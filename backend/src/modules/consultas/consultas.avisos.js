@@ -13,6 +13,16 @@
     · lo escribe personal sin ficha       → no es del CRM: se ignora;
     · entre alumnos                       → no es una consulta: se ignora.
 
+  CHAT DE GRUPO (plugin 1.9.0, opción B de la #285). «Entrar al chat» abre una
+  conversación de grupo por alumno y curso con las tutoras de ese curso. Su aviso trae
+  `grupo` (el alumno, el curso y quién está dentro). Una consulta = ese chat:
+
+    · lo escribe el alumno                → consulta (nueva o la suya) de ese curso; se
+                                            reparte entre las tutoras del curso como
+                                            siempre (para métricas y «Mi campus»);
+    · lo escribe CUALQUIER tutora de      → cuenta como respuesta, sea o no la tutora de
+      dentro (con ficha o sin ella)         la consulta; sin ficha, con su nombre del campus.
+
   Lo repetido (el aviso de un mensaje que ya se leyó, o el de una respuesta que
   salió del propio CRM) lo descarta su id de Moodle, como en la lectura.
 */
@@ -45,7 +55,12 @@ export async function procesarAviso(projectId, aviso) {
   const m = aviso?.mensaje;
   const de = aviso?.de;
   const para = Array.isArray(aviso?.para) ? aviso.para[0] : null;
-  if (aviso?.evento !== 'mensaje' || !m || !entero(m.id) || !entero(m.conversacion_id) || !entero(de?.id) || !entero(para?.id)) {
+  const grupo = aviso?.grupo && typeof aviso.grupo === 'object' ? aviso.grupo : null;
+  // En el chat de grupo puede no haber nadie más dentro (todas «No disponible»): no hace falta `para`.
+  if (aviso?.evento !== 'mensaje' || !m || !entero(m.id) || !entero(m.conversacion_id) || !entero(de?.id)
+      // En la conversación de un grupo del curso escriben varios alumnos: si escribe una
+      // tutora, no hay «alumno» en el aviso.
+      || (grupo ? (grupo.tipo !== 'curso' && !entero(grupo.alumno?.id)) : !entero(para?.id))) {
     throw new AppError('Aviso incompleto', 400, 'VALIDATION_ERROR');
   }
   // «Leer las consultas» apagado en Integraciones: el campus no entra en el CRM, ni por
@@ -62,6 +77,10 @@ export async function procesarAviso(projectId, aviso) {
   const texto = textoDeMoodle(m.html);
   const escritoAt = entero(m.fecha) ? new Date(Number(m.fecha) * 1000) : new Date();
   const conversacionId = Number(m.conversacion_id);
+
+  if (grupo) {
+    return mensajeDelChatDeGrupo(projectId, { m, de, grupo, tutores, texto, externoId, escritoAt, conversacionId });
+  }
 
   const tutorQueEscribe = tutores.get(Number(de.id));
   if (tutorQueEscribe) {
@@ -88,4 +107,95 @@ export async function procesarAviso(projectId, aviso) {
   if (r.duplicado) return { resultado: 'repetido' };
   logger.info({ projectId, consultaId: r.consulta?.id, nueva: r.nueva }, 'consultas: mensaje del campus por el plugin');
   return { resultado: r.nueva ? 'consulta_nueva' : 'mensaje', consultaId: r.consulta?.id ?? null };
+}
+
+/** Quién está en el chat de grupo, tal como lo cuenta el plugin (ids de Moodle). */
+function participantesDe(grupo) {
+  if (!Array.isArray(grupo?.miembros)) return null;
+  return grupo.miembros
+    .filter((x) => entero(x?.id))
+    .slice(0, 50)
+    .map((x) => ({
+      id: Number(x.id),
+      nombre: x.nombre ? String(x.nombre).slice(0, 200) : null,
+      tutora: Boolean(x.tutora),
+      alumno: Boolean(x.alumno),
+    }));
+}
+
+/**
+ * Un mensaje de un chat de grupo (plugin 1.9.0). Dos clases:
+ *
+ *  · 'plugin': el chat del alumno con las tutoras de su curso. Lo que escribe el alumno es su
+ *    consulta; lo que escribe cualquier tutora o personal de dentro, la respuesta.
+ *  · 'curso' (#285): la conversación de un grupo del curso con una tutora dentro, donde
+ *    escriben varios alumnos y también hablan entre ellos. Ahí:
+ *      - solo es respuesta lo que escribe una tutora DE ESE CURSO (`de.tutora`), nunca por ser
+ *        «personal» del campus;
+ *      - lo de un alumno es su consulta, aparte de la de su chat con las tutoras, sin correo a
+ *        la tutora, y asignada solo a una tutora que esté dentro (si no, la respuesta desde el
+ *        CRM no podría salir);
+ *      - una consulta cerrada NO se reabre con lo que escribe el alumno en el grupo: el mensaje
+ *        queda dentro como contexto. Para una duda nueva tiene su chat con las tutoras
+ *        («Entrar al chat»), que sí reabre. Así una charla entre alumnos no reabre nada;
+ *      - lo que escribe una tutora cuenta como respuesta solo si hay UNA consulta esperando en
+ *        ese grupo; con varias, se guarda como contexto en la que más lleva esperando, sin
+ *        darla por respondida (no se sabe a cuál contesta).
+ */
+async function mensajeDelChatDeGrupo(projectId, {
+  m, de, grupo, tutores, texto, externoId, escritoAt, conversacionId,
+}) {
+  const delCurso = grupo.tipo === 'curso';
+  const cursoId = entero(grupo.curso?.id) ? Number(grupo.curso.id) : (entero(m.curso_id) ? Number(m.curso_id) : null);
+  const participantes = participantesDe(grupo);
+  const autorNombre = de.nombre ? String(de.nombre).slice(0, 200) : null;
+  const tutorId = tutores.get(Number(de.id)) ?? null;
+
+  // ¿Escribe el alumno? En el chat del plugin, el de la consulta; en un grupo del curso,
+  // cualquiera que no sea tutora de ese curso.
+  const alumno = delCurso
+    ? (de.tutora ? null : { id: Number(de.id), nombre: de.nombre, email: de.email })
+    : (Number(de.id) === Number(grupo.alumno.id) ? grupo.alumno : null);
+
+  if (alumno) {
+    // Grupo del curso: solo puede llevarla una tutora (con ficha) que esté dentro.
+    const dentro = delCurso
+      ? new Set((participantes || []).filter((x) => x.tutora).map((x) => tutores.get(x.id)).filter(Boolean))
+      : null;
+    const r = await siYaEstaRepetido(() => entraMensajeDelAlumno({
+      projectId, conversacionId,
+      alumno: { moodleId: Number(alumno.id), nombre: alumno.nombre || de.nombre || null, email: alumno.email || de.email || null },
+      curso: cursoId ? { moodleId: cursoId, nombre: grupo.curso?.nombre ? String(grupo.curso.nombre).slice(0, 255) : null } : null,
+      texto, externoId, escritoAt, grupo: true, participantes,
+      grupoTipo: delCurso ? 'curso' : 'plugin',
+      // La de un grupo del curso es su propia consulta: no se une a la de su chat con las tutoras.
+      unirPorCurso: !delCurso,
+      reabrir: !delCurso,
+    }, { avisar: !delCurso, soloEntre: dentro }));
+    if (r.duplicado) return { resultado: 'repetido' };
+    if (r.sinReabrir) return { resultado: 'contexto', motivo: 'consulta cerrada de un grupo del curso', consultaId: r.consulta.id };
+    logger.info({ projectId, consultaId: r.consulta?.id, nueva: r.nueva, tipo: grupo.tipo || 'plugin' }, 'consultas: mensaje de un chat de grupo');
+    return { resultado: r.nueva ? 'consulta_nueva' : 'mensaje', consultaId: r.consulta?.id ?? null };
+  }
+
+  // Responde alguien de dentro.
+  let alumnoId;
+  let cuentaComoRespuesta = true;
+  if (delCurso) {
+    const espera = await model.alumnoQueEsperaEnElGrupo(projectId, conversacionId);
+    if (!espera) return { resultado: 'ignorado', motivo: 'respuesta sin consulta' };
+    alumnoId = espera.alumno;
+    cuentaComoRespuesta = espera.esperando <= 1;
+  } else {
+    if (!tutorId && !de.tutora && !de.personal) return { resultado: 'ignorado', motivo: 'no es tutora ni personal' };
+    alumnoId = Number(grupo.alumno.id);
+  }
+  const r = await siYaEstaRepetido(() => model.guardarRespuestaDesdeElCampus({
+    projectId, conversacionId, alumnoMoodleId: alumnoId, tutorId, texto, externoId, escritoAt,
+    autorMoodleId: Number(de.id), autorNombre, participantes,
+    cursoMoodleId: cursoId, grupo: true, cuentaComoRespuesta,
+  }));
+  if (r.duplicado) return { resultado: 'repetido' };
+  if (r.sinConsulta) return { resultado: 'ignorado', motivo: 'respuesta sin consulta' };
+  return { resultado: r.soloContexto ? 'contexto' : 'respuesta', consultaId: r.consulta.id };
 }

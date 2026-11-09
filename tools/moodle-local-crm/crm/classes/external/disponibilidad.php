@@ -33,8 +33,8 @@ use core_external\external_single_structure;
 use core_external\external_value;
 
 /**
- * Las tutoras que el CRM tiene «No disponible» (vacaciones, baja): el botón del chat
- * directo no lleva a ellas. Lo manda el CRM cada vez que cambia; es la lista entera.
+ * Las tutoras que el CRM tiene «No disponible» (vacaciones, baja): salen de los chats de
+ * grupo (y vuelven al estar disponibles). Lo manda el CRM cada vez que cambia; es la lista entera.
  */
 class disponibilidad extends external_api {
     public static function execute_parameters(): external_function_parameters {
@@ -51,6 +51,11 @@ class disponibilidad extends external_api {
         require_capability('local/crm:enviarcomo', $sistema);
         $ids = array_values(array_unique(array_filter(array_map('intval', $p['nodisponibles']))));
         set_config('no_disponibles', implode(',', $ids), 'local_crm');
+        // 1.9.0: quien está en cada chat de grupo, al día. Lo manda el CRM al cambiar y en el
+        // repaso de cada 15 minutos, así que también recoge a las profesoras que entran o
+        // salen de un curso. En segundo plano (puede haber muchas conversaciones) y una sola
+        // tarea pendiente cada vez.
+        \core\task\manager::queue_adhoc_task(new \local_crm\task\sincronizar_miembros(), true);
         return ['ok' => true, 'total' => count($ids)];
     }
 

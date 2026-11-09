@@ -60,7 +60,10 @@ async function leerFicha(c, { quien, userId, opciones }) {
   const url = urlDelCampus(conexion.url);
   ficha.campusUrl = url;
   ficha.perfilUrl = `${url}/user/profile.php?id=${c.alumno_moodle_id}`;
-  ficha.conversacionUrl = `${url}/message/index.php?id=${c.alumno_moodle_id}`;
+  // El chat de grupo de la consulta (plugin 1.9.0) o, si no tiene, la conversación privada.
+  ficha.conversacionUrl = c.conversacion_grupo_id
+    ? `${url}/message/index.php?convid=${c.conversacion_grupo_id}`
+    : `${url}/message/index.php?id=${c.alumno_moodle_id}`;
 
   try {
     const cursos = await cursosDe(conexion, c.alumno_moodle_id, opciones);

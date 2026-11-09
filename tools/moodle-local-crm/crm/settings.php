@@ -33,8 +33,8 @@ if ($hassiteconfig) {
     $settings->add(new \local_crm\ajuste_conectar());
     $settings->add(new admin_setting_configcheckbox('local_crm/autoactualizar', get_string('autoactualizar', 'local_crm'),
         get_string('autoactualizar_desc', 'local_crm'), 1));
-    $settings->add(new admin_setting_configcheckbox('local_crm/chat_directo', get_string('chat_directo', 'local_crm'),
-        get_string('chat_directo_desc', 'local_crm'), 1));
+    $settings->add(new admin_setting_configcheckbox('local_crm/chat_grupo', get_string('chat_grupo', 'local_crm'),
+        get_string('chat_grupo_desc', 'local_crm'), 1));
     $settings->add(new admin_setting_configtext('local_crm/excluir_nombre', get_string('excluir_nombre', 'local_crm'),
         get_string('excluir_nombre_desc', 'local_crm'), 'Inspector', PARAM_TEXT));
     $settings->add(new admin_setting_configtextarea('local_crm/crms', get_string('crms', 'local_crm'),

@@ -75,8 +75,8 @@ class aviso {
     }
 
     /**
-     * El aviso de un mensaje, o null si no va al CRM: borrado, de una conversación
-     * de grupo o la de uno consigo mismo.
+     * El aviso de un mensaje, o null si no va al CRM: borrado, de una conversación de
+     * grupo que no es un chat del plugin, o la de uno consigo mismo.
      */
     public static function del_mensaje(int $mensajeid): ?array {
         global $DB, $CFG;
@@ -85,7 +85,13 @@ class aviso {
             return null;
         }
         $conv = $DB->get_record('message_conversations', ['id' => $m->conversationid], 'id, type');
-        if (!$conv || (int) $conv->type !== \core_message\api::MESSAGE_CONVERSATION_TYPE_INDIVIDUAL) {
+        if (!$conv) {
+            return null;
+        }
+        if ((int) $conv->type === \core_message\api::MESSAGE_CONVERSATION_TYPE_GROUP) {
+            return self::del_mensaje_de_grupo($m);
+        }
+        if ((int) $conv->type !== \core_message\api::MESSAGE_CONVERSATION_TYPE_INDIVIDUAL) {
             return null;
         }
         $de = self::usuario((int) $m->useridfrom);
@@ -103,9 +109,6 @@ class aviso {
         if (!$para) {
             return null;
         }
-        $html = trim((string) $m->fullmessagehtml) !== ''
-            ? $m->fullmessagehtml
-            : format_text($m->fullmessage, $m->fullmessageformat, ['context' => \context_system::instance()]);
         return [
             'evento'  => 'mensaje',
             'sitio'   => $CFG->wwwroot,
@@ -115,12 +118,136 @@ class aviso {
                 // El curso, si la conversación se abrió desde «Entrar al chat» de un curso:
                 // el CRM solo pasa la consulta a tutoras de ese curso.
                 'curso_id'        => chat_directo::curso_de((int) $conv->id),
-                'html'            => $html,
+                'html'            => self::html($m),
                 'fecha'           => (int) $m->timecreated,
             ],
             'de'      => $de,
             'para'    => $para,
         ];
+    }
+
+    /**
+     * El aviso de un mensaje del chat de grupo del alumno con las tutoras (1.9.0).
+     *
+     * Además de lo de siempre lleva `grupo`: el alumno de la consulta, el curso y quién
+     * está ahora en la conversación (para que el CRM enseñe los participantes). `de.tutora`
+     * dice si quien escribe es tutora de ESE curso. Va aunque no haya nadie más dentro (todas
+     * las tutoras «No disponible»): lo que escribe el alumno llega al CRM sin excepción.
+     */
+    private static function del_mensaje_de_grupo(\stdClass $m): ?array {
+        global $DB, $CFG;
+        $fila = chat_grupo::de_conversacion((int) $m->conversationid);
+        if (!$fila) {
+            return self::del_mensaje_de_grupo_del_curso($m);
+        }
+        $de = self::usuario((int) $m->useridfrom);
+        $alumno = self::usuario((int) $fila->userid);
+        $curso = $DB->get_record('course', ['id' => $fila->courseid], 'id, fullname, shortname');
+        if (!$de || !$alumno || !$curso) {
+            return null;
+        }
+        $contexto = \context_course::instance($curso->id);
+        $tutoras = chat_directo::tutoras($contexto, false);
+        $de['tutora'] = isset($tutoras[$de['id']]);
+        $alumno['tutora'] = false;
+        $miembros = [];
+        $para = [];
+        $ids = $DB->get_fieldset_select('message_conversation_members', 'userid', 'conversationid = ?', [$m->conversationid]);
+        foreach ($ids as $id) {
+            if ($u = self::usuario((int) $id)) {
+                $u['tutora'] = isset($tutoras[$u['id']]);
+                $miembros[] = ['id' => $u['id'], 'nombre' => $u['nombre'], 'tutora' => $u['tutora'],
+                    'alumno' => $u['id'] === $alumno['id']];
+                if ($u['id'] !== $de['id']) {
+                    $para[] = $u;
+                }
+            }
+        }
+        return [
+            'evento'  => 'mensaje',
+            'sitio'   => $CFG->wwwroot,
+            'mensaje' => [
+                'id'              => (int) $m->id,
+                'conversacion_id' => (int) $m->conversationid,
+                'curso_id'        => (int) $curso->id,
+                'html'            => self::html($m),
+                'fecha'           => (int) $m->timecreated,
+                'tipo'            => 'grupo',
+            ],
+            'de'      => $de,
+            'para'    => $para,
+            'grupo'   => [
+                'alumno'   => $alumno,
+                'curso'    => ['id' => (int) $curso->id,
+                    'nombre' => format_string($curso->fullname, true, ['context' => $contexto, 'escape' => false])],
+                'miembros' => $miembros,
+            ],
+        ];
+    }
+
+    /**
+     * El aviso de un mensaje de otra conversación de grupo de un curso (la de un grupo del
+     * curso, p. ej.) en la que hay alguna tutora de ese curso. `grupo.tipo` = 'curso': ahí
+     * escriben varios alumnos, así que `grupo.alumno` es quien escribe si es alumno, y null si
+     * escribe una tutora (el CRM lo cuenta como respuesta a la consulta de esa conversación).
+     * En `miembros` solo van las tutoras y quien escribe: el resto del grupo no le hace falta.
+     */
+    private static function del_mensaje_de_grupo_del_curso(\stdClass $m): ?array {
+        global $DB, $CFG;
+        $convid = (int) $m->conversationid;
+        $cursoid = chat_grupo::curso_de_conversacion($convid);
+        if (!$cursoid) {
+            return null;
+        }
+        $dentro = chat_grupo::tutoras_dentro($convid, $cursoid);
+        $curso = $DB->get_record('course', ['id' => $cursoid], 'id, fullname');
+        $de = self::usuario((int) $m->useridfrom);
+        if (!$dentro || !$curso || !$de) {
+            return null;
+        }
+        $contexto = \context_course::instance($curso->id);
+        $de['tutora'] = in_array($de['id'], $dentro, true) || chat_directo::es_tutora($contexto, $de['id']);
+        $miembros = [];
+        foreach (array_unique(array_merge($dentro, [$de['id']])) as $id) {
+            if ($u = self::usuario((int) $id)) {
+                $esde = $u['id'] === $de['id'];
+                $miembros[] = ['id' => $u['id'], 'nombre' => $u['nombre'],
+                    'tutora' => $esde ? $de['tutora'] : in_array($u['id'], $dentro, true),
+                    // Quien escribe, si no es tutora de ese curso, es un alumno del grupo.
+                    'alumno' => $esde && !$de['tutora']];
+            }
+        }
+        $nombre = (string) $DB->get_field('message_conversations', 'name', ['id' => $convid]);
+        return [
+            'evento'  => 'mensaje',
+            'sitio'   => $CFG->wwwroot,
+            'mensaje' => [
+                'id'              => (int) $m->id,
+                'conversacion_id' => $convid,
+                'curso_id'        => (int) $curso->id,
+                'html'            => self::html($m),
+                'fecha'           => (int) $m->timecreated,
+                'tipo'            => 'grupo_curso',
+            ],
+            'de'      => $de,
+            'para'    => [],
+            'grupo'   => [
+                'tipo'     => 'curso',
+                'nombre'   => format_string($nombre, true, ['context' => $contexto, 'escape' => false]),
+                // Responde solo una profesora de ESE curso; ser «personal» del campus no basta.
+                'alumno'   => $de['tutora'] ? null : $de,
+                'curso'    => ['id' => (int) $curso->id,
+                    'nombre' => format_string($curso->fullname, true, ['context' => $contexto, 'escape' => false])],
+                'miembros' => $miembros,
+            ],
+        ];
+    }
+
+    /** El texto del mensaje, en HTML. */
+    private static function html(\stdClass $m): string {
+        return trim((string) $m->fullmessagehtml) !== ''
+            ? (string) $m->fullmessagehtml
+            : format_text($m->fullmessage, $m->fullmessageformat, ['context' => \context_system::instance()]);
     }
 
     /** La firma del cuerpo, tal y como la comprueba el CRM. */

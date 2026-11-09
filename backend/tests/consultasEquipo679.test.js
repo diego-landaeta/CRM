@@ -158,7 +158,7 @@ beforeAll(async () => {
   try {
     const t = await query(`SELECT to_regclass('public.consultas') AS a, to_regclass('public.moodle_plugin_campus') AS b,
                                   to_regclass('public.consulta_notas') AS c, to_regclass('public.respuestas_guardadas') AS d`);
-    if (!t.rows[0].a || !t.rows[0].b || !t.rows[0].c || !t.rows[0].d) throw new Error('Faltan las migraciones 244 y 245.');
+    if (!t.rows[0].a || !t.rows[0].b || !t.rows[0].c || !t.rows[0].d) throw new Error('Faltan las migraciones 245 y 247.');
   } catch (err) {
     hayBase = false;
     porQueNo = err.message;

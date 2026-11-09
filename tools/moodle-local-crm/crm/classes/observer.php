@@ -32,12 +32,39 @@ defined('MOODLE_INTERNAL') || die();
  * sola (las tareas ad hoc de Moodle se reintentan con espera creciente).
  */
 class observer {
+    /** Un mensaje privado: todos van al CRM (él decide cuáles son consultas). */
     public static function mensaje_enviado(\core\event\message_sent $evento): void {
         if (!aviso::configurado()) {
             return;
         }
+        self::encolar((int) $evento->objectid);
+    }
+
+    /**
+     * Un mensaje en una conversación de grupo (1.9.0). Va al CRM si es uno de los chats de
+     * grupo del plugin o, además, cualquier conversación de grupo de un curso (p. ej. la de un
+     * grupo del curso) en la que haya una tutora de ese curso: todos los chats de la tutora.
+     */
+    public static function mensaje_de_grupo(\core\event\group_message_sent $evento): void {
+        if (!aviso::configurado()) {
+            return;
+        }
+        $conversacion = (int) ($evento->other['conversationid'] ?? 0);
+        if (!$conversacion) {
+            return;
+        }
+        if (!chat_grupo::de_conversacion($conversacion)) {
+            $curso = chat_grupo::curso_de_conversacion($conversacion);
+            if (!$curso || !chat_grupo::tutoras_dentro($conversacion, $curso)) {
+                return;
+            }
+        }
+        self::encolar((int) $evento->objectid);
+    }
+
+    private static function encolar(int $mensajeid): void {
         $tarea = new task\avisar_crm();
-        $tarea->set_custom_data(['mensajeid' => (int) $evento->objectid]);
+        $tarea->set_custom_data(['mensajeid' => $mensajeid]);
         \core\task\manager::queue_adhoc_task($tarea);
     }
 }

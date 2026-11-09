@@ -61,17 +61,23 @@ class mensajes_desde extends external_api {
         require_capability('local/crm:enviarcomo', $sistema);
 
         $limite = max(1, min(self::TOPE, (int) $p['limite']));
-        $tipo = \core_message\api::MESSAGE_CONVERSATION_TYPE_INDIVIDUAL;
+        // Los privados y, desde la 1.9.0, los de grupo: los chats de grupo del plugin y las
+        // conversaciones de grupo de un curso con alguna tutora dentro. Las de grupo sin curso
+        // o sin tutora las descarta aviso::del_mensaje (lo mismo que hace el aviso al momento).
+        $params = [
+            'tipo' => \core_message\api::MESSAGE_CONVERSATION_TYPE_INDIVIDUAL,
+            'grupo' => \core_message\api::MESSAGE_CONVERSATION_TYPE_GROUP,
+        ];
         if ((int) $p['desdeid'] > 0) {
             $donde = 'm.id > :desde';
-            $params = ['desde' => (int) $p['desdeid'], 'tipo' => $tipo];
+            $params['desde'] = (int) $p['desdeid'];
         } else {
             $donde = 'm.timecreated >= :desde';
-            $params = ['desde' => max(0, (int) $p['desdefecha']), 'tipo' => $tipo];
+            $params['desde'] = max(0, (int) $p['desdefecha']);
         }
         $filas = $DB->get_records_sql(
             "SELECT m.id FROM {messages} m JOIN {message_conversations} c ON c.id = m.conversationid
-              WHERE $donde AND c.type = :tipo
+              WHERE $donde AND (c.type = :tipo OR c.type = :grupo)
            ORDER BY m.id", $params, 0, $limite + 1);
         $ids = array_keys($filas);
         $mas = count($ids) > $limite;

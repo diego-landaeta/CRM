@@ -237,10 +237,14 @@ export async function enviarMensaje(conexion, paraMoodleUserId, texto, opciones)
  * Manda un mensaje privado EN NOMBRE de la tutora, por el plugin del CRM
  * (`local_crm_enviar_mensaje`, #679), con el token del campus: sin el token
  * personal de cada tutora. El plugin solo deja enviar como personal del campus.
+ *
+ * Con `conversacionId` (plugin 1.9.0) va al chat de grupo del alumno con las tutoras del
+ * curso, donde lo ven todas; sin él, a la conversación privada de los dos.
  */
-export async function enviarComoTutor(conexion, desdeMoodleUserId, paraMoodleUserId, texto, opciones) {
+export async function enviarComoTutor(conexion, desdeMoodleUserId, paraMoodleUserId, texto, { conversacionId = null, ...opciones } = {}) {
   const r = await llamar(conexion, 'local_crm_enviar_mensaje', {
     desde: desdeMoodleUserId, para: paraMoodleUserId, texto,
+    ...(conversacionId ? { conversacionid: Number(conversacionId) } : {}),
   }, opciones);
   if (!r || !(Number(r.id) > 0)) throw new MoodleError('El campus no ha aceptado el mensaje.', 'NO_ENVIADO');
   return { id: Number(r.id), conversacionId: Number(r.conversacion_id) || null };

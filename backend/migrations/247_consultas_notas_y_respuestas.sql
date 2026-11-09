@@ -1,4 +1,4 @@
--- 245 · Notas internas en las consultas y respuestas guardadas en el servidor (#679)
+-- 247 · Notas internas en las consultas y respuestas guardadas en el servidor (#679)
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Para que el personal se organice mejor:

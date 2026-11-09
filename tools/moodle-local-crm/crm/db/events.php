@@ -31,4 +31,9 @@ $observers = [
         'eventname' => '\core\event\message_sent',
         'callback'  => '\local_crm\observer::mensaje_enviado',
     ],
+    // 1.9.0: el chat de grupo del alumno con las tutoras de su curso.
+    [
+        'eventname' => '\core\event\group_message_sent',
+        'callback'  => '\local_crm\observer::mensaje_de_grupo',
+    ],
 ];

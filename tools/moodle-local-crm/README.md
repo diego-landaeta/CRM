@@ -8,9 +8,12 @@ Une la mensajería de cada campus con el CRM:
     **Consultas**.
   - Si lo escribe una tutora del CRM, cuenta como su respuesta.
   - Los mensajes entre alumnos no entran.
+- **Y los de grupo (1.9.0).** El chat de grupo de cada alumno con las tutoras de su curso
+  («Entrar al chat») y cualquier conversación de grupo de un curso en la que esté una
+  tutora de ese curso (la de un grupo del curso, por ejemplo).
 - **Del CRM al campus, como la tutora.** La respuesta escrita en el CRM sale en la
-  conversación del alumno con el nombre de la tutora. No hace falta el token personal
-  de cada tutora.
+  conversación del alumno (o en su chat de grupo) con el nombre de la tutora. No hace
+  falta el token personal de cada tutora.
 - **«Mi campus» de la tutora.** El servicio del plugin incluye las funciones con las
   que el CRM lee cursos, alumnos y entregas sin corregir.
 
@@ -21,7 +24,7 @@ pierde, se recoge en la siguiente vuelta.
 |---|---|
 | Componente | `local_crm` (carpeta `local/crm`) |
 | Moodle | 4.4 a 5.2 (ISEIE 4.4 · Psiko, Fono e ISAEG 4.5 · ISEIH e ICTESS 5.0 · ISECD, ISSLOGG e ISEF 5.2) |
-| Probado | Moodle 4.5.4 en local, instalado desde el panel y conectado con un código, de punta a punta con el CRM (05/11/2026) |
+| Probado | Moodle 4.5.4 en local, instalado desde el panel y conectado con un código, de punta a punta con el CRM (05/11/2026). Chat de grupo (1.9.0): Moodle 4.5.4 (actualizando desde la 1.8.0) y 5.2.4, de punta a punta con dos tutoras y el CRM (09/11/2026) |
 
 ## Conectar un campus: dos pasos
 
@@ -76,22 +79,59 @@ en segundo plano de Moodle, y sin cron no salen. En Hostinger: cron de hPanel de
 «Conectar» dan 403, desactiva el CDN en hPanel (`Sitios web › iseih.com › Rendimiento ›
 CDN`), hazlo y vuelve a activarlo, igual que con «HTML adicional».
 
-## El chat directo con la tutora (1.6.0)
+## El chat de grupo con las tutoras del curso (1.9.0)
 
-«Entrar al chat» de la actividad Chat de cada curso ya no abre la sala: abre la
-conversación **privada** del alumno con una tutora de ese curso. Nada de salas ni de
-conversaciones de grupo.
+Lo eligió Carlos (opción B de la #285, 06/11/2026). «Entrar al chat» de la actividad Chat
+de cada curso ya no abre la sala: abre **una conversación de grupo por alumno y curso**,
+con el alumno y las tutoras de ese curso. Todas ven lo mismo y cualquiera responde, desde
+Moodle o desde el CRM.
 
-- **Qué tutora:** la de su última conversación con una tutora del curso (no se rompe el
-  hilo); si no tiene ninguna, una de las del curso, repartidas siempre igual.
-- **Quién cuenta como tutora:** rol de profesor (con o sin edición) **en ese curso**, con
-  la matrícula activa. No cuentan las cuentas cuyo nombre empieza por «Inspector» (se
-  cambia en los ajustes) ni las que el CRM tiene **«No disponible»**: el CRM se lo dice
-  al plugin en cuanto cambia.
-- **Si una tutora no está:** el CRM pasa la consulta a otra **del mismo curso**, que
-  responde en su conversación directa con el alumno. En el CRM sigue siendo una sola
-  consulta.
-- **Se apaga** en los ajustes del plugin («Chat directo con la tutora»).
+- **Qué es en Moodle:** una conversación de grupo de la mensajería (componente `local_crm`,
+  tipo `consulta`, en el contexto del curso), llamada «Consultas · <curso> · <alumno>». Sale
+  en el panel de mensajes, en «Grupo», a todos sus miembros. **No es un grupo del curso**:
+  no toca los grupos separados ni la calificación. El plugin apunta cuál es cada una en
+  `local_crm_conversaciones`.
+- **Quién está dentro:** el alumno (siempre) y las tutoras del curso: rol de profesor (con o
+  sin edición) **en ese curso**, con la matrícula activa, sin las cuentas cuyo nombre
+  empieza por «Inspector» (se cambia en los ajustes) y sin las que el CRM tiene **«No
+  disponible»**. Se repasa al abrir el chat y cada vez que el CRM manda la disponibilidad
+  (al cambiar y en el repaso de cada 15 minutos): la «No disponible» sale y, al volver,
+  entra otra vez y ve todo el historial.
+- **En el CRM** es una consulta: la abre el primer mensaje del alumno; un mensaje de
+  **cualquier** tutora de dentro cuenta como respuesta (también de alguien sin ficha en el
+  CRM: sale con su nombre del campus); la respuesta desde el CRM aparece en ese chat a
+  nombre de la tutora que la escribe (si no estaba dentro y es profesora del curso, entra).
+  La consulta sigue teniendo su tutora y su curso para las métricas y «Mi campus»; el
+  relevo cambia la tutora de la consulta, ya no la conversación.
+- **Si no hay ninguna tutora disponible**, el alumno lo ve dicho; lo que escribe llega igual
+  al CRM.
+- **Se apaga** en los ajustes del plugin («Chat de grupo con las tutoras del curso»; sustituye
+  al «Chat directo con la tutora» y conserva lo que tuviera puesto). Apagado, «Entrar al
+  chat» abre la sala de siempre.
+- **Lo de antes sigue:** las conversaciones privadas del chat directo (1.6.0 a 1.8.0) siguen
+  llegando al CRM. Si el alumno tenía una consulta abierta de ese curso, sigue en su chat de
+  grupo y la respuesta va al grupo.
+
+**También las demás conversaciones de grupo de la tutora** (#285, Diego): cualquier
+conversación de grupo de un curso en la que esté una tutora de ese curso (la de un grupo del
+curso con la mensajería de grupo encendida, por ejemplo) llega al CRM, con estas reglas:
+
+- Solo responde una **profesora de ese curso**; ser personal del campus no basta. Quien no lo
+  es, escribe como alumno.
+- Lo que escribe un alumno abre **su propia consulta** («Grupo del curso» en el CRM), que no se
+  mezcla con su chat con las tutoras ni al revés. No manda correo a la tutora, y se asigna
+  solo a una tutora que esté dentro de esa conversación.
+- Una consulta **cerrada no se reabre** con lo que escribe el alumno en el grupo (ahí los
+  alumnos también hablan entre ellos): el mensaje queda dentro como contexto. Para una duda
+  nueva tiene su chat con las tutoras, que sí reabre.
+- Lo que escribe una tutora es la respuesta a la consulta de esa conversación que espera, si
+  solo hay una. Con varias esperando, queda como contexto en la que más lleva esperando, sin
+  darla por respondida.
+- La respuesta desde el CRM sale en esa conversación, que **leen todos sus alumnos**: el CRM
+  lo avisa encima de la caja de respuesta. Ahí el plugin no añade ni quita a nadie.
+
+**La sala del Chat (`mod_chat`) no entra en el CRM.** Con el chat de grupo, «Entrar al chat»
+ya no lleva a la sala; lo que se escribiera en ella (entrando por la dirección a mano) no llega.
 
 **Antes de instalarlo en un campus que ya tenía el bloque de chat en el pie**
 (`additionalhtmlfooter`, bloque `<!-- ===== CHAT: consulta por mensajeria…`, hoy en Psiko,
@@ -133,7 +173,7 @@ openssl pkey -in plugin-moodle-privada.pem -pubout -out plugin-moodle-publica.pe
 ## Siempre al día con el campus (1.8.0)
 
 Cada mensaje llega al CRM al momento (el aviso). Además, **cada 15 minutos** el CRM repasa
-cada campus: le pide al plugin los mensajes privados desde el último que vio y mete lo que
+cada campus: le pide al plugin los mensajes privados y de grupo desde el último que vio y mete lo que
 falte (lo repetido se descarta solo). Así, aunque se pierda un aviso (el CRM caído más de lo
 que Moodle reintenta, el campus desconectado un rato), en 15 minutos como mucho está al día.
 En el mismo repaso le vuelve a mandar la lista de tutoras «No disponible».
@@ -148,8 +188,10 @@ Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que p
 
 ## Comprobar que funciona
 
-- **Del alumno al CRM:** el alumno escribe a su tutora en el campus y, en menos de un
-  minuto, la consulta aparece en el CRM asignada a ella.
+- **Del alumno al CRM:** el alumno entra por «Entrar al chat», escribe en su chat de grupo y,
+  en menos de un minuto, la consulta aparece en el CRM («Chat de grupo», con quién está dentro).
+- **Dos tutoras:** las dos ven el chat en su panel de mensajes (en «Grupo») y responden; en el
+  CRM salen las dos respuestas, cada una con su nombre, y la consulta pasa a «Respondida».
 - **Del CRM al alumno:** la tutora contesta desde el CRM («Le llega al alumno en el
   campus») y el alumno lo ve en el campus como mensaje de ella.
 - **De Moodle al CRM:** la tutora contesta desde el campus y la respuesta aparece en el
@@ -189,8 +231,11 @@ Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que p
   falla, se reintenta sola. Si el CRM lo rechaza (campus desconectado, clave cambiada),
   no se reintenta. Lo que se escribe a una tutora mientras el campus está desconectado
   lo recoge la lectura del CRM al volver a conectar.
-- **Datos personales.** El plugin no guarda datos en Moodle. Los manda al CRM, y lo
-  declara en la API de privacidad.
+- **Datos personales.** El plugin guarda en Moodle de qué curso es cada conversación del
+  chat directo (`local_crm_chat`) y cuál es el chat de grupo de cada alumno y curso
+  (`local_crm_conversaciones`); los mensajes son de la mensajería de Moodle. Lo declara, lo
+  exporta y lo borra con la API de privacidad (los chats de grupo, en el contexto del curso,
+  con la de la mensajería). Los mensajes los manda al CRM, y también lo declara.
 
 ## Desconectar o desinstalar
 

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowSquareOut, ArrowsClockwise, BookmarkSimple, CheckCircle, Checks, ClipboardText,
-  ArrowsLeftRight, CaretRight, Copy, IdentificationCard, LinkSimple, NotePencil, Paperclip, PaperPlaneRight, SidebarSimple, Trash, Warning, X,
+  ArrowsLeftRight, CaretRight, Copy, IdentificationCard, LinkSimple, NotePencil, Paperclip, PaperPlaneRight, SidebarSimple, Trash, UsersThree, Warning, X,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -12,7 +12,7 @@ import Iniciales from '@/shared/components/ui/Iniciales';
 import { cn } from '@/shared/lib/utils';
 import {
   consultasApi, semaforo, haceCuanto as horasEnTexto,
-  type ConsultaDetalle, type ConsultaFila, type ContextoConsulta, type NotaInterna, type RespuestaGuardada,
+  type ConsultaDetalle, type ConsultaFila, type ContextoConsulta, type NotaInterna, type ParticipanteChat, type RespuestaGuardada, type TipoDeGrupo,
 } from '../api/consultas.api';
 
 /*
@@ -436,6 +436,50 @@ function Nota({ n }: { n: NotaInterna }) {
   );
 }
 
+// ─── Chat de grupo (#679, plugin 1.9.0) ──────────────────────────────────────
+
+/**
+ * La consulta es un chat de grupo (plugin 1.9.0). Se dice arriba, con las tutoras de dentro:
+ *  · 'plugin': el chat del alumno con las tutoras de su curso; todas lo ven y cualquiera responde;
+ *  · 'curso' (#285): la conversación de un grupo del curso, que leen TODOS sus alumnos.
+ */
+function ChatDeGrupo({ participantes, alumno, tipo }: { participantes: ParticipanteChat[]; alumno: string | null; tipo: TipoDeGrupo }) {
+  const tutoras = participantes.filter((p) => p.tutora).map((p) => p.nombre || 'Sin nombre');
+  const delCurso = tipo === 'curso';
+  const quien = delCurso
+    ? (tutoras.length ? `tutoras dentro: ${tutoras.join(', ')}` : 'sin ninguna tutora dentro')
+    : (tutoras.length
+      ? `${tutoras.join(', ')} y ${alumno || 'el alumno'}`
+      : `Solo ${alumno || 'el alumno'}: ahora no hay ninguna tutora disponible dentro`);
+  return (
+    <div role="note" aria-label={delCurso ? 'Conversación de un grupo del curso' : 'Chat de grupo'} data-testid="chat-de-grupo"
+      className="flex items-start gap-2 border-b border-border bg-muted/50 px-4 py-1.5 text-secundario text-muted-foreground sm:px-8">
+      <UsersThree size={14} weight="bold" className="mt-[3px] shrink-0 text-foreground" aria-hidden />
+      <p className="min-w-0 flex-1 break-words">
+        <strong className="font-semibold text-foreground">{delCurso ? 'Grupo del curso' : 'Chat de grupo'}</strong>
+        {' · '}
+        <span>{quien}</span>
+        {!delCurso && <span className="hidden sm:inline">{' · '}todas lo ven y cualquiera responde, desde Moodle o desde aquí</span>}
+      </p>
+    </div>
+  );
+}
+
+/** Antes de responder en la conversación de un grupo del curso: la respuesta la leen todos. */
+function AvisoGrupoDelCurso() {
+  return (
+    <p role="note" data-testid="aviso-grupo-del-curso"
+      className="mx-auto mb-2 flex max-w-3xl items-start gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+      <Warning size={14} weight="fill" className="mt-[2px] shrink-0" aria-hidden />
+      <span>
+        <strong className="font-semibold">Lo leen todos los alumnos del grupo.</strong>
+        {' '}Esta consulta viene de la conversación de un grupo del curso: tu respuesta sale ahí, no en privado.
+        Para algo solo de este alumno, escríbele por su chat con las tutoras.
+      </span>
+    </p>
+  );
+}
+
 // ─── La página ───────────────────────────────────────────────────────────────
 
 export default function ConsultaPage() {
@@ -679,7 +723,12 @@ export default function ConsultaPage() {
                 </div>
               )}
 
-              {relevo && c.puedes === 'tutor' && !relevoVisto && (
+              {c.conversacion_grupo_id != null && (
+                <ChatDeGrupo participantes={c.participantes || []} alumno={c.alumno_nombre} tipo={c.grupo_tipo ?? 'plugin'} />
+              )}
+
+              {/* El relevo solo existe en las consultas privadas de antes: en el chat de grupo lo ven todas. */}
+              {relevo && c.conversacion_grupo_id == null && c.puedes === 'tutor' && !relevoVisto && (
                 <div role="note" className="flex items-center gap-2 border-b border-border bg-info-soft px-4 py-1.5 text-secundario text-info-soft-foreground sm:px-8">
                   <ArrowsLeftRight size={14} weight="bold" className="shrink-0" aria-hidden />
                   <span className="min-w-0 flex-1 truncate" title="Su tutora anterior no está disponible: lee el historial y las notas internas antes de responder.">
@@ -727,6 +776,8 @@ export default function ConsultaPage() {
                           className={cn('max-w-[88%] rounded-2xl px-3.5 py-2 text-normal leading-6 sm:max-w-[75%]',
                             delTutor ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
                             delTutor ? (empiezaGrupo ? 'rounded-tr-md' : '') : (empiezaGrupo ? 'rounded-tl-md' : ''))}>
+                          {/* Quién lo escribe, también para el lector de pantalla cuando el nombre no se repite encima. */}
+                          {!empiezaGrupo && <span className="sr-only">{quien}: </span>}
                           <p className="whitespace-pre-wrap break-words"><ConEnlaces texto={m.texto} claro={delTutor} /></p>
                           {m.adjuntos.length > 0 && (
                             <ul className="mt-2 flex flex-wrap gap-1.5">
@@ -778,6 +829,7 @@ export default function ConsultaPage() {
 
               {(puedeEscribir || c.puedes === 'admin') && (
                 <form onSubmit={(e) => { e.preventDefault(); enviar(false); }} noValidate className="relative border-t border-border p-3 sm:px-8 sm:py-4">
+                  {c.grupo_tipo === 'curso' && modoReal !== 'nota' && <AvisoGrupoDelCurso />}
                   {verGuardadas && (
                     <Guardadas lista={guardadas} texto={texto} alElegir={insertar} alCrear={crearGuardada} alBorrar={borrarGuardada} alCerrar={() => setVerGuardadas(false)} />
                   )}

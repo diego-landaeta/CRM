@@ -1,7 +1,7 @@
 # Probar el plugin y el CRM en local, con Docker
 
 Un Moodle 4.5 de pruebas con datos inventados (tutoras, alumnos, un curso con tareas y
-entregas) para probar de punta a punta el chat directo, «Mi campus», corregir desde el CRM,
+entregas) para probar de punta a punta el chat de grupo, «Mi campus», corregir desde el CRM,
 el repaso y la actualización automática. **Solo local**: las contraseñas de aquí son de este
 Moodle de pruebas y no sirven en ningún otro sitio.
 
@@ -15,7 +15,9 @@ Los campus van en tres versiones, y hay un entorno para cada una:
 
 Probado el 06/11/2026 de punta a punta en los tres: chat directo, relevo, respuesta desde el
 CRM, repaso sin duplicados, «Mi campus», corregir y la actualización automática (y que una
-firma falsa no se instala).
+firma falsa no se instala). El chat de grupo (1.9.0), el 09/11/2026 en 4.5 (actualizando desde
+la 1.8.0) y 5.2: alumno, dos tutoras desde Moodle, respuesta desde el CRM, «No disponible» que
+sale y vuelve, y la conversación de un grupo del curso.
 
 ## 1. Levantar el Moodle
 
@@ -81,6 +83,7 @@ Crea el curso `CRM679` con la tutora **tutora679** (Laura), los alumnos **alumno
 | `curso-contenido.php` | Temas y actividades variadas (página, enlace, cuestionario, foro, PDF, tema oculto) |
 | `grupos-separados.php poner\|quitar` | Grupos separados con la tutora solo en el Grupo A |
 | `mensaje-cli.php <de> <para> "<texto>"` | Un mensaje privado como si se escribiera en el campus |
+| `grupo-del-curso.php` | El «Grupo A (mensajería)» del curso con la mensajería de grupo encendida: Laura, Pedro y María (su conversación es de `core_group`) |
 | `conectar-cli.php <código>` / `desconectar-cli.php` | Conectar o desconectar el campus sin pasar por la página |
 
 ## 3. El CRM local apuntando a ese Moodle
@@ -110,11 +113,20 @@ y asígnales el campus en su ficha (Tutores › la tutora › Campus › Comprob
 
 ## 5. Qué probar
 
-- **Chat directo:** como alumno, la actividad Chat del curso › «Entrar al chat» → su conversación
-  privada con la tutora. Escribe y mira que llega a Consultas en el CRM.
-- **Responder desde el CRM** y ver que llega a Moodle a nombre de la tutora (sin duplicados).
-- **Relevo:** marca a Laura «No disponible» en su ficha del CRM → el alumno, al entrar al chat,
-  va con Carmen; su mensaje entra en la MISMA consulta y pasa a Carmen (con el aviso de relevo).
+- **Chat de grupo (1.9.0):** con `segunda-tutora.php` (Laura y Carmen en el curso), como alumno,
+  la actividad Chat del curso › «Entrar al chat» → su conversación de grupo «Consultas · <curso> ·
+  <alumno>» con las dos (sale en el panel de mensajes, en «Grupo»). Escribe y mira que llega a
+  Consultas en el CRM, con la franja «Chat de grupo» y quién está dentro.
+- **Dos tutoras:** Laura y Carmen abren su panel de mensajes, ven el chat y responden. En el CRM
+  salen las dos respuestas, cada una con su nombre, y la consulta pasa a «Respondida».
+- **Responder desde el CRM** y ver que llega al chat de grupo a nombre de la tutora (sin duplicados).
+- **No disponible:** marca a Laura «No disponible» en su ficha del CRM → tras la tarea
+  `\local_crm\task\sincronizar_miembros` sale del chat; al volver a «Disponible», entra otra vez y
+  ve el historial. La consulta cambia de tutora con el siguiente mensaje del alumno (no de chat).
+- **Grupo del curso:** `grupo-del-curso.php` y escribe en la conversación del «Grupo A» como
+  alumno y como Laura: llega al CRM como una consulta aparte, y lo de Laura cuenta como respuesta.
+- En Moodle 5.2 (sin cron) los avisos salen con
+  `php admin/cli/adhoc_task.php --execute --classname='\local_crm\task\avisar_crm'` (como `www-data`).
 - **Notas internas** y **respuestas guardadas / del campus** (Consultas › Respuestas del campus).
 - **Mi campus** de la tutora: por corregir, dudas, alumnos sin entrar, «Ver el curso completo».
 - **Corregir desde el CRM:** nota y comentario (aparecen en Moodle a su nombre); las tareas con

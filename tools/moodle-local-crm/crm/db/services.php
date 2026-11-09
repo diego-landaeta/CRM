@@ -30,7 +30,7 @@ defined('MOODLE_INTERNAL') || die();
 $functions = [
     'local_crm_enviar_mensaje' => [
         'classname'    => '\local_crm\external\enviar_mensaje',
-        'description'  => 'Envía un mensaje privado en nombre de un miembro del personal del campus (tutora) a un usuario.',
+        'description'  => 'Envía un mensaje en nombre de un miembro del personal del campus (tutora): privado a un usuario o en el chat de grupo del alumno con las tutoras.',
         'type'         => 'write',
         'capabilities' => 'local/crm:enviarcomo',
     ],
@@ -38,14 +38,14 @@ $functions = [
 
 $functions['local_crm_disponibilidad'] = [
     'classname'    => '\local_crm\external\disponibilidad',
-    'description'  => 'Guarda qué tutoras tiene el CRM como «No disponible»: el chat directo no lleva a ellas.',
+    'description'  => 'Guarda qué tutoras tiene el CRM como «No disponible»: salen de los chats de grupo hasta que vuelvan.',
     'type'         => 'write',
     'capabilities' => 'local/crm:enviarcomo',
 ];
 
 $functions['local_crm_mensajes_desde'] = [
     'classname'    => '\local_crm\external\mensajes_desde',
-    'description'  => 'Los mensajes privados desde uno dado, para que el CRM se ponga al día aunque se haya perdido un aviso.',
+    'description'  => 'Los mensajes privados y de los chats de grupo del plugin desde uno dado, para que el CRM se ponga al día aunque se haya perdido un aviso.',
     'type'         => 'read',
     'capabilities' => 'local/crm:enviarcomo',
 ];

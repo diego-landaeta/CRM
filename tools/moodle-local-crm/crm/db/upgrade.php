@@ -55,5 +55,31 @@ function xmldb_local_crm_upgrade($oldversion) {
         }
         upgrade_plugin_savepoint(true, 2026110512, 'local', 'crm');
     }
+    if ($oldversion < 2026110600) {
+        // 1.9.0: el chat de grupo del alumno con las tutoras de su curso (opción B de la #285).
+        $dbman = $DB->get_manager();
+        $tabla = new xmldb_table('local_crm_conversaciones');
+        if (!$dbman->table_exists($tabla)) {
+            $tabla->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $tabla->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $tabla->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $tabla->add_field('conversationid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $tabla->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $tabla->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $tabla->add_index('courseid-userid', XMLDB_INDEX_UNIQUE, ['courseid', 'userid']);
+            $tabla->add_index('conversationid', XMLDB_INDEX_UNIQUE, ['conversationid']);
+            $tabla->add_index('userid', XMLDB_INDEX_NOTUNIQUE, ['userid']);
+            $dbman->create_table($tabla);
+        }
+        // El ajuste «Chat de grupo con las tutoras del curso» sustituye al del chat directo: si
+        // alguien lo había apagado, sigue apagado. Las conversaciones privadas de antes siguen
+        // (y siguen llegando al CRM); solo cambia a dónde lleva «Entrar al chat».
+        $antes = get_config('local_crm', 'chat_directo');
+        if (get_config('local_crm', 'chat_grupo') === false) {
+            set_config('chat_grupo', $antes === false ? 1 : (int) (bool) $antes, 'local_crm');
+        }
+        unset_config('chat_directo', 'local_crm');
+        upgrade_plugin_savepoint(true, 2026110600, 'local', 'crm');
+    }
     return true;
 }

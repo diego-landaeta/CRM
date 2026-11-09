@@ -27,29 +27,18 @@ namespace local_crm;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * El chat directo alumno ↔ tutora.
+ * Quiénes son las tutoras de un curso, y lo que queda del chat directo (1.6.0 a 1.8.0).
  *
- * «Entrar al chat» de la actividad Chat del curso ya no abre la sala: abre la
- * conversación PRIVADA del alumno con una tutora de ESE curso. Nada de salas ni de
- * conversaciones de grupo: dos personas.
+ * Desde la 1.9.0, «Entrar al chat» abre la conversación de GRUPO del alumno con las
+ * tutoras del curso (chat_grupo). De aquí sale el criterio de quién es tutora, el mismo
+ * que antes: profesora del curso (con o sin edición), con la matrícula activa, sin las
+ * cuentas excluidas por nombre («Inspector…») y, para estar en el chat, sin las que el CRM
+ * ha marcado «No disponible».
  *
- * Qué tutora:
- *   1. la de su conversación más reciente con una tutora del curso (no se rompe el hilo);
- *   2. si no tiene ninguna, una de las del curso, repartidas de forma estable;
- *   y siempre entre las DISPONIBLES: profesoras del curso (con o sin edición), con la
- *   matrícula activa, sin las cuentas excluidas por nombre («Inspector…») y sin las que
- *   el CRM ha marcado «No disponible».
- *
- * Si una tutora no está, el CRM pasa la consulta a otra del mismo curso, que responde
- * en SU conversación directa con el alumno; la próxima vez, el botón lleva a esa.
+ * Las conversaciones privadas que abrió el chat directo siguen como estaban: su curso está
+ * en `local_crm_chat` y sus mensajes siguen llegando al CRM.
  */
 class chat_directo {
-
-    /** ¿Está encendido? (ajuste «chat_directo»; de serie, sí). */
-    public static function activo(): bool {
-        $v = get_config('local_crm', 'chat_directo');
-        return $v === false || (bool) $v;
-    }
 
     /** Los ids de Moodle que el CRM ha marcado «No disponible». */
     public static function no_disponibles(): array {
@@ -108,66 +97,6 @@ class chat_directo {
         return isset(self::tutoras($contexto, false)[$userid]);
     }
 
-    /**
-     * La tutora para este alumno en este curso, o null si no hay ninguna disponible.
-     */
-    public static function elegir(\context_course $contexto, int $alumnoid): ?\stdClass {
-        global $DB;
-        $tutoras = self::tutoras($contexto);
-        if (!$tutoras) {
-            return null;
-        }
-        // 1. La de su conversación más reciente con una tutora del curso.
-        [$insql, $params] = $DB->get_in_or_equal(array_keys($tutoras), SQL_PARAMS_NAMED);
-        $params['alumno'] = $alumnoid;
-        $params['tipo'] = \core_message\api::MESSAGE_CONVERSATION_TYPE_INDIVIDUAL;
-        $ultima = $DB->get_record_sql(
-            "SELECT otra.userid AS tutora, MAX(m.timecreated) AS ultima
-               FROM {message_conversations} c
-               JOIN {message_conversation_members} yo ON yo.conversationid = c.id AND yo.userid = :alumno
-               JOIN {message_conversation_members} otra ON otra.conversationid = c.id AND otra.userid $insql
-               JOIN {messages} m ON m.conversationid = c.id
-              WHERE c.type = :tipo
-           GROUP BY otra.userid
-           ORDER BY ultima DESC", $params, IGNORE_MULTIPLE);
-        if ($ultima && isset($tutoras[(int) $ultima->tutora])) {
-            return $tutoras[(int) $ultima->tutora];
-        }
-        // 2. Repartidas de forma estable: el mismo alumno, la misma tutora.
-        ksort($tutoras);
-        $lista = array_values($tutoras);
-        return $lista[$alumnoid % count($lista)];
-    }
-
-    /**
-     * La conversación directa alumno ↔ tutora (la crea si no existe), anotada con su
-     * curso para que el CRM sepa de qué curso es la consulta. Null si Moodle no deja
-     * al alumno escribirle.
-     */
-    public static function conversacion(int $courseid, int $alumnoid, int $tutoraid): ?int {
-        global $DB;
-        if (!\core_message\api::can_send_message($tutoraid, $alumnoid)) {
-            return null;
-        }
-        $id = \core_message\api::get_conversation_between_users([$alumnoid, $tutoraid]);
-        if (!$id) {
-            $c = \core_message\api::create_conversation(\core_message\api::MESSAGE_CONVERSATION_TYPE_INDIVIDUAL, [$alumnoid, $tutoraid]);
-            $id = (int) $c->id;
-        }
-        $fila = $DB->get_record('local_crm_chat', ['conversationid' => $id]);
-        if ($fila) {
-            if ((int) $fila->courseid !== $courseid) {
-                $DB->update_record('local_crm_chat', (object) ['id' => $fila->id, 'courseid' => $courseid, 'timemodified' => time()]);
-            }
-        } else {
-            $DB->insert_record('local_crm_chat', (object) [
-                'conversationid' => $id, 'courseid' => $courseid, 'alumnoid' => $alumnoid, 'tutoraid' => $tutoraid,
-                'timemodified' => time(),
-            ]);
-        }
-        return (int) $id;
-    }
-
     /** El curso de una conversación, si se abrió desde el chat de un curso. */
     public static function curso_de(int $conversationid): ?int {
         global $DB;
@@ -177,12 +106,12 @@ class chat_directo {
 
     /**
      * El script que cambia «Entrar al chat» en la página de la actividad Chat: lleva a
-     * chat.php (que elige la tutora) y quita «Usar interfaz más accesible», que abre la
-     * misma sala. Sin expresiones regulares ni dependencias: funciona en cualquier tema.
+     * chat.php (que abre la conversación de grupo) y quita «Usar interfaz más accesible»,
+     * que abre la misma sala. Sin expresiones regulares ni dependencias: cualquier tema.
      */
     public static function script_del_boton(): string {
         global $PAGE;
-        if (!self::activo() || $PAGE->pagetype !== 'mod-chat-view' || !isloggedin() || isguestuser() || empty($PAGE->cm->id)) {
+        if (!chat_grupo::activo() || $PAGE->pagetype !== 'mod-chat-view' || !isloggedin() || isguestuser() || empty($PAGE->cm->id)) {
             return '';
         }
         $destino = json_encode((new \moodle_url('/local/crm/chat.php', ['id' => $PAGE->cm->id]))->out(false));
@@ -197,7 +126,7 @@ class chat_directo {
       n.removeAttribute("id");
       n.removeAttribute("target");
       n.setAttribute("href", {$destino});
-      n.setAttribute("data-crm-chat", "directo");
+      n.setAttribute("data-crm-chat", "grupo");
       a.parentNode.replaceChild(n, a);
     });
   }

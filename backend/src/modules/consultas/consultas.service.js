@@ -54,8 +54,13 @@ import { marcarContactado } from './consultas.alumnos.js';
  *     más tiempo sin recibir una, y luego el de id más bajo (para que sea fijo);
  *   · null si no hay nadie: la consulta queda «sin tutor» en el panel.
  */
-export async function elegirTutor(projectId, { preferido = null, nueva = true, cursoId = null, alumnoMoodleId = null } = {}) {
+export async function elegirTutor(projectId, {
+  preferido = null, nueva = true, cursoId = null, alumnoMoodleId = null, soloEntre = null,
+} = {}) {
   let candidatos = await tutoresQueRecibenConsultas(projectId);
+  // La conversación de un grupo del curso (#285): solo una tutora que esté DENTRO, o la
+  // respuesta desde el CRM no podría salir (el plugin no añade a nadie a un grupo del curso).
+  if (soloEntre) candidatos = candidatos.filter((t) => soloEntre.has(t.id));
   if (!candidatos.length) return null;
   // Solo tutoras de ESE curso (#679): si una no está, la cubre otra del mismo curso, nunca
   // una de otro. Sin curso conocido, las de los cursos en los que está el alumno. Si el
@@ -145,15 +150,16 @@ async function tutoresConCargaCompleta(tutorIds) {
  * Mete un mensaje del alumno y avisa a su tutor. Lo usa la lectura del campus
  * y lo usarían otras entradas (un webhook del campus) sin cambiar nada.
  */
-export async function entraMensajeDelAlumno(datos, { tutorPreferido = null, avisar = true } = {}) {
+export async function entraMensajeDelAlumno(datos, { tutorPreferido = null, avisar = true, soloEntre = null } = {}) {
   // Al reabrir, primero el tutor que ya la lleva (puede ser otro que el de la
   // conversación, si se reasignó); en una nueva, al que escribió el alumno.
   const r = await model.guardarMensajeDelAlumno(datos,
     (actual, cursoDeLaConsulta) => elegirTutor(datos.projectId, {
       preferido: actual ?? tutorPreferido, nueva: actual == null,
       cursoId: cursoDeLaConsulta ?? datos.curso?.moodleId ?? null, alumnoMoodleId: datos.alumno?.moodleId ?? null,
+      soloEntre,
     }));
-  if (r.duplicado) return r;
+  if (r.duplicado || r.sinReabrir) return r;
   // #189: ya tiene conversación con su tutor, sale de «Alumnos sin mensajes».
   if (r.nueva && r.consulta.tutor_id) {
     await marcarContactado(datos.projectId, r.consulta.tutor_id, datos.alumno.moodleId, datos.escritoAt || new Date());
@@ -425,8 +431,11 @@ export async function enviarAlCampus(mensaje, consulta, adjuntos = [], { db = nu
       error = 'La tutora no tiene su usuario del campus en el CRM: compruébala en Tutores → Campus.';
     } else {
       try {
+        // Plugin 1.9.0: si la consulta es de un chat de grupo, la respuesta va a ese chat (la
+        // ven el alumno y todas las tutoras del curso), no a una conversación privada.
         const r = await enviarComoTutor(conexion, desde, consulta.alumno_moodle_id,
-          textoParaElCampus(mensaje.texto, adjuntos), opciones);
+          textoParaElCampus(mensaje.texto, adjuntos),
+          { ...opciones, conversacionId: consulta.conversacion_grupo_id ? Number(consulta.conversacion_grupo_id) : null });
         externoId = r.id;
         conversacionId = r.conversacionId;
       } catch (err) {
@@ -494,7 +503,8 @@ export async function responder(consultaId, tutorId, texto, archivos = [], { gua
 export async function reintentar(mensajeId, opciones = {}) {
   return model.enTransaccion(async (db) => {
     const { rows } = await db.query(
-      `SELECT m.*, c.project_id AS c_project, c.tutor_id AS c_tutor, c.alumno_moodle_id AS c_alumno
+      `SELECT m.*, c.project_id AS c_project, c.tutor_id AS c_tutor, c.alumno_moodle_id AS c_alumno,
+              c.conversacion_grupo_id AS c_grupo
          FROM consulta_mensajes m JOIN consultas c ON c.id = m.consulta_id
         WHERE m.id = $1 AND m.autor = 'tutor' AND m.enviado_campus_at IS NULL
         FOR UPDATE OF m SKIP LOCKED`, [mensajeId]);
@@ -504,6 +514,7 @@ export async function reintentar(mensajeId, opciones = {}) {
       'SELECT nombre, token_descarga FROM consulta_adjuntos WHERE mensaje_id = $1 ORDER BY id', [mensajeId]);
     return enviarAlCampus(m, {
       project_id: m.c_project, tutor_id: m.autor_user_id || m.c_tutor, alumno_moodle_id: m.c_alumno,
+      conversacion_grupo_id: m.c_grupo,
     }, adj.rows, { ...opciones, db });
   });
 }

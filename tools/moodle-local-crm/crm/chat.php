@@ -15,8 +15,8 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * «Entrar al chat»: lleva al alumno a su conversación directa con una tutora del curso,
- * y a la tutora, a su mensajería (donde están las de todos sus alumnos).
+ * «Entrar al chat»: lleva al alumno a su conversación de grupo con las tutoras de ese curso
+ * (1.9.0), y a la tutora, a su mensajería (donde están las de todos sus alumnos).
  *
  * @package    local_crm
  * @copyright  2026 ISEIE Innovation School
@@ -32,17 +32,26 @@ require_login($curso, false, $cm);
 $contexto = context_course::instance($curso->id);
 $sala = new moodle_url('/mod/chat/view.php', ['id' => $cm->id]);
 
-if (!\local_crm\chat_directo::activo()) {
+if (!\local_crm\chat_grupo::activo()) {
     redirect($sala);
 }
-// La tutora (o quien da clase en el curso): a su mensajería.
 if (\local_crm\chat_directo::es_tutora($contexto, (int) $USER->id) || has_capability('moodle/course:update', $contexto)) {
     redirect(new moodle_url('/message/index.php'));
 }
-$tutora = \local_crm\chat_directo::elegir($contexto, (int) $USER->id);
-$conv = $tutora ? \local_crm\chat_directo::conversacion((int) $curso->id, (int) $USER->id, (int) $tutora->id) : null;
+// Un invitado o alguien sin matrícula en el curso (p. ej. con acceso de invitado al curso) no
+// abre un chat con las tutoras: va a la sala, como siempre.
+if (isguestuser() || !is_enrolled($contexto)) {
+    redirect($sala);
+}
+// La crea si no existe y deja dentro a las tutoras disponibles de ahora.
+$conv = \local_crm\chat_grupo::conversacion((int) $curso->id, (int) $USER->id);
 if (!$conv) {
-    // Sin tutora disponible (o Moodle no deja escribirle): se dice, en vez de abrir una sala vacía.
+    // Ninguna tutora disponible en el curso: se dice, en vez de abrir un chat que no lee nadie.
     redirect($sala, get_string('chat_sin_tutora', 'local_crm'), null, \core\output\notification::NOTIFY_WARNING);
 }
-redirect(new moodle_url('/message/index.php', ['convid' => $conv]));
+$destino = new moodle_url('/message/index.php', ['convid' => $conv]);
+if (\core_message\api::count_conversation_members($conv) < 2) {
+    // Ya tenía su chat, pero ahora no hay ninguna tutora disponible: ve su historial y el aviso.
+    redirect($destino, get_string('chat_sin_tutora', 'local_crm'), null, \core\output\notification::NOTIFY_WARNING);
+}
+redirect($destino);
