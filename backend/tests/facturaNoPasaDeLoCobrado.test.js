@@ -184,17 +184,27 @@ describe('de quien es una factura, para una gestora', () => {
 
   it('y puede tocar la suya aunque no tenga ficha', async () => {
     // El permiso lo pide la ruta (#423); esto es solo de quién es.
-    respuestas = [{ rows: [{ '?column?': 1 }] }];
+    // Primero se mira si lleva un equipo comercial (09/11/2026): no lo lleva.
+    respuestas = [{ rows: [] }, { rows: [{ '?column?': 1 }] }];
     expect(await real.esFacturaQueGestiona(11, 'gestor', 392)).toBe(true);
-    const sql = consultas[0].sql;
+    expect(consultas[0].sql).toMatch(/FROM equipo_comercial/);
+    const sql = consultas[1].sql;
     expect(sql).toContain('i.created_by = ANY($2::int[])');
-    expect(consultas[0].params).toEqual([392, [11]]);
+    expect(consultas[1].params).toEqual([392, [11]]);
     expect(sql).toContain('LEFT JOIN conversions cv');
   });
 
   it('pero no la de otra', async () => {
-    respuestas = [{ rows: [] }];
+    respuestas = [{ rows: [] }, { rows: [] }];
     expect(await real.esFacturaQueGestiona(6, 'gestor', 392)).toBe(false);
+  });
+
+  it('quien lleva un equipo comercial no corrige ni abona ninguna (Diego, 09/11/2026)', async () => {
+    respuestas = [{ rows: [{ gestora_id: 12 }] }];
+    expect(await real.esFacturaQueGestiona(5, 'admin', 392)).toBe(false);
+    consultas.length = 0;
+    respuestas = [{ rows: [] }];
+    expect(await real.esFacturaQueGestiona(5, 'admin', 392)).toBe(true);
   });
 });
 

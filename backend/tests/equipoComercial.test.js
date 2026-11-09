@@ -20,8 +20,9 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { gestorasACargo, alcanceComercial } = await import('../src/shared/utils/roles.js');
 const { construirAmbito } = await import('../src/modules/mcp/mcp.acceso.js');
+const { esFacturaQueGestiona } = await import('../src/modules/invoices/invoices.model.js');
 const { HERRAMIENTAS } = await import('../src/modules/mcp/mcp.tools.js');
-const modulos = await Promise.all(['users', 'leads', 'conversions', 'sales']
+const modulos = await Promise.all(['users', 'leads', 'conversions', 'sales', 'invoices']
   .map((m) => import(`../src/modules/${m}/index.js`).then((x) => x.default)));
 
 const app = express();
@@ -37,7 +38,7 @@ const ids = { users: [], projects: [], issuers: [], leads: [], ventas: [] };
 
 let EMPRESA; let OTRA_EMPRESA; let A; let B; let C;
 let SUPER; let LIDER; let ADMIN; let G1; let G2; let G3; let G_OTRA;
-let L1; let L2; let L3; let L_SIN; let V1; let V2;
+let L1; let L2; let L3; let L_SIN; let V1; let V2; let F1;
 
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const pedir = (u, ruta) => request.get(ruta).set(como(u));
@@ -93,11 +94,19 @@ beforeAll(async () => {
   };
   V1 = await venta(L1, A, G1.id);
   V2 = await venta(L2, A, G2.id);
+  // Una factura de la venta de G1 (de su equipo), para corregir y abonar.
+  F1 = (await one(`INSERT INTO invoices (project_id, ano, cliente_nombre, cliente_nif, cliente_direccion,
+                      cliente_ciudad, cliente_cp, cliente_pais, items, base_imponible, total, conversion_id, lead_id,
+                      serie, numero, codigo)
+                    VALUES ($1, 2026, 'Cliente', 'X', 'Calle', 'Ciudad', '00000', 'ES', '[]'::jsonb, 100, 121, $2, $3,
+                      $4, 1, $5)
+                    RETURNING id`, [A, V1, L1, MARCA.slice(0, 10), `${MARCA}-1`])).id;
 }, 60000);
 
 afterAll(async () => {
   await q('DELETE FROM equipo_comercial WHERE lider_id = ANY($1::int[]) OR gestora_id = ANY($1::int[])', [ids.users]);
   await q('DELETE FROM permisos_registro WHERE usuario_id = ANY($1::int[]) OR quien_id = ANY($1::int[])', [ids.users]).catch(() => {});
+  await q('DELETE FROM invoices WHERE id = $1 OR rectifica_id = $1', [F1]).catch(() => q('DELETE FROM invoices WHERE id = $1', [F1]));
   await q('DELETE FROM conversion_payments WHERE conversion_id = ANY($1::int[])', [ids.ventas]);
   await q('DELETE FROM conversions WHERE id = ANY($1::int[])', [ids.ventas]);
   await q('DELETE FROM lead_interactions WHERE lead_id = ANY($1::int[])', [ids.leads]).catch(() => {});
@@ -149,6 +158,9 @@ describe('decidir el equipo (PUT /api/users/:id/equipo-comercial)', () => {
     const r = await pedir(ADMIN, `/api/users/${LIDER.id}/equipo-comercial`);
     expect(r.status).toBe(200);
     expect(r.body.data.gestora_ids.sort()).toEqual([G1.id, G3.id].sort());
+    // Si puede cambiarlo lo dice el servidor: la admin, no; el super admin, sí.
+    expect(r.body.data.puede_cambiar).toBe(false);
+    expect((await pedir(SUPER, `/api/users/${LIDER.id}/equipo-comercial`)).body.data.puede_cambiar).toBe(true);
     const deLaLista = r.body.data.gestoras.map((g) => g.id);
     expect(deLaLista).toEqual(expect.arrayContaining([G1.id, G2.id, G3.id]));
     expect(deLaLista).not.toContain(G_OTRA.id);   // otra empresa
@@ -264,6 +276,19 @@ describe('lo que ve cada una', () => {
       .rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
     const ver = HERRAMIENTAS.find((h) => h.nombre === 'ver_prospecto');
     await expect(ver.ejecutar(ambito, { id: L2 })).rejects.toMatchObject({ code: 'MCP_NO_ENCONTRADO' });
+  });
+
+  it('corregir y abonar facturas: la líder no, ni las de su equipo; una admin sin equipo, sí (Diego, 09/11)', async () => {
+    expect(await esFacturaQueGestiona(LIDER.id, 'admin', F1)).toBe(false);
+    expect(await esFacturaQueGestiona(ADMIN.id, 'admin', F1)).toBe(true);
+    expect(await esFacturaQueGestiona(SUPER.id, 'superadmin', F1)).toBe(true);
+    const corregir = await request.patch(`/api/invoices/${F1}/corregir`).set(como(LIDER)).send({ cliente_nombre: 'Otro' });
+    expect(corregir.status).toBe(403);
+    const abonar = await request.post(`/api/invoices/${F1}/rectificar`).set(como(LIDER)).send({ motivo: 'prueba' });
+    expect(abonar.status).toBe(403);
+    // La admin sin equipo pasa la puerta (lo que haga después ya no es cosa de esto).
+    const admin = await request.patch(`/api/invoices/${F1}/corregir`).set(como(ADMIN)).send({ cliente_nombre: 'Cliente' });
+    expect(admin.status).not.toBe(403);
   });
 
   it('cambiar el equipo surte efecto en la siguiente petición', async () => {

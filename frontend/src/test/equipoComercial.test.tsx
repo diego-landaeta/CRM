@@ -8,9 +8,6 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
  * persona no tiene equipo, no sale.
  */
 
-let permisos: Record<string, boolean> = {};
-let auth: any;
-vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => auth }));
 
 const put = vi.fn(async (_url: string, body: any) => ({
   success: true,
@@ -30,10 +27,9 @@ const { default: EquipoComercial } = await import('@/modules/users/components/Eq
 
 beforeEach(() => {
   put.mockClear();
-  permisos = {};
-  auth = { user: { id: 1, role: 'admin' }, permissions: permisos };
   equipo = {
     lider_id: 5,
+    puede_cambiar: false,
     gestora_ids: [11],
     gestoras: [
       { id: 11, nombre: 'Ana', email: 'ana@x.test', role: 'gestor', active: true, en_equipo: true },
@@ -44,7 +40,7 @@ beforeEach(() => {
 
 describe('la sección del equipo comercial', () => {
   it('con «equipos.gestionar»: se ve, se marca y se guarda', async () => {
-    auth.permissions = { 'equipos.gestionar': true };
+    equipo.puede_cambiar = true;
     render(<EquipoComercial userId={5} />);
     expect(await screen.findByText('Equipo comercial a su cargo')).toBeTruthy();
     const ana = screen.getByLabelText(/Ana/) as HTMLInputElement;

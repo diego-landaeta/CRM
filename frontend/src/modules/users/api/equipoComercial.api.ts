@@ -20,6 +20,8 @@ export interface EquipoComercial {
   gestora_ids: number[];
   /** Las que tiene y las que se le pueden poner (gestoras de sus campus). */
   gestoras: GestoraDelEquipo[];
+  /** Si quien mira puede cambiarlo (`equipos.gestionar`): lo dice el servidor. */
+  puede_cambiar?: boolean;
 }
 
 export async function getEquipoComercial(userId: number): Promise<EquipoComercial> {

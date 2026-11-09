@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { UsersThree } from '@phosphor-icons/react';
 import Casilla from '@/shared/components/ui/Casilla';
-import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { getEquipoComercial, setEquipoComercial, type EquipoComercial as Equipo } from '../api/equipoComercial.api';
 
@@ -18,11 +17,11 @@ import { getEquipoComercial, setEquipoComercial, type EquipoComercial as Equipo 
  *
  * Se ve si ya tiene equipo o si quien mira puede decidirlo
  * (`equipos.gestionar`, de serie solo el super admin). Sin el permiso, solo se
- * lee. Se guarda con su propio botón, aparte del formulario de la ficha.
+ * lee (lo dice el servidor en `puede_cambiar`: así el componente no depende de
+ * la sesión del navegador). Se guarda con su propio botón, aparte del
+ * formulario de la ficha.
  */
 export default function EquipoComercial({ userId }: { userId: number }) {
-  const { can } = usePermission();
-  const puedeCambiar = can('equipos.gestionar');
   const [equipo, setEquipo] = useState<Equipo | null>(null);
   const [marcadas, setMarcadas] = useState<number[]>([]);
   const [guardando, setGuardando] = useState(false);
@@ -37,6 +36,7 @@ export default function EquipoComercial({ userId }: { userId: number }) {
   }, [userId]);
 
   if (!equipo) return null;
+  const puedeCambiar = equipo.puede_cambiar === true;
   if (!puedeCambiar && equipo.gestora_ids.length === 0) return null;
 
   const cambiado = [...marcadas].sort().join(',') !== [...equipo.gestora_ids].sort().join(',');
