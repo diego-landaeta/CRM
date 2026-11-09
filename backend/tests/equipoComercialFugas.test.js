@@ -22,7 +22,8 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { gestorasACargo } = await import('../src/shared/utils/roles.js');
 const { usuarioObjetivo } = await import('../src/modules/whatsapp/chat.controller.js');
-const modulos = await Promise.all(['auth', 'users', 'projects', 'accounting', 'invoices', 'whatsapp', 'permissions']
+const modulos = await Promise.all(['auth', 'users', 'projects', 'accounting', 'invoices', 'whatsapp', 'permissions',
+  'reports', 'proceso', 'convocatorias']
   .map((m) => import(`../src/modules/${m}/index.js`).then((x) => x.default)));
 
 const app = express();
@@ -38,7 +39,7 @@ const ids = { users: [], projects: [], issuers: [], leads: [], ventas: [], factu
 
 let EMPRESA; let A; let B;
 let SUPER; let LIDER; let ADMIN; let G1; let G2; let G3;
-let V1; let V2; let P1; let P2; let F1; let F2;
+let V1; let V2; let P1; let P2; let F1; let F2; let L1; let L2;
 
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const pedir = (u, ruta) => request.get(ruta).set(como(u));
@@ -80,8 +81,8 @@ beforeAll(async () => {
       [A, `${MARCA} ${n}`, `${n}@${MARCA.toLowerCase()}.test`, responsable]);
     ids.leads.push(l.id); return l.id;
   };
-  const L1 = await lead('l1', G1.id);
-  const L2 = await lead('l2', G2.id);
+  L1 = await lead('l1', G1.id);
+  L2 = await lead('l2', G2.id);
 
   // Dos ventas con su cobro de hoy y algo pendiente.
   const venta = async (leadId, vendedora, total) => {
@@ -300,5 +301,24 @@ describe('6 · sin escalada', () => {
     expect((await gestorasACargo(LIDER.id)).sort()).toEqual([G1.id, G3.id].sort());
     await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'equipos'`, [LIDER.id]);
     olvidarPermisos?.(LIDER.id);
+  });
+});
+
+describe('otros sitios del barrido', () => {
+  it('Informes › overview: el ranking por gestora, solo su equipo', async () => {
+    const r = await pedir(LIDER, `/api/informes/overview?projectId=${A}`);
+    expect(r.status).toBe(200);
+    const nombres = r.body.data.leads_por_gestor.map((g) => g.gestor);
+    expect(nombres).toContain(`${MARCA} g1`);
+    expect(nombres).not.toContain(`${MARCA} g2`);
+    const admin = await pedir(ADMIN, `/api/informes/overview?projectId=${A}`);
+    expect(admin.body.data.leads_por_gestor.map((g) => g.gestor)).toContain(`${MARCA} g2`);
+  });
+
+  it('proceso y convocatorias de un prospecto de fuera, por id: 403', async () => {
+    expect((await pedir(LIDER, `/api/proceso/lead/${L2}`)).status).toBe(403);
+    expect((await pedir(LIDER, `/api/convocatorias/lead/${L2}`)).status).toBe(403);
+    expect((await pedir(LIDER, `/api/proceso/lead/${L1}`)).status).not.toBe(403);
+    expect((await pedir(ADMIN, `/api/proceso/lead/${L2}`)).status).not.toBe(403);
   });
 });

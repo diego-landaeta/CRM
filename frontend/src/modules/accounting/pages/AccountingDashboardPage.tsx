@@ -115,6 +115,11 @@ export default function AccountingDashboardPage() {
   if (!data) return null;
 
   const { ingresos, egresos, balance, cuentas_por_cobrar, trend } = data;
+  // Quien lleva un equipo comercial (o una gestora) ve lo de su equipo, y los
+  // egresos y el balance —que son de la empresa, no de gestoras— no le llegan
+  // (QA del 09/11/2026). Se dice en vez de pintar un cero que parece real.
+  const soloEquipo = data.solo_equipo === true;
+  const sinEgresos = soloEquipo || egresos?.oculto === true;
 
   // Merge trend ingresos + egresos
   // El backend manda los totales reales; el listado viene con LIMIT 50.
@@ -201,6 +206,7 @@ export default function AccountingDashboardPage() {
           trend="down"
         />
         </>)}
+        {!sinEgresos && (<>
         <KpiCard
           icon={TrendDown}
           iconBg="bg-destructive-soft text-destructive-soft-foreground"
@@ -215,7 +221,14 @@ export default function AccountingDashboardPage() {
           label="Balance neto"
           value={fmt(balance)}
         />
+        </>)}
       </div>
+
+      {soloEquipo && (
+        <p role="note" className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/40">
+          Cifras de tu equipo comercial. Egresos y balance: solo para administración sin equipo.
+        </p>
+      )}
 
       {/* Lo recurrente: lo que de verdad define a una suscripcion. Solo
           cuando hay conexion con Stripe; sin clave no se pinta un cuadro de
@@ -253,14 +266,16 @@ export default function AccountingDashboardPage() {
               <Tooltip formatter={(v) => fmt(v)} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2} name="Ingresos" dot={{ fill: '#10b981', r: 3 }} />
-              <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" dot={{ fill: '#ef4444', r: 3 }} />
+              {!sinEgresos && <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" dot={{ fill: '#ef4444', r: 3 }} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-semibold mb-3">Egresos por categoría</h3>
-          {egresos.por_categoria.length === 0 ? (
+          {sinEgresos ? (
+            <EmptyState icon={Receipt} title="Solo para administración sin equipo" description="Los egresos son de la empresa, no de tu equipo comercial" />
+          ) : egresos.por_categoria.length === 0 ? (
             <EmptyState icon={Receipt} title="Sin egresos" description="No hay gastos registrados en este período" />
           ) : (
             <ResponsiveContainer width="100%" height={220} minHeight={200}>

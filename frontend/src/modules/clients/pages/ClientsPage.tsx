@@ -65,6 +65,7 @@ function exportCSV(clients: Client[], filename: string, etiquetaPlural: string):
 }
 import { toast } from '@/shared/hooks/useToast';
 import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
+import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
@@ -215,9 +216,10 @@ export default function ClientsPage() {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
     const projectFilter = !isAllProjects && activeProject?.id ? `&projectId=${activeProject.id}` : '';
     client.get(`/users?active=true&role=gestor&limit=100${projectFilter}`).then((r) => {
-      if (r.success) setGestores(((r.data as Array<{ id: number; nombre: string }>) || []));
+      // Solo las de su alcance (equipo comercial, 09/11/2026).
+      if (r.success) setGestores(soloDelAlcance((r.data as Array<{ id: number; nombre: string }>) || [], user));
     }).catch(() => setGestores([]));
-  }, [user?.role, activeProject?.id, isAllProjects]);
+  }, [user?.role, activeProject?.id, isAllProjects, user?.lleva_equipo]);
 
   // Cargar productos del proyecto activo
   useEffect(() => {

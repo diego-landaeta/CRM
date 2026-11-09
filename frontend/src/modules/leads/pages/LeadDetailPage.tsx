@@ -27,6 +27,7 @@ import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
 import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
+import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 function LoadingSkeleton() {
   return (
@@ -206,7 +207,9 @@ export default function LeadDetailPage() {
       />
       <LeadReassignDialog
         open={reassignOpen}
-        gestores={gestores}
+        // Reasignar, solo a las de su alcance (equipo comercial, 09/11/2026):
+        // a una de fuera el servidor responde FUERA_DE_TU_EQUIPO.
+        gestores={soloDelAlcance(gestores, user)}
         onClose={() => setReassignOpen(false)}
         onSubmit={reassign}
       />

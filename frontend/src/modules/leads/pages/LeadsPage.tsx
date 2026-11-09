@@ -85,6 +85,7 @@ import BloquePlegable from '@/shared/components/ui/BloquePlegable';
 import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useIdsDelAmbito, useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
+import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 
 function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
@@ -409,10 +410,12 @@ export default function LeadsPage() {
     const pidParam = activeProject?.id && activeProject.id > 0 ? `&projectId=${activeProject.id}` : '';
     client.get(`/users?limit=100${pidParam}`)
       .then((res) => {
-        if (res.success) setGestores(res.data || []);
+        // Solo las de su alcance (equipo comercial, 09/11/2026): reasignar o
+        // filtrar por una de fuera, el servidor se lo negaría.
+        if (res.success) setGestores(soloDelAlcance(res.data || [], user));
       })
       .catch(() => toast({ title: 'Error al cargar gestores', variant: 'destructive' }));
-  }, [user?.role, activeProject?.id]);
+  }, [user?.role, activeProject?.id, user?.lleva_equipo]);
 
   function handleMarkContacted(lead) {
     setConfirmingContact(lead);

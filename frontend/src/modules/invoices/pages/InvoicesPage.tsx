@@ -22,6 +22,7 @@ import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
+import { llevaEquipo } from '@/shared/lib/alcanceComercial';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -48,7 +49,7 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string } | null };
+  const { user } = useAuth() as { user: { role?: string; lleva_equipo?: boolean } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
   // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
@@ -56,6 +57,11 @@ export default function InvoicesPage() {
   // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
   const { can } = usePermission();
   const canManage = can('facturas.gestionar');
+  // Corregir, abonar, asociar a una venta y eliminar: el permiso Y no llevar un
+  // equipo comercial (Diego, 09/11/2026). El servidor ya le da 403 a quien lo
+  // lleva; aquí no se le enseñan los botones (QA del 09/11).
+  const conEquipo = llevaEquipo(user);
+  const puedeCorregir = canManage && !conEquipo;
   const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   // «Todos los proyectos» (#218): sin campus, las de todos los suyos. El servidor
@@ -317,7 +323,7 @@ export default function InvoicesPage() {
             <TutorialButton />
             {/* Los abonos (rectificativas) los emite un admin o una gestora con
                 permiso factura_manager. Las demás ven la pestaña pero no crean. */}
-            {!(esAbonos && !canManage) && (
+            {!(esAbonos && !puedeCorregir) && (
               <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
@@ -334,6 +340,13 @@ export default function InvoicesPage() {
 
       {/* Si la serie tiene agujeros, se dice aqui: es donde se factura. */}
       <AvisoHuecosFacturas projectId={activeProject?.id} />
+
+      {canManage && conEquipo && (
+        <p role="note" className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/40">
+          Llevas un equipo comercial: ves las facturas de tu equipo, pero corregirlas, abonarlas, asociarlas a una
+          venta o eliminarlas lo hace la administración sin equipo.
+        </p>
+      )}
 
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
       {/* Con una empresa elegida arriba no hay un proyecto en la cabecera: una cola por campus
@@ -766,7 +779,7 @@ export default function InvoicesPage() {
                       )}
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
-                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && canManage && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && puedeCorregir && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar IVA, datos del cliente o concepto"
                           className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
@@ -806,7 +819,7 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} weight="bold" /> Cobrada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && canManage && (
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && puedeCorregir && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
@@ -814,7 +827,7 @@ export default function InvoicesPage() {
                         </button>
                       )}
                       {/* Asociar la factura a una venta del cliente — Opción B. */}
-                      {inv.estado !== 'cancelada' && canManage && (
+                      {inv.estado !== 'cancelada' && puedeCorregir && (
                         <button onClick={() => setAsociarInv(inv)}
                           title="Asociar esta factura a una venta del cliente"
                           className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
@@ -822,7 +835,7 @@ export default function InvoicesPage() {
                         </button>
                       )}
                       {/* Eliminar factura + liberar número (errores de carga). */}
-                      {canManage && inv.estado !== 'cancelada' && (
+                      {puedeCorregir && inv.estado !== 'cancelada' && (
                         <button onClick={() => setDeletingInv(inv)}
                           title="Eliminar la factura y liberar su número (se equivocaron al cargarla)"
                           className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">

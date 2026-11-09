@@ -30,6 +30,7 @@ import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import { toast } from '@/shared/hooks/useToast';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import { tramosDeSalud, fraseDeSalud, totalDeLaCola } from '../lib/salud';
+import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
 function cuando(fecha: string, retraso: number) {
@@ -201,12 +202,13 @@ export default function ColaDelDiaPage() {
     client.get(`/users?limit=100${proyecto ? `&projectId=${proyecto}` : ''}`)
       .then((r: any) => {
         if (!r?.success) return;
-        setGestoras((r.data || [])
+        // Solo las de su alcance (equipo comercial, 09/11/2026).
+        setGestoras(soloDelAlcance(r.data || [], user)
           .filter((u: any) => u.active !== false)
           .map((u: any) => ({ id: u.id, nombre: u.nombre })));
       })
       .catch(() => { /* si falla, se queda sin filtro y ya */ });
-  }, [esAdmin, proyecto]);
+  }, [esAdmin, proyecto, user?.lleva_equipo]);
 
   // Las formaciones del desplegable las manda el servidor CON la cola: solo
   // las que tiene la gente de esta lista. Antes se pedia el catalogo entero
