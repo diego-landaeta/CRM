@@ -32,10 +32,17 @@ BEGIN;
 
 ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS zadarma_extension VARCHAR(20);
 
--- Una extensión, una persona por campus. Parcial: sin extensión no choca nadie.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_user_projects_zadarma_extension
+-- Una extensión, una persona por campus. Parcial: sin extensión no choca nadie,
+-- y una fila apagada (quien ya no está en el campus) tampoco: si no, la
+-- extensión de quien se fue quedaría bloqueada para siempre. Las de personas
+-- desactivadas las libera el CRM al dársela a otra (zadarma.model.js ·
+-- ponerExtensiones), porque un índice no puede mirar `users.active`.
+-- DROP + CREATE y no solo IF NOT EXISTS: así, si alguien pasó la primera
+-- versión de esta migración (índice sin `active`), al repetirla queda la buena.
+DROP INDEX IF EXISTS uq_user_projects_zadarma_extension;
+CREATE UNIQUE INDEX uq_user_projects_zadarma_extension
     ON user_projects (project_id, zadarma_extension)
-    WHERE zadarma_extension IS NOT NULL;
+    WHERE zadarma_extension IS NOT NULL AND active;
 
 CREATE TABLE IF NOT EXISTS llamadas (
     id               SERIAL       PRIMARY KEY,

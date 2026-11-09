@@ -14,6 +14,19 @@ import { comoIds } from '../../shared/utils/roles.js';
 
 const TZ_POR_DEFECTO = 'Europe/Madrid';
 
+// Integraciones ya no deja guardar una zona que no existe; si quedara alguna de
+// antes, el aviso usa Madrid en vez de fallar en Postgres y perder la llamada.
+function zonaUsable(zona) {
+  if (!zona) return TZ_POR_DEFECTO;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: zona });
+    return zona;
+  } catch {
+    logger.warn({ zona }, 'zadarma: zona horaria no válida guardada; se usa Europe/Madrid');
+    return TZ_POR_DEFECTO;
+  }
+}
+
 function descifrarFila(fila) {
   const c = fila.config_public || {};
   if (!fila.encrypted_value || !c.zadarma_secret_encrypted) return null;
@@ -22,7 +35,7 @@ function descifrarFila(fila) {
       projectId: Number(fila.project_id),
       clave: decrypt(fila.encrypted_value, fila.iv, fila.auth_tag),
       secreto: decrypt(c.zadarma_secret_encrypted, c.zadarma_secret_iv, c.zadarma_secret_auth_tag),
-      zonaHoraria: c.zona_horaria || TZ_POR_DEFECTO,
+      zonaHoraria: zonaUsable(c.zona_horaria),
     };
   } catch (err) {
     // Una ENCRYPTION_KEY cambiada deja la fila ilegible: ese campus queda como
@@ -138,6 +151,20 @@ export async function ponerExtensiones(client, projectId, lista) {
   // Primero se vacían las que cambian: así dos personas pueden intercambiarse
   // la extensión en un mismo guardado sin chocar con el índice único.
   const ids = lista.map((x) => x.user_id);
+  // Las extensiones que se van a dar y que aún guarda quien ya no cuenta: una
+  // fila apagada del campus o una persona desactivada. Se le quitan, para que
+  // no bloqueen el índice único ni se le atribuyan llamadas de otra.
+  const nuevas = lista.map((x) => x.extension).filter(Boolean);
+  if (nuevas.length) {
+    await client.query(
+      `UPDATE user_projects up SET zadarma_extension = NULL
+         FROM users u
+        WHERE u.id = up.user_id AND up.project_id = $1
+          AND up.zadarma_extension = ANY($2::text[])
+          AND (NOT up.active OR NOT u.active)`,
+      [projectId, nuevas]
+    );
+  }
   await client.query(
     `UPDATE user_projects SET zadarma_extension = NULL
       WHERE project_id = $1 AND user_id = ANY($2::int[])`,
@@ -161,8 +188,11 @@ export async function ponerExtensiones(client, projectId, lista) {
 export async function gestoraDeLaExtension(extension, projectIds) {
   if (!extension) return null;
   const { rows } = await query(
+    // Solo quien sigue activa: una llamada no se atribuye a quien se fue aunque
+    // su fila conserve la extensión (queda «Sin asignar» hasta que se reasigne).
     `SELECT up.user_id, up.project_id
        FROM user_projects up
+       JOIN users u ON u.id = up.user_id AND u.active
       WHERE up.zadarma_extension = $1 AND up.project_id = ANY($2::int[]) AND up.active
       ORDER BY up.project_id
       LIMIT 1`,

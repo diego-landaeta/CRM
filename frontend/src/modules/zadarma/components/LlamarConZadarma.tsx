@@ -59,7 +59,8 @@ export default function LlamarConZadarma({
 
   if (variante === 'ancho') {
     return (
-      <button type="button" onClick={pulsar} disabled={llamando} title={titulo} aria-disabled={sinExtension || undefined}
+      <button type="button" onClick={pulsar} disabled={llamando} title={titulo}
+        aria-label="Llamar con Zadarma"
         className={`h-9 px-4 rounded-md text-sm font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap
                     focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60
                     ${sinExtension
@@ -72,7 +73,8 @@ export default function LlamarConZadarma({
   }
 
   return (
-    <button type="button" onClick={pulsar} disabled={llamando} title={titulo} aria-disabled={sinExtension || undefined}
+    <button type="button" onClick={pulsar} disabled={llamando} title={titulo}
+      aria-label="Llamar con Zadarma"
       className={`inline-flex items-center gap-1 h-6 px-2 rounded-md border text-xs
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60
                   ${sinExtension

@@ -1,4 +1,4 @@
-import client from '@/shared/api/client';
+import client, { getAccessToken } from '@/shared/api/client';
 
 /*
   Zadarma (#137): llamar por la centralita, las extensiones de cada persona y
@@ -46,18 +46,41 @@ export interface ReporteLlamadas {
   equipo: Omit<FilaLlamadas, 'user_id' | 'comercial' | 'personas'>;
 }
 
-// Una sola petición por carga de la app: el botón sale en muchas fichas y chats,
-// y lo que dice cambia solo cuando un admin conecta un campus o pone extensiones.
-let estadoEnCurso: Promise<CampusZadarma[]> | null = null;
+// Una sola petición por persona y carga de la app: el botón sale en muchas
+// fichas y chats, y lo que dice cambia solo cuando un admin conecta un campus o
+// pone extensiones.
+//
+// Guardada POR PERSONA: si en la misma pestaña se sale y entra otra (un
+// ordenador compartido), no puede heredar las extensiones de la anterior. Se
+// sabe quién es por el token de la sesión (su `userId`), sin depender de que
+// alguien vacíe esto al salir.
+let estado: { userId: string; promesa: Promise<CampusZadarma[]> } | null = null;
+
+function quienSoy(): string {
+  const token = getAccessToken();
+  if (!token) return '';
+  try {
+    const carga = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return String(carga.userId ?? carga.id ?? '');
+  } catch {
+    return '';
+  }
+}
 
 export function getEstado({ refrescar = false } = {}): Promise<CampusZadarma[]> {
-  if (!estadoEnCurso || refrescar) {
-    estadoEnCurso = client.get<CampusZadarma[]>('/zadarma/estado')
-      .then((r) => (r.success && Array.isArray(r.data) ? r.data : []))
-      // Sin permiso o sin el módulo, simplemente no hay Zadarma: sin botón.
-      .catch(() => []);
-  }
-  return estadoEnCurso;
+  const userId = quienSoy();
+  if (estado && estado.userId === userId && !refrescar) return estado.promesa;
+  const promesa = client.get<CampusZadarma[]>('/zadarma/estado')
+    .then((r) => (r.success && Array.isArray(r.data) ? r.data : []))
+    .catch((err: { status?: number }) => {
+      // Sin permiso (403) o sin el módulo (404) la respuesta no va a cambiar:
+      // no hay Zadarma y se recuerda. Cualquier otro fallo (red, 500) NO se
+      // guarda: la próxima ficha lo vuelve a preguntar.
+      if (err?.status !== 403 && err?.status !== 404 && estado?.promesa === promesa) estado = null;
+      return [] as CampusZadarma[];
+    });
+  estado = { userId, promesa };
+  return promesa;
 }
 
 export async function llamar(leadId: number): Promise<ResultadoLlamada> {

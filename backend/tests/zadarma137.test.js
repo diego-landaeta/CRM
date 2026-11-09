@@ -308,11 +308,63 @@ describe('Integraciones: Zadarma se guarda cifrado y se prueba (como Stripe)', (
     expect(fila.encrypted_value).not.toContain('una-clave-larga');
     expect(JSON.stringify(fila.config_public)).not.toContain('un-secreto-largo');
     expect(fila.config_public.zadarma_secret_encrypted).toBeTruthy();
+    // Y lo cifrado no vuelve al navegador: ni el secreto cifrado, ni su iv, ni su etiqueta.
+    expect(Object.keys(ok.body.data.config_public).filter((k) => /_(encrypted|iv|auth_tag)$/.test(k))).toEqual([]);
+    expect(ok.body.data.config_public.zadarma_secret_preview).toBeTruthy();
+    const detalle = await request.get(`/api/integrations/zadarma?projectId=${B}`).set(como(SUPER));
+    expect(JSON.stringify(detalle.body.data.config_public)).not.toMatch(/_encrypted|_auth_tag|_iv"/);
 
     const { llamadas } = zadarmaSimulado();
     const prueba = await request.post(`/api/integrations/zadarma/test?projectId=${B}`).set(como(SUPER));
     expect(prueba.body.data).toMatchObject({ ok: true });
     expect(new URL(llamadas[0].url).pathname).toBe('/v1/info/balance/');
     await q(`DELETE FROM project_integrations WHERE project_id = $1 AND provider = 'zadarma'`, [B]);
+  });
+
+  it('una zona horaria que no existe no se guarda (400): si no, cada aviso de ese campus fallaría', async () => {
+    const SUPER2 = await persona('Super2', 'superadmin', [B]);
+    const mala = await request.put('/api/integrations').set(como(SUPER2))
+      .send({ projectId: B, provider: 'zadarma', api_key: 'una-clave-larga', api_secret: 'un-secreto-largo', config_public: { zona_horaria: 'Europe/Madird' } });
+    expect(mala.status).toBe(400);
+    expect(mala.body.error).toMatch(/Zona horaria no válida/);
+    expect(await q(`SELECT 1 FROM project_integrations WHERE project_id = $1 AND provider = 'zadarma'`, [B])).toHaveLength(0);
+    const buena = await request.put('/api/integrations').set(como(SUPER2))
+      .send({ projectId: B, provider: 'zadarma', api_key: 'una-clave-larga', api_secret: 'un-secreto-largo', config_public: { zona_horaria: 'America/Bogota' } });
+    expect(buena.status).toBe(200);
+    expect(buena.body.data.config_public.zona_horaria).toBe('America/Bogota');
+    await q(`DELETE FROM project_integrations WHERE project_id = $1 AND provider = 'zadarma'`, [B]);
+  });
+});
+
+describe('extensiones de quien ya no está', () => {
+  it('una desactivada no se lleva las llamadas de su extensión, y la extensión se puede dar a otra', async () => {
+    const MARTA = await persona('Marta', 'gestor', [A], '109');
+    const NUEVA = await persona('Nueva', 'gestor', [A]);
+    await q('UPDATE users SET active = false WHERE id = $1', [MARTA.id]);
+
+    // El aviso de la 109 ya no es de Marta: queda sin gestora.
+    const c = avisoSaliente({ pbx: `${MARCA}-baja`, extension: '109', destino: '34699999991', estado: 'no answer', duracion: 0 });
+    const r = await enviarAviso(c, firmaDe(c));
+    expect(r.status).toBe(200);
+    expect(r.body.data.userId).toBeNull();
+
+    // Y la 109 se le puede dar a la nueva: se le quita a quien ya no está.
+    const g = await request.put('/api/zadarma/extensiones').set(como(ADMIN))
+      .send({ projectId: A, extensiones: [{ user_id: NUEVA.id, extension: '109' }] });
+    expect(g.status).toBe(200);
+    const filas = await q('SELECT user_id, zadarma_extension FROM user_projects WHERE project_id = $1 AND user_id = ANY($2::int[]) ORDER BY user_id',
+      [A, [MARTA.id, NUEVA.id]]);
+    expect(filas).toEqual([{ user_id: MARTA.id, zadarma_extension: null }, { user_id: NUEVA.id, zadarma_extension: '109' }]);
+  });
+
+  it('una fila apagada del campus no bloquea su extensión', async () => {
+    const SALE = await persona('Sale', 'gestor', [A], '110');
+    const ENTRA = await persona('Entra', 'gestor', [A]);
+    await q('UPDATE user_projects SET active = false WHERE user_id = $1 AND project_id = $2', [SALE.id, A]);
+    const g = await request.put('/api/zadarma/extensiones').set(como(ADMIN))
+      .send({ projectId: A, extensiones: [{ user_id: ENTRA.id, extension: '110' }] });
+    expect(g.status).toBe(200);
+    const [fila] = await q('SELECT zadarma_extension FROM user_projects WHERE user_id = $1 AND project_id = $2', [ENTRA.id, A]);
+    expect(fila.zadarma_extension).toBe('110');
   });
 });

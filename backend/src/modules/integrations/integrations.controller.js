@@ -60,6 +60,15 @@ function projectId(req) {
 // Toma la fila del DB y la prepara para serializar al frontend SIN exponer
 // el secreto en claro. Devolvemos un secret_preview enmascarado para que el
 // admin vea con qué key está configurado sin poder copiarla.
+// Lo que vuelve al navegador de config_public, sin lo cifrado: ni el secreto
+// cifrado ni su iv ni su etiqueta (el whsec_ de Stripe, el secreto de Zadarma).
+// No sirven sin ENCRYPTION_KEY, pero no tienen por qué salir del servidor; la
+// pantalla solo necesita el «_preview».
+const CLAVE_CIFRADA = /_(encrypted|iv|auth_tag)$/;
+function configParaEnsenar(config) {
+  return Object.fromEntries(Object.entries(config || {}).filter(([k]) => !CLAVE_CIFRADA.test(k)));
+}
+
 function sanitize(row) {
   if (!row) return null;
   let preview = null;
@@ -79,7 +88,7 @@ function sanitize(row) {
     active: row.active,
     has_secret: !!row.encrypted_value,
     secret_preview: preview,
-    config_public: row.config_public || {},
+    config_public: configParaEnsenar(row.config_public),
     last_test_status: row.last_test_status,
     last_test_message: row.last_test_message,
     last_test_at: row.last_test_at,
@@ -95,6 +104,7 @@ export async function list(req, res, next) {
     // listByProject NO trae los campos crypto, así que no hay que descifrar
     res.json({ success: true, data: rows.map((r) => ({
       ...r,
+      config_public: configParaEnsenar(r.config_public),
       secret_preview: null,  // sólo el GET de detalle por provider devuelve preview
     })) });
   } catch (err) { next(err); }
@@ -167,9 +177,13 @@ export async function upsert(req, res, next) {
       }
       // La zona horaria de la cuenta: Zadarma manda la hora de cada llamada sin
       // zona, en la que tenga puesta la cuenta. Por defecto, Madrid.
+      // Que EXISTA, no solo que tenga forma: «Europe/Madird» pasaba la
+      // expresión y luego Postgres fallaba en cada aviso de ese campus (500 y
+      // llamadas perdidas). La base de datos de zonas de Node (ICU) es la IANA,
+      // la misma que usa Postgres.
       const zona = String(config.zona_horaria || 'Europe/Madrid').trim();
-      if (!/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(zona)) {
-        throw new AppError('Zona horaria no válida (por ejemplo, Europe/Madrid).', 400, 'VALIDATION_ERROR');
+      if (!zonaHorariaValida(zona)) {
+        throw new AppError(`Zona horaria no válida: «${zona.slice(0, 60)}» (por ejemplo, Europe/Madrid).`, 400, 'VALIDATION_ERROR');
       }
       config = { ...config, zona_horaria: zona };
       if (api_secret && api_secret.trim()) {
@@ -337,6 +351,17 @@ async function testSupabase(accessToken, projectRef) {
     };
   }
   return { ok: true, message: `Conexion OK con «${suyo.name}» (${suyo.region}).`, projectRef };
+}
+
+/** ¿Es una zona horaria IANA que existe? (`Europe/Madrid` sí; `Europe/Madird`, no). */
+function zonaHorariaValida(zona) {
+  if (!/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(zona)) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: zona });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

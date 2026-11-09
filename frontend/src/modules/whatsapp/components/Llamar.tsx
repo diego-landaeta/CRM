@@ -42,7 +42,8 @@ export default function Llamar({
    * llamar por la centralita —queda grabada y se apunta sola al colgar— y el
    * movil pasa a ser la otra salida.
    */
-  zadarma?: { leadId: number; projectId: number };
+  /** `telefonoFicha`: el teléfono de la ficha, que es al que llama Zadarma (null si no se pudo leer). */
+  zadarma?: { leadId: number; projectId: number; telefonoFicha: string | null };
   onCerrar: () => void;
 }) {
   const [copiado, setCopiado] = useState(false);
@@ -61,6 +62,11 @@ export default function Llamar({
   }, [copiado]);
 
   const limpio = `+${String(telefono).replace(/[^0-9]/g, '')}`;
+  // Zadarma no llama al número de este chat sino al de la FICHA (es el que el
+  // servidor manda a la centralita). Si no son el mismo, hay que verlo antes de
+  // pulsar: se compara la parte nacional, como el CRM casa los números.
+  const deLaFicha = zadarma?.telefonoFicha ? `+${zadarma.telefonoFicha.replace(/[^0-9]/g, '')}` : null;
+  const otroNumero = Boolean(deLaFicha) && deLaFicha!.slice(-9) !== limpio.slice(-9);
 
   const copiar = async () => {
     try {
@@ -104,10 +110,17 @@ export default function Llamar({
             </p>
 
             {zadarma ? (
-              <p className="text-sm text-muted-foreground text-center leading-relaxed">
-                Por <strong className="text-foreground">Zadarma</strong>, la centralita: suena tu extensión
-                y, al cogerla, se llama al prospecto. WhatsApp no deja hablar desde el ordenador.
-              </p>
+              <div className="space-y-1.5">
+                <p className="text-sm text-muted-foreground text-center leading-relaxed">
+                  Por <strong className="text-foreground">Zadarma</strong>, la centralita: suena tu extensión
+                  y, al cogerla, se llama al prospecto{deLaFicha ? <> al <strong className="text-foreground tabular-nums">{deLaFicha}</strong>, el de su ficha</> : ' al teléfono de su ficha'}.
+                </p>
+                {otroNumero && (
+                  <p role="status" className="text-xs text-warning text-center leading-relaxed">
+                    Ojo: no es el número de este chat. Zadarma llama al de la ficha; para llamar a este, usa el móvil.
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center leading-relaxed">
                 La llamada se hace <strong className="text-foreground">desde tu móvil</strong>.
