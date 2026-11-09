@@ -2,12 +2,26 @@ import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
 import { comoIds } from '../../shared/utils/roles.js';
 import { condicionDeAmbito } from '../expenses/expense.model.js';
+import { FACTURA_DE } from '../invoices/invoices.model.js';
 
 // ============================================================
 // DASHBOARD ACCOUNTING
 // ============================================================
 
-export async function getDashboardStats({ projectId, projectIds = null, from, to }) {
+/*
+  EL EQUIPO COMERCIAL (QA del 09/11/2026). Con `alcance` (lista de personas: una
+  gestora, o una líder y su equipo) todo lo que es de gestoras se recorta a esas
+  personas, con el mismo criterio que Ventas: la venta entra si alguna del
+  alcance está en su reparto, y cuenta SU parte (`SUM(r.peso)`; una venta
+  repartida entre dos del equipo vale entera). Las facturas, con el de la lista
+  de Facturas (`FACTURA_DE`). Lo que vence, la venta entera: es lo que debe el
+  cliente, como en «Cuentas por cobrar».
+
+  Egresos y balance NO son de gestoras sino de la empresa: con alcance no se
+  calculan, salen a cero con `egresos.oculto = true` y `balance = null`, y la
+  pantalla dice «solo para administración sin equipo».
+*/
+export async function getDashboardStats({ projectId, projectIds = null, from, to, alcance = null }) {
   // Un campus o los siete de una sociedad: aqui dentro son lo mismo, una lista.
   // Antes solo se sabia acotar a UNO, asi que con CEDIA puesta la pantalla
   // pedia el proyecto -1 --el «todos» del navegador-- y el servidor contestaba
@@ -20,15 +34,31 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   const fromIdx = ids ? 2 : 1;
   const toIdx = ids ? 3 : 2;
 
+  // El alcance va el ÚLTIMO en cada lista de parámetros: en las del rango
+  // (`params`) y en las cortas (solo campus) de las cuentas por cobrar.
+  const equipo = alcance ? comoIds(alcance) : null;
+  if (equipo) params.push(equipo);
+  const eqLargo = params.length;            // su $n en las consultas con rango
+  const cortos = [...(ids ? [ids] : []), ...(equipo ? [equipo] : [])];
+  const eqCorto = cortos.length;            // su $n en las consultas sin rango
+  const delEquipo = (n) => (equipo
+    ? `AND EXISTS (SELECT 1 FROM conversion_reparto rx
+                    WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($${n}::int[]))`
+    : '');
+  const peso = (n) => (equipo
+    ? `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                  WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${n}::int[])), 0)`
+    : '1');
+
   // Ingresos (via conversion_payments en rango)
   const paymentsProjFilter = projFilter;
   const { rows: ingresosRows } = await query(
     `SELECT
-       COALESCE(SUM(cp.importe), 0) AS total_cobrado,
+       COALESCE(SUM(cp.importe * ${peso(eqLargo)}), 0) AS total_cobrado,
        COUNT(DISTINCT cp.id) AS num_pagos
      FROM conversion_payments cp
      JOIN conversions c ON c.id = cp.conversion_id
-     WHERE cp.fecha BETWEEN $${fromIdx} AND $${toIdx} ${paymentsProjFilter}`,
+     WHERE cp.fecha BETWEEN $${fromIdx} AND $${toIdx} ${paymentsProjFilter} ${delEquipo(eqLargo)}`,
     params
   );
 
@@ -36,11 +66,11 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   const convProjFilter = projFilter;
   const { rows: facturadoRows } = await query(
     `SELECT
-       COALESCE(SUM(c.importe_total), 0) AS total_facturado,
-       COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
+       COALESCE(SUM(c.importe_total * ${peso(eqLargo)}), 0) AS total_facturado,
+       COALESCE(SUM((c.importe_total - c.importe_pagado) * ${peso(eqLargo)}), 0) AS total_pendiente,
        COUNT(*) AS num_conversiones
      FROM conversions c
-     WHERE c.fecha_conversion BETWEEN $${fromIdx} AND $${toIdx} ${convProjFilter}`,
+     WHERE c.fecha_conversion BETWEEN $${fromIdx} AND $${toIdx} ${convProjFilter} ${delEquipo(eqLargo)}`,
     params
   );
 
@@ -54,8 +84,11 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
        COUNT(*) FILTER (WHERE i.tipo = 'proforma') AS num_proformas,
        COALESCE(SUM(i.total) FILTER (WHERE i.tipo = 'proforma'), 0) AS total_proformas
      FROM invoices i
+     ${equipo ? `LEFT JOIN conversions cv ON cv.id = i.conversion_id
+     LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)` : ''}
      WHERE i.estado NOT IN ('borrador', 'cancelada')
-       AND i.fecha_emision BETWEEN $${fromIdx} AND $${toIdx} ${invProjFilter}`,
+       AND i.fecha_emision BETWEEN $${fromIdx} AND $${toIdx} ${invProjFilter}
+       ${equipo ? `AND ${FACTURA_DE(`$${eqLargo}`)}` : ''}`,
     params
   );
 
@@ -63,7 +96,8 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   // (`condicionDeAmbito`): los del campus, los de su EMPRESA y los generales.
   // La misma regla que su listado, para que las dos pantallas den la misma cifra.
   const expProjFilter = ids ? `AND ${condicionDeAmbito('e', 1)}` : '';
-  const { rows: egresosRows } = await query(
+  const sinEgresos = { rows: [] };
+  const { rows: egresosRows } = equipo ? { rows: [{ total_egresos: 0, num_egresos: 0 }] } : await query(
     `SELECT
        COALESCE(SUM(e.importe), 0) AS total_egresos,
        COUNT(*) AS num_egresos
@@ -88,10 +122,10 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN projects p ON p.id = c.project_id
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter}
+     WHERE c.importe_pagado < c.importe_total ${convProjFilter} ${delEquipo(eqCorto)}
      ORDER BY c.fecha_compromiso_pago ASC NULLS LAST
      LIMIT 50`,
-    ids ? [ids] : []
+    cortos
   );
 
   // Totales REALES de por cobrar: el listado de arriba va con LIMIT 50, asi que
@@ -105,8 +139,8 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
             COUNT(*) FILTER (WHERE c.fecha_compromiso_pago IS NOT NULL
                                AND c.fecha_compromiso_pago < CURRENT_DATE)::int AS num_vencido
      FROM conversions c
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter}`,
-    ids ? [ids] : []
+     WHERE c.importe_pagado < c.importe_total ${convProjFilter} ${delEquipo(eqCorto)}`,
+    cortos
   );
 
   // Evolucion mensual ultimos 12 meses
@@ -114,15 +148,16 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   const trendParams = ids ? [ids] : [];
   const { rows: ingresosTrend } = await query(
     `SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
-            COALESCE(SUM(cp.importe), 0) AS total
+            COALESCE(SUM(cp.importe * ${peso(eqCorto)}), 0) AS total
      FROM conversion_payments cp
      JOIN conversions c ON c.id = cp.conversion_id
      WHERE cp.fecha >= CURRENT_DATE - INTERVAL '12 months' ${trendProjFilter.replace('project_id', 'c.project_id')}
+       ${delEquipo(eqCorto)}
      GROUP BY 1
      ORDER BY 1`,
-    trendParams
+    cortos
   );
-  const { rows: egresosTrend } = await query(
+  const { rows: egresosTrend } = equipo ? sinEgresos : await query(
     `SELECT to_char(date_trunc('month', e.fecha), 'YYYY-MM') AS mes,
             COALESCE(SUM(e.importe), 0) AS total
      FROM expenses e
@@ -133,7 +168,7 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   );
 
   // Egresos por categoria
-  const { rows: porCategoria } = await query(
+  const { rows: porCategoria } = equipo ? sinEgresos : await query(
     `SELECT categoria, COALESCE(SUM(importe), 0) AS total
      FROM expenses e
      WHERE e.fecha BETWEEN $${fromIdx} AND $${toIdx} ${expProjFilter}
@@ -158,8 +193,12 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
       total: Number(egresosRows[0].total_egresos),
       num_egresos: parseInt(egresosRows[0].num_egresos),
       por_categoria: porCategoria.map(r => ({ categoria: r.categoria, total: Number(r.total) })),
+      // Con alcance no se calculan: son de la empresa, no de gestoras.
+      oculto: Boolean(equipo),
     },
-    balance: Number(ingresosRows[0].total_cobrado) - Number(egresosRows[0].total_egresos),
+    balance: equipo ? null : Number(ingresosRows[0].total_cobrado) - Number(egresosRows[0].total_egresos),
+    // Que la pantalla sepa que esto es solo lo de unas personas.
+    solo_equipo: Boolean(equipo),
     cuentas_por_cobrar: receivables.map(r => ({ ...r, importe_pendiente: Number(r.importe_pendiente) })),
     cuentas_por_cobrar_resumen: {
       num: recTotals[0].num,

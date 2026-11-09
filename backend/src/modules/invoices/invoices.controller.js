@@ -8,7 +8,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial } from '../../shared/utils/roles.js';
+import { alcanceComercial, equipoQueLleva } from '../../shared/utils/roles.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -92,7 +92,9 @@ export async function stats(req, res, next) {
     const todos = !issuerId && !req.query.projectId;
     const pid = req.query.projectId ? Number(req.query.projectId) : null;
     const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
-    res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req) }) });
+    // Recortadas como la lista: una gestora, las suyas; un equipo comercial, las suyas.
+    const responsableId = await alcanceComercial(req.user);
+    res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req), responsableId }) });
   } catch (e) { next(e); }
 }
 
@@ -672,7 +674,9 @@ export async function ventasSinFactura(req, res, next) {
     // Un proyecto O una sociedad entera: el mismo helper que Ventas y Reportes.
     // Antes solo sabia de un proyecto y con CEDIA elegida no devolvia nada.
     res.json({ success: true, data: await model.listVentasSinFactura({
-      ...(await proyectosDelAmbito(req)), from: periodo(req).from, to: periodo(req).to }) });
+      ...(await proyectosDelAmbito(req)), from: periodo(req).from, to: periodo(req).to,
+      // Una gestora o un equipo comercial, solo lo suyo (QA del 09/11/2026).
+      responsableId: await alcanceComercial(req.user) }) });
   } catch (e) { next(e); }
 }
 
@@ -720,7 +724,8 @@ export async function facturacionAlDia(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
-    res.json({ success: true, data: await service.getFacturacionAlDia(projectId) });
+    // Quien lleva un equipo comercial, solo los cobros de su equipo (QA del 09/11/2026).
+    res.json({ success: true, data: await service.getFacturacionAlDia(projectId, await equipoQueLleva(req.user)) });
   } catch (err) { next(err); }
 }
 
@@ -737,6 +742,11 @@ export async function setFacturacionAlDia(req, res, next) {
     // El flag no viaja en el token, asi que se consulta en la base de datos.
     if (!(await tienePermiso(req, 'facturas.cola'))) {
       throw new AppError('Solo quien gestiona la facturacion puede mover esta fecha', 403, 'FORBIDDEN');
+    }
+    // La fecha «al día» es de todo el campus: mueve la cola de todas las
+    // gestoras. Quien lleva un equipo comercial no la toca (QA del 09/11/2026).
+    if (await equipoQueLleva(req.user)) {
+      throw new AppError('La fecha «al día» es de todo el campus: la mueve la administración sin equipo', 403, 'LLEVA_EQUIPO');
     }
     const r = await service.setFacturacionAlDia(projectId, alDiaHasta, req.user.userId, req.body?.stripeOkHasta || null);
     res.json({ success: true, data: r });
@@ -756,6 +766,8 @@ export async function generarDeCola(req, res, next) {
       forzar: req.body?.forzar === true,
       // El numero que haya elegido quien factura. Sin el, el siguiente libre.
       numero: req.body?.numero != null && req.body?.numero !== '' ? Number(req.body.numero) : null,
+      // Quien lleva un equipo comercial, solo los de su equipo.
+      equipo: await equipoQueLleva(req.user),
     });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
@@ -770,7 +782,7 @@ export async function emitirColaHasta(req, res, next) {
     if (!(await tienePermiso(req, 'facturas.cola'))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
-    res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
+    res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId, await equipoQueLleva(req.user)) });
   } catch (err) { next(err); }
 }
 

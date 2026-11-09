@@ -29,7 +29,11 @@ export async function dashboard(req, res, next) {
     // sociedad se traduce a sus campus y el modelo no se entera de la
     // diferencia.
     const { projectId, projectIds } = await proyectosDelAmbito(req);
-    const stats = await model.getDashboardStats({ ...parsed.data, projectId, projectIds });
+    // Y además por persona (QA del 09/11/2026): quien lleva un equipo comercial
+    // ve lo de su equipo, no lo del campus. Con «Todos» o una empresa arriba,
+    // igual: el campus se recorta arriba y la persona aquí.
+    const alcance = await alcanceComercial(req.user);
+    const stats = await model.getDashboardStats({ ...parsed.data, projectId, projectIds, alcance });
     res.json({ success: true, data: stats });
   } catch (err) { next(err); }
 }

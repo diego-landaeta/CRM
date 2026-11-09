@@ -537,7 +537,7 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
 */
 // El parámetro es una LISTA de personas: la gestora sola o, si lleva un equipo
 // comercial (09/11/2026), ella y las de su equipo.
-const FACTURA_DE = (param) => `(i.created_by = ANY(${param}::int[])
+export const FACTURA_DE = (param) => `(i.created_by = ANY(${param}::int[])
     OR COALESCE(cv.vendedora_id, l.responsable_id) = ANY(${param}::int[])
     OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
         AND EXISTS (SELECT 1 FROM user_projects up
@@ -619,10 +619,20 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
 //
 // Y con LOS MISMOS FILTROS que la lista (#233, Manuel 03/10: «poner una fecha y que
 // no agarre»): con septiembre puesto, las tarjetas decían el acumulado de siempre.
-export async function getStats({ projectId, projectIds, issuerId, from, to, estado } = {}) {
+export async function getStats({ projectId, projectIds, issuerId, from, to, estado, responsableId = null } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
+  // Los mismos recortes que la lista (QA del 09/11/2026): una gestora, las
+  // suyas; quien lleva un equipo comercial, las de su equipo. Sin esto las
+  // tarjetas de arriba sumaban todo el campus y la lista de abajo no.
+  if (responsableId) {
+    conds.push(`id IN (SELECT i.id FROM invoices i
+                         LEFT JOIN conversions cv ON cv.id = i.conversion_id
+                         LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+                        WHERE ${FACTURA_DE(`$${idx++}`)})`);
+    params.push(comoIds(responsableId));
+  }
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
   if (Array.isArray(projectIds)) { conds.push(`project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
@@ -1831,7 +1841,7 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null } = {}) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   /*
     Un proyecto O UNA SOCIEDAD ENTERA.
 
@@ -1859,8 +1869,11 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
         -- El periodo de arriba (#233): con septiembre puesto salían ventas de junio.
         AND ($2::date IS NULL OR c.fecha_conversion::date >= $2::date)
         AND ($3::date IS NULL OR c.fecha_conversion::date <= $3::date)
+        -- Una gestora o un equipo comercial: por el reparto, como Ventas (09/11/2026).
+        AND ($4::int[] IS NULL OR EXISTS (SELECT 1 FROM conversion_reparto rx
+                                           WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($4::int[])))
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [lista, from || null, to || null]
+    [lista, from || null, to || null, responsableId ? comoIds(responsableId) : null]
   );
   return rows;
 }
@@ -1971,16 +1984,21 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 }
 
 // Proformas que una gestora dejo esperando el visto bueno.
-export async function listProformasPendientes(projectId) {
+// `equipo` (lista de personas, QA del 09/11/2026): a quien lleva un equipo
+// comercial, solo las de su equipo, con el criterio de la lista (`FACTURA_DE`).
+export async function listProformasPendientes(projectId, equipo = null) {
   const { rows } = await query(
     `SELECT i.id, i.total, i.fecha_emision, i.created_at, i.conversion_id,
             i.cliente_nombre, u.nombre AS creada_por
        FROM invoices i
        LEFT JOIN users u ON u.id = i.created_by
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.project_id = $1 AND i.tipo = 'proforma'
         AND i.estado = 'borrador' AND i.numero IS NULL
+        AND ($2::int[] IS NULL OR ${FACTURA_DE('$2')})
       ORDER BY i.created_at ASC`,
-    [projectId]
+    [projectId, equipo ? comoIds(equipo) : null]
   );
   return rows;
 }
@@ -2062,10 +2080,21 @@ const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
 
 // Cobros que estan esperando factura. Si se pasa hasta, solo los que ya entran
 // dentro del corte; sin hasta, todos los que no tienen factura.
-export async function listPagosSinFactura(projectId, hasta = null) {
+//
+// Con `equipo` (lista de personas: quien lleva un equipo comercial, QA del
+// 09/11/2026) cada fila dice si es de su equipo (`del_equipo`, por el reparto de
+// la venta, como Ventas). No se filtra aquí: quién es «el siguiente» de la cola
+// se decide con TODOS los cobros, y eso no cambia porque mire una líder.
+export async function listPagosSinFactura(projectId, hasta = null, equipo = null) {
   const params = [projectId];
   let filtroFecha = '';
   if (hasta) { params.push(hasta); filtroFecha = 'AND cp.fecha <= $2'; }
+  let delEquipo = 'NULL::boolean';
+  if (equipo) {
+    params.push(comoIds(equipo));
+    delEquipo = `EXISTS (SELECT 1 FROM conversion_reparto rx
+                          WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($${params.length}::int[]))`;
+  }
   // Los cobros anteriores al ejercicio que se esta facturando no entran en la
   // cola: son de la facturacion anterior y aqui no van a llevar factura nunca.
   const desdeEjercicio = `AND cp.fecha >= make_date(
@@ -2082,7 +2111,8 @@ export async function listPagosSinFactura(projectId, hasta = null) {
             l.nombre AS cliente, c.producto_contratado,
             COALESCE(uv.nombre, u.nombre) AS gestora,
             EXISTS (SELECT 1 FROM stripe_payments sp
-                     WHERE sp.conversion_payment_id = cp.id) AS de_stripe
+                     WHERE sp.conversion_payment_id = cp.id) AS de_stripe,
+            ${delEquipo} AS del_equipo
        FROM conversion_payments cp
        JOIN conversions c ON c.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = c.lead_id

@@ -305,3 +305,16 @@ export async function personaDelInforme(user, pedido, { jefes = ['admin', 'super
   if (esJefe) return pedido ?? null;
   return user?.userId || -1;
 }
+
+/**
+ * Si quien pregunta LLEVA un equipo comercial: el alcance es ella y alguna más.
+ * Una gestora (solo ella) o quien no tiene límite (null) no lo llevan.
+ *
+ * Para lo que no es «qué filas ve» sino «qué puede hacer»: corregir y abonar
+ * facturas, egresos y balance de la empresa, supervisar el WhatsApp de otras
+ * (fugas del QA del 09/11/2026). Devuelve la lista del equipo o null.
+ */
+export async function equipoQueLleva(user) {
+  const alcance = await alcanceComercial(user);
+  return alcance && alcance.length > 1 ? alcance : null;
+}

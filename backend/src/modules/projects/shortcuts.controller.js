@@ -3,6 +3,7 @@ import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { gestoresDelReparto, aQuienLeToca } from '../leads/reparto.js';
 import { activasEntre } from '../asignacion/asignacion.actividad.js';
+import { alcanceComercial, enElAlcance } from '../../shared/utils/roles.js';
 
 // GET /api/projects/:id/ultimo-lead — que ha recibido cada gestora, de verdad
 //
@@ -49,8 +50,12 @@ export async function getUltimoLead(req, res, next) {
         if (!yaEsta.has(g.id)) yaEsta.set(g.id, g);
       }
     }
-    const gestores = [...yaEsta.values()];
-    const projectId = proyectos && proyectos.length === 1 ? proyectos[0] : null;
+    // Solo las de su alcance (QA del 09/11/2026): a quien lleva un equipo
+    // comercial, ella y su equipo; a una gestora, ella. Antes una líder veía
+    // aquí a todas las gestoras del campus con el nombre y el curso de su
+    // último prospecto.
+    const alcance = await alcanceComercial(req.user);
+    const gestores = [...yaEsta.values()].filter((g) => enElAlcance(alcance, g.id));
 
     // Y ademas, quien HA RECIBIDO leads este mes aunque hoy no este en el
     // reparto — de vacaciones, o se fue. Sus numeros son historia y esconderlos
@@ -122,7 +127,9 @@ export async function getUltimoLead(req, res, next) {
       f.activa = a ? { hace_min: Math.max(0, Math.round((Date.now() - new Date(a.ultima).getTime()) / 60000)), que: a.que } : null;
     }
 
-    const { rows: sueltos } = await query(
+    // Los sin responsable no son de su alcance (no los ve en la lista): a quien
+    // tiene alcance no se le cuentan.
+    const { rows: sueltos } = alcance ? { rows: [{ n: 0 }] } : await query(
       `SELECT COUNT(*)::int AS n FROM leads
         WHERE ($1::int[] IS NULL OR project_id = ANY($1::int[]))
           AND responsable_id IS NULL AND deleted_at IS NULL`,
@@ -188,14 +195,20 @@ export async function getQueueState(req, res, next) {
       [projectId]
     );
 
+    // El turno se calcula con TODAS (es lo que va a pasar), pero a quien tiene
+    // alcance (una líder de equipo, una gestora) solo se le enseñan las suyas:
+    // la de fuera sale como «null», sin nombre (QA del 09/11/2026).
+    const alcance = await alcanceComercial(req.user);
+    const verla = (g) => (g && enElAlcance(alcance, g.id) ? g : null);
+
     res.json({
       success: true,
       data: {
-        gestores,
+        gestores: gestores.filter((g) => enElAlcance(alcance, g.id)),
         last_assigned_at: state[0]?.updated_at || null,
-        last_gestor: lastGestor,
-        next_gestor: nextGestor,
-        sin_responsable: sueltos[0]?.n || 0,
+        last_gestor: verla(lastGestor),
+        next_gestor: verla(nextGestor),
+        sin_responsable: alcance ? 0 : (sueltos[0]?.n || 0),
       },
     });
   } catch (err) { next(err); }

@@ -790,18 +790,24 @@ export async function sendByEmail(invoiceId, customEmail = null) {
 // ---------------------------------------------------------------------------
 // Corte de facturacion
 // ---------------------------------------------------------------------------
-export async function getFacturacionAlDia(projectId) {
+// `equipo`: la lista de quien lleva un equipo comercial (QA del 09/11/2026), o
+// null. Con ella solo se ven los cobros y las proformas de su equipo; quién es
+// «el siguiente» sigue saliendo de la cola entera.
+export async function getFacturacionAlDia(projectId, equipo = null) {
   const estado = await model.getFacturacionAlDia(projectId);
   // La cola: todo cobro posterior a lo ya hecho que aun no tiene factura.
-  const cola = await model.listPagosSinFactura(projectId);
+  const entera = await model.listPagosSinFactura(projectId, null, equipo);
+  const siguiente = entera[0]?.payment_id ?? null;
+  const cola = equipo ? entera.filter((p) => p.del_equipo) : entera;
   return {
     ...estado,
     pagos_sin_factura: cola.length,
     importe_sin_factura: cola.reduce((s, p) => s + Number(p.importe || 0), 0),
     // El primero de la cola es el unico que puede emitirse sin saltarse a nadie.
-    listos_para_emitir: cola.length ? 1 : 0,
-    proformas_pendientes: await model.listProformasPendientes(projectId),
-    cola: cola.slice(0, 200).map((p, i) => ({
+    listos_para_emitir: cola.some((p) => p.payment_id === siguiente) ? 1 : 0,
+    proformas_pendientes: await model.listProformasPendientes(projectId, equipo),
+    solo_equipo: Boolean(equipo),
+    cola: cola.slice(0, 200).map((p) => ({
       payment_id: p.payment_id,
       conversion_id: p.conversion_id,
       fecha: p.fecha,
@@ -811,7 +817,7 @@ export async function getFacturacionAlDia(projectId) {
       gestora: p.gestora,
       origen: p.de_stripe ? 'stripe' : 'manual',
       // El primero es el que toca; los demas esperan a que salgan los anteriores.
-      es_el_siguiente: i === 0,
+      es_el_siguiente: p.payment_id === siguiente,
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);
@@ -831,10 +837,11 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 
 // Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
 // antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
-export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, numero = null } = {}) {
-  const cola = await model.listPagosSinFactura(projectId);
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, numero = null, equipo = null } = {}) {
+  const cola = await model.listPagosSinFactura(projectId, null, equipo);
   const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
-  if (!pg) {
+  // Un cobro de fuera de su equipo, como si no estuviera (QA del 09/11/2026).
+  if (!pg || (equipo && !pg.del_equipo)) {
     throw new AppError('Ese cobro ya no está en la cola: o ya tiene factura, o queda fuera del periodo.',
       404, 'NOT_IN_QUEUE');
   }
@@ -925,8 +932,10 @@ export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas,
 }
 
 // Emite de golpe, en orden de fecha, todo lo que quede en la cola hasta esa fecha.
-export async function emitirColaHasta(projectId, hasta, userId) {
-  const pendientes = await model.listPagosSinFactura(projectId, hasta);
+// Con `equipo` (quien lleva un equipo comercial), solo los cobros de su equipo.
+export async function emitirColaHasta(projectId, hasta, userId, equipo = null) {
+  const pendientes = (await model.listPagosSinFactura(projectId, hasta, equipo))
+    .filter((p) => !equipo || p.del_equipo);
   const emitidas = [];
   const fallidas = [];
   for (const pg of pendientes) {
