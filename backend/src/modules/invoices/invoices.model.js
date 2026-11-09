@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
+import { comoIds } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 
 /**
@@ -534,11 +535,13 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
   gestora, debo de verlas»; y que tambien las gestione (con su permiso de
   facturacion). Ya corre asi en las dos producciones desde el 06/10.
 */
-const FACTURA_DE = (param) => `(i.created_by = ${param}
-    OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param}
+// El parámetro es una LISTA de personas: la gestora sola o, si lleva un equipo
+// comercial (09/11/2026), ella y las de su equipo.
+const FACTURA_DE = (param) => `(i.created_by = ANY(${param}::int[])
+    OR COALESCE(cv.vendedora_id, l.responsable_id) = ANY(${param}::int[])
     OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
         AND EXISTS (SELECT 1 FROM user_projects up
-                     WHERE up.user_id = ${param} AND up.project_id = i.project_id AND up.active)))`;
+                     WHERE up.user_id = ANY(${param}::int[]) AND up.project_id = i.project_id AND up.active)))`;
 
 export async function list({ projectId, projectIds, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
@@ -549,7 +552,7 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
   // Los campus de quien mira (#591): null es «todos» (superadmin y soporte).
   if (Array.isArray(projectIds)) { conds.push(`i.project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
   // Gestor: solo ve las SUYAS (ver FACTURA_DE). Admin/superadmin ven todas.
-  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(responsableId); }
+  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(comoIds(responsableId)); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
   // correlativo que las facturas normales, asi que si se ocultan parece que
   // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
@@ -819,7 +822,7 @@ export async function esFacturaQueGestiona(userId, role, invoiceId) {
        LEFT JOIN conversions cv ON cv.id = i.conversion_id
        LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.id = $1 AND ${FACTURA_DE('$2')}`,
-    [invoiceId, userId]
+    [invoiceId, comoIds(userId)]
   );
   return rows.length > 0;
 }
@@ -1061,7 +1064,8 @@ export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
 }
 
 // ¿Es de esta gestora? La hizo ella, o es de su venta o de su cliente: lo mismo
-// que le deja verla en el listado, mas la que escribio.
+// que le deja verla en el listado, mas la que escribio. `userId` puede ser una
+// lista (una líder y su equipo comercial).
 export async function esProformaDe(userId, invoiceId) {
   const { rows } = await query(
     `SELECT 1 FROM invoices i
@@ -1069,7 +1073,7 @@ export async function esProformaDe(userId, invoiceId) {
        LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.id = $1
         AND ${FACTURA_DE('$2')}`,
-    [invoiceId, userId]);
+    [invoiceId, comoIds(userId)]);
   return rows.length > 0;
 }
 

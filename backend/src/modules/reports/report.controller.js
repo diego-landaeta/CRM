@@ -11,6 +11,7 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mcp.acceso.js';
+import { personaDelInforme, alcanceComercial, gestorasACargo, comoIds } from '../../shared/utils/roles.js';
 
 // A que proyectos se acota el informe.
 //
@@ -41,13 +42,11 @@ export async function overview(req, res, next) {
 // Factory para los reportes descargables: todos comparten firma {projectId, from, to}.
 // A quien se recorta el informe. Una gestora solo ve lo suyo, y se decide aqui
 // —no con lo que llegue por la URL— para que no pueda pedir lo de otra.
-// Admin y superadmin ven todo, o lo de una en concreto si lo piden.
+// Admin y superadmin ven todo, o lo de una en concreto si lo piden. Quien lleva
+// un equipo comercial (09/11/2026), lo de su equipo o lo de una de ellas: puede
+// devolver una LISTA de personas, y los informes la aceptan.
 export function asesoraDelInforme(req) {
-  const rol = req.user?.role;
-  if (rol === 'admin' || rol === 'superadmin') {
-    return req.query.asesoraId ? Number(req.query.asesoraId) : null;
-  }
-  return req.user?.userId || -1;
+  return personaDelInforme(req.user, req.query.asesoraId ? Number(req.query.asesoraId) : null);
 }
 
 function makeReport(fn) {
@@ -58,7 +57,7 @@ function makeReport(fn) {
         ...(await proyectosDelInforme(req)),
         from: from || null,
         to: to || null,
-        asesoraId: asesoraDelInforme(req),
+        asesoraId: await asesoraDelInforme(req),
       });
       res.json({ success: true, data });
     } catch (err) { next(err); }
@@ -87,7 +86,7 @@ async function rangoDeQuery(req) {
     to: re.test(req.query.to || '') ? req.query.to : null,
     // Por aqui pasan el panel del Resumen, los rankings y el detalle. Sin esto
     // una gestora veia los numeros de todos.
-    asesoraId: asesoraDelInforme(req),
+    asesoraId: await asesoraDelInforme(req),
     // Base de conteo: 'factura' (que se emitio este mes) o 'cobro' (cuanto
     // dinero entro). Por defecto factura, que es como cuenta la contabilidad;
     // con cobro se caian del mes las facturas emitidas en un mes y cobradas en
@@ -120,7 +119,9 @@ export async function miPuesto(req, res, next) {
   try {
     const esJefe = await tienePermiso(req, 'reports.puesto_ajeno');
     const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
-    const userId = esJefe && pedido ? pedido : req.user.userId;
+    // Quien lleva un equipo comercial (09/11/2026), el de una de su equipo.
+    const alcance = await alcanceComercial(req.user);
+    const userId = esJefe && pedido && (!alcance || alcance.includes(pedido)) ? pedido : req.user.userId;
     const { from, to, ...ambito } = await rangoDeQuery(req);
     // Por defecto, EL MES EN CURSO. Con el historico entero el puesto casi no
     // se mueve --lo que se hizo en marzo pesa igual que lo de ayer-- y deja de
@@ -306,7 +307,7 @@ export async function resumenDia(req, res, next) {
       .split(',').map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
     const datos = await resumenDelDia({
       projectIds: ids.length ? ids : null,
-      asesoraId: asesoraDelInforme(req),
+      asesoraId: await asesoraDelInforme(req),
     });
     res.json({ success: true, data: datos });
   } catch (e) { next(e); }
@@ -323,7 +324,9 @@ async function ambitoDeActividad(req) {
   // Un campus de pruebas solo se ve si se elige él o su empresa (migración
   // 148); con «Todos», no. Claude no los ve nunca.
   const eligeAlgo = Boolean(req.query.projectId || req.query.issuerId);
-  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }));
+  // Con su equipo comercial, si lleva uno (09/11/2026): se ve a sí misma y a ellas.
+  const equipo = await gestorasACargo(user.id);
+  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }), equipo);
   const projectIds = acotarProyectos(ambito, {
     proyecto_id: req.query.projectId ? Number(req.query.projectId) : null,
     sociedad_id: req.query.issuerId ? Number(req.query.issuerId) : null,
@@ -371,7 +374,14 @@ export async function actividadComercialDetalle(req, res, next) {
     if (!TIPOS_DE_DETALLE.includes(tipo)) {
       throw new AppError(`Tipo no válido: ${tipo || '(vacío)'}.`, 400, 'TIPO_NO_VALIDO');
     }
-    const userId = responsableId ?? Number(req.query.userId);
+    // Una gestora, la suya pida lo que pida; quien lleva un equipo, una de él.
+    const pedido = Number(req.query.userId);
+    const alcance = comoIds(responsableId);
+    let userId = pedido;
+    if (alcance && alcance.length === 1) userId = alcance[0];
+    else if (alcance && Number.isInteger(pedido) && !alcance.includes(pedido)) {
+      throw new AppError('Esa comercial no es de tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
+    }
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new AppError('Falta la comercial (userId).', 400, 'FALTA_COMERCIAL');
     }

@@ -7,6 +7,7 @@ import Select from '@/shared/components/ui/Select';
 import Field from '@/shared/components/ui/Field';
 import { avatarColorFor, getInitials, inputClass } from '@/shared/lib/ui';
 import { toast } from '@/shared/hooks/useToast';
+import EquipoComercial from './EquipoComercial';
 import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
 import { listRolesAsignables, type AvisoCambioCorreo, type CrmUser, type Empresa, type ProjectAssignment, type RolAsignable } from '../api/users.api';
 import { ASSIGNABLE_ROLES } from '../lib/usersUi';
@@ -471,6 +472,9 @@ export default function UserFormDialog({
                 />
               </Field>
             )}
+
+            {/* Las gestoras a su cargo (Carlos, 09/11/2026): componente aparte. */}
+            {esEdicion && user && <EquipoComercial userId={user.id} />}
 
             {esEdicion && !canResetPassword && (
               <div className="border-t border-border pt-3 mt-1">
