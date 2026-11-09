@@ -17,14 +17,16 @@
 //        DATABASE_URL=<la de ISEIE> node scripts/avisos-de-otro-crm-630.mjs meter --desde-fichero avisos-630.json
 //        DATABASE_URL=<la de ISEIE> node scripts/avisos-de-otro-crm-630.mjs meter --desde-fichero avisos-630.json --aplicar --a-fichero metidos-630.json
 //   3. En el 360, quitar SOLO lo que ya está en ISEIE (ensayo; para escribir, --aplicar):
-//        node --env-file=.env scripts/avisos-de-otro-crm-630.mjs borrar --desde-fichero metidos-630.json
+//        DATABASE_URL_DESTINO=<la de ISEIE> node --env-file=.env scripts/avisos-de-otro-crm-630.mjs borrar --desde-fichero metidos-630.json
 //
 // «borrar» solo acepta el fichero que deja «meter --aplicar» (las matrículas que han
 // quedado en la base de destino) y solo en la base de donde se sacaron: lo que «meter»
-// saltó (un campus de prueba del 360, por ejemplo) o dio error, no se borra. Quita la
-// fila y también las campanas que dejó ese aviso en el 360 («Terminó sin pedir el
-// diploma: …»), que es lo que se veía desde el admin.
-// Los ficheros llevan nombres y correos de alumnos: bórralos al acabar.
+// saltó (un campus de prueba del 360, por ejemplo) o dio error, no se borra. Y no se fía
+// del fichero: abre la base de destino (DATABASE_URL_DESTINO, en solo lectura), comprueba
+// que es la que dice el fichero y solo borra una matrícula si está allí con el mismo
+// campus. Quita la fila y también las campanas que dejó ese aviso en el 360 («Terminó
+// sin pedir el diploma: …»), que es lo que se veía desde el admin.
+// Los ficheros llevan nombres y correos de alumnos (están en .gitignore): bórralos al acabar.
 //
 // Qué se copia: lo que dijo Certifex (matrícula, campus, curso, nombres, correo,
 // solicitud y «terminado»). Qué NO: lo que es propio del 360 (lead_id y producto_id
@@ -53,7 +55,9 @@
 //
 // El ensayo abre la base en SOLO LECTURA (default_transaction_read_only).
 // En producción (crm_prod_db, crm_iseie), --aplicar exige RECUPERAR_EN_PRODUCCION=1
-// (lo decide Diego).
+// (lo decide Diego). Qué base es lo dice la propia base (current_database()), no la URL.
+// Las filas sin campus son de esta base (avisos de rechazo): «sacar» no las saca.
+// Sin correo, «meter» no busca ficha.
 
 import fs from 'node:fs';
 
@@ -86,19 +90,18 @@ if (aFichero && desdeFichero && aFichero === desdeFichero) {
 
 const URL_BD = process.env.DATABASE_URL || '';
 if (!URL_BD) { console.error('Falta DATABASE_URL (node --env-file=.env …)'); process.exit(1); }
-const base = new URL(URL_BD).pathname.slice(1);
-// Donde está Diplomas en el frontal de cada CRM (ISEIE no tiene el «/clientes»).
-const RUTA_DIPLOMAS = valor('--enlace-diplomas') || (base === 'crm_iseie' ? '/matriculas/diplomas' : '/clientes/matriculas/diplomas');
-// Git Bash de Windows convierte «/matriculas/…» en «C:/Program Files/Git/matriculas/…»:
-// un enlace así no lleva a ningún sitio, así que se para antes.
-if (!/^\/[a-z0-9/_-]+$/i.test(RUTA_DIPLOMAS)) {
-  console.error(`--enlace-diplomas tiene que ser una ruta del CRM, como /matriculas/diplomas (llegó «${RUTA_DIPLOMAS}»; en Git Bash usa MSYS_NO_PATHCONV=1).`);
-  process.exit(1);
-}
-if (aplicar && ['crm_prod_db', 'crm_iseie'].includes(base) && process.env.RECUPERAR_EN_PRODUCCION !== '1') {
-  console.error(`\n  ${base} es PRODUCCIÓN. Para aplicar hace falta RECUPERAR_EN_PRODUCCION=1.\n`);
-  process.exit(1);
-}
+const PRODUCCION = ['crm_prod_db', 'crm_iseie'];
+const candado = (nombre) => {
+  if (!(aplicar && PRODUCCION.includes(nombre) && process.env.RECUPERAR_EN_PRODUCCION !== '1')) return null;
+  return `\n  ${nombre} es PRODUCCIÓN. Para aplicar hace falta RECUPERAR_EN_PRODUCCION=1.\n`;
+};
+// Primero por el nombre que trae la URL, para parar sin conectar. No basta (la URL
+// puede escribir la base de otra forma: %5F, barra final, ?db=, PGDATABASE…): la
+// palabra final la tiene current_database(), ya conectados y antes de leer nada.
+const enUrl = (() => {
+  try { return decodeURIComponent(new URL(URL_BD).pathname.replace(/^\/+|\/+$/g, '')).toLowerCase(); } catch { return ''; }
+})();
+if (candado(enUrl)) { console.error(candado(enUrl)); process.exit(1); }
 if (!aplicar) {
   // Antes de importar nada que abra el pool: la conexión entera, de solo lectura.
   const u = new URL(URL_BD);
@@ -110,10 +113,32 @@ const { query, default: pool } = await import('../src/shared/config/db.js');
 const { proyectosDeCentro } = await import('../src/modules/certifex/certifex.programa.js');
 const { idsAdministracionDeCentro } = await import('../src/modules/certifex/certifex.model.js');
 
+let destino = null; // la base donde se metieron (solo «borrar»), de solo lectura
+const parar = async (msg) => {
+  console.error(msg);
+  await pool.end();
+  if (destino) await destino.end();
+  process.exit(1);
+};
+
+const { rows: [{ base }] } = await query('SELECT current_database() AS base');
+if (candado(base)) await parar(candado(base));
 if (!aplicar) {
   const { rows } = await query('SHOW default_transaction_read_only');
-  if (rows[0]?.default_transaction_read_only !== 'on') { console.error('El ensayo no ha quedado en solo lectura: paro.'); process.exit(1); }
+  if (rows[0]?.default_transaction_read_only !== 'on') await parar('El ensayo no ha quedado en solo lectura: paro.');
 }
+
+// Donde está Diplomas en el frontal de cada CRM (ISEIE no tiene el «/clientes»).
+const RUTA_DIPLOMAS = valor('--enlace-diplomas') || (base === 'crm_iseie' ? '/matriculas/diplomas' : '/clientes/matriculas/diplomas');
+// Git Bash de Windows convierte «/matriculas/…» en «C:/Program Files/Git/matriculas/…»:
+// un enlace así no lleva a ningún sitio, así que se para antes.
+if (!/^\/[a-z0-9/_-]+$/i.test(RUTA_DIPLOMAS)) {
+  await parar(`--enlace-diplomas tiene que ser una ruta del CRM, como /matriculas/diplomas (llegó «${RUTA_DIPLOMAS}»; en Git Bash usa MSYS_NO_PATHCONV=1).`);
+}
+
+// El mismo campus escrito de otra forma («iseih», «ISEIH»): sí; otro campus: no.
+const campusCompacto = (c) => String(c ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const mismoCampus = (a, b) => campusCompacto(a) === campusCompacto(b);
 
 // La misma regla que las entradas de Certifex (esCentroDeEsteCrm): un campus es de
 // este CRM si casa con algún proyecto que no sea de prueba.
@@ -155,11 +180,30 @@ if (paso !== 'sacar') {
   try {
     entrada = leer();
   } catch (e) {
-    console.error(`
-  ${e.message}
-`);
-    await pool.end();
-    process.exit(1);
+    await parar(`\n  ${e.message}\n`);
+  }
+}
+
+// «borrar» no se fía del fichero: cada matrícula se mira en la base donde se metió
+// (DATABASE_URL_DESTINO, en solo lectura), y solo se borra aquí si está allí, con el
+// mismo campus. El fichero solo dice qué mirar.
+if (paso === 'borrar') {
+  const urlDestino = process.env.DATABASE_URL_DESTINO || '';
+  if (!urlDestino) {
+    await parar(`\n  borrar: falta DATABASE_URL_DESTINO, la base donde se metieron (${entrada.destino}). Se abre en solo lectura: solo se borra aquí lo que esté allí.\n`);
+  }
+  const u = new URL(urlDestino);
+  u.searchParams.set('options', '-c default_transaction_read_only=on');
+  const { default: pg } = await import('pg');
+  destino = new pg.Pool({ connectionString: u.toString(), max: 1 });
+  try {
+    const { rows: [{ nombre }] } = await destino.query('SELECT current_database() AS nombre');
+    if (nombre !== entrada.destino) {
+      await parar(`\n  DATABASE_URL_DESTINO es ${nombre}, pero el fichero dice que se metieron en ${entrada.destino}: no se borra nada.\n`);
+    }
+    if (nombre === base) await parar('\n  DATABASE_URL_DESTINO es esta misma base: no se borra nada.\n');
+  } catch (e) {
+    await parar(`\n  No se puede leer la base de destino: ${e.message}\n`);
   }
 }
 
@@ -174,7 +218,11 @@ if (paso === 'sacar') {
     ? `  ⚠ NO casan con ningún proyecto de esta base: ${noCasan.join(', ')}. Desde la #630 sus avisos se RECHAZARÍAN. Revísalo antes de fusionar.\n`
     : '  ✓ Todos casan con un proyecto de esta base.\n');
   const { rows } = await query(`SELECT * FROM certifex_solicitudes ORDER BY recibida_en, matricula_id`);
-  const ajenos = rows.filter((r) => !esDeEsteCrm(r.centro));
+  // Sin campus no es «de otro CRM»: son filas de esta base (las crea, por ejemplo, el
+  // aviso de rechazo, registrarAvisosRechazo). No se sacan ni viajan en el fichero.
+  const sinCampus = rows.filter((r) => !campusCompacto(r.centro));
+  if (sinCampus.length) console.log(`${sinCampus.length} filas sin campus: son de esta base y no se sacan.`);
+  const ajenos = rows.filter((r) => campusCompacto(r.centro) && !esDeEsteCrm(r.centro));
   const avisos = ajenos.map((r) => ({
     matricula_id: Number(r.matricula_id),
     ...Object.fromEntries(COPIABLES.map((c) => [c, r[c] ?? null])),
@@ -248,14 +296,23 @@ if (paso === 'meter') {
     filas.push(fila);
     try {
       if (!esDeEsteCrm(a.centro)) { fila.accion = 'SALTA'; fila.rellena = 'el campus tampoco es de esta base'; continue; }
-      const { rows: [lead] } = await query(
+      const { rows: [ya] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+      // La misma matrícula con otro campus aquí: no es el mismo aviso. No se toca, y
+      // como no queda en el fichero de lo hecho, «borrar» tampoco quita el original.
+      if (ya && campusCompacto(ya.centro) && !mismoCampus(ya.centro, a.centro)) {
+        fila.accion = 'OTRO CAMPUS';
+        fila.rellena = `aquí la matrícula es de ${ya.centro}: no se toca`;
+        continue;
+      }
+      // Sin correo no hay a quién buscar: con '' casaría con cualquier ficha sin correo.
+      const email = String(a.email || '').trim();
+      const lead = email ? (await query(
         `SELECT l.id FROM leads l
           WHERE l.deleted_at IS NULL AND lower(l.email) = lower($1)
             AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)
           ORDER BY l.id DESC LIMIT 1`,
-        [String(a.email || '').trim()],
-      );
-      const { rows: [ya] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+        [email],
+      )).rows[0] : null;
       // Lo que este aviso trae de nuevo a esta base (para la campana, si se pide).
       const nuevos = conCampana ? {
         // Como Certifex: no se avisa de «terminado» a quien ya pidió el diploma.
@@ -331,6 +388,14 @@ if (paso === 'borrar') {
       const { rows: [r] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
       // Lo que manda es el campus que hay EN ESTA BASE, no el del fichero.
       if (r && esDeEsteCrm(r.centro)) { fila.accion = 'SALTA'; fila.nota = `el campus ${r.centro} es de esta base`; continue; }
+      // Que esté de verdad en la otra base, y con el mismo campus.
+      const { rows: [alli] } = await destino.query(`SELECT centro FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+      if (!alli) { fila.accion = 'NO ESTÁ ALLÍ'; fila.nota = `no está en ${entrada.destino}: no se borra`; continue; }
+      if (!mismoCampus(alli.centro, r?.centro ?? a.centro)) {
+        fila.accion = 'OTRO CAMPUS';
+        fila.nota = `en ${entrada.destino} es de ${alli.centro || 'ningún campus'}: no se borra`;
+        continue;
+      }
       // Tocada aquí (firma, edición, aviso de rechazo): no se pierde sin que alguien la mire.
       const tocada = r ? tocadaAqui(r) : [];
       if (tocada.length && !tambienTocadas) {
@@ -362,4 +427,5 @@ if (paso !== 'sacar') {
 }
 
 await pool.end();
+if (destino) await destino.end();
 process.exit(0);
