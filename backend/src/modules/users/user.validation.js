@@ -158,3 +158,9 @@ export const listUsersSchema = z.object({
   // La pantalla de Usuarios los pide expresamente; el resto de listas no.
   incluirTodos: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
 });
+
+// El equipo comercial de una administradora (Carlos, 09/11/2026): la lista
+// ENTERA de gestoras a su cargo. Vacía = sin equipo (lo ve todo, como antes).
+export const equipoComercialSchema = z.object({
+  gestoraIds: z.array(z.number().int().positive()).max(200, 'Demasiadas gestoras'),
+});

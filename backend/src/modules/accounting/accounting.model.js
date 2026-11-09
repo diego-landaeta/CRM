@@ -1,5 +1,6 @@
 import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
+import { comoIds } from '../../shared/utils/roles.js';
 import { condicionDeAmbito } from '../expenses/expense.model.js';
 
 // ============================================================
@@ -185,7 +186,8 @@ export async function getReceivable({ projectId = null, projectIds = null, respo
   let i = 1;
   const idsCobro = comoLista(projectId, projectIds);
   if (idsCobro)      { conds.push(`c.project_id = ANY($${i++}::int[])`); params.push(idsCobro); }
-  if (responsableId) { conds.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+  // Una gestora o varias (las de un equipo comercial, 09/11/2026).
+  if (responsableId) { conds.push(`l.responsable_id = ANY($${i++}::int[])`); params.push(comoIds(responsableId)); }
   const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';
   // Rango de vencimiento (opcional). Se aplica a la fecha de cada fila (vence).
   const fromCond = from ? ` AND vence >= $${i++}` : '';
