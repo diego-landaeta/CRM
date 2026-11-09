@@ -37,6 +37,20 @@ describe('tarjetas de Facturación con periodo', () => {
     await model.listVentasSinFactura({ projectId: 4, from: '2026-09-01', to: '2026-09-30' });
     const [sql, params] = query.mock.calls[0];
     expect(sql).toMatch(/c\.fecha_conversion::date >= \$2::date/);
-    expect(params).toEqual([[4], '2026-09-01', '2026-09-30']);
+    // El cuarto es la gestora o el equipo comercial (09/11/2026): sin nadie, null.
+    expect(params).toEqual([[4], '2026-09-01', '2026-09-30', null]);
+  });
+
+  it('«Ventas sin factura» y las tarjetas, de un equipo comercial (09/11/2026)', async () => {
+    query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    await model.listVentasSinFactura({ projectId: 4, responsableId: [5, 11] });
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toMatch(/r[x]?\.vendedora_id = ANY\(\$4::int\[\]\)/);
+    expect(params[3]).toEqual([5, 11]);
+    vi.clearAllMocks();
+    await model.getStats({ projectId: 4, responsableId: [5, 11] });
+    const [sql2, params2] = query.mock.calls[0];
+    expect(sql2).toMatch(/id IN \(SELECT i\.id FROM invoices i/);
+    expect(params2).toEqual([[5, 11], 4]);
   });
 });

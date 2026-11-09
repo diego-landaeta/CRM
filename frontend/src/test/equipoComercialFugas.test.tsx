@@ -96,7 +96,7 @@ describe('desplegable de gestora (Ventas)', () => {
     sesion.user = LIDER;
     render(<MemoryRouter><SalesPage /></MemoryRouter>);
     await esperar();
-    expect(screen.getByRole('option', { name: 'Ana de mi equipo' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Ana de mi equipo' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: 'Bea de fuera' })).toBeNull();
   });
 
@@ -104,7 +104,7 @@ describe('desplegable de gestora (Ventas)', () => {
     sesion.user = ADMIN;
     render(<MemoryRouter><SalesPage /></MemoryRouter>);
     await esperar();
-    expect(screen.getByRole('option', { name: 'Bea de fuera' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Bea de fuera' })).toBeTruthy();
   });
 });
 
@@ -114,12 +114,12 @@ describe('Facturas: botones que el servidor negaría', () => {
     render(<MemoryRouter><InvoicesPage /></MemoryRouter>);
     await esperar();
     await esperar();
-    expect(screen.getByText('2026/0009')).toBeInTheDocument();
+    expect(screen.getByText('2026/0009')).toBeTruthy();
     expect(screen.queryByTitle('Crear factura rectificativa (de abono)')).toBeNull();
     expect(screen.queryByTitle('Asociar esta factura a una venta del cliente')).toBeNull();
     expect(screen.queryByTitle('Eliminar la factura y liberar su número (se equivocaron al cargarla)')).toBeNull();
     expect(screen.queryByTitle('Editar IVA, datos del cliente o concepto')).toBeNull();
-    expect(screen.getByRole('note')).toHaveTextContent('Llevas un equipo comercial');
+    expect(screen.getByRole('note').textContent).toContain('Llevas un equipo comercial');
   });
 
   it('la admin sin equipo, sí', async () => {
@@ -127,9 +127,9 @@ describe('Facturas: botones que el servidor negaría', () => {
     render(<MemoryRouter><InvoicesPage /></MemoryRouter>);
     await esperar();
     await esperar();
-    expect(screen.getByTitle('Crear factura rectificativa (de abono)')).toBeInTheDocument();
-    expect(screen.getByTitle('Asociar esta factura a una venta del cliente')).toBeInTheDocument();
-    expect(screen.getByTitle('Eliminar la factura y liberar su número (se equivocaron al cargarla)')).toBeInTheDocument();
+    expect(screen.getByTitle('Crear factura rectificativa (de abono)')).toBeTruthy();
+    expect(screen.getByTitle('Asociar esta factura a una venta del cliente')).toBeTruthy();
+    expect(screen.getByTitle('Eliminar la factura y liberar su número (se equivocaron al cargarla)')).toBeTruthy();
     expect(screen.queryByText(/Llevas un equipo comercial/)).toBeNull();
   });
 });
@@ -141,10 +141,10 @@ describe('Finanzas › Dashboard', () => {
     render(<MemoryRouter><AccountingDashboardPage /></MemoryRouter>);
     await esperar();
     await esperar();
-    expect(screen.getByText('Ingresos cobrados')).toBeInTheDocument();
+    expect(screen.getByText('Ingresos cobrados')).toBeTruthy();
     expect(screen.queryByText('Balance neto')).toBeNull();
     expect(screen.queryByText('Egresos')).toBeNull();
-    expect(screen.getByText(/Egresos y balance: solo para administración sin equipo/)).toBeInTheDocument();
+    expect(screen.getByText(/Egresos y balance: solo para administración sin equipo/)).toBeTruthy();
   });
 
   it('sin equipo: Egresos y Balance como siempre', async () => {
@@ -152,7 +152,7 @@ describe('Finanzas › Dashboard', () => {
     render(<MemoryRouter><AccountingDashboardPage /></MemoryRouter>);
     await esperar();
     await esperar();
-    expect(screen.getByText('Balance neto')).toBeInTheDocument();
+    expect(screen.getByText('Balance neto')).toBeTruthy();
     expect(screen.queryByText(/solo para administración sin equipo/)).toBeNull();
   });
 });
