@@ -15,6 +15,7 @@ import dossiersModule from './modules/dossiers/index.js';
 import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
 import whatsappModule from './modules/whatsapp/index.js';
+import zadarmaModule from './modules/zadarma/index.js';
 import tutoresModule from './modules/tutores/index.js';
 import consultasModule from './modules/consultas/index.js';
 import notificationsModule from './modules/notifications/index.js';
@@ -262,6 +263,9 @@ const ALL_MODULES = [
   { name: 'conversions', mod: conversionsModule },
   { name: 'sales', mod: salesModule },
   { name: 'whatsapp', mod: whatsappModule },
+  // Zadarma (#137): llamar por la centralita, el registro de cada llamada y su
+  // reporte. Migración 249. Apagado en cada campus sin credenciales.
+  { name: 'zadarma', mod: zadarmaModule },
   { name: 'tutores', mod: tutoresModule },
   // Consultas de alumnos (#188): la bandeja del tutor y el panel.
   { name: 'consultas', mod: consultasModule },

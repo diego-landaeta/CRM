@@ -25,6 +25,7 @@ import TasaDeCierre from '../components/TasaDeCierre';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import FeedbackEnReportes, { feedbackEnCsv } from '@/modules/feedback/components/FeedbackEnReportes';
 import ActividadPorComercial from '../components/ActividadPorComercial';
+import LlamadasZadarma from '@/modules/zadarma/components/LlamadasZadarma';
 
 function exportReportCSV(data, project, range, panel, seguimiento, feedback = null) {
   const sections = [];
@@ -452,6 +453,8 @@ function PantallaDeReportes() {
           primero que se mira por la mañana». Con sus propios atajos (Ayer por
           defecto), aparte del periodo del resto del informe. */}
       <ActividadPorComercial ambito={ambitoComoObjeto({ activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo })} />
+      {/* Las llamadas de la centralita (#137): solo si algún campus del ámbito tiene Zadarma. */}
+      <LlamadasZadarma ambito={ambitoComoObjeto({ activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo })} />
 
       {/* La tasa de cierre (#39). Justo debajo de la actividad: es la pregunta
           que se hace al abrir Reportes, y lleva su propio «¿de dónde sale?»:

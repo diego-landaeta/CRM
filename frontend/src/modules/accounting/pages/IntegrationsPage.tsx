@@ -8,6 +8,7 @@ import EstadoDeLasIntegraciones from '../components/EstadoDeLasIntegraciones';
 import { TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
 import SupabaseCard from '../components/SupabaseCard';
+import ZadarmaCard from '@/modules/zadarma/components/ZadarmaCard';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -139,6 +140,8 @@ export default function IntegrationsPage() {
           {esIA && <SupabaseCard projectId={pid} />}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
+          {/* La centralita (#137): llamar desde el CRM y el registro de llamadas. */}
+          <ZadarmaCard projectId={pid} />
         </div>
       )}
     </div>

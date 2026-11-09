@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Phone, Copy, Check, X, DeviceMobile } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import LlamarConZadarma from '@/modules/zadarma/components/LlamarConZadarma';
 
 /**
  * Llamar a un numero, sin que el boton se quede en nada.
@@ -29,12 +30,19 @@ export default function Llamar({
   telefono,
   nombre,
   apuntada,
+  zadarma,
   onCerrar,
 }: {
   telefono: string;
   nombre?: string | null;
   /** Si el intento quedo registrado. Se dice: es la mitad del sentido de esto. */
   apuntada: boolean;
+  /**
+   * El prospecto, si su campus tiene Zadarma (#137). Entonces lo primero es
+   * llamar por la centralita —queda grabada y se apunta sola al colgar— y el
+   * movil pasa a ser la otra salida.
+   */
+  zadarma?: { leadId: number; projectId: number };
   onCerrar: () => void;
 }) {
   const [copiado, setCopiado] = useState(false);
@@ -95,20 +103,32 @@ export default function Llamar({
               {limpio}
             </p>
 
-            <p className="text-sm text-muted-foreground text-center leading-relaxed">
-              La llamada se hace <strong className="text-foreground">desde tu móvil</strong>.
-              WhatsApp no deja hablar desde el ordenador.
-            </p>
+            {zadarma ? (
+              <p className="text-sm text-muted-foreground text-center leading-relaxed">
+                Por <strong className="text-foreground">Zadarma</strong>, la centralita: suena tu extensión
+                y, al cogerla, se llama al prospecto. WhatsApp no deja hablar desde el ordenador.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center leading-relaxed">
+                La llamada se hace <strong className="text-foreground">desde tu móvil</strong>.
+                WhatsApp no deja hablar desde el ordenador.
+              </p>
+            )}
 
             <div className="flex flex-col gap-2 pt-1">
+              {zadarma && (
+                <LlamarConZadarma leadId={zadarma.leadId} projectId={zadarma.projectId} variante="ancho" onHecho={onCerrar} />
+              )}
               {/* Un enlace de verdad, no un `window.location`: asi el navegador
                   decide, y en un movil abre el telefono. En el ordenador puede
                   no hacer nada — para eso esta el boton de copiar debajo. */}
               <a
                 href={`tel:${limpio}`}
-                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium
-                           hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap
-                           focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={`h-9 px-4 rounded-md text-sm font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap
+                           focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${zadarma
+                  // Con Zadarma, el móvil es la segunda salida: un solo botón principal.
+                  ? 'border border-border text-foreground hover:bg-muted'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
               >
                 <DeviceMobile size={15} weight="bold" aria-hidden="true" />
                 Marcar en el móvil
@@ -129,14 +149,24 @@ export default function Llamar({
             {/* Si el intento no quedo apuntado hay que DECIRLO: registrar la
                 llamada es la mitad del sentido de este boton, y callarlo deja
                 un hueco en el historial del prospecto sin que nadie lo sepa. */}
-            <p className={`text-xs text-center flex items-center justify-center gap-1.5 ${
-              apuntada ? 'text-muted-foreground' : 'text-warning'
-            }`}>
-              <Phone size={12} weight="fill" aria-hidden="true" />
-              {apuntada
-                ? 'El intento queda apuntado en el historial.'
-                : 'No se pudo apuntar en el historial — llama igual.'}
-            </p>
+            {zadarma ? (
+              // Con Zadarma no se apunta el intento: la llamada entra sola al
+              // colgar, con su duración. Lo que se marque en el móvil no pasa
+              // por la centralita y no llega: se dice.
+              <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1.5">
+                <Phone size={12} weight="fill" aria-hidden="true" />
+                Por Zadarma se apunta sola al colgar. Desde el móvil, apúntala tú.
+              </p>
+            ) : (
+              <p className={`text-xs text-center flex items-center justify-center gap-1.5 ${
+                apuntada ? 'text-muted-foreground' : 'text-warning'
+              }`}>
+                <Phone size={12} weight="fill" aria-hidden="true" />
+                {apuntada
+                  ? 'El intento queda apuntado en el historial.'
+                  : 'No se pudo apuntar en el historial — llama igual.'}
+              </p>
+            )}
           </div>
         </div>
       </div>

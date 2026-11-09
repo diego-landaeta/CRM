@@ -122,6 +122,15 @@ export const SECCIONES = [
         ],
       },
       {
+        // Zadarma (#137): la centralita. Llamar es sobre lo suyo (el servicio recorta a sus prospectos
+        // con la sesión, como la ficha); la extensión de cada una la pone un admin en Integraciones
+        // (`integrations.edit`) y el reporte va con Reportes (`reports.mis_informes`).
+        clave: 'zadarma', nombre: 'Llamadas (Zadarma)', acciones: [
+          a('llamar', 'Llamar con Zadarma', 'Llamar a sus prospectos por la centralita, con su extensión; la llamada se apunta sola al colgar.', TODOS,
+            { nunca: ['tutor', 'colaborador'] }),
+        ],
+      },
+      {
         clave: 'ventas', nombre: 'Ventas', acciones: [
           a('view', 'Ver sus ventas', 'Sus cifras: por cliente, por producto, facturado y su evolución.', TODOS),
           a('registrar', 'Registrar una venta', 'Apuntar una venta nueva desde Ventas.', COMERCIAL),
