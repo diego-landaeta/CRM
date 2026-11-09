@@ -86,6 +86,8 @@ function responder(sql, p = []) {
     return r([{ ...i }]);
   }
   if (/^UPDATE invoices SET pdf_path = NULL/.test(s)) return r([]);
+  // ¿Lleva un equipo comercial? (09/11/2026: quien lo lleva no corrige facturas). Aquí, nadie.
+  if (/^SELECT gestora_id FROM equipo_comercial/.test(s)) return r([]);
   if (/^SELECT cp\.importe, EXISTS \( SELECT 1 FROM stripe_payments sp/.test(s)) {
     const cp = db.payments.get(Number(p[0]));
     return r(cp ? [{ importe: cp.importe, de_stripe: db.deStripe.has(cp.id) }] : []);
