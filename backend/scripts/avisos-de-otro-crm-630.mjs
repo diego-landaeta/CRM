@@ -192,7 +192,10 @@ if (paso === 'borrar') {
   if (!urlDestino) {
     await parar(`\n  borrar: falta DATABASE_URL_DESTINO, la base donde se metieron (${entrada.destino}). Se abre en solo lectura: solo se borra aquí lo que esté allí.\n`);
   }
-  const u = new URL(urlDestino);
+  let u;
+  try { u = new URL(urlDestino); } catch {
+    await parar('\n  DATABASE_URL_DESTINO no es una URL de Postgres (postgresql://usuario:clave@servidor:puerto/base): no se borra nada.\n');
+  }
   u.searchParams.set('options', '-c default_transaction_read_only=on');
   const { default: pg } = await import('pg');
   destino = new pg.Pool({ connectionString: u.toString(), max: 1 });
@@ -423,9 +426,14 @@ if (paso !== 'sacar') {
   for (const f of filas) resumen[f.accion] = (resumen[f.accion] || 0) + 1;
   console.log('\nResumen:');
   for (const [k, n] of Object.entries(resumen)) console.log(`  ${k}: ${n}`);
-  console.log(aplicar ? '\nHecho.' : '\nEnsayo: no se ha escrito nada. Para aplicar: --aplicar');
+  if (resumen.ERROR) {
+    // No se da por terminado: quien lo lance tiene que ver que algo falló (sale con 1).
+    console.error(`\n  ${resumen.ERROR} con ERROR (mira la tabla). ${aplicar ? 'El resto sí se ha aplicado; se puede repetir.' : 'Ensayo: no se ha escrito nada.'}\n`);
+  } else {
+    console.log(aplicar ? '\nHecho.' : '\nEnsayo: no se ha escrito nada. Para aplicar: --aplicar');
+  }
 }
 
 await pool.end();
 if (destino) await destino.end();
-process.exit(0);
+process.exit(filas.some((f) => f.accion === 'ERROR') ? 1 : 0);

@@ -288,6 +288,26 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     const otraBase = correr(['borrar', '--desde-fichero', lista, '--aplicar'], { DATABASE_URL_DESTINO: process.env.DATABASE_URL });
     expect(otraBase.status).toBe(1);
     expect(otraBase.stderr).toMatch(/pero el fichero dice que se metieron en/);
+    // Una URL mal escrita: un mensaje claro, no un error de Node.
+    const malEscrita = correr(['borrar', '--desde-fichero', lista, '--aplicar'], { DATABASE_URL_DESTINO: 'no es una url' });
+    expect(malEscrita.status).toBe(1);
+    expect(malEscrita.stderr).toMatch(/no es una URL de Postgres/);
+    expect(malEscrita.stderr).not.toMatch(/TypeError/);
+    // Si una fila falla (aquí, una base de destino sin la tabla), no acaba en «Hecho.» ni
+    // con 0: sale con 1 y lo dice. Y no borra nada.
+    const VACIA = `${DESTINO}_vacia`;
+    await pool.query(`CREATE DATABASE ${VACIA}`);
+    try {
+      const conErrores = correr(['borrar', '--desde-fichero', escribir('a-vacia.json', { paso: 'meter', origen: BASE_AQUI, destino: VACIA, avisos: [
+        { matricula_id: base, centro: 'ZAJENA630' },
+      ] }), '--aplicar'], { DATABASE_URL_DESTINO: en(VACIA) });
+      expect(conErrores.status).toBe(1);
+      expect(conErrores.stdout).toMatch(/ERROR: 1/);
+      expect(conErrores.stdout).not.toMatch(/Hecho\./);
+      expect(conErrores.stderr).toMatch(/1 con ERROR/);
+    } finally {
+      await pool.query(`DROP DATABASE IF EXISTS ${VACIA} WITH (FORCE)`);
+    }
     expect(await fila(base)).toBeDefined();
     // Las campanas que dejaron esos avisos aquí (lo que se veía desde el admin).
     const campana = async (type, matriculaId, centro) => (await pool.query(
@@ -353,17 +373,24 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     expect(existsSync(join(dir, 'x.json'))).toBe(false);
   });
 
-  it('el candado mira qué base es de verdad (current_database), no cómo la escribe la URL', async () => {
-    // «crm%5Fiseie» es crm_iseie para pg, pero no para quien lee la URL tal cual. Hace
-    // falta una base con ese nombre: se crea vacía si no está, y solo se quita si se creó.
+  it('el candado no se salta escribiendo la base de otra forma, ni sin escribirla', async () => {
+    // Hace falta una base que se llame crm_iseie: se crea vacía si no está, y solo se
+    // quita si se creó.
     const { rows } = await pool.query(`SELECT 1 FROM pg_database WHERE datname = 'crm_iseie'`);
     const creada = rows.length === 0;
     if (creada) await pool.query('CREATE DATABASE crm_iseie');
+    const meter = (extra) => correr(['meter', '--desde-fichero', join(dir, 'desde.json'), '--aplicar', '--a-fichero', join(dir, 'y.json')],
+      { RECUPERAR_EN_PRODUCCION: '', ...extra });
     try {
-      const r = correr(['meter', '--desde-fichero', join(dir, 'desde.json'), '--aplicar', '--a-fichero', join(dir, 'y.json')],
-        { DATABASE_URL: en('crm%5Fiseie'), RECUPERAR_EN_PRODUCCION: '' });
+      // «crm%5Fiseie» es crm_iseie para pg: lo para ya la lectura de la URL.
+      const r = meter({ DATABASE_URL: en('crm%5Fiseie') });
       expect(r.status).toBe(1);
       expect(r.stderr).toMatch(/crm_iseie es PRODUCCIÓN/);
+      // Sin base en la URL, pg tira de PGDATABASE: la URL no dice nada y solo
+      // current_database(), ya conectados, sabe que es producción.
+      const sinBase = meter({ DATABASE_URL: en(''), PGDATABASE: 'crm_iseie' });
+      expect(sinBase.status).toBe(1);
+      expect(sinBase.stderr).toMatch(/crm_iseie es PRODUCCIÓN/);
       expect(existsSync(join(dir, 'y.json'))).toBe(false);
     } finally {
       if (creada) await pool.query('DROP DATABASE IF EXISTS crm_iseie WITH (FORCE)');
