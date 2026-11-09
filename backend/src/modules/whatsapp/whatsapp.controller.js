@@ -6,7 +6,7 @@ import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial, acotarAlAlcance } from '../../shared/utils/roles.js';
+import { alcanceComercial, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -153,7 +153,12 @@ export async function actividad(req, res, next) {
     const desde = fecha(req.query.from) || hasta;
     const ambito = await proyectosDelAmbito(req);
     const projectIds = comoLista(ambito.projectId, ambito.projectIds);
-    res.json({ success: true, data: await actividadEnWhatsapp({ projectIds, desde, hasta }) });
+    const data = await actividadEnWhatsapp({ projectIds, desde, hasta });
+    // Una fila por persona: quien lleva un equipo comercial, solo las de su
+    // equipo y la suya (QA del 09/11/2026).
+    const alcance = await alcanceComercial(req.user);
+    data.filas = data.filas.filter((f) => enElAlcance(alcance, f.id));
+    res.json({ success: true, data });
   } catch (e) { next(e); }
 }
 

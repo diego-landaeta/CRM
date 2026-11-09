@@ -4,7 +4,7 @@ import {
   crearConfigSchema, cambiarConfigSchema, pruebaSchema, listarDecisionesSchema, entradaSchema, motivoDelFallo, prepararEntrada,
 } from './asignacion.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { tieneRol } from '../../shared/utils/roles.js';
+import { tieneRol, alcanceComercial, enElAlcance } from '../../shared/utils/roles.js';
 import { campusDeLaPersona } from '../../shared/utils/ambito.js';
 
 /*
@@ -160,7 +160,10 @@ export async function decisiones(req, res, next) {
     const filas = await model.listarDecisiones({
       misCampus: mios, destinoId: q.destino_id, projectId: q.project_id, issuerId: q.issuer_id, escenario: q.escenario, estado: q.estado, limit: q.limit,
     });
-    res.json({ success: true, data: filas });
+    // Cada decisión dice a qué gestora fue y de qué cliente: quien lleva un
+    // equipo comercial, solo las de su equipo (QA del 09/11/2026).
+    const alcance = await alcanceComercial(req.user);
+    res.json({ success: true, data: filas.filter((f) => enElAlcance(alcance, f.responsable_id)) });
   } catch (err) { next(err); }
 }
 
@@ -172,6 +175,7 @@ export async function reenviar(req, res, next) {
     if (!dec) throw new AppError('Esa decisión no existe', 404, 'NOT_FOUND');
     const mios = await misCampus(req);
     if (mios && !mios.includes(Number(dec.project_id))) throw prohibido('Esa decisión es de un campus que no es tuyo');
+    if (!enElAlcance(await alcanceComercial(req.user), dec.responsable_id)) throw prohibido('Esa decisión es de una gestora que no es de tu equipo');
     const r = await service.reenviar(id);
     res.json({ success: true, data: { estado: r?.estado, error: r?.error || null } });
   } catch (err) { next(err); }
