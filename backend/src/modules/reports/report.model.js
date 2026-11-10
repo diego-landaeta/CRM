@@ -1,4 +1,7 @@
 import { query } from '../../shared/config/db.js';
+// `asesoraId` puede ser una gestora o varias: las de un equipo comercial
+// (09/11/2026, `alcanceComercial`). Por eso todo va con `= ANY($n::int[])`.
+import { comoIds } from '../../shared/utils/roles.js';
 
 // A que proyectos se acota un informe.
 //
@@ -53,15 +56,16 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
   if (to) params.push(to);
   // El parametro de la gestora va el ULTIMO y lo usan TODAS las consultas que
   // reciben `params`: Postgres rechaza un parametro que sobra.
-  const pAses = asesoraId ? `$${idx++}` : null;
-  if (asesoraId) params.push(Number(asesoraId));
-  const deLaGestora = (alias = '') => (pAses ? `AND ${alias}responsable_id = ${pAses}` : '');
-  // Su parte de la venta: 1 sin gestora (la venta es una para la casa).
+  const pAses = asesoraId ? `$${idx++}::int[]` : null;
+  if (asesoraId) params.push(comoIds(asesoraId));
+  const deLaGestora = (alias = '') => (pAses ? `AND ${alias}responsable_id = ANY(${pAses})` : '');
+  // Su parte de la venta: 1 sin gestora (la venta es una para la casa). Con un
+  // equipo, la suma de las partes de las del equipo.
   const PESO = (cv = 'conversions') => (pAses
-    ? `(SELECT r.peso FROM conversion_reparto r WHERE r.conversion_id = ${cv}.id AND r.vendedora_id = ${pAses})`
+    ? `(SELECT SUM(r.peso) FROM conversion_reparto r WHERE r.conversion_id = ${cv}.id AND r.vendedora_id = ANY(${pAses}))`
     : '1');
   const suVenta = (cv = 'conversions') => (pAses
-    ? `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = ${cv}.id AND r.vendedora_id = ${pAses})`
+    ? `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = ${cv}.id AND r.vendedora_id = ANY(${pAses}))`
     : '');
 
   // Leads: total + por estado + por canal + por gestor
@@ -145,10 +149,10 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
   let pesoTrend = '1';
   let filtroTrend = '';
   if (pAses) {
-    trendParams.push(Number(asesoraId));
-    const ph = `$${trendParams.length}`;
-    pesoTrend = `(SELECT r.peso FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ${ph})`;
-    filtroTrend = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ${ph})`;
+    trendParams.push(comoIds(asesoraId));
+    const ph = `$${trendParams.length}::int[]`;
+    pesoTrend = `(SELECT SUM(r.peso) FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY(${ph}))`;
+    filtroTrend = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY(${ph}))`;
   }
   const { rows: trend } = await query(
     `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') as mes,
@@ -238,16 +242,16 @@ function filtroAsesora(projectCol, ph) {
   // Nivel PROSPECTO: la ficha es de su gestora, y tambien de quien comparte su
   // venta. Si no, quien puso la mitad de una venta no veria ni al cliente.
   if (projectCol.startsWith('l.')) {
-    return `(l.responsable_id = ${ph}
+    return `(l.responsable_id = ANY(${ph}::int[])
              OR EXISTS (SELECT 1 FROM conversion_reparto r
-                         WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`;
+                         WHERE r.lead_id = l.id AND r.vendedora_id = ANY(${ph}::int[]) AND r.compartida))`;
   }
   // Nivel VENTA. Sustituye al COALESCE(vendedora_id, responsable_id) de antes:
   // hace lo mismo cuando la venta no esta repartida, y ademas encuentra las que
   // si lo estan.
   const c = projectCol.startsWith('c.') ? 'c.' : '';
   return `EXISTS (SELECT 1 FROM conversion_reparto r
-                   WHERE r.conversion_id = ${c}id AND r.vendedora_id = ${ph})`;
+                   WHERE r.conversion_id = ${c}id AND r.vendedora_id = ANY(${ph}::int[]))`;
 }
 
 function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, projectCol = 'project_id') {
@@ -263,7 +267,7 @@ function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, pr
   // cuando quien pregunta es una gestora, asi que no puede pedir lo de otra.
   // El parametro se referencia dos veces en el caso del prospecto, pero se
   // empuja UNA: en Postgres $1 puede repetirse dentro de la misma consulta.
-  if (asesoraId) { cond.push(filtroAsesora(projectCol, `$${idx++}`)); params.push(asesoraId); }
+  if (asesoraId) { cond.push(filtroAsesora(projectCol, `$${idx++}`)); params.push(comoIds(asesoraId)); }
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
@@ -302,8 +306,8 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
   if (from) par.push(from);
   const pHasta = to ? `$${i++}` : null;
   if (to) par.push(to);
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push(comoIds(asesoraId));
 
   const entre = (col) => [
     pDesde ? `AND ${col} >= ${pDesde}::date` : '',
@@ -660,10 +664,10 @@ function buildGeneralFilter({ projectId, projectIds, from, to, asesoraId }) {
   // incluidas las que atendio a medias con otra, que tambien son suyas.
   if (asesoraId) {
     const ph = `$${idx++}`;
-    cond.push(`(COALESCE(conv.vendedora_id, l.responsable_id) = ${ph}
+    cond.push(`(COALESCE(conv.vendedora_id, l.responsable_id) = ANY(${ph}::int[])
                 OR EXISTS (SELECT 1 FROM conversion_reparto r
-                            WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`);
-    params.push(asesoraId);
+                            WHERE r.lead_id = l.id AND r.vendedora_id = ANY(${ph}::int[]) AND r.compartida))`);
+    params.push(comoIds(asesoraId));
   }
   if (from) { cond.push(`${reportDate} >= $${idx++}::date`); params.push(from); }
   if (to) { cond.push(`${reportDate} <= $${idx++}::date`); params.push(to); }
@@ -1313,15 +1317,15 @@ export async function panelReportes({ projectId, projectIds, from, to, asesoraId
   // proyectos debajo del titulo «CEDIA · 7 campus».
   const lista = comoLista(projectId, projectIds);
   const iAs = lista ? 4 : 3;
-  const al = asesoraId ? ` AND l.responsable_id = $${iAs}` : '';
+  const al = asesoraId ? ` AND l.responsable_id = ANY($${iAs}::int[])` : '';
   const ac = asesoraId
     // La vista resuelve titular y reparto de una vez.
     ? ` AND EXISTS (SELECT 1 FROM conversion_reparto r
-                     WHERE r.conversion_id = c.id AND r.vendedora_id = $${iAs})`
+                     WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${iAs}::int[]))`
     : '';
   const pl = (lista ? 'AND l.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('l.project_id')}`) + al;
   const pc = (lista ? 'AND c.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('c.project_id')}`) + ac;
-  const par = (a, b) => [a, b, ...(lista ? [lista] : []), ...(asesoraId ? [asesoraId] : [])];
+  const par = (a, b) => [a, b, ...(lista ? [lista] : []), ...(asesoraId ? [comoIds(asesoraId)] : [])];
 
   async function bloque(d, h) {
     const { rows: le } = await query(
@@ -1700,10 +1704,10 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
       const ph = `$${idx++}`;
       cond.push(`(COALESCE(l.responsable_id, (SELECT cv.vendedora_id FROM conversions cv
                                                WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL
-                                               ORDER BY cv.fecha_conversion LIMIT 1)) = ${ph}
+                                               ORDER BY cv.fecha_conversion LIMIT 1)) = ANY(${ph}::int[])
                   OR EXISTS (SELECT 1 FROM conversion_reparto r
-                              WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`);
-      params.push(Number(asesoraId));
+                              WHERE r.lead_id = l.id AND r.vendedora_id = ANY(${ph}::int[]) AND r.compartida))`);
+      params.push(comoIds(asesoraId));
     }
     const { rows } = await query(
       `SELECT l.id, l.nombre AS cliente, l.email, l.telefono, l.status AS estado,
@@ -1732,7 +1736,7 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
     cond.push(finMes ? `${DV} <= ${finMes}` : `${DV} <= $${idx++}`);
     if (!finMes) params.push(hasta);
     if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
-    else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
+    else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY(?::int[]))', comoIds(asesoraId));
     // LA PARTE QUE LE TOCA A ELLA.
     //
     // Mirando lo de UNA asesora, una venta repartida no es suya entera: es
@@ -1741,9 +1745,9 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
     // era justo la mitad de la compartida. Sin asesora el peso es 1.
     let PESO = '1';
     if (asesoraId && asesoraId !== 'sin') {
-      params.push(Number(asesoraId));
-      PESO = `COALESCE((SELECT r.peso FROM conversion_reparto r
-                         WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++}), 1)`;
+      params.push(comoIds(asesoraId));
+      PESO = `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                         WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[])), 1)`;
     }
     // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
     // sustituiria el primero, que no es el nuestro.
@@ -1836,8 +1840,12 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
       reparto = 'JOIN conversion_reparto r ON r.conversion_id = c.id AND r.vendedora_id IS NULL';
       PESO = 'r.peso';
     } else if (asesoraId) {
-      p.push(Number(asesoraId));
-      reparto = `JOIN conversion_reparto r ON r.conversion_id = c.id AND r.vendedora_id = $${p.length}`;
+      p.push(comoIds(asesoraId));
+      // Una fila por cobro aunque la venta la compartan dos del mismo equipo:
+      // su parte es la suma de las dos.
+      reparto = `JOIN LATERAL (SELECT SUM(rr.peso) AS peso FROM conversion_reparto rr
+                                 WHERE rr.conversion_id = c.id AND rr.vendedora_id = ANY($${p.length}::int[])) r
+                   ON r.peso IS NOT NULL`;
       PESO = 'r.peso';
     }
     // CAJAS[tipo] sale de la lista de arriba, nunca de la URL.
@@ -1875,7 +1883,7 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
   cond.push(finMes ? `${DC} <= ${finMes}` : `${DC} <= $${idx++}`);
   if (!finMes) params.push(hasta);
   if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
-  else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
+  else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY(?::int[]))', comoIds(asesoraId));
   // Un cobro es "de la venta" si es el primero Y su ficha es una venta de
   // verdad: en una marcada como mensualidad no hay venta que cobrar, así que
   // todos sus cobros son cuota.
@@ -1956,7 +1964,7 @@ const ES_MENSUALIDAD = `(
 // lleva un total mas bajo sin enterarse.
 //
 // Esto lo devuelve para poder avisarle ANTES de descargar.
-export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to }) {
+export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to, asesoraId = null }) {
   const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT cv.id, COALESCE(l.nombre, '—') AS cliente,
@@ -1974,9 +1982,12 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
           SELECT 1 FROM invoices i
            WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
              AND (i.conversion_id = cv.id OR i.payment_id = cp.id))
+        -- De una gestora o de un equipo comercial: por el reparto, como el resto.
+        AND ($4::int[] IS NULL OR EXISTS (SELECT 1 FROM conversion_reparto r
+                                           WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($4::int[])))
       GROUP BY cv.id, l.nombre, cv.producto_contratado
       ORDER BY ultimo_cobro DESC, cobrado DESC`,
-    [lista, from || null, to || null]
+    [lista, from || null, to || null, asesoraId ? comoIds(asesoraId) : null]
   );
   return {
     ventas: rows.length,

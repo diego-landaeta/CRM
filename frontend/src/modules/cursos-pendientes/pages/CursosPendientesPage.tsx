@@ -3,6 +3,7 @@ import { Plus, Warning, GraduationCap, Hourglass, Users, ArrowClockwise } from '
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
   cursosApi, ESTADOS, TIPOS, type CursoPendiente, type EstadoCurso, type Resumen,
@@ -57,6 +58,13 @@ export default function CursosPendientesPage() {
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cursos, setCursos] = useState<CursoPendiente[]>([]);
   const [campus, setCampus] = useState<number | 'todos'>('todos');
+  // Con una empresa arriba, solo sus campus (Diego, en la revisión de la #670):
+  // las pestañas, los contadores y la lista. El servidor ya lo entiende
+  // (`proyectosDelAmbito`) y lo recorta a los campus de quien mira.
+  const { activeIssuerId } = useProjectContext() as { activeIssuerId?: number | null };
+  const issuerId = activeIssuerId ?? null;
+  // Al cambiar de empresa, la pestaña elegida puede no ser de la nueva.
+  useEffect(() => { setCampus('todos'); }, [issuerId]);
   const [verCerrados, setVerCerrados] = useState(false);
   const [soloRetrasados, setSoloRetrasados] = useState(false);
   const [tutoraFiltro, setTutoraFiltro] = useState<number | ''>('');
@@ -69,15 +77,16 @@ export default function CursosPendientesPage() {
     try {
       const params: Record<string, string | number | boolean> = { abiertos: !verCerrados };
       if (campus !== 'todos') params.projectId = campus;
+      else if (issuerId) params.issuerId = issuerId;
       if (soloRetrasados) params.soloRetrasados = true;
       if (tutoraFiltro) params.tutorId = tutoraFiltro;
-      const [r, l] = await Promise.all([cursosApi.resumen(), cursosApi.listar(params)]);
+      const [r, l] = await Promise.all([cursosApi.resumen(issuerId ? { issuerId } : {}), cursosApi.listar(params)]);
       setResumen(r);
       setCursos(l);
     } catch (e) {
       toast({ title: 'No se pudieron cargar los cursos pendientes', description: (e as Error).message, variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [campus, verCerrados, soloRetrasados, tutoraFiltro]);
+  }, [campus, verCerrados, soloRetrasados, tutoraFiltro, issuerId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

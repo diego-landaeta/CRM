@@ -12,7 +12,7 @@ import * as stripe from '../stripe-payments/stripe-payments.model.js';
 import * as comisiones from '../commissions/commission.model.js';
 import * as duplicados from '../leads/dup-queue.service.js';
 import * as model from './mcp.model.js';
-import { acotarProyectos, responsableImpuesto } from './mcp.acceso.js';
+import { acotarProyectos, responsableImpuesto, alcanceDelAmbito, fueraDelAlcance } from './mcp.acceso.js';
 import { enteroEnv } from './mcp.config.js';
 import * as moodle from './mcp.moodle.js';
 
@@ -332,9 +332,12 @@ export const HERRAMIENTAS = [
     ejecutar: async (ambito) => ({
       persona: ambito.nombre,
       rol: ambito.role,
-      alcance: ambito.soloLoSuyo
-        ? 'Solo tus propios prospectos, ventas y facturas dentro de tus campus.'
-        : 'Todos los datos de tus campus.',
+      alcance: ambito.equipo?.length
+        ? 'Tus prospectos, ventas y facturas y los de las gestoras de tu equipo comercial, dentro de tus campus.'
+        : ambito.soloLoSuyo
+          ? 'Solo tus propios prospectos, ventas y facturas dentro de tus campus.'
+          : 'Todos los datos de tus campus.',
+      ...(ambito.equipo?.length ? { equipo_comercial: ambito.equipo } : {}),
       proyectos: ambito.proyectos,
       // Con un solo campus no hay nada que elegir (#220): se dice para que
       // Claude no pregunte «¿de qué campus?» ni pase ids en cada consulta.
@@ -361,8 +364,8 @@ export const HERRAMIENTAS = [
     },
     ejecutar: async (ambito, a) => {
       const { gestora_id: gestoraId, ...resto } = a;
-      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
-        throw new AppError('Solo ves tus propios prospectos: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      if (fueraDelAlcance(ambito, gestoraId)) {
+        throw new AppError('Solo ves tus propios prospectos (y los de tu equipo, si llevas uno): no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
       }
       return model.buscarProspectos({ ...resto, gestoraId, ...acotar(ambito, a) });
     },
@@ -402,8 +405,8 @@ export const HERRAMIENTAS = [
     ejecutar: async (ambito, a) => {
       const { vendedora_id: vendedoraId, ...resto } = a;
       // Una gestora ve solo lo suyo: pedir otra vendedora no ensancha nada, y se le dice.
-      if (vendedoraId && ambito.soloLoSuyo && vendedoraId !== ambito.userId) {
-        throw new AppError('Solo ves tus propias ventas: no puedes pedir las de otra vendedora.', 403, 'MCP_FUERA_DE_AMBITO');
+      if (fueraDelAlcance(ambito, vendedoraId)) {
+        throw new AppError('Solo ves tus propias ventas (y las de tu equipo, si llevas uno): no puedes pedir las de otra vendedora.', 403, 'MCP_FUERA_DE_AMBITO');
       }
       return model.listarVentas({ ...resto, vendedoraId, ...acotar(ambito, a) });
     },
@@ -453,12 +456,14 @@ export const HERRAMIENTAS = [
     },
     ejecutar: async (ambito, a) => {
       const { gestora_id: gestoraId, ...resto } = a;
-      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
-        throw new AppError('Solo ves tus propios cobros: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      if (fueraDelAlcance(ambito, gestoraId)) {
+        throw new AppError('Solo ves tus propios cobros (y los de tu equipo, si llevas uno): no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
       }
       const dondeVa = acotar(ambito, a);
-      // A quien ve solo lo suyo se le impone ella misma; quien ve todo el campus puede acotar a una gestora.
-      return model.cobrosPendientes({ ...resto, ...dondeVa, responsableId: dondeVa.responsableId || gestoraId || null });
+      // A quien ve solo lo suyo se le impone ella misma (o su equipo); quien ve
+      // todo el campus, o una líder dentro de su equipo, puede acotar a una gestora
+      // (que ya se ha comprobado arriba que es de su alcance).
+      return model.cobrosPendientes({ ...resto, ...dondeVa, responsableId: gestoraId || dondeVa.responsableId || null });
     },
   },
   {
@@ -478,8 +483,8 @@ export const HERRAMIENTAS = [
     },
     ejecutar: async (ambito, a) => {
       const { gestora_id: gestoraId, desde, hasta, ...resto } = a;
-      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
-        throw new AppError('Solo ves tus propios clientes: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      if (fueraDelAlcance(ambito, gestoraId)) {
+        throw new AppError('Solo ves tus propios clientes (y los de tu equipo, si llevas uno): no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
       }
       return model.clientesDe({ ...resto, gestoraId, desde, hasta, ...acotar(ambito, a) });
     },
@@ -828,7 +833,8 @@ export const HERRAMIENTAS = [
       ...PERIODO,
     },
     ejecutar: async (ambito, a) => {
-      if (INFORMES[a.tipo].soloAdmin && ambito.soloLoSuyo) {
+      // «De todo el campus»: ni a quien ve solo lo suyo ni a quien ve solo su equipo.
+      if (INFORMES[a.tipo].soloAdmin && alcanceDelAmbito(ambito)) {
         throw new AppError(`El informe «${a.tipo}» es de todo el campus y solo lo ven super admin y admin. Prueba con «resumen_mensual».`, 403, 'MCP_INFORME_SOLO_ADMIN');
       }
       const { projectIds, responsableId } = acotar(ambito, a);
