@@ -79,6 +79,7 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 // Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { MARCA } from '@/shared/config/marca';
@@ -329,18 +330,20 @@ export const NAV_SECTIONS = [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports.view' },
       // Por que no compran: enviados, respondidos y motivos (#170).
       { label: 'Feedback', to: '/informes/feedback', detail: 'Por qué no compran', icon: ChatCircleText, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'feedback.view' },
-      // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
-      { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
-      // Preguntarle a los datos (#30): solo en pruebas hasta que haya clave y tope (#22).
-      ...(SOLO_EN_PRUEBAS
-        ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+      // Las pantallas de IA del CRM (#30) —Análisis IA, Pregunta a tus datos y
+      // Chat IA— están APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP).
+      // Se encienden las tres juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
+      ...(PANTALLAS_IA
+        ? [
+          // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
+          { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
+          // Preguntarle a los datos (#30): además, solo en pruebas hasta que haya clave y tope (#22).
+          ...(SOLO_EN_PRUEBAS
+            ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+            : []),
+          { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+        ]
         : []),
-      // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
-      // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
-      // probado—, pero no se ofrece en el menu: enseñar una puerta que no
-      // lleva a ningun sitio es peor que no tenerla.
-      // Para devolverla, quitar el comentario de la linea de abajo.
-      // { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
