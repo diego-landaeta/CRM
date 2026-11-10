@@ -19,4 +19,9 @@
  * Para levantarlo: poner `false` AQUI, en los dos CRM. Antes hay que arreglar
  * el enlace de contrasena de Brevo, que sigue roto.
  */
+//
+// El código para cambiar el correo (#211) NO pasa por el freno, a propósito: lo
+// pide el propio tutor (o un superadmin) y va a la dirección NUEVA. Sin él, un
+// tutor no podría cambiar su correo mientras siga el freno. El aviso a la
+// dirección vieja sí sigue frenado (`cambiarCorreo`).
 export const NO_ESCRIBIR_A_TUTORES = true;

@@ -186,3 +186,140 @@ export function soloLoSuyo(user) {
   if (suyos.some((r) => VEN_TODO_EL_CAMPUS.includes(r))) return false;
   return suyos.some((r) => COMERCIAL_PROPIO.includes(r));
 }
+
+
+/*
+  EL EQUIPO COMERCIAL: el tercer alcance (Carlos, 09/11/2026).
+
+  «Raquel pasa a ser administradora como Daniela: no recibe leads y puede ver
+  los leads y la gestión de las diferentes compañeras. Daniela puede ver todas.
+  Raquel podrá ver sus comerciales asignadas (pueden variar).»
+
+  Hasta hoy, o se veía todo el campus (admin) o solo lo suyo (gestora). Ahora,
+  quien tiene gestoras a su cargo en `equipo_comercial` (migración 246) ve lo
+  suyo y lo de ellas, y NADA más, sea cual sea su rol. Un admin sin equipo
+  sigue viéndolo todo, como Daniela.
+
+  `alcanceComercial(user)` devuelve:
+    · null      → sin límite por persona (todo lo de sus campus);
+    · [ids…]    → solo lo de esas personas (la propia siempre va la primera).
+
+  El alcance por campus/empresa (`shared/utils/ambito.js`) no cambia y se
+  aplica ADEMÁS: esto recorta personas, aquello recorta campus.
+
+  Es ALCANCE, no puerta: si entra o no lo deciden los permisos (#423).
+*/
+const SIN_LIMITE_POR_PERSONA = ['superadmin', 'soporte'];
+
+// Una consulta por petición, no una por cada sitio que pregunta: `req.user` es
+// un objeto nuevo en cada petición, así que lo que se guarda aquí muere con
+// ella y un cambio de equipo se nota en la siguiente.
+const alcancesPorPeticion = new WeakMap();
+
+function idDe(user) {
+  const id = Number(user?.userId ?? user?.id);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** Las gestoras que tiene a su cargo esta persona (vacío si no lidera a nadie). */
+export async function gestorasACargo(liderId) {
+  const { query } = await import('../config/db.js');
+  try {
+    const res = await query(
+      'SELECT gestora_id FROM equipo_comercial WHERE lider_id = $1 ORDER BY gestora_id',
+      [liderId]);
+    return (res?.rows || []).map((r) => Number(r.gestora_id)).filter((id) => Number.isInteger(id) && id > 0);
+  } catch (err) {
+    // Sin la migración 246 todavía, nadie lidera a nadie: se ve como hasta hoy.
+    if (err?.code === '42P01') return [];
+    throw err;
+  }
+}
+
+async function calcularAlcance(user) {
+  const suyos = rolesDe(user);
+  if (suyos.some((r) => SIN_LIMITE_POR_PERSONA.includes(r))) return null;
+  const yo = idDe(user);
+  if (!yo) return soloLoSuyo(user) ? [-1] : null;
+  const equipo = await gestorasACargo(yo);
+  if (equipo.length) return [yo, ...equipo.filter((id) => id !== yo)];
+  if (soloLoSuyo(user)) return [yo];
+  return null;
+}
+
+export function alcanceComercial(user) {
+  if (!user || typeof user !== 'object') return Promise.resolve(null);
+  let p = alcancesPorPeticion.get(user);
+  if (!p) {
+    p = calcularAlcance(user);
+    alcancesPorPeticion.set(user, p);
+    // Si falla, que la siguiente pregunta lo vuelva a intentar.
+    p.catch(() => alcancesPorPeticion.delete(user));
+  }
+  return p;
+}
+
+/** Si esta persona entra en el alcance (null = sin límite). */
+export function enElAlcance(alcance, id) {
+  if (!alcance) return true;
+  return id != null && alcance.includes(Number(id));
+}
+
+/**
+ * Lo que pide la pantalla («de esta gestora»), recortado al alcance.
+ *
+ *   · sin alcance       → lo pedido, tal cual (o null = de todas);
+ *   · sin pedir nada    → todo el alcance;
+ *   · pedido de dentro  → solo esa persona;
+ *   · pedido de fuera   → se ignora y queda el alcance, como siempre se hizo
+ *                         con la gestora («ignoramos el responsableId del cliente»).
+ *
+ * Devuelve un número, una lista o null. Las consultas lo pasan por `comoIds`.
+ */
+export function acotarAlAlcance(pedido, alcance) {
+  const p = pedido == null || pedido === '' ? null : Number(pedido);
+  if (!alcance) return Number.isFinite(p) ? p : null;
+  if (Number.isFinite(p) && alcance.includes(p)) return [p];
+  return alcance;
+}
+
+/** Un id, una lista o nada → lista de enteros para `= ANY($n::int[])`, o null. */
+export function comoIds(v) {
+  if (v == null || v === '') return null;
+  const lista = (Array.isArray(v) ? v : [v]).map(Number).filter((n) => Number.isFinite(n));
+  // Una lista que se queda vacía no casa con nada: nunca «sin filtro».
+  return lista.length ? lista : [-1];
+}
+
+/**
+ * «De quién» en las pantallas que lo decidían por el ROL (Reportes, la cola del
+ * proceso, convocatorias, actividad): quien manda (`jefes`) ve todo o la de una
+ * que pida; el resto, solo lo suyo. Lo que añade el equipo comercial
+ * (09/11/2026): quien lo lleva ve su equipo, o una de él si la pide, nunca a
+ * otra. Sin equipo, exactamente lo de antes.
+ */
+export async function personaDelInforme(user, pedido, { jefes = ['admin', 'superadmin'] } = {}) {
+  const alcance = await alcanceComercial(user);
+  const esJefe = jefes.includes(user?.role);
+  if (alcance && (esJefe || alcance.length > 1)) return acotarAlAlcance(pedido, alcance);
+  if (esJefe) return pedido ?? null;
+  return user?.userId || -1;
+}
+
+/**
+ * El alcance SOLO si lleva un equipo comercial (QA del 09/11/2026); null si no.
+ *
+ * Para las pantallas que una gestora sigue viendo como siempre (el panel
+ * «Último lead de cada gestora», la cola de facturación, el selector de
+ * WhatsApp, los desplegables de gestora…) pero que a una líder le enseñaban
+ * todo el campus, y para lo que no es «qué filas ve» sino «qué puede hacer»
+ * (egresos y balance de la empresa, mover la fecha de la cola). Una gestora
+ * sola tiene alcance `[ella]`; una líder, `[ella, ...sus gestoras]`, y nunca
+ * está en su propio equipo, así que «más de uno» es «lleva equipo».
+ *
+ * Mismo nombre y contrato en CRM-ISEIE (paridad).
+ */
+export async function alcanceDeLider(user) {
+  const alcance = await alcanceComercial(user);
+  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
+}

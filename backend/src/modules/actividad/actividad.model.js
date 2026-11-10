@@ -1,5 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
+// `asesoraId`: una gestora o varias (un equipo comercial, 09/11/2026).
+import { comoIds } from '../../shared/utils/roles.js';
 
 /**
  * «Qué ha pasado hoy»: la actividad reciente de un proyecto (#13).
@@ -75,7 +77,7 @@ export async function actividadReciente({
     const cond = [condicionDeProyecto(proyectoCol, lista, params)];
     if (desde) { params.push(desde); cond.push(`${fechaCol} >= $${params.length}::timestamptz`); }
     if (antes) { params.push(antes); cond.push(`${fechaCol} < $${params.length}::timestamptz`); }
-    if (asesoraId) { params.push(asesoraId); cond.push(gestora(`$${params.length}`)); }
+    if (asesoraId) { params.push(comoIds(asesoraId)); cond.push(gestora(`ANY($${params.length}::int[])`)); }
     params.push(n + 1); // uno de más para saber si hay página siguiente
     return { cond: cond.join(' AND '), params, limite: `$${params.length}` };
   }

@@ -41,7 +41,7 @@ const DECLARADAS = {
   'leads/lead.controller.js': [1, 'alcance: la gestora, sus prospectos'],
   'leads/lead.model.js': [1, 'alcance: el resumen del día de la gestora'],
   'leads/lead.service.js': [2, 'alcance y comportamiento: interacciones propias; el reparto no da a tutores'],
-  'mcp/mcp.acceso.js': [1, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin'],
+  'mcp/mcp.acceso.js': [2, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin; el equipo comercial no recorta a un super admin'],
   'mcp/mcp.actividad.js': [1, 'alcance: el superadmin ve la actividad de todos'],
   'mcp/mcp.controller.js': [4, 'alcance y avisos: soloLoSuyo, por qué un rol no se marca, campus'],
   'mcp/mcp.model.js': [2, 'alcance: personas y campus de quien pregunta'],
@@ -67,7 +67,6 @@ const DECLARADAS = {
   'asignacion/asignacion.controller.js': [3, 'alcance: el superadmin ve todas las configuraciones de la asignación; la de todas las empresas, solo él'],
   'whatsapp/chat.controller.js': [2, 'alcance: supervisar solo a quien comparte campus'],
   'whatsapp/roles.js': [2, 'comportamiento: por qué un rol no tiene WhatsApp (el motivo que se enseña)'],
-  'whatsapp/vozOTexto.js': [1, 'alcance: admin, superadmin y soporte ven a todas las gestoras; la gestora, solo a si misma'],
 };
 
 function ficheros(dir) {
