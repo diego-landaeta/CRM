@@ -9,7 +9,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
-import { alcanceComercial } from '../../shared/utils/roles.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -128,11 +128,13 @@ export async function me(req, res, next) {
       throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     }
 
-    const [projects, permissions, view, alcance] = await Promise.all([
+    const [projects, permissions, view, equipo] = await Promise.all([
       authModel.getUserProjects(user.id, user.role),
       buildPermissionsMap(user.id, user.role, user.custom_role_id, user.roles_extra),
       resolveUserView(user.id, user.role, user.custom_role_id),
-      alcanceComercial({ userId: user.id, role: user.role, roles_extra: user.roles_extra }),
+      // El equipo comercial que lleva (QA del 09/11/2026). No puede tumbar /me:
+      // sin él, la pantalla se queda como estaba.
+      alcanceDeLider({ userId: user.id, role: user.role, roles_extra: user.roles_extra }).catch(() => null),
     ]);
 
     res.json({
@@ -155,15 +157,14 @@ export async function me(req, res, next) {
           // Para que la pantalla no pregunte por WhatsApp a quien lo tiene
           // apagado (QA de Diego, 22/10, punto 8). null = sin la columna.
           usa_whatsapp: user.usa_whatsapp ?? null,
-          // El alcance comercial (QA del 09/11/2026): null = sin límite por
-          // persona; si no, las personas cuyos datos ve (ella la primera).
-          // `lleva_equipo`: tiene gestoras a su cargo. La pantalla lo usa para
-          // ofrecer solo esas gestoras en los desplegables y para no enseñar
-          // lo que el servidor le negaría (corregir o abonar facturas).
-          alcance_comercial: alcance,
-          lleva_equipo: Boolean(alcance && alcance.length > 1),
+          // El equipo comercial (QA del 09/11/2026), igual que en CRM-ISEIE.
+          // La pantalla lo usa para no enseñar lo que el servidor le negaría
+          // (corregir o abonar facturas, egresos y balance).
+          lleva_equipo: Boolean(equipo),
         },
         permissions,
+        // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].
+        alcance_comercial: equipo,
         view,
         projects: sanitizeProjects(projects, user.role),
       },

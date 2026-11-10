@@ -1,6 +1,6 @@
 import { proyectosDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
-import { alcanceComercial, acotarAlAlcance } from '../../shared/utils/roles.js';
+import { alcanceDeLider, acotarAlAlcance } from '../../shared/utils/roles.js';
 
 // `commissions.reglas` de serie es de soporte; a un admin de empresa se le
 // puede dar como excepción, y entonces toca solo las reglas de SUS campus:
@@ -74,8 +74,9 @@ export async function listAll(req, res, next) {
   try {
     const { userId, projectId, estado, from, to } = req.query;
     const rows = await model.listCommissions({
-      // Quien lleva un equipo comercial, las de su equipo (QA del 09/11/2026).
-      userId: acotarAlAlcance(userId, await alcanceComercial(req.user)),
+      // Quien lleva un equipo comercial, las suyas y las de su equipo; pedir a
+      // alguien de fuera no ensancha nada (QA del 09/11/2026).
+      userId: acotarAlAlcance(userId, await alcanceDeLider(req.user)),
       ...(await proyectosDelAmbito(req)),
       estado: estado || null,
       from: from || null,
@@ -101,7 +102,7 @@ export async function statsAll(req, res, next) {
   try {
     const { userId, projectId, from, to } = req.query;
     const s = await model.getStats({
-      userId: acotarAlAlcance(userId, await alcanceComercial(req.user)),
+      userId: acotarAlAlcance(userId, await alcanceDeLider(req.user)),
       ...(await proyectosDelAmbito(req)),
       from: from || null,
       to: to || null,

@@ -307,14 +307,19 @@ export async function personaDelInforme(user, pedido, { jefes = ['admin', 'super
 }
 
 /**
- * Si quien pregunta LLEVA un equipo comercial: el alcance es ella y alguna más.
- * Una gestora (solo ella) o quien no tiene límite (null) no lo llevan.
+ * El alcance SOLO si lleva un equipo comercial (QA del 09/11/2026); null si no.
  *
- * Para lo que no es «qué filas ve» sino «qué puede hacer»: corregir y abonar
- * facturas, egresos y balance de la empresa, supervisar el WhatsApp de otras
- * (fugas del QA del 09/11/2026). Devuelve la lista del equipo o null.
+ * Para las pantallas que una gestora sigue viendo como siempre (el panel
+ * «Último lead de cada gestora», la cola de facturación, el selector de
+ * WhatsApp, los desplegables de gestora…) pero que a una líder le enseñaban
+ * todo el campus, y para lo que no es «qué filas ve» sino «qué puede hacer»
+ * (egresos y balance de la empresa, mover la fecha de la cola). Una gestora
+ * sola tiene alcance `[ella]`; una líder, `[ella, ...sus gestoras]`, y nunca
+ * está en su propio equipo, así que «más de uno» es «lleva equipo».
+ *
+ * Mismo nombre y contrato en CRM-ISEIE (paridad).
  */
-export async function equipoQueLleva(user) {
+export async function alcanceDeLider(user) {
   const alcance = await alcanceComercial(user);
-  return alcance && alcance.length > 1 ? alcance : null;
+  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
 }

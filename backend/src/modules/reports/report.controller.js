@@ -11,7 +11,7 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mcp.acceso.js';
-import { personaDelInforme, alcanceComercial, gestorasACargo, comoIds } from '../../shared/utils/roles.js';
+import { personaDelInforme, alcanceDeLider, enElAlcance, gestorasACargo, comoIds } from '../../shared/utils/roles.js';
 
 // A que proyectos se acota el informe.
 //
@@ -123,9 +123,13 @@ export async function miPuesto(req, res, next) {
   try {
     const esJefe = await tienePermiso(req, 'reports.puesto_ajeno');
     const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
-    // Quien lleva un equipo comercial (09/11/2026), el de una de su equipo.
-    const alcance = await alcanceComercial(req.user);
-    const userId = esJefe && pedido && (!alcance || alcance.includes(pedido)) ? pedido : req.user.userId;
+    // Quien lleva un equipo comercial (QA del 09/11/2026): el puesto de una
+    // gestora de fuera, no; y de la tabla, solo las filas de su equipo.
+    const lider = await alcanceDeLider(req.user);
+    if (esJefe && pedido && !enElAlcance(lider, pedido)) {
+      throw new AppError('Esa gestora no está en tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+    }
+    const userId = esJefe && pedido ? pedido : req.user.userId;
     const { from, to, ...ambito } = await rangoDeQuery(req);
     // Por defecto, EL MES EN CURSO. Con el historico entero el puesto casi no
     // se mueve --lo que se hizo en marzo pesa igual que lo de ayer-- y deja de
@@ -146,11 +150,9 @@ export async function miPuesto(req, res, next) {
       // reconoce como suyo el dia que cierra.
       base: req.query.base === 'factura' ? 'factura' : 'cobro',
     });
-    // Quien lleva un equipo comercial (QA del 09/11/2026): de la tabla, solo
-    // las filas de su equipo (con su puesto en el campus, que es lo que dice
-    // cómo van), y sin las sumas del campus entero de debajo.
-    if (alcance && Array.isArray(data?.tabla)) {
-      data.tabla = data.tabla.filter((f) => alcance.includes(Number(f.user_id)));
+    if (lider && Array.isArray(data?.tabla)) {
+      data.tabla = data.tabla.filter((f) => enElAlcance(lider, f.user_id));
+      // «Sin gestora» y el total son del campus entero: para ella, no.
       data.sin_gestora = null;
       data.total = null;
     }

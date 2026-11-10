@@ -790,23 +790,29 @@ export async function sendByEmail(invoiceId, customEmail = null) {
 // ---------------------------------------------------------------------------
 // Corte de facturacion
 // ---------------------------------------------------------------------------
-// `equipo`: la lista de quien lleva un equipo comercial (QA del 09/11/2026), o
-// null. Con ella solo se ven los cobros y las proformas de su equipo; quién es
-// «el siguiente» sigue saliendo de la cola entera.
-export async function getFacturacionAlDia(projectId, equipo = null) {
+/*
+  `personas` (QA del 09/11/2026): una administradora que lleva un equipo
+  comercial ve en la cola solo los cobros de ella y de su equipo (y los que no
+  son de nadie, como en Facturas: FACTURA_DE). Antes veía los de todas las
+  gestoras del campus. «El siguiente» se decide con la cola ENTERA: es el turno
+  real de la numeración, no el primero de los que ella ve.
+*/
+const cobroDelEquipo = (personas) => (p) =>
+  !personas || p.gestora_id == null || personas.includes(Number(p.gestora_id));
+
+export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const estado = await model.getFacturacionAlDia(projectId);
   // La cola: todo cobro posterior a lo ya hecho que aun no tiene factura.
-  const entera = await model.listPagosSinFactura(projectId, null, equipo);
-  const siguiente = entera[0]?.payment_id ?? null;
-  const cola = equipo ? entera.filter((p) => p.del_equipo) : entera;
+  const entera = await model.listPagosSinFactura(projectId);
+  const primero = entera[0]?.payment_id;
+  const cola = entera.filter(cobroDelEquipo(personas));
   return {
     ...estado,
     pagos_sin_factura: cola.length,
     importe_sin_factura: cola.reduce((s, p) => s + Number(p.importe || 0), 0),
     // El primero de la cola es el unico que puede emitirse sin saltarse a nadie.
-    listos_para_emitir: cola.some((p) => p.payment_id === siguiente) ? 1 : 0,
-    proformas_pendientes: await model.listProformasPendientes(projectId, equipo),
-    solo_equipo: Boolean(equipo),
+    listos_para_emitir: cola.length ? 1 : 0,
+    proformas_pendientes: await model.listProformasPendientes(projectId, { personas }),
     cola: cola.slice(0, 200).map((p) => ({
       payment_id: p.payment_id,
       conversion_id: p.conversion_id,
@@ -817,7 +823,7 @@ export async function getFacturacionAlDia(projectId, equipo = null) {
       gestora: p.gestora,
       origen: p.de_stripe ? 'stripe' : 'manual',
       // El primero es el que toca; los demas esperan a que salgan los anteriores.
-      es_el_siguiente: p.payment_id === siguiente,
+      es_el_siguiente: p.payment_id === primero,
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);
@@ -837,13 +843,16 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 
 // Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
 // antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
-export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, numero = null, equipo = null } = {}) {
-  const cola = await model.listPagosSinFactura(projectId, null, equipo);
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, numero = null, personas = null } = {}) {
+  const cola = await model.listPagosSinFactura(projectId);
   const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
-  // Un cobro de fuera de su equipo, como si no estuviera (QA del 09/11/2026).
-  if (!pg || (equipo && !pg.del_equipo)) {
+  if (!pg) {
     throw new AppError('Ese cobro ya no está en la cola: o ya tiene factura, o queda fuera del periodo.',
       404, 'NOT_IN_QUEUE');
+  }
+  // Una líder de equipo comercial solo emite los cobros que ve en su cola.
+  if (!cobroDelEquipo(personas)(pg)) {
+    throw new AppError('Ese cobro es de una gestora que no está en tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
   }
   if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
     throw new AppError(
@@ -932,10 +941,8 @@ export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas,
 }
 
 // Emite de golpe, en orden de fecha, todo lo que quede en la cola hasta esa fecha.
-// Con `equipo` (quien lleva un equipo comercial), solo los cobros de su equipo.
-export async function emitirColaHasta(projectId, hasta, userId, equipo = null) {
-  const pendientes = (await model.listPagosSinFactura(projectId, hasta, equipo))
-    .filter((p) => !equipo || p.del_equipo);
+export async function emitirColaHasta(projectId, hasta, userId) {
+  const pendientes = await model.listPagosSinFactura(projectId, hasta);
   const emitidas = [];
   const fallidas = [];
   for (const pg of pendientes) {

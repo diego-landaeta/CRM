@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 /**
  * A quién ve en Usuarios quien pregunta (Diego, 04/11: «el project manager ve
@@ -32,7 +33,9 @@ export async function list(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await userService.list({ ...parsed.data, campus: await campusDeLaLista(req) });
+    const { alcance, ...filtros } = parsed.data;
+    const soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    const result = await userService.list({ ...filtros, campus: await campusDeLaLista(req), soloIds });
     res.json({
       success: true,
       data: result.users,
