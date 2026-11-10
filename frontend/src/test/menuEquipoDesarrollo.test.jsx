@@ -18,7 +18,7 @@ const COLABORADOR = ['tasks.view_own', 'tasks.create', 'tasks.edit', 'facturas_c
 describe('menú · equipo de desarrollo', () => {
   it('un colaborador ve Tareas, «Mi factura» y sus preferencias; nada de prospectos, ventas ni finanzas', () => {
     const ve = loQueVe(['colaborador'], { role: 'colaborador' }, COLABORADOR);
-    expect(ve).toEqual(expect.arrayContaining(['/tareas', '/mi-factura', '/preferencias']));
+    expect(ve).toEqual(expect.arrayContaining(['/tareas', '/tareas/historial', '/mi-factura', '/preferencias']));
     for (const no of ['/prospectos', '/finanzas/ventas', '/finanzas/facturas', '/meta-ads', '/tareas/revisar', '/tareas/configurar']) {
       expect(ve, no).not.toContain(no);
     }
