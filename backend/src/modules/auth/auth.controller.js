@@ -2,8 +2,9 @@ import * as authService from './auth.service.js';
 import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import bcrypt from 'bcrypt';
+import { pedirCodigo, confirmarCodigo, MINUTOS as MINUTOS_CODIGO } from '../users/cambio-de-correo.js';
 import { query } from '../../shared/config/db.js';
-import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema, olvidoSchema } from './auth.validation.js';
+import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema, pedirCodigoCorreoSchema, olvidoSchema } from './auth.validation.js';
 import * as userService from '../users/user.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
@@ -219,16 +220,45 @@ export async function updateMyProfile(req, res, next) {
 // de roles lo sigue pidiendo a administración. Es la credencial: al cambiarlo se
 // cierran sus sesiones y tiene que volver a entrar con el nuevo. Se avisa a
 // administración, porque es el correo de la factura de su comisión.
+/**
+ * POST /api/auth/me/email/codigo — paso 1 del correo propio (#211): con la
+ * contraseña actual, manda un código de 6 cifras a la dirección NUEVA. Todavía
+ * no cambia nada. A un tutor también le llega aunque siga el freno de tutores:
+ * lo pide él mismo y va a su dirección nueva (propuesta 2 de la #211).
+ */
+export async function pedirCodigoMiCorreo(req, res, next) {
+  try {
+    const parsed = pedirCodigoCorreoSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
+    const userId = req.user.userId;
+    const { rows: [yo] } = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (!yo) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+    const ok = yo.password_hash ? await bcrypt.compare(parsed.data.password, yo.password_hash) : false;
+    // 400 y no 401, como en el cambio de contraseña: un 401 haría renovar la sesión.
+    if (!ok) throw new AppError('La contraseña actual no es correcta', 400, 'INVALID_CURRENT_PASSWORD');
+    const r = await pedirCodigo({ userId, emailNuevo: parsed.data.email, porUserId: userId, ip: getClientIp(req) });
+    res.json({ success: true, data: { email: r.email, expira_at: r.expira_at, enviado: r.enviado, minutos: MINUTOS_CODIGO } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * PATCH /api/auth/me/email — paso 2 (#211): con el código que llegó a la
+ * dirección nueva, el correo cambia. Antes cambiaba sin comprobar nada (#246).
+ */
 export async function updateMyEmail(req, res, next) {
   try {
-    // Quién puede: la ruta pide «Cambiar su correo» (#423; de serie, el tutor).
+    // Quién puede: la ruta pide «Cambiar su correo» (#423, #211).
     const parsed = updateMyEmailSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
     const userId = req.user.userId;
-    const { rows: [yo] } = await query('SELECT nombre, email FROM users WHERE id = $1', [userId]);
+    // `es_tutor`: si tiene ficha de tutor, es el correo de su factura y se avisa
+    // a administración (#246). Por la ficha y no por el rol (#423).
+    const { rows: [yo] } = await query(
+      `SELECT nombre, email, EXISTS (SELECT 1 FROM tutor_profiles tp WHERE tp.user_id = users.id) AS es_tutor
+         FROM users WHERE id = $1`, [userId]);
     if (!yo) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
-    const r = await userService.cambiarCorreo(userId, parsed.data.email, { porUserId: userId, ip: getClientIp(req) });
-    if (r.cambiado) {
+    const r = await confirmarCodigo({ userId, codigo: parsed.data.codigo, porUserId: userId, ip: getClientIp(req) });
+    if (r.cambiado && yo.es_tutor) {
       await userService.avisarCorreoDeTutorCambiado({ tutorId: userId, nombre: yo.nombre, de: yo.email, a: r.email })
         .catch(() => {});
     }

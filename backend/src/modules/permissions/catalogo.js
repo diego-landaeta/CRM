@@ -618,7 +618,9 @@ export const SECCIONES = [
       },
       {
         clave: 'cuenta', nombre: 'Su cuenta', acciones: [
-          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra (el de su factura).', ['tutor'], { propia: true }),
+          // #211: con un código a la dirección nueva y su contraseña actual. Antes
+          // solo el tutor, y sin código (#246). El project manager no: solo ve.
+          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor'], { propia: true }),
         ],
       },
     ],

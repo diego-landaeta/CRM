@@ -41,6 +41,8 @@ router.delete('/availability-blocks/:blockId', puede('users.edit'), availability
 router.get('/:id', puede('users.view'), userController.getById);
 router.post('/', puede('users.create'), userController.create);
 router.patch('/:id', puede('users.edit'), userController.update);
+// El código que le llegó a la dirección nueva (#211): solo el superadmin, como el correo (#248).
+router.post('/:id/email/confirmar', puede('users.edit'), userController.confirmarCorreo);
 router.delete('/:id', puede('users.delete'), userController.deactivate);
 router.patch('/:id/reactivate', puede('users.edit'), userController.reactivate);
 router.patch('/:id/password', puede('users.contrasena'), userController.setPassword);
