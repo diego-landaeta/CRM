@@ -94,6 +94,7 @@ export function menuDe(p, { mapa = legado.mapaDePermisos(p) } = {}) {
  */
 const { cambiosDeMenuPorPerfil } = await import('../../../backend/src/modules/permissions/inventario/cambios-aprobados.js');
 export const CAMBIOS_APROBADOS = cambiosDeMenuPorPerfil();
+const { aplicarTraslados } = await import('@/shared/components/layout/trasladosDeMenu');
 
 describe('menú por perfil (#423)', () => {
   const ahora = Object.fromEntries(Object.entries(PERFILES).map(([k, p]) => [k, menuDe(p, { mapa: mapaDeAhora(p) })]));
@@ -108,11 +109,22 @@ describe('menú por perfil (#423)', () => {
     it(`${perfil}: el mismo menú que antes, salvo lo aprobado`, () => {
       const antes = new Set(foto[perfil] || []);
       const despues = new Set(ahora[perfil]);
-      const diferencias = [
-        ...[...despues].filter((x) => !antes.has(x)).map((x) => `+ ${x}`),
-        ...[...antes].filter((x) => !despues.has(x)).map((x) => `- ${x}`),
+      // Las entradas que solo cambian de sitio (`trasladosDeMenu.js`, #690): se
+      // trasladan en la foto y en lo aprobado, y lo demás se compara igual.
+      const conTraslados = (lineas) => {
+        const conAprobado = new Set(antes);
+        for (const l of lineas) (l[0] === '+' ? conAprobado.add(l.slice(2)) : conAprobado.delete(l.slice(2)));
+        return new Set(aplicarTraslados([...conAprobado]));
+      };
+      // Lo aprobado tiene que ser un cambio de verdad respecto a la foto.
+      const aprobado = CAMBIOS_APROBADOS[perfil] || [];
+      expect(aprobado.filter((l) => (l[0] === '+') === antes.has(l.slice(2)))).toEqual([]);
+      const esperado = conTraslados(aprobado);
+      const sinAprobar = [
+        ...[...despues].filter((x) => !esperado.has(x)).map((x) => `+ ${x}`),
+        ...[...esperado].filter((x) => !despues.has(x)).map((x) => `- ${x}`),
       ].sort();
-      expect(diferencias).toEqual([...(CAMBIOS_APROBADOS[perfil] || [])].sort());
+      expect(sinAprobar).toEqual([]);
     });
   }
 

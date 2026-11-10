@@ -43,7 +43,6 @@ import {
   ChatCircleText,
   ChatsCircle,
   ArrowSquareOut,
-  Lightning,
   WebhooksLogo,
   Tree,
   ListBullets,
@@ -97,6 +96,14 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
 // que existe, que funcione y esté en el menú. Lo vigila
 // `test/menuSinRutasRotas.test.jsx`: cada `to` tiene su <Route> en App.jsx, o
 // lleva `comingSoon`. Las de `href` salen a otra compilación y no cuentan.
+// Conexión › Webhooks (#690): la entrada se ve con el permiso de cualquiera de
+// los webhooks que reúne. La misma lista que `TIPOS` en
+// modules/webhooks/lib/resumen.ts (lo vigila test/webhooksJuntos690.test.jsx).
+export const PERMISOS_WEBHOOKS = [
+  'webhooks.view', 'make.view', 'forms.view', 'projects.edit', 'integrations.view',
+  'woocommerce.view', 'whatsapp.usar', 'widget.view', 'webhooks_salientes.view', 'certifex_consultas.view',
+];
+
 export const NAV_SECTIONS = [
   {
     label: 'Testeo',
@@ -217,8 +224,7 @@ export const NAV_SECTIONS = [
     items: [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences', permiso: 'email_sequences.view' },
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms', permiso: 'forms.view' },
-      { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make', permiso: 'make.view' },
-      { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks', permiso: 'webhooks.view' },
+      // Make y Webhooks estaban aquí: desde la #690, en Conexión › Webhooks.
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'], permiso: 'widget.view' },
       // Próximamente (#216): enseñaban datos de ejemplo. El gasto real de Meta, en Publicidad.
       { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'], comingSoon: true },
@@ -375,9 +381,13 @@ export const NAV_SECTIONS = [
       // #335: los cursos, alumnos y recursos de los Moodle de cada campus.
       { label: 'Moodle', to: '/conexion/moodle', detail: 'Cursos y alumnos de cada campus', icon: GraduationCap, roles: ['superadmin', 'admin'], permiso: 'moodle.view' },
       { label: 'Conectores', to: '/conexion/conectores', detail: 'WordPress, tiendas y APIs', icon: CloudArrowDown, roles: ['superadmin', 'admin'], module: 'connectors', permiso: 'connectors.view' },
-      // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
-      // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
-      { label: 'Webhook de transferencias', to: '/conexion/webhook-transferencias', detail: 'Avisar de transferencias y depósitos', icon: Bank, roles: ['superadmin', 'admin'], permiso: 'webhooks_salientes.view' },
+      // Todos los webhooks en un sitio, señalados por su función (#690, Diego 05/11:
+      // «hay demasiados y están repartidos por el menú»). Reúne los que estaban en
+      // Captación (Webhooks, Make) y el de transferencias, que estaba aquí suelto
+      // (Diego, 15/10). Se ve con el permiso de cualquiera de los que enseña.
+      { label: 'Webhooks', to: '/conexion/webhooks', detail: 'Todos, por su función', icon: WebhooksLogo, roles: ['superadmin', 'admin'], permiso: PERMISOS_WEBHOOKS,
+        // Para que el buscador (Ctrl K) los siga encontrando por su nombre de antes.
+        keywords: 'make escenarios zapier n8n transferencias depósitos stripe woocommerce admisión matrícula formularios entradas avisos' },
       { label: 'Asignación de leads', to: '/conexion/asignacion-leads', detail: 'A quién va cada formulario', icon: Shuffle, roles: ['superadmin', 'admin'], permiso: 'webhooks_salientes.view' },
     ],
   },
@@ -538,6 +548,11 @@ export function pasaPermisoDeRoles(item, can) {
 const SIN_ENTRADA = {
   // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
   '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+  // Las pestañas de Conexión › Webhooks (#690): el permiso de las entradas que
+  // tenían en el menú antes de juntarse.
+  '/conexion/webhooks/prospectos': ['webhooks.view'],
+  '/conexion/webhooks/make': ['make.view'],
+  '/conexion/webhooks/transferencias': ['webhooks_salientes.view'],
 };
 
 export function rutaPermitida(pathname, can) {

@@ -151,7 +151,7 @@ export default function MakeWebhookDetailPage() {
   async function deleteHook() {
     if (!confirm('Eliminar este conector? Make dejará de poder enviar leads aquí.')) return;
     await client.delete(`/make-webhooks/${id}`);
-    navigate('/captacion/make');
+    navigate('/conexion/webhooks/make');
   }
 
   function copy(text: string, what: string) {
@@ -167,7 +167,7 @@ export default function MakeWebhookDetailPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <button onClick={() => navigate('/captacion/make')} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <button onClick={() => navigate('/conexion/webhooks/make')} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft size={14} /> Volver
       </button>
 
