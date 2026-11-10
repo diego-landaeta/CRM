@@ -1451,7 +1451,11 @@
  * llega justo al borde de abajo.
  *
  * Con pantalla completa no: `.wa-completa` va `fixed` contra la pantalla y un
- * margen la descolocaria. */
+ * margen la descolocaria.
+ *
+ * VA JUNTO CON el `p-4` del <main> de AppLayout.jsx (16 px en el movil). Si
+ * ese relleno cambia, este margen tiene que cambiar con el: si no, sale una
+ * franja o scroll horizontal. */
 @media (max-width: 640px) {
   .wa-pagina:not(.wa-completa) { margin: -16px; }
   .wa-pagina:not(.wa-completa) > .wa-barra-superior {
