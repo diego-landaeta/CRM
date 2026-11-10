@@ -2,7 +2,7 @@ import * as model from './accounting.model.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { accountingDashboardSchema } from './accounting.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { alcanceComercial, acotarAlAlcance } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, acotarAlAlcance } from '../../shared/utils/roles.js';
 
 // GET /accounting/receivable — cuentas por cobrar con filtros gestora/proyecto/periodo.
 // El gestor solo ve las suyas (se fuerza su responsableId); quien lleva un
@@ -29,7 +29,14 @@ export async function dashboard(req, res, next) {
     // sociedad se traduce a sus campus y el modelo no se entera de la
     // diferencia.
     const { projectId, projectIds } = await proyectosDelAmbito(req);
-    const stats = await model.getDashboardStats({ ...parsed.data, projectId, projectIds });
+    // Una administradora que lleva equipo comercial (QA del 09/11/2026): lo de
+    // gestoras, solo lo suyo y lo de su equipo; egresos y balance, no (son de
+    // la empresa). Una admin sin equipo y el superadmin, como siempre; quien
+    // más tiene `accounting.view` de serie (project manager), también. Con
+    // «Todos» o una empresa arriba, igual: el campus se recorta arriba y la
+    // persona aquí.
+    const personas = await alcanceDeLider(req.user);
+    const stats = await model.getDashboardStats({ ...parsed.data, projectId, projectIds, personas });
     res.json({ success: true, data: stats });
   } catch (err) { next(err); }
 }

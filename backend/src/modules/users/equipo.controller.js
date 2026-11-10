@@ -36,6 +36,12 @@ export async function guardar(req, res, next) {
     const id = idDeLaRuta(req);
     const parsed = equipoComercialSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    // Nadie cambia su PROPIO equipo (QA del 09/11/2026), ni con
+    // «equipos.gestionar»: sería ampliarse a sí misma lo que ve. Lo decide otra
+    // persona.
+    if (id === Number(req.user.userId)) {
+      throw new AppError('Tu propio equipo te lo cambia otra persona', 403, 'EQUIPO_PROPIO');
+    }
     await exigirPersonaDeSusCampus(req, id);
     await equipo.guardarEquipo(id, parsed.data.gestoraIds, { quienId: req.user.userId });
     res.json({ success: true, data: await respuesta(req, id) });

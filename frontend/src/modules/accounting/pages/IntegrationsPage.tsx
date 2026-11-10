@@ -11,6 +11,7 @@ import SupabaseCard from '../components/SupabaseCard';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { esProyectoIA, PROYECTOS_IA } from '@/shared/lib/proyectosIA';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
@@ -83,7 +84,8 @@ export default function IntegrationsPage() {
   // pantalla enseña el estado de cada uno, solo para ver (#218, Diego 04/11).
   const vistaGeneral = !!isAllProjects || !!activeIssuerId || activeProject?.id === TODOS_LOS_PROYECTOS;
   const pid = vistaGeneral ? null : activeProject?.id;
-  const esIA = activeProject?.type === 'ia';
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
 
   return (
     <div className="space-y-5 pb-8">
@@ -125,8 +127,8 @@ export default function IntegrationsPage() {
 
       {/* La lista de proyectos IA va FUERA del `pid`: sirve precisamente
           cuando todavia no se ha elegido ninguno, para saber por cual empezar.
-          Se pinta sola solo si hay proyectos IA. */}
-      <ProyectosIAConectados />
+          Se pinta sola solo si hay proyectos IA. Solo en pruebas (#44). */}
+      {PROYECTOS_IA && <ProyectosIAConectados />}
 
       {vistaGeneral ? (
         <EstadoDeLasIntegraciones />

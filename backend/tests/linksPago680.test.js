@@ -29,7 +29,7 @@ const { errorHandler } = await import('../src/shared/middleware/errorHandler.js'
 const { SYSTEM_ROLE_DEFAULTS } = await import('../src/modules/permissions/permissions.defaults.js');
 const { default: linksPago } = await import('../src/modules/links-pago/index.js');
 const { default: integraciones } = await import('../src/modules/integrations/index.js');
-const { testStripeLinksParaPruebas } = await import('../src/modules/integrations/integrations.controller.js');
+const { testStripeLinksParaPruebas, proveedorSoportado } = await import('../src/modules/integrations/integrations.controller.js');
 const { linksPagoActivos, facturasColaboradorActivas } = await import('../src/shared/config/soloEnPruebas.js');
 
 // ─── Stripe de mentira ──────────────────────────────────────────────────────
@@ -296,6 +296,31 @@ describe('un id fuera de rango', () => {
       expect((await api.get(ruta).set(como(p.adminA))).status, ruta).toBe(400);
     }
     expect((await api.get('/api/links-pago/2147483647').set(como(p.adminA))).status).toBe(404);
+  });
+});
+
+// Revisión de #715 (Diego, 10/11): #715 y #713 traían cada una su función para decidir
+// qué proveedores de Integraciones se aceptan. Al juntarlas queda UNA, y tiene que mirar
+// las dos banderas: con una sola, el otro proveedor volvía a aceptarse en producción.
+describe('una sola puerta para los proveedores aún no aprobados (#715 + #713)', () => {
+  const prod = { NODE_ENV: 'production', CRM_BASE_URL: 'https://360crm.tech/crm' };
+  it('en producción, ni supabase ni stripe_links; los de siempre, sí', () => {
+    expect(proveedorSoportado('supabase', prod)).toBe(false);
+    expect(proveedorSoportado('stripe_links', prod)).toBe(false);
+    for (const p of ['stripe', 'brevo', 'moodle']) expect(proveedorSoportado(p, prod), p).toBe(true);
+    expect(proveedorSoportado('otro', prod)).toBe(false);
+  });
+  it('la bandera de uno no abre el otro', () => {
+    expect(proveedorSoportado('stripe_links', { ...prod, LINKS_PAGO_EN_PRODUCCION: '1' })).toBe(true);
+    expect(proveedorSoportado('supabase', { ...prod, LINKS_PAGO_EN_PRODUCCION: '1' })).toBe(false);
+    expect(proveedorSoportado('supabase', { ...prod, PROYECTOS_IA_EN_PRODUCCION: '1' })).toBe(true);
+    expect(proveedorSoportado('stripe_links', { ...prod, PROYECTOS_IA_EN_PRODUCCION: '1' })).toBe(false);
+  });
+  it('en /testeo y en local, los dos', () => {
+    for (const env of [{ NODE_ENV: 'production', CRM_BASE_URL: 'https://360crm.tech/testeo' }, { NODE_ENV: 'development' }]) {
+      expect(proveedorSoportado('supabase', env)).toBe(true);
+      expect(proveedorSoportado('stripe_links', env)).toBe(true);
+    }
   });
 });
 

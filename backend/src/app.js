@@ -110,7 +110,7 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
-import { tareasActivas, facturasColaboradorActivas, linksPagoActivos } from './shared/config/soloEnPruebas.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
@@ -331,6 +331,10 @@ const ALL_MODULES = [
 if (!linksPagoActivos()) logger.info('Modulo SKIP (solo en pruebas): /api/links-pago');
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
+// Lo del #44 de los proyectos IA no es un modulo aparte: el router de `ia-monitor`
+// deja sin montar sus rutas (ia.routes.js) e Integraciones no acepta el proveedor
+// `supabase`. /api/ia/metrics y /api/ia/gasto, que ya estaban en produccion, siguen.
+if (!proyectosIAActivos()) logger.info('Rutas SKIP (solo en pruebas): /api/ia/cobros, /api/ia/supabase/* y la integracion supabase');
 
 // Módulos siempre activos (fuera del sistema de bundles)
 app.use(installationModule.prefix, installationModule.router);

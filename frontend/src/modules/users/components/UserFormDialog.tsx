@@ -27,6 +27,11 @@ export interface UserFormValues {
   /** Con un correo nuevo: mandarle el enlace para poner contraseña allí (#246). */
   reenviarEnlace: boolean;
   /**
+   * #211: de serie, el correo nuevo no se aplica hasta meter el código que le
+   * llega a esa dirección. Marcado, se aplica al momento (queda en el registro).
+   */
+  aplicarSinCodigo?: boolean;
+  /**
    * Empresas enteras de un admin (#220). `undefined` = no se tocan: quien edita
    * no es super admin, o no hay migración. Vacía = quitarlas (sus campus se quedan).
    */
@@ -69,6 +74,7 @@ export default function UserFormDialog({
   const [nombre, setNombre] = useState(user?.nombre ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [reenviarEnlace, setReenviarEnlace] = useState(false);
+  const [aplicarSinCodigo, setAplicarSinCodigo] = useState(false);
   const cambiaCorreo = esEdicion && canChangeEmail && email.trim().toLowerCase() !== user!.email.toLowerCase();
   const [role, setRole] = useState<UserRole>((user?.role as UserRole) ?? 'gestor');
   // Los roles añadidos. Diego, 22/09: «necesitamos que se pueda colocar más de
@@ -209,7 +215,8 @@ export default function UserFormDialog({
       roles_extra: rolesExtra.filter((r) => r !== role),
       projects: seleccionados,
       whatsapp_phone: telefono.trim(),
-      reenviarEnlace: cambiaCorreo && reenviarEnlace,
+      reenviarEnlace: cambiaCorreo && aplicarSinCodigo && reenviarEnlace,
+      aplicarSinCodigo: cambiaCorreo && aplicarSinCodigo,
       // Solo si quien edita puede darlas. Para otro rol que no sea admin ni
       // colaborador, se mandan vacías: una gestora no tiene empresas enteras.
       ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
@@ -314,7 +321,27 @@ export default function UserFormDialog({
                 </Field>
                 {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
                     sale ningún correo mientras siga el freno: se dice en vez de esconderlo. */}
+                {/* #211: con código de serie. «Aplicar sin código», para casos como
+                    una dirección que la persona ya no puede abrir. */}
                 {cambiaCorreo && (
+                  <label className="mt-1.5 flex items-start gap-2 px-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aplicarSinCodigo}
+                      onChange={(e) => setAplicarSinCodigo(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm">
+                      Aplicar sin código
+                      <span className="block text-secundario text-muted-foreground">
+                        {aplicarSinCodigo
+                          ? 'Cambia al guardar, sin comprobar que la dirección nueva existe. Queda en el registro.'
+                          : 'Al guardar le llega un código de 6 cifras a la dirección nueva; el correo cambia cuando metas el código que te diga.'}
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {cambiaCorreo && aplicarSinCodigo && (
                   role === 'tutor' ? (
                     <p className="text-secundario text-muted-foreground mt-1.5 px-1">
                       A los tutores no se les manda ningún correo por ahora: si lo necesita, ponle tú una contraseña abajo y pásasela.

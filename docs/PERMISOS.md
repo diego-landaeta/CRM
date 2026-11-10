@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-821 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
+823 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -78,6 +78,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | me | `GET /api/auth/me` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | changePassword | `POST /api/auth/change-password` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | updateMyProfile | `PATCH /api/auth/me` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
+| pedirCodigoMiCorreo | `POST /api/auth/me/email/codigo` | (no existía) | (ruta nueva) | `cuenta.cambiar_correo` |
 | updateMyEmail | `PATCH /api/auth/me/email` | sesión · a mano: auth.controller.js · updateMyEmail | tutor | `cuenta.cambiar_correo` |
 
 ## certifex
@@ -1065,6 +1066,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | getById | `GET /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | create | `POST /api/users/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.create` |
 | update | `PATCH /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
+| confirmarCorreo | `POST /api/users/:id/email/confirmar` | (no existía) | (ruta nueva) | `users.edit` |
 | deactivate | `DELETE /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.delete` |
 | reactivate | `PATCH /api/users/:id/reactivate` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | setPassword | `PATCH /api/users/:id/password` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · a mano: user.controller.js · setPassword | superadmin, admin | `users.contrasena` |
@@ -1747,7 +1749,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Cambiar su correo | `cuenta.cambiar_correo` | Cambiar el correo con el que entra (el de su factura). | Tutor |  |
+| Cambiar su correo | `cuenta.cambiar_correo` | Cambiar el correo con el que entra, con un código que le llega a la dirección nueva. | Admin, Gestora, Soporte, Tutor |  |
 
 ## Dentro del código, que ya preguntan a un permiso
 

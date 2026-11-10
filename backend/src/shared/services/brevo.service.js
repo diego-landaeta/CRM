@@ -389,6 +389,29 @@ export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
   return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
 }
 
+/**
+ * El código para cambiar el correo (#211), a la dirección NUEVA: llegar y
+ * meterlo es lo que demuestra que existe y es de esa persona. Caduca a los
+ * `minutos` minutos.
+ */
+export async function sendCodigoCambioCorreoEmail({ nombre, a, codigo, minutos = 15 }) {
+  const P = plantilla;
+  const subject = `${codigo} es tu código para cambiar el correo del CRM`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Confirma tu nuevo correo',
+    saludo: nombre,
+    resumen: `Tu código: ${codigo}`,
+    bloques: [
+      P.parrafo('Has pedido entrar al CRM con esta dirección. Para confirmarlo, escribe este código en el CRM:'),
+      P.nota(`<strong style="font-size:24px;letter-spacing:4px">${P.esc(codigo)}</strong>`),
+      P.parrafo(`Caduca en ${minutos} minutos. Hasta que lo metas, sigues entrando con tu correo de siempre.`),
+      letraPequena('Si no lo has pedido tú, no hagas nada: sin el código no cambia nada.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: a, name: nombre }], subject, htmlContent, textContent, tags: ['codigo-cambio-correo', 'crm'] });
+}
+
 // Con la plantilla común y la marca del campus del prospecto (Diego, 10/10).
 export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
   const P = plantilla;

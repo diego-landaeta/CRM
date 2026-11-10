@@ -11,6 +11,8 @@
 // Se activa con VITE_BETA_MODE=true (lo pone el build de producción).
 // ============================================================
 
+import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
+
 export const BETA_VERSION = '2.6.0';
 
 export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').toLowerCase() === 'true';
@@ -42,7 +44,8 @@ export const BETA_ROUTES: readonly string[] = [
   // El resumen de un proyecto IA (#44). La pantalla existe desde hace
   // semanas y salia como «Proximamente»: es la de MRR, altas, bajas y por
   // que se van, y es la primera que se abre de una marca IA.
-  '/stripe',                 // Proyecto IA › Resumen
+  // Solo en pruebas hasta que se apruebe el #44: en /crm sigue «Próximamente».
+  ...(PROYECTOS_IA ? ['/stripe'] : []), // Proyecto IA › Resumen
   '/manual',                 // Manual de usuario
   '/preferencias',            // Mis preferencias
   '/perfil',                // Perfil

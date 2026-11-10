@@ -6,7 +6,7 @@ import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 import { logger } from '../../shared/utils/logger.js';
 import { infoDelCampus, urlDelCampus } from '../../shared/services/moodle.client.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
-import { linksPagoActivos } from '../../shared/config/soloEnPruebas.js';
+import { linksPagoActivos, proyectosIAActivos } from '../../shared/config/soloEnPruebas.js';
 
 /*
   SUPABASE, EL TERCERO (#44).
@@ -34,10 +34,6 @@ import { linksPagoActivos } from '../../shared/config/soloEnPruebas.js';
 // esta se filtra o se borra, los cobros siguen entrando. Se cifra igual.
 const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle', 'stripe_links'];
 
-// El hueco de links de pago, apagado en producción hasta que se apruebe (#680):
-// allí contesta como si no existiera, igual que antes de la fase 1.
-const soportado = (provider) => SUPPORTED.includes(provider) && (provider !== 'stripe_links' || linksPagoActivos());
-
 // Una clave secreta (`sk_`) o restringida (`rk_`) de Stripe, de test o de live.
 // La publicable (`pk_`) no sirve para nada en el servidor y se rechaza al guardar.
 const CLAVE_DE_STRIPE = /^(sk|rk)_(test|live)_[A-Za-z0-9]{8,}$/;
@@ -49,6 +45,24 @@ const CLAVE_DE_STRIPE = /^(sk|rk)_(test|live)_[A-Za-z0-9]{8,}$/;
 const CIFRADO = /(_encrypted|_iv|_auth_tag)$/;
 function sinCifrado(config) {
   return Object.fromEntries(Object.entries(config || {}).filter(([k]) => !CIFRADO.test(k)));
+}
+
+/**
+ * ¿Se acepta este proveedor? UNA sola puerta para lo que aún no está aprobado: en
+ * producción, sin su bandera, se contesta como a un proveedor desconocido (400
+ * BAD_PROVIDER), igual que antes de que existiera. Se mira en cada petición.
+ *
+ *   supabase      solo de los proyectos IA (#44)          PROYECTOS_IA_EN_PRODUCCION=1
+ *   stripe_links  la clave de escritura de los links (#680) LINKS_PAGO_EN_PRODUCCION=1
+ *
+ * Eran dos funciones, una de cada PR (#715 y #713). Al juntarlas hay que mirar las
+ * dos banderas: con una sola, el otro proveedor volvía a aceptarse en producción.
+ */
+export function proveedorSoportado(provider, env = process.env) {
+  if (!SUPPORTED.includes(provider)) return false;
+  if (provider === 'supabase') return proyectosIAActivos(env);
+  if (provider === 'stripe_links') return linksPagoActivos(env);
+  return true;
 }
 
 // Sólo aceptamos los providers conocidos. Cada provider tiene su shape de
@@ -134,7 +148,7 @@ export async function estado(req, res, next) {
 export async function getOne(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!soportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const row = await model.get(projectId(req), provider);
     res.json({ success: true, data: sanitize(row) });
   } catch (err) { next(err); }
@@ -146,8 +160,8 @@ export async function upsert(req, res, next) {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const { provider, active, api_key, webhook_secret, config_public } = parsed.data;
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
-    if (!soportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     if (provider === 'stripe_links') {
       // Solo la clave. El webhook es uno por cuenta y va en la tarjeta de Stripe.
       if (webhook_secret) {
@@ -221,7 +235,7 @@ export async function upsert(req, res, next) {
 export async function test(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!soportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
     const row = await model.get(pid, provider);
     if (!row || !row.encrypted_value) {
@@ -268,7 +282,7 @@ export async function test(req, res, next) {
 export async function remove(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!soportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     await model.remove(projectId(req), provider);
     res.json({ success: true });
   } catch (err) { next(err); }
