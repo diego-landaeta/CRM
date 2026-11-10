@@ -41,16 +41,18 @@ describe('tarjetas de Facturación con periodo', () => {
     expect(params).toEqual([[4], '2026-09-01', '2026-09-30', null]);
   });
 
-  it('«Ventas sin factura» y las tarjetas, de un equipo comercial (09/11/2026)', async () => {
+  it('«Ventas sin factura» de quien lleva equipo: solo las de su equipo', async () => {
     query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
-    await model.listVentasSinFactura({ projectId: 4, responsableId: [5, 11] });
+    await model.listVentasSinFactura({ projectId: 4, personas: [7, 8] });
     const [sql, params] = query.mock.calls[0];
-    expect(sql).toMatch(/r[x]?\.vendedora_id = ANY\(\$4::int\[\]\)/);
-    expect(params[3]).toEqual([5, 11]);
-    vi.clearAllMocks();
-    await model.getStats({ projectId: 4, responsableId: [5, 11] });
-    const [sql2, params2] = query.mock.calls[0];
-    expect(sql2).toMatch(/id IN \(SELECT i\.id FROM invoices i/);
-    expect(params2).toEqual([[5, 11], 4]);
+    expect(sql).toMatch(/r\.vendedora_id = ANY\(\$4::int\[\]\)/);
+    expect(params).toEqual([[4], null, null, [7, 8]]);
+  });
+
+  it('las tarjetas de quien lleva equipo (o de una gestora): las facturas que ve en la lista', async () => {
+    await model.getStats({ projectId: 4, personas: [7, 8] });
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toMatch(/id IN \(SELECT i\.id FROM invoices i/);
+    expect(params).toEqual([4, [7, 8]]);
   });
 });
