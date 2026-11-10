@@ -38,3 +38,12 @@ export function tareasActivas(env = process.env) {
 export function facturasColaboradorActivas(env = process.env) {
   return enPruebasOAprobado('FACTURAS_COLABORADOR_EN_PRODUCCION', env);
 }
+
+/**
+ * Links de pago (#680): ni `/api/links-pago` ni el hueco `stripe_links` de
+ * Integraciones en el servidor de producción mientras Diego no lo apruebe (revisión
+ * de la fase 1). Se aprueba con LINKS_PAGO_EN_PRODUCCION=1.
+ */
+export function linksPagoActivos(env = process.env) {
+  return enPruebasOAprobado('LINKS_PAGO_EN_PRODUCCION', env);
+}
