@@ -16,6 +16,7 @@ const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
 const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 export default function SalesPage() {
   const { activeProject, activeIssuerId, activeIssuer } = useProjectContext() as {
@@ -78,7 +79,8 @@ export default function SalesPage() {
    * No se esconde por ser IA porque sí: se esconde lo que en un proyecto sin
    * equipo NO PUEDE tener contenido nunca.
    */
-  const esIA = activeProject?.type === 'ia';
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
 
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.

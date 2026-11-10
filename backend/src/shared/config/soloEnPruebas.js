@@ -38,3 +38,19 @@ export function tareasActivas(env = process.env) {
 export function facturasColaboradorActivas(env = process.env) {
   return enPruebasOAprobado('FACTURAS_COLABORADOR_EN_PRODUCCION', env);
 }
+
+/**
+ * Lo que el #44 añade para los proyectos IA (PR #386 y #387): sus cobros
+ * (`/api/ia/cobros`) y la conexión con su Supabase (`/api/ia/supabase/*` y el
+ * proveedor `supabase` de Integraciones). Está en /testeo y aún no aprobado:
+ * sin esto, al pasar `staging` a `main` saldría en /crm sin que nadie lo
+ * hubiera visto. Se aprueba con PROYECTOS_IA_EN_PRODUCCION=1.
+ *
+ * NO apaga lo que ya estaba en producción antes del #44: `/api/ia/metrics` (el
+ * «Monitor SaaS» del Dashboard y la pestaña Stripe de un proyecto IA) ni
+ * `/api/ia/gasto` (el tope de gasto de la IA del propio CRM, #22). Tampoco el
+ * sondeo de Stripe: es de todos los campus, no solo de los proyectos IA.
+ */
+export function proyectosIAActivos(env = process.env) {
+  return enPruebasOAprobado('PROYECTOS_IA_EN_PRODUCCION', env);
+}

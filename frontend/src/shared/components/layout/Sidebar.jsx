@@ -79,6 +79,8 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+// Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -1370,9 +1372,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           // Una seccion entera puede no aplicar a un tipo de proyecto (en IA no hay
           // campañas, ni catalogo, ni tutores).
           const seccionAplica = !(Array.isArray(section.salvoTipo)
-            && section.salvoTipo.includes(activeProject?.type));
+            && section.salvoTipo.includes(tipoDelMenu(activeProject?.type)));
           const visibleItems = seccionAplica
-            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab })
+            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type), soloColab })
             : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
@@ -1389,7 +1391,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 // tener mas de uno, el menu tiene que sumar lo de cada uno.
                 role={rolesDe(user)}
                 modules={activeProject?.modules}
-                projectType={activeProject?.type}
+                projectType={tipoDelMenu(activeProject?.type)}
                 soloColab={soloColab}
                 permisos={user}
                 can={can}
