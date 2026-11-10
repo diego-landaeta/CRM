@@ -1,4 +1,4 @@
--- 247 · Equipos de programación en el tablero (CRM#707, Diego y Carlos, 09-10/11/2026)
+-- 252 · Equipos de programación en el tablero (CRM#707, Diego y Carlos, 09-10/11/2026)
 --
 -- La regla nueva del tablero: quien hace la tarea la pasa a «Hecha» él mismo,
 -- sin pasar por «En revisión». La EXCEPCIÓN son las tareas de programación: el
