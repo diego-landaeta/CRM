@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { tieneRol } from '../../shared/utils/roles.js';
-import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, comoLista } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, comoLista, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { tutoresQueRecibenConsultas, campusDelTutor } from '../tutores/tutor.campus.js';
 import * as model from './consultas.model.js';
@@ -10,6 +10,7 @@ import * as servicio from './consultas.service.js';
 import * as alumnos from './consultas.alumnos.js';
 import * as carga from './consultas.carga.js';
 import * as metricas from './consultas.metricas.js';
+import * as plugin from './consultas.plugin.js';
 import {
   responderSchema, reasignarSchema, tokenTutorSchema, listarSchema,
   escribirSchema, cargaSchema, metricasSchema,
@@ -331,5 +332,38 @@ export async function campusSinTutor(req, res, next) {
   try {
     const { projectId, projectIds } = await proyectosDelAmbito(req);
     res.json({ success: true, data: await carga.campusSinTutor(comoLista(projectId, projectIds)) });
+  } catch (err) { next(err); }
+}
+
+// ─── Plugin del CRM en el campus (#679) ─────────────────────────────────────
+
+async function campusDelPlugin(req) {
+  const id = parseInt(req.params.projectId);
+  if (!Number.isInteger(id) || id <= 0) throw new AppError('Campus no válido', 400, 'VALIDATION_ERROR');
+  await exigirCampusSuyo(req, id, 'Campus no encontrado');
+  return id;
+}
+
+// GET /api/consultas/campus/:projectId/plugin  — si está conectado y su último aviso
+export async function estadoDelPlugin(req, res, next) {
+  try {
+    res.json({ success: true, data: await plugin.estado(await campusDelPlugin(req)) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/consultas/campus/:projectId/plugin/codigo  — el código para pegar en el Moodle
+export async function codigoDeConexion(req, res, next) {
+  try {
+    const id = await campusDelPlugin(req);
+    res.json({ success: true, data: await plugin.crearCodigo(id, req.user.userId) });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/consultas/campus/:projectId/plugin  — deja de aceptar avisos
+export async function desactivarPlugin(req, res, next) {
+  try {
+    const id = await campusDelPlugin(req);
+    await plugin.desactivar(id);
+    res.json({ success: true, data: await plugin.estado(id) });
   } catch (err) { next(err); }
 }

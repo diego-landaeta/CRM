@@ -12,6 +12,9 @@ import {
   empresaDelTutorSchema, campusDelTutorSchema, disponibleSchema,
 } from './tutor.validation.js';
 import * as campusTutor from './tutor.campus.js';
+import { query } from '../../shared/config/db.js';
+import { logger } from '../../shared/utils/logger.js';
+import { avisarDisponibilidad } from '../consultas/consultas.plugin.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import {
   misCampus, exigirTutorDeMisCampus, exigirFormacionMia, exigirProyectoMio, exigirColaboracionMia,
@@ -835,6 +838,11 @@ export async function cambiarDisponible(req, res, next) {
     const id = await exigirTutorGestionable(req);
     const { disponible, motivo } = valida(disponibleSchema, req.body);
     await campusTutor.ponerDisponible(id, disponible, motivo);
+    // El chat directo de los campus con el plugin del CRM (#679) deja de llevarle alumnos
+    // (o vuelve a hacerlo). Sin esperar: un campus que no contesta no frena la ficha.
+    query('SELECT project_id FROM tutor_campus WHERE tutor_id = $1', [id])
+      .then(({ rows }) => avisarDisponibilidad(rows.map((r) => Number(r.project_id))))
+      .catch((err) => logger.warn({ tutorId: id, err: err.message }, 'tutores: no se ha avisado a los campus de la disponibilidad'));
     res.json({ success: true, data: await panelDelTutor(id) });
   } catch (err) { next(err); }
 }

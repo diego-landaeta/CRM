@@ -3,6 +3,7 @@ import multer from 'multer';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import * as ctrl from './consultas.controller.js';
 
 // Los adjuntos de la respuesta: PDF, imágenes y los documentos de siempre, hasta
@@ -62,6 +63,22 @@ router.get('/tutores-panel', administracion, ctrl.panelDeTutores);
 router.get('/campus-sin-tutor', administracion, ctrl.campusSinTutor);
 router.post('/sincronizar-alumnos', gestion, ctrl.sincronizarAlumnosAhora);
 router.get('/metricas', suyasOTodas, ctrl.verMetricas);
+
+/*
+  EL PLUGIN DEL CRM EN EL MOODLE DE CADA CAMPUS (#679), SOLO EN PRUEBAS.
+
+  Su estado, el código de conexión y apagarlo. Dar un código es dar la conexión
+  entera del campus (token incluido), y con el plugin conectado el CRM escribe en
+  el Moodle: con NODE_ENV=production no se montan —responden 404— salvo en
+  /testeo o con PLUGIN_MOODLE_EN_PRODUCCION=1. Se decide al cargar, como en
+  `app.js` y en ia.routes.js.
+*/
+if (pluginMoodleActivo()) {
+  router.get('/campus/:projectId/plugin', gestion, ctrl.estadoDelPlugin);
+  // El código da la conexión entera del campus (token incluido): lo genera quien edita integraciones.
+  router.post('/campus/:projectId/plugin/codigo', gestion, puede('integrations.edit'), ctrl.codigoDeConexion);
+  router.delete('/campus/:projectId/plugin', gestion, ctrl.desactivarPlugin);
+}
 
 // Un :id que no es un número no es ninguna consulta: 404, no el 500 de Postgres
 // (22P02) que daba, por ejemplo, /api/consultas/tutores (#188).

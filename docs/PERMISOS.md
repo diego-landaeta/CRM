@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-819 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+822 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -200,6 +200,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusSinTutor | `GET /api/consultas/campus-sin-tutor` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.view` |
 | sincronizarAlumnosAhora | `POST /api/consultas/sincronizar-alumnos` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.gestionar` |
 | verMetricas | `GET /api/consultas/metricas` | sesión · a mano: consultas.controller.js · quienYAmbito (sin ?todas) | tutor | `consultas.atender` |
+| estadoDelPlugin | `GET /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| codigoDeConexion | `POST /api/consultas/campus/:projectId/plugin/codigo` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| desactivarPlugin | `DELETE /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | panel | `GET /api/consultas/` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.view` |
 | ver | `GET /api/consultas/:id` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
 | responder | `POST /api/consultas/:id/responder` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
