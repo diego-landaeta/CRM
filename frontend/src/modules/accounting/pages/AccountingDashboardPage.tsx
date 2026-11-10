@@ -115,11 +115,11 @@ export default function AccountingDashboardPage() {
   if (!data) return null;
 
   const { ingresos, egresos, balance, cuentas_por_cobrar, trend } = data;
-  // Quien lleva un equipo comercial (o una gestora) ve lo de su equipo, y los
-  // egresos y el balance —que son de la empresa, no de gestoras— no le llegan
-  // (QA del 09/11/2026). Se dice en vez de pintar un cero que parece real.
-  const soloEquipo = data.solo_equipo === true;
-  const sinEgresos = soloEquipo || egresos?.oculto === true;
+  // Quien lleva un equipo comercial (QA del 09/11/2026): el servidor le
+  // recorta las cifras a ella y su equipo y no le manda egresos ni balance,
+  // que son de la empresa. Aquí no se pintan, y se dice por qué.
+  const soloAdmin: string[] = Array.isArray(data.solo_administracion) ? data.solo_administracion : [];
+  const sinEgresos = soloAdmin.includes('egresos');
 
   // Merge trend ingresos + egresos
   // El backend manda los totales reales; el listado viene con LIMIT 50.
@@ -160,16 +160,22 @@ export default function AccountingDashboardPage() {
               aria-label="Fecha hasta"
               className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
-            <button
+            {!sinEgresos && <button
               onClick={() => navigate('/finanzas/egresos')}
               aria-label="Nuevo egreso"
               className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Egreso</span>
-            </button>
+            </button>}
           </>
         }
       />
+
+      {sinEgresos && (
+        <p className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-md px-3 py-2">
+          Cifras de tu equipo comercial. Egresos y balance: solo para administración sin equipo.
+        </p>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -224,12 +230,6 @@ export default function AccountingDashboardPage() {
         </>)}
       </div>
 
-      {soloEquipo && (
-        <p role="note" className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/40">
-          Cifras de tu equipo comercial. Egresos y balance: solo para administración sin equipo.
-        </p>
-      )}
-
       {/* Lo recurrente: lo que de verdad define a una suscripcion. Solo
           cuando hay conexion con Stripe; sin clave no se pinta un cuadro de
           ceros, que es peor que no pintar nada. */}
@@ -255,7 +255,7 @@ export default function AccountingDashboardPage() {
       )}
 
       {/* Graficas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 ${sinEgresos ? '' : 'lg:grid-cols-2'} gap-4`}>
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-semibold mb-3">Evolución mensual (12 meses)</h3>
           <ResponsiveContainer width="100%" height={220} minHeight={200}>
@@ -271,11 +271,9 @@ export default function AccountingDashboardPage() {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-4">
+        {!sinEgresos && <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-semibold mb-3">Egresos por categoría</h3>
-          {sinEgresos ? (
-            <EmptyState icon={Receipt} title="Solo para administración sin equipo" description="Los egresos son de la empresa, no de tu equipo comercial" />
-          ) : egresos.por_categoria.length === 0 ? (
+          {egresos.por_categoria.length === 0 ? (
             <EmptyState icon={Receipt} title="Sin egresos" description="No hay gastos registrados en este período" />
           ) : (
             <ResponsiveContainer width="100%" height={220} minHeight={200}>
@@ -288,7 +286,7 @@ export default function AccountingDashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Ventas por vendedora. En IA no hay: la gente se suscribe sola. */}

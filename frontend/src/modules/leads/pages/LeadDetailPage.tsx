@@ -27,7 +27,6 @@ import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
 import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
-import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 function LoadingSkeleton() {
   return (
@@ -101,7 +100,8 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (!isAdmin || gestores.length > 0) return;
-    client.get('/users?limit=100')
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get('/users?limit=100&alcance=comercial')
       .then((res) => { if (res.success) setGestores(res.data || []); })
       .catch(() => toast({ title: 'Error al cargar gestores', variant: 'destructive' }));
   }, [isAdmin, gestores.length]);
@@ -207,9 +207,7 @@ export default function LeadDetailPage() {
       />
       <LeadReassignDialog
         open={reassignOpen}
-        // Reasignar, solo a las de su alcance (equipo comercial, 09/11/2026):
-        // a una de fuera el servidor responde FUERA_DE_TU_EQUIPO.
-        gestores={soloDelAlcance(gestores, user)}
+        gestores={gestores}
         onClose={() => setReassignOpen(false)}
         onSubmit={reassign}
       />

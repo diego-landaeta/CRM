@@ -22,7 +22,6 @@ import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
-import { llevaEquipo } from '@/shared/lib/alcanceComercial';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -49,19 +48,18 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; lleva_equipo?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
   // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
   // SUS facturas—; quien factura de verdad, «Emitir desde la cola». Los totales
   // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
-  const { can } = usePermission();
+  const { can, llevaEquipo } = usePermission();
   const canManage = can('facturas.gestionar');
   // Corregir, abonar, asociar a una venta y eliminar: el permiso Y no llevar un
   // equipo comercial (Diego, 09/11/2026). El servidor ya le da 403 a quien lo
   // lleva; aquí no se le enseñan los botones (QA del 09/11).
-  const conEquipo = llevaEquipo(user);
-  const puedeCorregir = canManage && !conEquipo;
+  const puedeCorregir = canManage && !llevaEquipo;
   const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   // «Todos los proyectos» (#218): sin campus, las de todos los suyos. El servidor
@@ -341,7 +339,7 @@ export default function InvoicesPage() {
       {/* Si la serie tiene agujeros, se dice aqui: es donde se factura. */}
       <AvisoHuecosFacturas projectId={activeProject?.id} />
 
-      {canManage && conEquipo && (
+      {canManage && llevaEquipo && (
         <p role="note" className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/40">
           Llevas un equipo comercial: ves las facturas de tu equipo, pero corregirlas, abonarlas, asociarlas a una
           venta o eliminarlas lo hace la administración sin equipo.

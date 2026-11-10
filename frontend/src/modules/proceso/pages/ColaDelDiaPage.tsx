@@ -30,7 +30,6 @@ import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import { toast } from '@/shared/hooks/useToast';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import { tramosDeSalud, fraseDeSalud, totalDeLaCola } from '../lib/salud';
-import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
 function cuando(fecha: string, retraso: number) {
@@ -199,16 +198,16 @@ export default function ColaDelDiaPage() {
   // La lista de gestoras, solo para quien puede filtrar por ellas.
   useEffect(() => {
     if (!esAdmin) return;
-    client.get(`/users?limit=100${proyecto ? `&projectId=${proyecto}` : ''}`)
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${proyecto ? `&projectId=${proyecto}` : ''}`)
       .then((r: any) => {
         if (!r?.success) return;
-        // Solo las de su alcance (equipo comercial, 09/11/2026).
-        setGestoras(soloDelAlcance(r.data || [], user)
+        setGestoras((r.data || [])
           .filter((u: any) => u.active !== false)
           .map((u: any) => ({ id: u.id, nombre: u.nombre })));
       })
       .catch(() => { /* si falla, se queda sin filtro y ya */ });
-  }, [esAdmin, proyecto, user?.lleva_equipo]);
+  }, [esAdmin, proyecto]);
 
   // Las formaciones del desplegable las manda el servidor CON la cola: solo
   // las que tiene la gente de esta lista. Antes se pedia el catalogo entero

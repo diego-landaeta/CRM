@@ -85,7 +85,6 @@ import BloquePlegable from '@/shared/components/ui/BloquePlegable';
 import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useIdsDelAmbito, useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
-import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 
 function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
@@ -408,14 +407,13 @@ export default function LeadsPage() {
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
     const pidParam = activeProject?.id && activeProject.id > 0 ? `&projectId=${activeProject.id}` : '';
-    client.get(`/users?limit=100${pidParam}`)
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${pidParam}`)
       .then((res) => {
-        // Solo las de su alcance (equipo comercial, 09/11/2026): reasignar o
-        // filtrar por una de fuera, el servidor se lo negaría.
-        if (res.success) setGestores(soloDelAlcance(res.data || [], user));
+        if (res.success) setGestores(res.data || []);
       })
       .catch(() => toast({ title: 'Error al cargar gestores', variant: 'destructive' }));
-  }, [user?.role, activeProject?.id, user?.lleva_equipo]);
+  }, [user?.role, activeProject?.id]);
 
   function handleMarkContacted(lead) {
     setConfirmingContact(lead);

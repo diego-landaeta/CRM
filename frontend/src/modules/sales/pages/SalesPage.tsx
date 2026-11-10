@@ -16,7 +16,6 @@ const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
 const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
-import { soloDelAlcance } from '@/shared/lib/alcanceComercial';
 
 export default function SalesPage() {
   const { activeProject, activeIssuerId, activeIssuer } = useProjectContext() as {
@@ -24,7 +23,7 @@ export default function SalesPage() {
     activeIssuerId: number | null;
     activeIssuer?: { nombre?: string; campus?: unknown[] } | null;
   };
-  const { user } = useAuth() as { user: { role?: string; alcance_comercial?: number[] | null } | null };
+  const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
   // CON QUE TIPO SE ABRE. Diego, 25/09: «registrar venta automatica (sin
@@ -88,9 +87,9 @@ export default function SalesPage() {
   useEffect(() => {
     if (!isAdmin) return;
     const pid = projectIdParam ? `&projectId=${projectIdParam}` : '';
-    // Solo las de su alcance (equipo comercial, 09/11/2026).
-    client.get(`/users?limit=100${pid}`).then((r) => setGestores(r.success ? soloDelAlcance(r.data || [], user) : [])).catch(() => {});
-  }, [isAdmin, projectIdParam, user?.alcance_comercial?.length]);
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
+  }, [isAdmin, projectIdParam]);
 
   return (
     <div className="space-y-6">
