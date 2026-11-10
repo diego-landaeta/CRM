@@ -82,7 +82,7 @@ Crea el curso `CRM679` con la tutora **tutora679** (Laura), los alumnos **alumno
 | `actividad-chat.php` | La actividad Chat del curso («Entrar al chat»), y activa el módulo Chat |
 | `curso-contenido.php` | Temas y actividades variadas (página, enlace, cuestionario, foro, PDF, tema oculto) |
 | `grupos-separados.php poner\|quitar` | Grupos separados con la tutora solo en el Grupo A |
-| `mensaje-cli.php <de> <para> "<texto>"` | Un mensaje privado como si se escribiera en el campus |
+| `mensaje-cli.php <de> <para> "<texto>"` | Un mensaje privado como si se escribiera en el campus (`<de>` y `<para>`: id o nombre de usuario) |
 | `grupo-del-curso.php` | El «Grupo A (mensajería)» del curso con la mensajería de grupo encendida: Laura, Pedro y María (su conversación es de `core_group`) |
 | `conectar-cli.php <código>` / `desconectar-cli.php` | Conectar o desconectar el campus sin pasar por la página |
 
