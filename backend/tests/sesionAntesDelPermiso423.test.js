@@ -42,10 +42,12 @@ describe('PATCH /api/auth/me/email (#246, punto 2 del QA de #423)', () => {
     expect(r.status).toBe(200);
   });
 
-  it('una gestora no: 403, no 401', async () => {
-    registrar({ userId: 9102, role: 'gestor' });
+  // Desde la #211 la gestora también cambia el suyo (con código); quien no
+  // tiene el permiso es, por ejemplo, el colaborador.
+  it('un colaborador no: 403, no 401', async () => {
+    registrar({ userId: 9102, role: 'colaborador' });
     const r = await supertest(app).patch('/api/auth/me/email')
-      .set('Authorization', `Bearer ${token(9102, 'gestor')}`).send({ email: 'nuevo@prueba.test' });
+      .set('Authorization', `Bearer ${token(9102, 'colaborador')}`).send({ email: 'nuevo@prueba.test' });
     expect(r.status).toBe(403);
   });
 

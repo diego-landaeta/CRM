@@ -78,6 +78,8 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+// Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -554,6 +556,10 @@ const SIN_ENTRADA = {
   '/conexion/webhooks/prospectos': ['webhooks.view'],
   '/conexion/webhooks/make': ['make.view'],
   '/conexion/webhooks/transferencias': ['webhooks_salientes.view'],
+  // La pestaña Tutores de Consultas: la del panel de tutores en el servidor
+  // (`/api/consultas/tutores-panel`). Escrita a mano por una tutora decía «No
+  // hay tutores aquí» en vez de que no tiene acceso (#188).
+  '/consultas/tutores': 'consultas.view',
 };
 
 export function rutaPermitida(pathname, can) {
@@ -1041,6 +1047,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // cada render y, en las dependencias de un efecto, lo relanzaría sin parar.
   const veProspectosNuevos = can('leads.view');
   const veReportesDeSpam = can('leads.spam');
+  const usaMensajes = can('mensajes.usar');
 
   // Estado de secciones colapsadas (Captación, Catálogo, Finanzas, etc.).
   // Persistido en localStorage. Por defecto, abierto: Principal + la sección
@@ -1219,9 +1226,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     return () => { cancelled = true; clearInterval(interval); };
   }, [veReportesDeSpam]);
 
-  // Badge de mensajes no leidos
+  // Badge de mensajes no leidos: solo a quien puede usar Mensajes. A quien se lo
+  // han quitado (la tutora de prueba de /testeo) el servidor le daba un 403 en
+  // cada página (#188).
   useEffect(() => {
-    if (soloEsColaborador(user)) return;
+    if (soloEsColaborador(user) || !usaMensajes) return;
     let cancelled = false;
     async function fetchMsgCount() {
       try {
@@ -1232,7 +1241,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     fetchMsgCount();
     const interval = setInterval(fetchMsgCount, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user]);
+  }, [user, usaMensajes]);
 
   // «Por revisar (n)» en el menú: solo a quien puede cerrar tareas.
   const puedeRevisar = can('tasks.close');
@@ -1379,9 +1388,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           // Una seccion entera puede no aplicar a un tipo de proyecto (en IA no hay
           // campañas, ni catalogo, ni tutores).
           const seccionAplica = !(Array.isArray(section.salvoTipo)
-            && section.salvoTipo.includes(activeProject?.type));
+            && section.salvoTipo.includes(tipoDelMenu(activeProject?.type)));
           const visibleItems = seccionAplica
-            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab })
+            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type), soloColab })
             : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
@@ -1398,7 +1407,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 // tener mas de uno, el menu tiene que sumar lo de cada uno.
                 role={rolesDe(user)}
                 modules={activeProject?.modules}
-                projectType={activeProject?.type}
+                projectType={tipoDelMenu(activeProject?.type)}
                 soloColab={soloColab}
                 permisos={user}
                 can={can}
