@@ -1,4 +1,6 @@
 import { query } from '../../shared/config/db.js';
+// `asesoraId`: una gestora o varias (un equipo comercial, 09/11/2026).
+import { comoIds } from '../../shared/utils/roles.js';
 
 /*
   Convocatorias y ofrecimientos (#86).
@@ -146,8 +148,8 @@ export async function pendientesDeRespuesta({ projectIds, asesoraId }) {
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND o.project_id = ANY($${i++}::int[])` : '';
   if (pProj) par.push(projectIds.map(Number));
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push(comoIds(asesoraId));
 
   const { rows } = await query(
     `SELECT ${COLS_OFR}, c.nombre AS convocatoria, l.nombre AS lead_nombre,

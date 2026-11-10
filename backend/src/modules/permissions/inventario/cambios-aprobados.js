@@ -155,6 +155,18 @@ export const CAMBIOS = [
   },
 ];
 
+// #211 (05/11): propuesta de Hugo, a la espera de Diego. Si dice que solo el
+// tutor, se quita esta entrada y los roles de `cuenta.cambiar_correo`.
+CAMBIOS.push({
+  id: 'correo-propio-con-codigo',
+  que: 'Cambiar su propio correo desde «Mi perfil», con un código a la dirección nueva y su contraseña actual: también admin, gestora y soporte. Hasta ahora solo el tutor, y sin código.',
+  motivo: '#211: el correo es la credencial y se cambiaba sin comprobar nada (así quedaron 39 de 45 tutores de ISEIE sin poder entrar). Con el código, nadie se queda con una dirección que no existe.',
+  filas: ['PATCH /api/auth/me/email', 'POST /api/auth/me/email/codigo'],
+  roles: ['admin', 'gestor', 'soporte'],
+  sentido: 'gana',
+  aprobadoPor: null,
+});
+
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */
 export function cambioPrevisto(filaId, rol) {
   return CAMBIOS.find((c) => c.filas.includes(filaId) && c.roles.includes(rol)) || null;

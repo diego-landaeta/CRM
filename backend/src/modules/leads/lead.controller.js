@@ -8,7 +8,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { soloLoSuyo, alcanceComercial, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -27,12 +27,16 @@ import { soloLoSuyo } from '../../shared/utils/roles.js';
 // historial. Va en TODO handler que reciba un :id de lead: la ficha estaba
 // protegida pero seis puertas al mismo lead no lo estaban, y por ahi se leia y
 // se escribia el historial de fichas ajenas (#109).
+//
+// Y quien lleva un equipo comercial (09/11/2026), los de su equipo y los suyos:
+// `alcanceComercial` dice de quién puede ver; null = de todo su campus.
 async function exigirQueSeaSuyo(req, leadId) {
-  if (!soloLoSuyo(req.user)) return;              // admin, superadmin y soporte ven todo
+  const alcance = await alcanceComercial(req.user);
+  if (!alcance) return;                           // admin sin equipo, superadmin y soporte ven todo
   const { rows } = await query(
     'SELECT responsable_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [leadId]);
   if (!rows.length) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
-  if (rows[0].responsable_id !== req.user.userId) {
+  if (!enElAlcance(alcance, rows[0].responsable_id)) {
     throw new AppError('Ese contacto es de otra gestora', 403, 'NO_ES_TUYO');
   }
 }
@@ -87,9 +91,13 @@ export async function list(req, res, next) {
     }
     // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
     // Ignoramos cualquier responsableId/unassigned que venga del cliente.
-    if (soloLoSuyo(req.user)) {
-      filters.responsableId = req.user.userId;
+    // Quien lleva un equipo, lo de su equipo (o el de una de ellas si lo pide).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
+      filters.responsableId = acotarAlAlcance(filters.responsableId, alcance);
       filters.unassigned = false;
+    }
+    if (soloLoSuyo(req.user)) {
       filters.duplicated = false;
       filters.reincidente = false;
     }
@@ -122,7 +130,8 @@ export async function quickCounts(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const filtros = { ...parsed.data };
-    if (soloLoSuyo(req.user)) filtros.responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filtros.responsableId = acotarAlAlcance(filtros.responsableId, alcance);
 
     res.json({ success: true, data: await leadModel.contarFiltrosRapidos(filtros) });
   } catch (err) { next(err); }
@@ -153,7 +162,8 @@ export async function revisar(req, res, next) {
     }
     const lead = await leadModel.findById(id);
     if (!lead) throw new AppError('Prospecto no encontrado', 404, 'NOT_FOUND');
-    if (soloLoSuyo(req.user) && lead.responsable_id !== req.user.userId) {
+    const alcance = await alcanceComercial(req.user);
+    if (!enElAlcance(alcance, lead.responsable_id)) {
       throw new AppError('Ese prospecto no es tuyo', 403, 'FORBIDDEN');
     }
 
@@ -164,7 +174,7 @@ export async function revisar(req, res, next) {
     // cuanto queda sin tener que pedirlo aparte en cada clic.
     const progreso = await leadModel.comoVaLaRevision({
       projectId: lead.project_id,
-      responsableId: soloLoSuyo(req.user) ? req.user.userId : null,
+      responsableId: alcance,
     });
     res.status(201).json({ success: true, data: { revision: hecho, progreso } });
   } catch (err) { next(err); }
@@ -176,7 +186,7 @@ export async function progresoRevision(req, res, next) {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     const progreso = await leadModel.comoVaLaRevision({
       projectId,
-      responsableId: soloLoSuyo(req.user) ? req.user.userId : null,
+      responsableId: await alcanceComercial(req.user),
     });
     res.json({
       success: true,
@@ -215,9 +225,8 @@ export async function exportWasapi(req, res, next) {
       duplicated: false,
       reincidente: false,
     };
-    if (soloLoSuyo(req.user)) {
-      filters.responsableId = req.user.userId;
-    }
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filters.responsableId = acotarAlAlcance(filters.responsableId, alcance);
 
     const result = await leadModel.findAll(filters);
     let leads = result.leads.map((l) => ({
@@ -347,7 +356,7 @@ export async function today(req, res, next) {
     const data = await leadService.getTodaySummary({
       userId: req.user.userId,
       role: req.user.role,
-      soloSuyo: soloLoSuyo(req.user),
+      alcanceIds: await alcanceComercial(req.user),
       projectId: projectId && !isNaN(projectId) ? projectId : null,
       projectIds: await campusPedidos(req),
     });
@@ -371,7 +380,8 @@ export async function stats(req, res, next) {
       search: req.query.search || null,
     };
     // SEGURIDAD: gestor solo ve sus propios stats, ignoramos responsableId del query.
-    if (soloLoSuyo(req.user)) opts.responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) opts.responsableId = acotarAlAlcance(opts.responsableId, alcance);
     const data = await leadService.getStats(lista || projectId, opts);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -633,6 +643,16 @@ export async function reassign(req, res, next) {
     const parsed = reassignSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    // Quien lleva un equipo comercial (09/11/2026) reasigna dentro de él: solo
+    // prospectos suyos o de sus gestoras, y solo a ella misma o a una de ellas.
+    // Sin equipo, como siempre (lo decide el permiso `leads.assign`).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance && alcance.length > 1) {
+      await exigirQueSeaSuyo(req, id);
+      if (!enElAlcance(alcance, parsed.data.responsable_id)) {
+        throw new AppError('Solo puedes pasarlo a alguien de tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+      }
     }
     const result = await leadService.reassign(id, parsed.data.responsable_id, req.user.userId);
     res.json({ success: true, data: result });
