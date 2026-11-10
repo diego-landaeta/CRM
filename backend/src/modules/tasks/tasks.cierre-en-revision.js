@@ -20,7 +20,7 @@
   Lo lanza `scripts/cerrar-en-revision-707.mjs`; aquí está para poder probarlo.
 */
 
-export const MARCA_707 = 'cierre_707';
+export const MARCA_CIERRE = 'cierre_707';
 
 /**
  * @param {import('pg').PoolClient | import('pg').Client} db  una conexión propia (se abre y cierra la transacción aquí)
@@ -59,7 +59,7 @@ export async function cerrarLasEnRevision(db, { aplicar = false, soloTareas = nu
         `INSERT INTO task_events (task_id, user_id, event_type, details, created_at)
          VALUES ($1, $2, 'status_changed', $3, $4)`,
         [t.id, t.cerrada_por, JSON.stringify({
-          old_status: 'en_revision', new_status: 'hecha', action: MARCA_707,
+          old_status: 'en_revision', new_status: 'hecha', action: MARCA_CIERRE,
           motivo: 'Cerrada al cambiar la regla del tablero (CRM#707): quien la hace la pasa a «Hecha».',
         }), t.completed_at]
       );
