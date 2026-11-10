@@ -96,13 +96,14 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
 // que existe, que funcione y esté en el menú. Lo vigila
 // `test/menuSinRutasRotas.test.jsx`: cada `to` tiene su <Route> en App.jsx, o
 // lleva `comingSoon`. Las de `href` salen a otra compilación y no cuentan.
-// Conexión › Webhooks (#690): la entrada se ve con el permiso de cualquiera de
-// los webhooks que reúne. La misma lista que `TIPOS` en
-// modules/webhooks/lib/resumen.ts (lo vigila test/webhooksJuntos690.test.jsx).
-export const PERMISOS_WEBHOOKS = [
-  'webhooks.view', 'make.view', 'forms.view', 'projects.edit', 'integrations.view',
-  'woocommerce.view', 'whatsapp.usar', 'widget.view', 'webhooks_salientes.view', 'certifex_consultas.view',
-];
+// Conexión › Webhooks (#690): la entrada se ve con el permiso de alguna de las
+// TRES entradas que sustituye (Captación › Webhooks, Captación › Make y
+// Conexión › Webhook de transferencias), ni uno más: así la ve exactamente
+// quien veía alguna de ellas, también con permisos quitados o dados a mano. Lo
+// demás que reúne el resumen (Stripe, formularios…) tiene su pantalla propia, y
+// dentro cada tarjeta pide su permiso. Lo vigilan test/webhooksJuntos690.test.jsx
+// y el traslado de `trasladosDeMenu.js`.
+export const PERMISOS_WEBHOOKS = ['webhooks.view', 'make.view', 'webhooks_salientes.view'];
 
 export const NAV_SECTIONS = [
   {

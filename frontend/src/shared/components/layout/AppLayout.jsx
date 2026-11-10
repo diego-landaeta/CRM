@@ -59,7 +59,7 @@ const ALL_PROJECTS_OK = [
   // con ámbito «toda la empresa» (migración 206) y la pantalla y el servidor ya lo
   // resuelven. El muro lo dejaba usable solo con un campus elegido. Diego, 19/10: «los
   // webhooks en producción solo se ven por campus y debe ser por empresa».
-  /^\/conexion\/webhooks\/transferencias$/,
+  /^\/conexion\/webhooks\/transferencias\/?$/,
   // Su dirección de antes (#690) redirige a la de arriba; si el muro la parara,
   // los enlaces viejos (Novedades, marcadores) se quedarían en «elige un campus».
   /^\/conexion\/webhook-transferencias\/?$/,
@@ -70,7 +70,7 @@ const ALL_PROJECTS_OK = [
   // El resumen de Conexión › Webhooks (#690): con una empresa o «Todos», los
   // webhooks de sus campus, cada uno con el suyo. Las pestañas de prospectos y
   // Make siguen siendo de un campus: se montan para uno.
-  /^\/conexion\/webhooks$/,
+  /^\/conexion\/webhooks\/?$/,
   // Asignación de leads: con «todos», todas las configuraciones y decisiones que ve cada uno.
   /^\/conexion\/asignacion-leads$/,
   // El botón de WhatsApp de la web: con una empresa o «Todos», sus pulsaciones
@@ -222,7 +222,7 @@ const CON_SOCIEDAD_OK = [
   // con ámbito «toda la empresa» (migración 206) y la pantalla y el servidor ya lo
   // resuelven. El muro lo dejaba usable solo con un campus elegido. Diego, 19/10: «los
   // webhooks en producción solo se ven por campus y debe ser por empresa».
-  /^\/conexion\/webhooks\/transferencias$/,
+  /^\/conexion\/webhooks\/transferencias\/?$/,
   // Su dirección de antes (#690), que redirige a la de arriba, y las de Make y
   // los webhooks de prospectos (redirigen; el muro se pide ya en la nueva).
   /^\/conexion\/webhook-transferencias\/?$/,
@@ -230,7 +230,7 @@ const CON_SOCIEDAD_OK = [
   // El resumen de Conexión › Webhooks (#690): con una empresa o «Todos», los
   // webhooks de sus campus, cada uno con el suyo. Las pestañas de prospectos y
   // Make siguen siendo de un campus: se montan para uno.
-  /^\/conexion\/webhooks$/,
+  /^\/conexion\/webhooks\/?$/,
   // Asignación de leads (CRM#513): con una empresa, sus configuraciones y las
   // decisiones de sus campus, con un filtro de campus. Diego, 28/10: «tengo que
   // verlo por empresa y campus».

@@ -52,10 +52,10 @@ export default function WebhooksResumenPage() {
     : campusFijo ? (campusFijo.nombre || 'este campus') : 'todos los campus';
 
   // Un tipo cuyo módulo está apagado en todos los campus del ámbito no sale.
+  const porPermiso = useMemo(() => tiposVisibles(can, moduloEncendido, undefined, tieneRol), [can, tieneRol]);
   const tipos = useMemo(
-    () => tiposVisibles(can, moduloEncendido, undefined, tieneRol)
-      .filter((t) => !t.moduloCampus || campusDelTipo(t, campus).length > 0),
-    [can, tieneRol, campus],
+    () => porPermiso.filter((t) => !t.moduloCampus || campusDelTipo(t, campus).length > 0),
+    [porPermiso, campus],
   );
   const [estados, setEstados] = useState<Record<string, Estado>>({});
 
@@ -86,7 +86,14 @@ export default function WebhooksResumenPage() {
   };
 
   if (!tipos.length) {
-    return (
+    // Por qué no hay nada: los permisos, o que en estos campus están apagados.
+    return porPermiso.length ? (
+      <EmptyState
+        icon={WebhooksLogo}
+        title="Sin webhooks en estos campus"
+        description="Los webhooks que puedes ver tienen su módulo apagado en los campus elegidos arriba. Prueba con otro campus o empresa."
+      />
+    ) : (
       <EmptyState
         icon={WebhooksLogo}
         title="No tienes webhooks que ver"
@@ -114,7 +121,9 @@ export default function WebhooksResumenPage() {
       />
 
       {GRUPOS.map((g) => {
-        const suyos = tipos.filter((t) => t.grupo === g.id);
+        // Lo que solo sale si tiene algo (los tokens antiguos) no ocupa sitio vacío.
+        const suyos = tipos.filter((t) => t.grupo === g.id
+          && !(t.ocultarSiVacio && estados[t.id] && !estados[t.id].cargando && !estados[t.id].error && !estados[t.id].filas.length));
         if (!suyos.length) return null;
         return (
           <section key={g.id} aria-labelledby={`grupo-${g.id}`} className="space-y-3">
@@ -139,10 +148,16 @@ export default function WebhooksResumenPage() {
   );
 }
 
+/** Filas que se ven de entrada; el resto, al pulsar (formularios: pueden ser cientos). */
+const A_LA_VISTA = 8;
+
 function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
   tipo: TipoWebhook; estado?: Estado; alAbrir: (f: FilaWebhook) => void; conCampus: boolean;
 }) {
+  const [todas, setTodas] = useState(false);
   const filas = estado ? ordenarFilas(estado.filas) : [];
+  // Lo que falla va primero (`ordenarFilas`): recortar nunca esconde un fallo.
+  const aLaVista = todas ? filas : filas.slice(0, Math.max(A_LA_VISTA, filas.filter((f) => f.fallo).length));
   const Flecha = tipo.direccion === 'entra' ? ArrowDownLeft : tipo.direccion === 'sale' ? ArrowUpRight : ArrowsLeftRight;
   const direccion = { entra: 'Entra al CRM', sale: 'Sale del CRM', ambos: 'Entra y sale' }[tipo.direccion];
   return (
@@ -158,23 +173,32 @@ function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
         </span>
       </div>
 
-      {!estado || estado.cargando ? (
-        <p className="text-sm text-muted-foreground">Cargando…</p>
-      ) : estado.error ? (
-        <p className="text-sm text-destructive">No se pudo leer: {estado.error}</p>
-      ) : !filas.length ? (
-        <p className="text-sm text-muted-foreground">Ninguno en este ámbito.</p>
-      ) : (
-        <ul className="divide-y divide-border text-sm">
-          {filas.map((f) => <FilaDeWebhook key={f.clave} fila={f} alAbrir={alAbrir} />)}
-        </ul>
-      )}
+      <div role="status" aria-live="polite">
+        {!estado || estado.cargando ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : estado.error ? (
+          <p className="text-sm text-destructive">No se pudo leer: {estado.error}</p>
+        ) : !filas.length ? (
+          <p className="text-sm text-muted-foreground">Ninguno en este ámbito.</p>
+        ) : (
+          <>
+            <ul className="divide-y divide-border text-sm">
+              {aLaVista.map((f) => <FilaDeWebhook key={f.clave} fila={f} alAbrir={alAbrir} />)}
+            </ul>
+            {filas.length > aLaVista.length && (
+              <button type="button" onClick={() => setTodas(true)} className="mt-1 text-xs font-semibold text-primary hover:underline">
+                Ver los {filas.length} ({filas.length - aLaVista.length} más)
+              </button>
+            )}
+          </>
+        )}
+      </div>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="text-muted-foreground">{tipo.nota}</span>
         {/* Su pantalla es de un campus y no hay uno elegido: el muro pararía el
             enlace. Se dice qué hacer; cada fila ya entra eligiendo el suyo. */}
-        {tipo.deUnCampus && !conCampus ? (
+        {!tipo.enlace ? null : tipo.deUnCampus && !conCampus ? (
           <span className="text-muted-foreground">
             {filas.length ? 'Para configurarlo, pulsa uno o elige un campus arriba.' : 'Para configurarlo, elige un campus arriba.'}
           </span>
@@ -194,9 +218,20 @@ function FilaDeWebhook({ fila, alAbrir }: { fila: FilaWebhook; alAbrir: (f: Fila
     : <StatusDot tono={fila.activo ? 'success' : 'neutral'}>{fila.activo ? 'Activo' : 'Apagado'}</StatusDot>;
   const ultimo = fila.ultimo === undefined ? null
     : fila.ultimo ? `Último aviso: ${formatDateTime(fila.ultimo)}` : 'Sin avisos todavía';
+  // Solo un clic normal elige el campus: Ctrl/Cmd/Mayús + clic o el botón
+  // central abren otra pestaña, y no deben cambiar el selector de esta.
   const nombre = fila.enlace
-    ? <Link to={fila.enlace} onClick={() => alAbrir(fila)} className="font-semibold hover:underline">{fila.nombre}</Link>
+    ? (
+      <Link
+        to={fila.enlace}
+        onClick={(e) => { if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) alAbrir(fila); }}
+        className="font-semibold hover:underline"
+      >
+        {fila.nombre}
+      </Link>
+    )
     : <span className="font-semibold">{fila.nombre}</span>;
+  const corto = fila.fallo && fila.fallo.length > 80 ? `${fila.fallo.slice(0, 80)}…` : fila.fallo;
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
       <span className="min-w-0 flex-1">
@@ -205,8 +240,18 @@ function FilaDeWebhook({ fila, alAbrir }: { fila: FilaWebhook; alAbrir: (f: Fila
       </span>
       {estado}
       {ultimo && <span className="text-xs text-muted-foreground">{ultimo}</span>}
+      {fila.detalle && <span className="text-xs text-muted-foreground">{fila.detalle}</span>}
       {fila.sinLeer && <span className="text-xs text-warning">{fila.sinLeer}</span>}
-      {fila.fallo && <StatusDot tono="danger" title={fila.fallo}>Falló: {fila.fallo.length > 80 ? `${fila.fallo.slice(0, 80)}…` : fila.fallo}</StatusDot>}
+      {fila.aviso && <span className="text-xs text-warning">{fila.aviso}</span>}
+      {/* El texto entero, para el lector de pantalla; el recortado, a la vista. */}
+      {fila.fallo && (corto === fila.fallo ? (
+        <StatusDot tono="danger" title={fila.fallo}>Falló: {fila.fallo}</StatusDot>
+      ) : (
+        <StatusDot tono="danger" title={fila.fallo}>
+          <span aria-hidden>Falló: {corto}</span>
+          <span className="sr-only">Falló: {fila.fallo}</span>
+        </StatusDot>
+      ))}
     </li>
   );
 }

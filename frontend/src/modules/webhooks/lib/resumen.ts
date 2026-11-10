@@ -74,6 +74,13 @@ export interface FilaWebhook {
   fallo?: string | null;
   /** Lo que no se pudo leer de esta fila (su historial, por ejemplo). */
   sinLeer?: string;
+  /**
+   * Algo que mirar que NO es que el último aviso fallara (envíos fallidos en
+   * 30 días cuando el último fue bien). No cuenta en «N con fallos».
+   */
+  aviso?: string;
+  /** Una aclaración neutra de esta fila (por qué no hay último aviso, por ejemplo). */
+  detalle?: string;
   /** Su pantalla de configuración. */
   enlace: string;
   /**
@@ -122,6 +129,8 @@ export interface TipoWebhook {
    * entrar. La tarjeta dice entonces que se elija uno (las filas lo eligen solas).
    */
   deUnCampus?: boolean;
+  /** Sin filas, la tarjeta no sale (lo que ya no se crea y casi nadie tiene). */
+  ocultarSiVacio?: boolean;
   /** Si existe en este entorno (Certifex: `VITE_CERTIFEX_PANEL`). Sin ella, siempre. */
   enEsteEntorno?: () => boolean;
   /** Lo que el servidor no guarda de este tipo, dicho en la tarjeta. */
@@ -158,6 +167,14 @@ export function crearPedidor(limite = 6, signal?: AbortSignal): Pedir {
   };
 }
 
+/** Por qué no se pudo leer un campus, dicho como es: un 403 no es «no contestó». */
+export function motivoDeNoLeer(err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  if (status === 403) return 'No tienes permiso para ver este campus';
+  if (status === 404) return 'No existe o ya no está';
+  return 'El servidor no contestó para este campus';
+}
+
 /**
  * `fn` para cada campus, `limite` a la vez. Un campus que falla no tumba la
  * tarjeta: sale como fila «no se pudo leer», que es lo que hay que saber.
@@ -175,9 +192,9 @@ export async function porCampus(
       const c = campus[i];
       try {
         salida[i] = await fn(c);
-      } catch {
+      } catch (err) {
         // `sinLeer`, no `fallo`: no se sabe si el webhook falla, solo que no se pudo leer.
-        salida[i] = [{ clave: `error-${c.id}`, nombre: 'No se pudo leer', campus: c.nombre, activo: null, sinLeer: 'El servidor no contestó para este campus', enlace: '' }];
+        salida[i] = [{ clave: `error-${c.id}`, nombre: 'No se pudo leer', campus: c.nombre, activo: null, sinLeer: motivoDeNoLeer(err), enlace: '' }];
       }
     }
   };
@@ -200,7 +217,7 @@ async function ultimoEvento(pedir: Pedir, formId: number): Promise<Pick<FilaWebh
   }
 }
 
-type FormFila = { id: number; nombre: string; active: boolean; submissions_count?: number };
+type FormFila = { id: number; nombre: string; active: boolean; submissions_count?: number; destination?: string | null };
 
 /**
  * Los formularios o los webhooks de prospectos de cada campus. El último aviso
@@ -217,7 +234,12 @@ const formulariosDe = (kind: 'webhook' | 'form', enlace: (f: FormFila) => string
       nombre: f.nombre,
       campus: c.nombre,
       activo: !!f.active,
-      ...(conAvisos ? await ultimoEvento(pedir, f.id) : {}),
+      // Con destino Matrícula el servidor no apunta cada aviso en el historial
+      // (`form.controller`, sin `logEvent`): decir «sin avisos todavía» sería
+      // falso. No se pide y se explica.
+      ...(conAvisos && f.destination === 'matricula'
+        ? { detalle: 'Va a Matrículas: sus avisos no se apuntan aquí, se ven en Matrículas' }
+        : conAvisos ? await ultimoEvento(pedir, f.id) : {}),
       enlace: enlace(f),
       campusId: c.id,
     })));
@@ -238,6 +260,9 @@ async function falloDeMake(
   try {
     const [d] = await pedir<Array<{ result: string; error_message?: string | null }>>(`/make-webhooks/${m.id}/deliveries?limit=1`);
     if (d?.result === 'rejected') return { fallo: d.error_message || 'El último aviso se rechazó' };
+    // La última fue bien (o era de prueba, que no limpia `last_error`): el
+    // error que quede es de antes y no dice cómo está ahora.
+    if (d?.result === 'accepted' || d?.result === 'test_only') return { fallo: null };
     return { fallo: m.last_error };
   } catch {
     return { fallo: m.last_error, sinLeer: 'No se pudo leer su última entrega' };
@@ -330,6 +355,30 @@ export const TIPOS: TipoWebhook[] = [
     },
   },
   {
+    id: 'tokens',
+    grupo: 'captacion',
+    titulo: 'Tokens de entrada antiguos',
+    queHace: 'Direcciones con token (de tipo «prospectos» o «a medida») que siguen recibiendo avisos aunque ya no se crean desde ninguna pantalla.',
+    direccion: 'entra',
+    enlace: '',
+    // `GET /webhook-tokens` (sin `kind`: todos los del campus), el mismo que
+    // lee la pestaña de admisión. Los de admisión van en su tarjeta.
+    permisos: ['webhooks.view'],
+    ocultarSiVacio: true,
+    nota: 'No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
+    cargar: (ctx) => porCampus(ctx.campus, async (c) => {
+      const filas = await (ctx.pedir || datos)<Array<{ id: number; kind: string; notas?: string | null; active: boolean; last_used_at: string | null }>>(`/webhook-tokens?projectId=${c.id}`);
+      return filas.filter((t) => t.kind !== 'matriculas').map((t) => ({
+        clave: `token-${t.id}`,
+        nombre: `${t.notas || 'Token'} (${t.kind === 'leads' ? 'prospectos' : 'a medida'})`,
+        campus: c.nombre,
+        activo: !!t.active,
+        ultimo: t.last_used_at,
+        enlace: '',
+      }));
+    }),
+  },
+  {
     id: 'admision',
     grupo: 'admision',
     titulo: 'Webhook de admisión',
@@ -371,15 +420,22 @@ export const TIPOS: TipoWebhook[] = [
     // pantalla): si está encendida y si tiene la FIRMA del webhook
     // (`config_public.webhook_secret_preview`). Sin la firma, Stripe avisa y el
     // CRM rechaza el aviso; con la clave de la API a secas no basta.
+    // La firma vale cifrada (`webhook_secret_preview`, la de ahora) o en claro
+    // en `config_public.webhook_secret` (la de antes): las dos las acepta
+    // `getWebhookSecret` (stripe-payments.service). El interruptor de la
+    // integración NO se enseña: el aviso se procesa igual esté encendida o no.
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      const i = await (ctx.pedir || datos)<{ active?: boolean; config_public?: { webhook_secret_preview?: string | null } } | null>(`/integrations/stripe?projectId=${c.id}`);
+      const i = await (ctx.pedir || datos)<{ config_public?: { webhook_secret_preview?: string | null; webhook_secret?: string | null } } | null>(`/integrations/stripe?projectId=${c.id}`);
       if (!i || Array.isArray(i)) return [];
+      const conFirma = Boolean(i.config_public?.webhook_secret_preview || i.config_public?.webhook_secret);
       return [{
         clave: `stripe-${c.id}`,
-        nombre: i.config_public?.webhook_secret_preview ? 'Con la firma del webhook' : 'Sin la firma del webhook: los avisos se rechazan',
+        nombre: conFirma ? 'Con la firma del webhook' : 'Sin la firma del webhook',
         campus: c.nombre,
-        activo: !!i.active,
+        activo: null,
+        fallo: conFirma ? null : 'Sin la firma, el CRM rechaza los avisos de Stripe',
         enlace: '/finanzas/integraciones',
+        campusId: c.id,
       }];
     }),
   },
@@ -408,6 +464,7 @@ export const TIPOS: TipoWebhook[] = [
         campus: c.nombre,
         activo: !!c.activo,
         enlace: '/productos/woocommerce',
+        campusId: c.id,
       }));
     },
   },
@@ -435,7 +492,7 @@ export const TIPOS: TipoWebhook[] = [
     nota: 'Las pulsaciones se ven en su pantalla.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
       const d = await (ctx.pedir || datos)<{ config?: { enabled?: boolean } }>(`/widget/config?projectId=${c.id}`);
-      return [{ clave: `widget-${c.id}`, nombre: 'Botón de la web', campus: c.nombre, activo: !!d?.config?.enabled, enlace: '/captacion/whatsapp' }];
+      return [{ clave: `widget-${c.id}`, nombre: 'Botón de la web', campus: c.nombre, activo: !!d?.config?.enabled, enlace: '/captacion/whatsapp', campusId: c.id }];
     }),
   },
   {
@@ -453,15 +510,16 @@ export const TIPOS: TipoWebhook[] = [
       // «Todos» se recorta aquí, porque un admin recibe también lo de sus campus
       // de pruebas, que el resto de tarjetas no enseña.
       const enTodos = !ctx.ambito.get('projectId') && !ctx.ambito.get('issuerId');
-      return filas.filter((w) => !enTodos || delAmbitoDeArriba(w, ctx.campus)).map((w) => ({
+      const pedir = ctx.pedir || datos;
+      return Promise.all(filas.filter((w) => !enTodos || delAmbitoDeArriba(w, ctx.campus)).map(async (w) => ({
         clave: `saliente-${w.id}`,
         nombre: w.nombre,
         campus: dondeVa(w),
         activo: !!w.activo,
         ultimo: w.ultimo_envio_at,
-        fallo: fallidos(w.fallidos_30_dias),
+        ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}&limit=5`, w.fallidos_30_dias)),
         enlace: '/conexion/webhooks/transferencias',
-      }));
+      })));
     },
   },
   {
@@ -477,16 +535,17 @@ export const TIPOS: TipoWebhook[] = [
     nota: 'De lo que entra se ve la última decisión; los fallos son los avisos al escenario.',
     cargar: async (ctx) => {
       // No acepta ámbito: devuelve todo lo que ve la persona, y se recorta aquí.
-      const filas = await (ctx.pedir || datos)<Array<ConAmbito & { ultima_decision_at: string | null }>>('/asignacion');
-      return filas.filter((d) => delAmbitoDeArriba(d, ctx.campus)).map((d) => ({
+      const pedir = ctx.pedir || datos;
+      const filas = await pedir<Array<ConAmbito & { ultima_decision_at: string | null }>>('/asignacion');
+      return Promise.all(filas.filter((d) => delAmbitoDeArriba(d, ctx.campus)).map(async (d) => ({
         clave: `asignacion-${d.id}`,
         nombre: d.nombre,
         campus: dondeVa(d),
         activo: !!d.activo,
         ultimo: d.ultima_decision_at,
-        fallo: fallidos(d.fallidos_30_dias),
+        ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}&limit=5`, d.fallidos_30_dias)),
         enlace: '/conexion/asignacion-leads',
-      }));
+      })));
     },
   },
   {
@@ -528,6 +587,31 @@ type ConAmbito = {
 
 const dondeVa = (w: ConAmbito) => (w.ambito === 'todas' ? 'Todas las empresas' : (w.proyecto || w.empresa));
 const fallidos = (n: number) => (n > 0 ? `${n} ${n === 1 ? 'envío fallido' : 'envíos fallidos'} en 30 días` : null);
+
+/**
+ * Si falló el ÚLTIMO envío (sin contar las pruebas), y los fallidos de 30 días
+ * aparte. Un webhook que falló hace dos semanas y desde entonces va bien no
+ * está fallando: sus fallidos se dicen como aviso, sin contar en «con fallos».
+ * Si no se puede leer el último, se dice, y los fallidos quedan como aviso.
+ */
+async function comoFueElUltimo(
+  pedir: Pedir,
+  url: string,
+  fallidos30: number,
+): Promise<Pick<FilaWebhook, 'fallo' | 'aviso' | 'sinLeer'>> {
+  const aviso = fallidos(fallidos30) || undefined;
+  try {
+    const envios = await pedir<Array<{ estado: string; prueba?: boolean; error?: string | null; http_status?: number | null }>>(url);
+    const ultimo = envios.find((e) => !e.prueba);
+    if (ultimo?.estado === 'fallido') {
+      const por = ultimo.error || (ultimo.http_status ? `respondió ${ultimo.http_status}` : 'no se pudo entregar');
+      return { fallo: `El último envío falló: ${por}`, aviso };
+    }
+    return { fallo: null, aviso };
+  } catch {
+    return { aviso, sinLeer: 'No se pudo leer su último envío' };
+  }
+}
 
 /**
  * Qué tipos ve alguien: los de su permiso, con el rol que pide su pantalla si

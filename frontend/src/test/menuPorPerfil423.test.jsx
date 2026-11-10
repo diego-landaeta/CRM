@@ -128,6 +128,22 @@ describe('menú por perfil (#423)', () => {
     });
   }
 
+  // Un traslado (`trasladosDeMenu.js`) solo se acepta si NO cambia el acceso con
+  // ninguna combinación de permisos, no solo con estos perfiles: la entrada
+  // nueva pide exactamente los permisos de las viejas, ni uno más ni uno menos.
+  // Aprobarlo sigue siendo de Diego (`aprobadoPor`); esto impide que un
+  // traslado esconda un cambio de acceso mientras tanto.
+  it('cada traslado pide en su entrada nueva los permisos de las viejas, ni uno más', async () => {
+    const { TRASLADOS_DE_MENU } = await import('@/shared/components/layout/trasladosDeMenu');
+    for (const t of TRASLADOS_DE_MENU) {
+      const [seccion, etiqueta] = t.a.split(' › ');
+      const entrada = NAV_SECTIONS.find((s) => s.label === seccion)?.items.find((i) => i.label === etiqueta);
+      expect(entrada, t.a).toBeTruthy();
+      expect(new Set([].concat(entrada.permiso)), t.id).toEqual(new Set(t.de.map((d) => d.permiso)));
+      expect('aprobadoPor' in t, `${t.id}: falta aprobadoPor (null hasta que Diego lo apruebe)`).toBe(true);
+    }
+  });
+
   it('la foto recoge el fallo de «Facturación»: hoy solo la ve el superadmin', () => {
     expect(foto.superadmin).toContain('Finanzas › Facturación');
     expect(foto.admin).not.toContain('Finanzas › Facturación');

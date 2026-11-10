@@ -66,12 +66,17 @@ describe('un solo apartado en el menú', () => {
     }
   });
 
-  it('se ve con el permiso de cualquiera de los que reúne, y son los mismos que lee', () => {
-    // Los que bastan para ver algún tipo; los de `requiere` van además de uno de estos.
-    const deLosTipos = new Set(TIPOS.flatMap((t) => t.permisos));
-    expect(new Set(PERMISOS_WEBHOOKS)).toEqual(deLosTipos);
+  it('la entrada pide los permisos de las tres que sustituye, ni uno más', () => {
+    expect(new Set(PERMISOS_WEBHOOKS)).toEqual(new Set(TRASLADOS_DE_MENU[0].de.map((d) => d.permiso)));
     expect(rutaPermitida('/conexion/webhooks', (p) => p === 'make.view')).toBe(true);
     expect(rutaPermitida('/conexion/webhooks', () => false)).toBe(false);
+    // Con permisos de otras pantallas (Stripe, formularios, el botón…) no se
+    // abre: esas tienen la suya. Una gestora no la abre escribiendo la dirección.
+    const gestora = (p) => ['forms.view', 'widget.view', 'whatsapp.usar', 'integrations.view'].includes(p);
+    expect(rutaPermitida('/conexion/webhooks', gestora)).toBe(false);
+    // Y cada permiso que lee el resumen es de algún tipo.
+    const deLosTipos = new Set(TIPOS.flatMap((t) => t.permisos));
+    for (const p of PERMISOS_WEBHOOKS) expect(deLosTipos.has(p), p).toBe(true);
   });
 
   it('cada pestaña pide el permiso que tenía su entrada', () => {
@@ -83,9 +88,10 @@ describe('un solo apartado en el menú', () => {
   });
 
   it('el resumen se abre con «Todos» y con empresa; las pantallas de un campus, no', () => {
-    expect(pathAllowsAll('/conexion/webhooks')).toBe(true);
-    expect(rutaAceptaSociedad('/conexion/webhooks')).toBe(true);
-    expect(pathAllowsAll('/conexion/webhooks/transferencias')).toBe(true);
+    for (const r of ['/conexion/webhooks', '/conexion/webhooks/', '/conexion/webhooks/transferencias', '/conexion/webhooks/transferencias/']) {
+      expect(pathAllowsAll(r), r).toBe(true);
+      expect(rutaAceptaSociedad(r), r).toBe(true);
+    }
     expect(pathAllowsAll('/conexion/webhooks/prospectos')).toBe(false);
     expect(pathAllowsAll('/conexion/webhooks/make')).toBe(false);
   });
@@ -136,7 +142,7 @@ describe('cada tipo, en su grupo y por su permiso', () => {
     // Cada punto por el que entra un aviso de fuera o sale uno a una URL configurable.
     expect(TIPOS.map((t) => t.id).sort()).toEqual([
       'admision', 'asignacion', 'certifex', 'clave-campus', 'formularios', 'make',
-      'prospectos', 'stripe', 'transferencias', 'whatsapp', 'widget', 'woocommerce',
+      'prospectos', 'stripe', 'tokens', 'transferencias', 'whatsapp', 'widget', 'woocommerce',
     ]);
   });
 
@@ -166,7 +172,7 @@ describe('cada tipo, en su grupo y por su permiso', () => {
   });
 
   it('prospectos pide además leer formularios, que es lo que pide su GET', () => {
-    expect(tiposVisibles((p) => ['webhooks.view', 'forms.view'].includes(p)).map((t) => t.id)).toEqual(['prospectos', 'formularios']);
+    expect(tiposVisibles((p) => ['webhooks.view', 'forms.view'].includes(p)).map((t) => t.id)).toEqual(['prospectos', 'formularios', 'tokens']);
   });
 
   it('cada tarjeta solo a quien puede abrir adonde lleva', () => {
@@ -183,10 +189,12 @@ describe('cada tipo, en su grupo y por su permiso', () => {
     const can = (p) => ['webhooks.view', 'diplomas.view_emisiones', 'matriculas.view'].includes(p);
     const admin = (...r) => r.includes('admin');
     const pm = (...r) => r.includes('project_manager');
-    expect(tiposVisibles(can, undefined, undefined, admin).map((t) => t.id)).toEqual(['admision']);
-    expect(tiposVisibles(can, undefined, undefined, pm).map((t) => t.id)).toEqual([]);
-    expect(tiposVisibles((p) => p === 'webhooks.view', undefined, undefined, admin).map((t) => t.id)).toEqual([]);
-    expect(tiposVisibles((p) => p !== 'matriculas.view' && can(p), undefined, undefined, admin).map((t) => t.id)).toEqual([]);
+    // `tokens` sale con `webhooks.view` a secas: no es de Matrículas.
+    const sinTokens = (ts) => ts.map((t) => t.id).filter((id) => id !== 'tokens');
+    expect(sinTokens(tiposVisibles(can, undefined, undefined, admin))).toEqual(['admision']);
+    expect(sinTokens(tiposVisibles(can, undefined, undefined, pm))).toEqual([]);
+    expect(sinTokens(tiposVisibles((p) => p === 'webhooks.view', undefined, undefined, admin))).toEqual([]);
+    expect(sinTokens(tiposVisibles((p) => p !== 'matriculas.view' && can(p), undefined, undefined, admin))).toEqual([]);
   });
 
   it('un campus con el módulo apagado no se pide para ese tipo', () => {
@@ -329,16 +337,131 @@ describe('el resumen sigue al selector de arriba', () => {
     get.mockImplementation((url) => Promise.resolve({
       data: url === '/integrations/stripe?projectId=1' ? { active: true, config_public: { webhook_secret_preview: 'whsec_…ab12' } }
         : url === '/integrations/stripe?projectId=2' ? { active: false, config_public: {} }
-          : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+          : url === '/integrations/stripe?projectId=5' ? { active: false, config_public: { webhook_secret: 'whsec_en_claro' } }
+            : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
     }));
     abrir();
     const stripe = await screen.findByTestId('tipo-stripe');
-    expect(await within(stripe).findByText('Con la firma del webhook')).toBeTruthy();
-    expect(within(stripe).getByText(/Sin la firma del webhook: los avisos se rechazan/)).toBeTruthy();
-    expect(within(stripe).getByText('Activo')).toBeTruthy();
-    expect(within(stripe).getByText('Apagado')).toBeTruthy();
-    // El campus sin Stripe configurado no sale.
-    expect(within(stripe).queryByText('Otro campus')).toBeNull();
+    // Cifrada (la de ahora) o en claro (la de antes): las dos valen.
+    expect(await within(stripe).findAllByText('Con la firma del webhook')).toHaveLength(2);
+    expect(within(stripe).getByText('Sin la firma del webhook')).toBeTruthy();
+    expect(within(stripe).getAllByText(/Falló: Sin la firma, el CRM rechaza/).length).toBeGreaterThan(0);
+    // El interruptor de la integración no se enseña: el aviso se procesa igual.
+    expect(within(stripe).queryByText('Apagado')).toBeNull();
+  });
+
+  it('Stripe: el campus sin Stripe no sale, y al pulsar uno con «Todos» se elige su campus', async () => {
+    const switchProject = vi.fn();
+    cabecera.value = { ...cabecera.value, switchProject };
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/integrations/stripe?projectId=1' ? { config_public: { webhook_secret_preview: 'x' } }
+        : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+    }));
+    abrir();
+    const stripe = await screen.findByTestId('tipo-stripe');
+    fireEvent.click(await within(stripe).findByText('Con la firma del webhook'));
+    expect(switchProject).toHaveBeenCalledWith(1);
+    expect(within(stripe).queryByText(/Psiko Aprende/)).toBeNull();
+  });
+
+  it('Make: si la última entrega fue bien o de prueba, un error viejo no se enseña', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/make-webhooks?projectId=2')
+        ? [{ id: 21, label: 'Leads Meta', slug: 'mk_1', active: true, mode: 'test', last_received_at: '2026-11-09T09:00:00Z', last_error: 'Error de hace un mes' }]
+        : url === '/make-webhooks/21/deliveries?limit=1' ? [{ result: 'test_only' }]
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    const make = await screen.findByTestId('tipo-make');
+    await within(make).findByText(/Leads Meta/);
+    await waitFor(() => expect(get.mock.calls.some((c) => c[0].includes('/deliveries'))).toBe(true));
+    expect(within(make).queryByText(/Error de hace un mes/)).toBeNull();
+  });
+
+  it('prospectos con destino Matrícula: no dice «sin avisos todavía», que sería falso', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/forms?projectId=1&kind=webhook') ? [{ id: 12, nombre: 'Admisiones web', active: true, destination: 'matricula' }] : RESPUESTAS(url),
+    }));
+    abrir();
+    const prospectos = await screen.findByTestId('tipo-prospectos');
+    expect(await within(prospectos).findByText(/sus avisos no se apuntan aquí/)).toBeTruthy();
+    expect(within(prospectos).queryByText('Sin avisos todavía')).toBeNull();
+    expect(get.mock.calls.some((c) => c[0] === '/forms/12/events?limit=1')).toBe(false);
+  });
+
+  it('transferencias: rojo solo si falló el ÚLTIMO envío; los fallidos de 30 días, como aviso', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/webhooks-salientes?') ? [
+        { id: 50, nombre: 'Va bien ya', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: '2026-11-09T10:00:00Z', fallidos_30_dias: 4 },
+        { id: 51, nombre: 'Falla ahora', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: '2026-11-09T10:00:00Z', fallidos_30_dias: 1 },
+      ] : url.startsWith('/webhooks-salientes/envios?webhookId=50') ? [{ estado: 'fallido', prueba: true }, { estado: 'enviado' }]
+        : url.startsWith('/webhooks-salientes/envios?webhookId=51') ? [{ estado: 'fallido', http_status: 500 }]
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    const salida = await screen.findByTestId('tipo-transferencias');
+    await within(salida).findByText('Va bien ya');
+    await within(salida).findByText(/El último envío falló: respondió 500/);
+    // La de la prueba no cuenta: «Va bien ya» no sale en rojo, pero sí su aviso.
+    expect(within(salida).getAllByText(/Falló:/)).toHaveLength(1);
+    expect(within(salida).getByText(/4 envíos fallidos en 30 días/)).toBeTruthy();
+  });
+
+  it('tokens antiguos: la tarjeta solo sale si hay alguno', async () => {
+    abrir();
+    await screen.findByTestId('tipo-make');
+    await waitFor(() => expect(get.mock.calls.some((c) => c[0].startsWith('/webhook-tokens?projectId=1') && !c[0].includes('kind'))).toBe(true));
+    expect(screen.queryByTestId('tipo-tokens')).toBeNull();
+  });
+
+  it('tokens antiguos: si hay, se enseñan con su tipo y sin enlace de configuración', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/webhook-tokens?projectId=1' ? [
+        { id: 70, kind: 'leads', notas: 'Landing vieja', active: true, last_used_at: null },
+        { id: 71, kind: 'matriculas', notas: 'Admisión', active: true, last_used_at: null },
+      ] : RESPUESTAS(url),
+    }));
+    abrir();
+    const tokens = await screen.findByTestId('tipo-tokens');
+    expect(await within(tokens).findByText('Landing vieja (prospectos)')).toBeTruthy();
+    expect(within(tokens).queryByText(/Admisión/)).toBeNull();
+    expect(within(tokens).queryByRole('link', { name: /Configurar/ })).toBeNull();
+  });
+
+  it('Ctrl + clic en una fila abre otra pestaña y no cambia el selector de esta', async () => {
+    const switchProject = vi.fn();
+    cabecera.value = { ...cabecera.value, switchProject };
+    abrir();
+    const fila = await screen.findByText('Zapier ventas');
+    fireEvent.click(fila, { ctrlKey: true });
+    fireEvent.click(fila, { metaKey: true });
+    expect(switchProject).not.toHaveBeenCalled();
+  });
+
+  it('un 403 de un campus se dice como es, no «el servidor no contestó»', async () => {
+    const filas = await porCampus([{ id: 1, nombre: 'A' }], async () => { throw Object.assign(new Error('x'), { status: 403 }); });
+    expect(filas[0].sinLeer).toBe('No tienes permiso para ver este campus');
+  });
+
+  it('con muchas filas se ven 8 y el resto al pulsar; lo que falla nunca se esconde', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/forms?projectId=1&kind=form')
+        ? Array.from({ length: 12 }, (_, i) => ({ id: 100 + i, nombre: `Form ${String(i).padStart(2, '0')}`, active: true }))
+        : RESPUESTAS(url),
+    }));
+    abrir();
+    const formularios = await screen.findByTestId('tipo-formularios');
+    await within(formularios).findByText('Form 00');
+    expect(within(formularios).queryByText('Form 11')).toBeNull();
+    fireEvent.click(within(formularios).getByRole('button', { name: /Ver los 12/ }));
+    expect(within(formularios).getByText('Form 11')).toBeTruthy();
+  });
+
+  it('sin tipos por los módulos apagados, no se culpa a los permisos', async () => {
+    permisos.value = ['make.view'];
+    cabecera.value = { activeProject: { id: 2, nombre: 'Psiko Aprende', modules: { make: false } }, activeIssuerId: null, projects: PROYECTOS };
+    abrir();
+    expect(await screen.findByText('Sin webhooks en estos campus')).toBeTruthy();
   });
 
   it('Make: un escenario cuya última entrega se rechazó (sin mapeo, #627) sale como fallo', async () => {
@@ -454,8 +577,9 @@ describe('el resumen sigue al selector de arriba', () => {
     abrir();
     await screen.findByText('Zapier ventas');
     expect(await screen.findByText('1 sin poder leer.')).toBeTruthy();
-    // Los fallos de verdad: Zapier (último aviso con error) y transferencias.
-    expect(screen.getByText('2 con fallos.')).toBeTruthy();
+    // Fallos de verdad: solo Zapier (su último aviso dio error). Los 2 envíos
+    // fallidos de transferencias son un aviso: su último envío no consta fallido.
+    expect(screen.getByText('1 con fallos.')).toBeTruthy();
   });
 
   it('un campus con Make apagado no se pide', async () => {
