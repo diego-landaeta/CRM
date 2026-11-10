@@ -393,6 +393,24 @@ describe('#679 · revisión: grupos del curso sin fugas ni mezclas', () => {
     expect(ficha.participantes.find((x) => x.id === alumno + 1)).toMatchObject({ alumno: true, tutora: false });
   });
 
+  it('en el chat de grupo del PLUGIN, la consulta va a una tutora que está dentro, no a otra del campus que no lo está', async () => {
+    if (!hayBase) return;
+    // Lo que pasó en un Moodle 5.2 de verdad (10/11): Sofía, tutora del campus pero de otro
+    // curso y sin consultas, se llevaba la consulta del chat de grupo de Laura y Carmen; su
+    // respuesta la rechazaba el plugin («solo responde una profesora de ese curso»).
+    const { campus, laura, carmen, alumno, conversacion } = await escenario('PluginDentro');
+    const sofia = await tutora(campus.id, 799);
+    // Laura y Carmen llevan ya consultas abiertas: sin el filtro, la menos cargada es Sofía.
+    for (const t of [laura, carmen]) {
+      await query(`INSERT INTO consultas (project_id, tutor_id, alumno_moodle_id, estado) VALUES ($1, $2, $3, 'abierta')`,
+        [campus.id, t, 900000 + t]);
+    }
+    const r = await procesarAviso(campus.id, avisoGrupo({ conversacion: conversacion + 740000, alumno, de: { id: alumno } }));
+    const t = Number((await estado(r.consultaId)).tutor_id);
+    expect(t).not.toBe(sofia);
+    expect([laura, carmen]).toContain(t);
+  });
+
   it('en un grupo del curso, la consulta va a una tutora que está DENTRO (aunque otra del curso esté más libre)', async () => {
     if (!hayBase) return;
     const { campus, carmen, alumno, conversacion } = await escenario('Dentro');

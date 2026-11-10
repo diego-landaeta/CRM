@@ -46,6 +46,10 @@ export async function crearClave(projectId, userId = null) {
      ON CONFLICT (project_id) DO UPDATE
        SET secreto_cifrado = EXCLUDED.secreto_cifrado, secreto_iv = EXCLUDED.secreto_iv,
            secreto_tag = EXCLUDED.secreto_tag, activo = TRUE, creado_por = EXCLUDED.creado_por,
+           -- Conectar (otra vez) es empezar el repaso de cero: el cursor era de los ids del
+           -- Moodle de antes, y si ahora es otro (otra base) se saltaba sus primeros mensajes.
+           -- Sin cursor, el repaso va por fecha y lo repetido lo descarta el índice único.
+           sincronizado_hasta_id = NULL, sincronizacion_error = NULL,
            updated_at = NOW()`,
     [projectId, enc.encrypted, enc.iv, enc.authTag, userId]);
   return secreto;

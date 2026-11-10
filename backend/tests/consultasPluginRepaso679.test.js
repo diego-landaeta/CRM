@@ -4,7 +4,7 @@ import {
 import { query } from '../src/shared/config/db.js';
 import { encrypt } from '../src/shared/utils/crypto.js';
 import * as servicio from '../src/modules/consultas/consultas.service.js';
-import { sincronizarCampus } from '../src/modules/consultas/consultas.plugin.js';
+import { sincronizarCampus, crearClave } from '../src/modules/consultas/consultas.plugin.js';
 import { procesarAviso } from '../src/modules/consultas/consultas.avisos.js';
 import { repasarTodos } from '../src/jobs/moodleSincronizacionScheduler.js';
 
@@ -277,5 +277,18 @@ describe('#679 · el repaso recupera lo que no llegó, sin duplicar', () => {
     const todos = await repasarTodos();
     expect(todos.some((x) => x.projectId === apagado.id)).toBe(false);
     expect(apagado.moodle.pedidosDesde).toHaveLength(0);
+  });
+});
+
+describe('#679 · volver a conectar un campus', () => {
+  it('empieza el repaso de cero: el cursor del Moodle de antes no vale para el nuevo', async () => {
+    if (!hayBase) return;
+    // Prueba en Moodle 5.2 (10/11): al conectar el proyecto a otro Moodle, el cursor seguía en
+    // el id del anterior y el repaso se saltaba los primeros mensajes del nuevo.
+    const campus = await crearCampus('Reconectar', { plugin: true });
+    await query(`UPDATE moodle_plugin_campus SET sincronizado_hasta_id = 16, sincronizacion_error = 'viejo' WHERE project_id = $1`, [campus.id]);
+    await crearClave(campus.id);
+    const { rows: [c] } = await query('SELECT sincronizado_hasta_id, sincronizacion_error, activo FROM moodle_plugin_campus WHERE project_id = $1', [campus.id]);
+    expect(c).toMatchObject({ sincronizado_hasta_id: null, sincronizacion_error: null, activo: true });
   });
 });

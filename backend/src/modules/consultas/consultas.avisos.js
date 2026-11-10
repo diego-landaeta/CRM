@@ -165,10 +165,13 @@ async function mensajeDelChatDeGrupo(projectId, {
     : (Number(de.id) === Number(grupo.alumno.id) ? grupo.alumno : null);
 
   if (alumno) {
-    // Grupo del curso: solo puede llevarla una tutora (con ficha) que esté dentro.
-    const dentro = delCurso
-      ? new Set((participantes || []).filter((x) => x.tutora).map((x) => tutores.get(x.id)).filter(Boolean))
-      : null;
+    // Solo puede llevarla una tutora (con ficha en el CRM) que esté dentro del grupo. En un
+    // grupo del curso, siempre. En el chat del plugin, también: si se elegía entre todas las
+    // tutoras del campus, podía tocarle una de otro curso, que no está en el chat, y el plugin
+    // le rechaza la respuesta (prueba en Moodle 5.2, 10/11). Si ninguna de las de dentro tiene
+    // ficha, el chat del plugin sigue como antes: cualquiera del campus.
+    const conFicha = new Set((participantes || []).filter((x) => x.tutora).map((x) => tutores.get(x.id)).filter(Boolean));
+    const dentro = delCurso ? conFicha : (conFicha.size ? conFicha : null);
     const r = await siYaEstaRepetido(() => entraMensajeDelAlumno({
       projectId, conversacionId,
       alumno: { moodleId: Number(alumno.id), nombre: alumno.nombre || de.nombre || null, email: alumno.email || de.email || null },
