@@ -494,10 +494,16 @@ export async function detalle(id) {
     if (!porMensaje.has(a.mensaje_id)) porMensaje.set(a.mensaje_id, []);
     porMensaje.get(a.mensaje_id).push(a);
   }
+  const { rows: notas } = await query(
+    `SELECT n.id, n.texto, n.created_at AS at, n.autor_user_id, u.nombre AS autor_nombre
+       FROM consulta_notas n LEFT JOIN users u ON u.id = n.autor_user_id
+      WHERE n.consulta_id = $1 ORDER BY n.created_at, n.id`, [id]);
   return {
     ...c,
     mensajes: mensajes.rows.map((m) => ({ ...m, adjuntos: porMensaje.get(m.id) || [] })),
     eventos: eventos.rows,
+    // Notas internas (#679): solo del personal, nunca salen al campus.
+    notas,
   };
 }
 

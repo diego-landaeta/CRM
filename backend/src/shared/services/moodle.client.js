@@ -282,7 +282,11 @@ export const FUNCIONES_ALUMNOS = ['core_enrol_get_users_courses', 'core_enrol_ge
 /** Los cursos en los que está matriculado un usuario (para el tutor: los que imparte). */
 export async function cursosDe(conexion, moodleUserId, opciones) {
   const r = await llamar(conexion, 'core_enrol_get_users_courses', { userid: moodleUserId }, opciones);
-  return (Array.isArray(r) ? r : []).map((c) => ({ id: Number(c.id), nombre: c.fullname || c.shortname || null }));
+  return (Array.isArray(r) ? r : []).map((c) => ({
+    id: Number(c.id), nombre: c.fullname || c.shortname || null,
+    // La última vez que ESE usuario entró al curso (0 = nunca).
+    ultimoAcceso: Number(c.lastaccess) > 0 ? new Date(Number(c.lastaccess) * 1000) : null,
+  }));
 }
 
 /**
@@ -303,4 +307,100 @@ export async function matriculadosDe(conexion, cursoId, opciones) {
     // 0 = nunca ha entrado.
     ultimoAcceso: Number(u.lastcourseaccess || u.lastaccess) > 0 ? new Date(Number(u.lastcourseaccess || u.lastaccess) * 1000) : null,
   }));
+}
+
+// ─── La ficha del alumno en Consultas (#679): sus tareas sin corregir ───────
+//
+// Solo LEEN. Calificar desde el CRM va aparte.
+
+/** Las tareas (mod_assign) de esos cursos, en UNA llamada: { cursoId: [{ id, cmid, nombre, entrega }] }. */
+export async function tareasDeCursos(conexion, cursoIds, opciones) {
+  if (!cursoIds.length) return new Map();
+  // Sin `includenotenrolledcourses`, Moodle solo devuelve los cursos en los que
+  // está MATRICULADO el usuario del token. El del campus es un administrador que
+  // no lo está en ninguno: salía todo vacío («User is not enrolled»).
+  const params = { includenotenrolledcourses: 1 };
+  cursoIds.forEach((id, i) => { params[`courseids[${i}]`] = id; });
+  const r = await llamar(conexion, 'mod_assign_get_assignments', params, opciones);
+  const porCurso = new Map();
+  for (const c of r?.courses || []) {
+    porCurso.set(Number(c.id), (c.assignments || []).map((a) => ({
+      id: Number(a.id), cmid: Number(a.cmid), nombre: a.name || null,
+      entrega: Number(a.duedate) > 0 ? new Date(Number(a.duedate) * 1000) : null,
+      // La nota máxima (0 = sin nota numérica: escala o sin calificar).
+      notaMax: Number(a.grade) > 0 ? Number(a.grade) : 0,
+      // Con escala (grade < 0) o sin nota (0) una cifra no vale: se corrige en Moodle.
+      calificable: Number(a.grade) > 0,
+      // Entrega en grupo: Moodle la guarda a nombre del grupo (userid 0), no de cada alumno.
+      enGrupo: Number(a.teamsubmission) === 1,
+      // Flujo de calificación: los estados son otros («released», «inmarking»…).
+      flujo: Number(a.markingworkflow) === 1,
+      // ¿Admite comentario de retroalimentación? Si está apagado, Moodle tira el comentario sin avisar.
+      comentarios: (a.configs || []).some((c) => c.plugin === 'comments' && c.subtype === 'assignfeedback' && c.name === 'enabled' && String(c.value) === '1'),
+      enunciado: a.intro || null,
+    })));
+  }
+  // Los cursos que Moodle no ha dejado leer (vienen como aviso, no como error):
+  // quien llama tiene que decirlo, no enseñar un «0 por corregir» que miente.
+  porCurso.sinPermiso = new Set((r?.warnings || [])
+    .filter((w) => w.item === 'course' && w.itemid).map((w) => Number(w.itemid)));
+  return porCurso;
+}
+
+/** Estados de `gradingstatus` que son «ya corregida» (sin flujo: graded; con flujo: los de después de calificar). */
+export const YA_CORREGIDA = new Set(['graded', 'released', 'readyforrelease']);
+
+/** Las notas de varias tareas, en una llamada: { tareaId: { alumnoId: { nota, at } } }. */
+async function notasDeTareas(conexion, tareaIds, opciones) {
+  const params = {};
+  tareaIds.forEach((id, i) => { params[`assignmentids[${i}]`] = id; });
+  const r = await llamar(conexion, 'mod_assign_get_grades', params, opciones);
+  const porTarea = new Map();
+  for (const a of r?.assignments || []) {
+    porTarea.set(Number(a.assignmentid), new Map((a.grades || [])
+      .filter((g) => g.grade !== null && g.grade !== '' && Number(g.grade) >= 0)
+      .map((g) => [Number(g.userid), { nota: Number(g.grade), at: Number(g.timemodified) > 0 ? new Date(Number(g.timemodified) * 1000) : null }])));
+  }
+  return porTarea;
+}
+
+/**
+ * ¿Está por corregir? Entregada y, o sin corregir, o vuelta a entregar después de la
+ * nota (Moodle la sigue llamando «graded» aunque la entrega sea posterior).
+ */
+export function porCorregir(entrega, nota) {
+  if (entrega?.estado !== 'submitted') return false;
+  if (!YA_CORREGIDA.has(entrega.gradingstatus) && !nota) return true;
+  return Boolean(nota?.at && entrega.entregadaAt && entrega.entregadaAt > nota.at);
+}
+
+/** Tareas por llamada a Moodle: con muchas a la vez, una sola llamada pasa del tiempo de espera. */
+const TAREAS_POR_LLAMADA = 20;
+
+/**
+ * Las entregas POR CORREGIR de esas tareas: { tareaId: [{ alumnoId, entregadaAt }] }.
+ * Por tandas de `TAREAS_POR_LLAMADA` (entregas y notas de cada tanda a la vez).
+ */
+export async function entregasSinCorregir(conexion, tareaIds, opciones) {
+  const porTarea = new Map();
+  for (let i = 0; i < tareaIds.length; i += TAREAS_POR_LLAMADA) {
+    const tanda = tareaIds.slice(i, i + TAREAS_POR_LLAMADA);
+    const params = { status: 'submitted' };
+    tanda.forEach((id, j) => { params[`assignmentids[${j}]`] = id; });
+    const [r, notas] = await Promise.all([
+      llamar(conexion, 'mod_assign_get_submissions', params, opciones),
+      notasDeTareas(conexion, tanda, opciones),
+    ]);
+    for (const a of r?.assignments || []) {
+      const notasDeEsta = notas.get(Number(a.assignmentid)) || new Map();
+      porTarea.set(Number(a.assignmentid), (a.submissions || [])
+        .map((s) => ({
+          alumnoId: Number(s.userid), estado: s.status, gradingstatus: s.gradingstatus || null,
+          entregadaAt: Number(s.timemodified) > 0 ? new Date(Number(s.timemodified) * 1000) : null,
+        }))
+        .filter((e) => e.alumnoId > 0 && porCorregir(e, notasDeEsta.get(e.alumnoId)))
+        .map((e) => ({ alumnoId: e.alumnoId, entregadaAt: e.entregadaAt })));
+    }
+  }
+  return porTarea;
 }

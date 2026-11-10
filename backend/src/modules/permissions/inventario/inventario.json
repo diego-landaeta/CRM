@@ -2483,6 +2483,86 @@
   "puertas": []
  },
  {
+  "id": "GET /api/consultas/respuestas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/respuestas",
+  "relativa": "GET /respuestas",
+  "controlador": "respuestas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/respuestas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/respuestas",
+  "relativa": "POST /respuestas",
+  "controlador": "crearRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/respuestas/importar",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/respuestas/importar",
+  "relativa": "POST /respuestas/importar",
+  "controlador": "importarRespuestas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/consultas/respuestas/:rid",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "PUT",
+  "ruta": "/api/consultas/respuestas/:rid",
+  "relativa": "PUT /respuestas/:rid",
+  "controlador": "cambiarRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/consultas/respuestas/:rid",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "DELETE",
+  "ruta": "/api/consultas/respuestas/:rid",
+  "relativa": "DELETE /respuestas/:rid",
+  "controlador": "borrarRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/consultas/",
   "tipo": "ruta",
   "modulo": "consultas",
@@ -2523,6 +2603,22 @@
   "puertas": []
  },
  {
+  "id": "GET /api/consultas/:id/contexto",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/:id/contexto",
+  "relativa": "GET /:id/contexto",
+  "controlador": "contexto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/consultas/:id/responder",
   "tipo": "ruta",
   "modulo": "consultas",
@@ -2546,6 +2642,22 @@
   "ruta": "/api/consultas/:id/cerrar",
   "relativa": "POST /:id/cerrar",
   "controlador": "cerrar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/:id/notas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/:id/notas",
+  "relativa": "POST /:id/notas",
+  "controlador": "anotar",
   "publica": false,
   "guardias": [
    {
