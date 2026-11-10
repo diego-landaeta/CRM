@@ -105,7 +105,15 @@ export function AuthProvider({ children }) {
             // correo, tiene que abrirse el proyecto de ese enlace (#132).
             const deLaUrl = proyectoDeLaUrl(meRes.data.projects);
             setActiveProjectId(deLaUrl || validProjectId || meRes.data.projects?.[0]?.id || null);
-            if (deLaUrl) localStorage.setItem('crm_active_project_id', String(deLaUrl));
+            if (deLaUrl) {
+              localStorage.setItem('crm_active_project_id', String(deLaUrl));
+              // Un campus en la dirección manda también sobre la EMPRESA
+              // guardada: si no, seguía mandando la empresa y la pantalla de un
+              // campus se quedaba en el muro (#690: abrir un webhook en otra
+              // pestaña desde el resumen con una empresa elegida).
+              localStorage.removeItem(CLAVE_SOCIEDAD);
+              setActiveIssuerId(null);
+            }
           }
         }
       } catch {
@@ -146,7 +154,10 @@ export function AuthProvider({ children }) {
 
     // Usar proyecto activo del login o el primero disponible
     const savedProjectId = localStorage.getItem('crm_active_project_id');
-    const projectId = proyectoDeLaUrl(userProjects)
+    const deLaUrl = proyectoDeLaUrl(userProjects);
+    // Igual que al restaurar la sesión: el campus de la dirección quita la empresa.
+    if (deLaUrl) { localStorage.removeItem(CLAVE_SOCIEDAD); setActiveIssuerId(null); }
+    const projectId = deLaUrl
       || userProjects?.find((p) => p.id === Number(savedProjectId))?.id
       || apiProjectId
       || userProjects?.[0]?.id

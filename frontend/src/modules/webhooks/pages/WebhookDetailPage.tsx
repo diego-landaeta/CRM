@@ -179,9 +179,10 @@ export default function WebhookDetailPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title={webhook.nombre}
-        // `submissions_count` solo sube cuando el aviso crea algo (prospecto,
-        // matrícula o reenvío): los rechazados no cuentan. «Recibidos» hacía
-        // creer que no había llegado nada aunque el historial tuviera avisos.
+        // `submissions_count` solo sube cuando el aviso se procesa bien (crea el
+        // prospecto o la matrícula, se apunta como reenvío o se salta por
+        // duplicado): los que fallan no cuentan. «Recibidos» hacía creer que no
+        // había llegado nada aunque el historial tuviera avisos.
         subtitle={`${webhook.submissions_count || 0} procesados con éxito · ${webhook.embed_id}`}
         actions={
           <div className="flex items-center gap-2">

@@ -86,7 +86,17 @@ export default function WebhooksResumenPage() {
   };
 
   if (!tipos.length) {
-    // Por qué no hay nada: los permisos, o que en estos campus están apagados.
+    // Por qué no hay nada: los permisos; que el ámbito no tiene campus (o aún
+    // no han llegado); o que en estos campus su módulo está apagado.
+    if (porPermiso.length && !campus.length) {
+      return (
+        <EmptyState
+          icon={WebhooksLogo}
+          title="Sin campus que mirar"
+          description="El ámbito elegido arriba no tiene campus (o todavía se están cargando). Prueba con otro campus o empresa."
+        />
+      );
+    }
     return porPermiso.length ? (
       <EmptyState
         icon={WebhooksLogo}
@@ -141,7 +151,17 @@ export default function WebhooksResumenPage() {
               <p className="text-xs text-muted-foreground">{g.detalle}</p>
             </div>
             <div className="grid gap-3 lg:grid-cols-2">
-              {suyos.map((t) => <TarjetaTipo key={t.id} tipo={t} estado={estados[t.id]} alAbrir={alAbrir} conCampus={!!campusFijo} />)}
+              {/* La `key` lleva el ámbito: al cambiarlo, cada tarjeta empieza de
+                  cero (plegada), no con el «Ver los N» del ámbito anterior. */}
+              {suyos.map((t) => (
+                <TarjetaTipo
+                  key={`${t.id}|${activeIssuerId ?? ''}|${activeProject?.id ?? ''}`}
+                  tipo={t}
+                  estado={estados[t.id]}
+                  alAbrir={alAbrir}
+                  conCampus={!!campusFijo}
+                />
+              ))}
             </div>
           </section>
         );
@@ -182,7 +202,15 @@ function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
         </span>
       </div>
 
-      <div role="status" aria-live="polite">
+      {/* Para el lector de pantalla, solo el estado de la tarjeta, en una frase:
+          con la lista entera dentro, al cargar se leían todas las filas de todas
+          las tarjetas. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {`${tipo.titulo}: ${!estado || estado.cargando ? 'cargando'
+          : estado.error ? 'no se pudo leer'
+            : `${filas.length} ${filas.length === 1 ? 'webhook' : 'webhooks'}${filas.some((f) => f.fallo) ? `, ${filas.filter((f) => f.fallo).length} con fallos` : ''}`}`}
+      </p>
+      <div>
         {!estado || estado.cargando ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : estado.error ? (
@@ -192,7 +220,7 @@ function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
         ) : (
           <>
             <ul className="divide-y divide-border text-sm">
-              {aLaVista.map((f) => <FilaDeWebhook key={f.clave} fila={f} alAbrir={alAbrir} />)}
+              {aLaVista.map((f) => <FilaDeWebhook key={f.clave} fila={f} alAbrir={alAbrir} conCampus={conCampus} />)}
             </ul>
             {filas.length > aLaVista.length && (
               <button type="button" onClick={() => setTodas(true)} className="mt-1 text-xs font-semibold text-primary hover:underline">
@@ -222,7 +250,18 @@ function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
   );
 }
 
-function FilaDeWebhook({ fila, alAbrir }: { fila: FilaWebhook; alAbrir: (f: FilaWebhook) => void }) {
+/**
+ * El enlace de una fila. Con «Todos» o una empresa arriba, lleva el campus en la
+ * dirección (`?projectId=`): así, abierto en otra pestaña (Ctrl/Cmd + clic o el
+ * botón central), esa pestaña arranca con el campus y no se queda en el muro.
+ * El CRM lo lee al cargar (AuthContext, `proyectoDeLaUrl`).
+ */
+export function enlaceDeFila(fila: FilaWebhook, conCampus: boolean): string {
+  if (conCampus || !fila.campusId || !fila.enlace) return fila.enlace;
+  return `${fila.enlace}${fila.enlace.includes('?') ? '&' : '?'}projectId=${fila.campusId}`;
+}
+
+function FilaDeWebhook({ fila, alAbrir, conCampus }: { fila: FilaWebhook; alAbrir: (f: FilaWebhook) => void; conCampus: boolean }) {
   const estado = fila.activo === null ? null
     : <StatusDot tono={fila.activo ? 'success' : 'neutral'}>{fila.activo ? 'Activo' : 'Apagado'}</StatusDot>;
   const ultimo = fila.ultimo === undefined ? null
@@ -232,7 +271,7 @@ function FilaDeWebhook({ fila, alAbrir }: { fila: FilaWebhook; alAbrir: (f: Fila
   const nombre = fila.enlace
     ? (
       <Link
-        to={fila.enlace}
+        to={enlaceDeFila(fila, conCampus)}
         onClick={(e) => { if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) alAbrir(fila); }}
         className="font-semibold hover:underline"
       >

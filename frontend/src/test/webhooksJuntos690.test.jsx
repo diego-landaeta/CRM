@@ -33,7 +33,7 @@ import { pestanasDe } from '@/modules/webhooks/pages/WebhooksLayout';
 import { TRASLADOS_DE_MENU, aplicarTraslados } from '@/shared/components/layout/trasladosDeMenu';
 import { NAV_SECTIONS, PERMISOS_WEBHOOKS, rutaPermitida } from '@/shared/components/layout/Sidebar';
 import { pathAllowsAll, rutaAceptaSociedad } from '@/shared/components/layout/AppLayout';
-import WebhooksResumenPage from '@/modules/webhooks/pages/WebhooksResumenPage';
+import WebhooksResumenPage, { enlaceDeFila } from '@/modules/webhooks/pages/WebhooksResumenPage';
 import RedirigirAWebhooks from '@/modules/webhooks/components/RedirigirAWebhooks';
 
 const RESPUESTAS = (url) => {
@@ -345,7 +345,9 @@ describe('el resumen sigue al selector de arriba', () => {
     // Cifrada (la de ahora) o en claro (la de antes): las dos valen.
     expect(await within(stripe).findAllByText('Con la firma del webhook')).toHaveLength(2);
     expect(within(stripe).getByText('Sin la firma del webhook')).toBeTruthy();
-    expect(within(stripe).getAllByText(/Falló: Sin la firma, el CRM rechaza/).length).toBeGreaterThan(0);
+    // Aviso, no fallo: los cobros llegan igual por la consulta cada 5 minutos.
+    expect(within(stripe).getByText(/el aviso inmediato se rechaza; los cobros llegan por la consulta/)).toBeTruthy();
+    expect(within(stripe).queryByText(/Falló:/)).toBeNull();
     // El interruptor de la integración no se enseña: el aviso se procesa igual.
     expect(within(stripe).queryByText('Apagado')).toBeNull();
   });
@@ -384,9 +386,21 @@ describe('el resumen sigue al selector de arriba', () => {
     }));
     abrir();
     const prospectos = await screen.findByTestId('tipo-prospectos');
-    expect(await within(prospectos).findByText(/sus avisos no se apuntan aquí/)).toBeTruthy();
+    expect(await within(prospectos).findByText(/los avisos que salen bien no se apuntan aquí/)).toBeTruthy();
     expect(within(prospectos).queryByText('Sin avisos todavía')).toBeNull();
-    expect(get.mock.calls.some((c) => c[0] === '/forms/12/events?limit=1')).toBe(false);
+  });
+
+  it('prospectos con destino Matrícula: su último error SÍ se enseña, como aviso con su fecha', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/forms?projectId=1&kind=webhook') ? [{ id: 12, nombre: 'Admisiones web', active: true, destination: 'matricula' }]
+        : url === '/forms/12/events?limit=1' ? [{ status: 'error', error_message: 'Falta el DNI', created_at: '2026-11-08T10:00:00Z' }]
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    const prospectos = await screen.findByTestId('tipo-prospectos');
+    expect(await within(prospectos).findByText(/Último error registrado el .*: Falta el DNI/)).toBeTruthy();
+    // Aviso, no fallo: puede haber otros posteriores que fueron bien y no se apuntan.
+    expect(within(prospectos).queryByText(/Falló: Falta el DNI/)).toBeNull();
   });
 
   it('transferencias: rojo solo si falló el ÚLTIMO envío; los fallidos de 30 días, como aviso', async () => {
@@ -426,6 +440,52 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(await within(tokens).findByText('Landing vieja (prospectos)')).toBeTruthy();
     expect(within(tokens).queryByText(/Admisión/)).toBeNull();
     expect(within(tokens).queryByRole('link', { name: /Configurar/ })).toBeNull();
+  });
+
+  it('con «Todos», el enlace de una fila lleva su campus: abierto en otra pestaña, no se queda en el muro', async () => {
+    abrir();
+    const fila = await screen.findByText('Zapier ventas');
+    expect(fila.closest('a').getAttribute('href')).toBe('/conexion/webhooks/prospectos/11?projectId=1');
+    expect(enlaceDeFila({ enlace: '/clientes/matriculas?pestana=webhooks', campusId: 2 }, false)).toBe('/clientes/matriculas?pestana=webhooks&projectId=2');
+    // Con un campus ya elegido, la dirección de siempre.
+    expect(enlaceDeFila({ enlace: '/conexion/webhooks/make/3', campusId: 2 }, true)).toBe('/conexion/webhooks/make/3');
+  });
+
+  it('admisión y los tokens antiguos comparten una sola petición por campus', async () => {
+    abrir();
+    await screen.findByTestId('tipo-admision');
+    await waitFor(() => expect(get.mock.calls.some((c) => c[0] === '/webhook-tokens?projectId=1')).toBe(true));
+    expect(get.mock.calls.filter((c) => c[0] === '/webhook-tokens?projectId=1')).toHaveLength(1);
+  });
+
+  it('el último envío de transferencias y asignación se pide con el ámbito de arriba', async () => {
+    cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 7, activeIssuer: { nombre: 'CEDIA' }, projects: PROYECTOS };
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/webhooks-salientes?') ? [{ id: 60, nombre: 'De todas', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: null, fallidos_30_dias: 0 }]
+        : url === '/asignacion' ? [{ id: 9, nombre: 'Reparto', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultima_decision_at: null, fallidos_30_dias: 0 }]
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    await screen.findByText('De todas');
+    await waitFor(() => expect(get.mock.calls.map((c) => c[0])).toContain('/webhooks-salientes/envios?webhookId=60&limit=5&issuerId=7'));
+    await waitFor(() => expect(get.mock.calls.map((c) => c[0])).toContain('/asignacion/decisiones?destino_id=9&limit=5&issuer_id=7'));
+  });
+
+  it('el lector de pantalla oye el estado de cada tarjeta en una frase, no todas sus filas', async () => {
+    abrir();
+    const make = await screen.findByTestId('tipo-make');
+    await within(make).findByText(/Leads Meta/);
+    const vivos = make.querySelectorAll('[aria-live]');
+    expect(vivos).toHaveLength(1);
+    await waitFor(() => expect(vivos[0].textContent).toBe('Escenarios de Make: 1 webhook'));
+    expect(vivos[0].querySelector('li')).toBeNull();
+  });
+
+  it('sin campus en el ámbito, no se culpa a los módulos', async () => {
+    permisos.value = ['make.view'];
+    cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 99, activeIssuer: { nombre: 'Vacía' }, projects: PROYECTOS };
+    abrir();
+    expect(await screen.findByText('Sin campus que mirar')).toBeTruthy();
   });
 
   it('Ctrl + clic en una fila abre otra pestaña y no cambia el selector de esta', async () => {
@@ -587,10 +647,10 @@ describe('el resumen sigue al selector de arriba', () => {
 
   it('webhooks de admisión sin nota: cada uno con su número y su fecha, no cinco filas iguales', async () => {
     get.mockImplementation((url) => Promise.resolve({
-      data: url === '/webhook-tokens?projectId=1&kind=matriculas' ? [
-        { id: 3, notas: null, active: true, last_used_at: null, created_at: '2026-10-22T10:00:00Z' },
-        { id: 4, notas: null, active: true, last_used_at: null, created_at: '2026-10-23T10:00:00Z' },
-        { id: 5, notas: 'Formulario web', active: true, last_used_at: null },
+      data: url === '/webhook-tokens?projectId=1' ? [
+        { id: 3, kind: 'matriculas', notas: null, active: true, last_used_at: null, created_at: '2026-10-22T10:00:00Z' },
+        { id: 4, kind: 'matriculas', notas: null, active: true, last_used_at: null, created_at: '2026-10-23T10:00:00Z' },
+        { id: 5, kind: 'matriculas', notas: 'Formulario web', active: true, last_used_at: null },
       ] : RESPUESTAS(url),
     }));
     abrir();

@@ -23,7 +23,7 @@
 */
 import client from '@/shared/api/client';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
-import { formatDateNumeric } from '@/shared/lib/format';
+import { formatDateNumeric, formatDateTime } from '@/shared/lib/format';
 
 /** `ambos`: recibe un aviso y avisa a otro (la asignación de leads). */
 export type Direccion = 'entra' | 'sale' | 'ambos';
@@ -155,7 +155,7 @@ export function crearPedidor(limite = 6, signal?: AbortSignal): Pedir {
   let enCurso = 0;
   const cola: Array<() => void> = [];
   const soltar = () => { enCurso -= 1; cola.shift()?.(); };
-  return async <T>(url: string): Promise<T> => {
+  const pedir = async <T>(url: string): Promise<T> => {
     if (enCurso >= limite) await new Promise<void>((r) => cola.push(r));
     enCurso += 1;
     try {
@@ -165,6 +165,14 @@ export function crearPedidor(limite = 6, signal?: AbortSignal): Pedir {
     } finally {
       soltar();
     }
+  };
+  // La misma dirección, una sola vez por carga: dos tarjetas que leen lo mismo
+  // (admisión y los tokens antiguos: `/webhook-tokens?projectId=N`) comparten
+  // la petición. Se olvida al cancelar o al cambiar de ámbito (pedidor nuevo).
+  const yaPedidas = new Map<string, Promise<unknown>>();
+  return <T>(url: string): Promise<T> => {
+    if (!yaPedidas.has(url)) yaPedidas.set(url, pedir<T>(url));
+    return yaPedidas.get(url) as Promise<T>;
   };
 }
 
@@ -218,6 +226,27 @@ async function ultimoEvento(pedir: Pedir, formId: number): Promise<Pick<FilaWebh
   }
 }
 
+/**
+ * Un webhook con destino Matrícula: el servidor apunta en su historial los
+ * ERRORES (y la muestra del modo escucha), pero no los que salen bien
+ * (`form.controller`, `processInboundPayload`). Así que su último evento no es
+ * su último aviso: «sin avisos todavía» sería falso, y un error del historial
+ * puede ser anterior a otros que fueron bien. Ese error se enseña como aviso,
+ * con su fecha, sin contar en «con fallos».
+ */
+async function ultimoDeMatricula(pedir: Pedir, formId: number): Promise<Pick<FilaWebhook, 'detalle' | 'aviso' | 'sinLeer'>> {
+  const detalle = 'Va a Matrículas: los avisos que salen bien no se apuntan aquí, se ven en Matrículas';
+  try {
+    const [e] = await pedir<Array<{ status: string; error_message?: string | null; created_at: string }>>(`/forms/${formId}/events?limit=1`);
+    if (e?.status === 'error') {
+      return { detalle, aviso: `Último error registrado el ${formatDateTime(e.created_at)}: ${e.error_message || 'sin detalle'}` };
+    }
+    return { detalle };
+  } catch {
+    return { detalle, sinLeer: 'No se pudo leer su historial de errores' };
+  }
+}
+
 type FormFila = { id: number; nombre: string; active: boolean; submissions_count?: number; destination?: string | null };
 
 /**
@@ -235,11 +264,8 @@ const formulariosDe = (kind: 'webhook' | 'form', enlace: (f: FormFila) => string
       nombre: f.nombre,
       campus: c.nombre,
       activo: !!f.active,
-      // Con destino Matrícula el servidor no apunta cada aviso en el historial
-      // (`form.controller`, sin `logEvent`): decir «sin avisos todavía» sería
-      // falso. No se pide y se explica.
       ...(conAvisos && f.destination === 'matricula'
-        ? { detalle: 'Va a Matrículas: sus avisos no se apuntan aquí, se ven en Matrículas' }
+        ? await ultimoDeMatricula(pedir, f.id)
         : conAvisos ? await ultimoEvento(pedir, f.id) : {}),
       enlace: enlace(f),
       campusId: c.id,
@@ -396,8 +422,10 @@ export const TIPOS: TipoWebhook[] = [
     deUnCampus: true,
     nota: 'Guarda cuándo se usó por última vez, pero no si falló.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      const filas = await (ctx.pedir || datos)<Array<{ id: number; notas?: string | null; active: boolean; last_used_at: string | null; created_at?: string | null }>>(`/webhook-tokens?projectId=${c.id}&kind=matriculas`);
-      return filas.map((t) => ({
+      // Sin `kind`: la misma petición que la de los tokens antiguos, que el
+      // pedidor hace una sola vez por campus. Aquí, solo los de admisión.
+      const filas = await (ctx.pedir || datos)<Array<{ id: number; kind?: string; notas?: string | null; active: boolean; last_used_at: string | null; created_at?: string | null }>>(`/webhook-tokens?projectId=${c.id}`);
+      return filas.filter((t) => t.kind === 'matriculas').map((t) => ({
         clave: `admision-${t.id}`,
         // Sin nota, cinco webhooks del mismo campus salían iguales («Webhook de
         // admisión · Campus»): se distinguen por su número y cuándo se crearon.
@@ -436,7 +464,11 @@ export const TIPOS: TipoWebhook[] = [
         nombre: conFirma ? 'Con la firma del webhook' : 'Sin la firma del webhook',
         campus: c.nombre,
         activo: null,
-        fallo: conFirma ? null : 'Sin la firma, el CRM rechaza los avisos de Stripe',
+        // Aviso, no fallo: sin la firma el CRM rechaza el aviso inmediato, pero
+        // los cobros llegan igual por la consulta a Stripe cada 5 minutos
+        // (jobs/stripePaymentsSyncScheduler). Un campus que va así a propósito
+        // no está fallando.
+        aviso: conFirma ? undefined : 'Sin la firma, el aviso inmediato se rechaza; los cobros llegan por la consulta cada 5 minutos',
         enlace: '/finanzas/integraciones',
         campusId: c.id,
       }];
@@ -520,7 +552,9 @@ export const TIPOS: TipoWebhook[] = [
         campus: dondeVa(w),
         activo: !!w.activo,
         ultimo: w.ultimo_envio_at,
-        ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}&limit=5`, w.fallidos_30_dias)),
+        // Con el ámbito de arriba: con una empresa, el último envío de un
+        // webhook «de todas las empresas» es el de un cobro de esa empresa.
+        ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}&limit=5${conAmbito(ctx.ambito, 'projectId', 'issuerId')}`, w.fallidos_30_dias)),
         enlace: '/conexion/webhooks/transferencias',
       })));
     },
@@ -546,7 +580,7 @@ export const TIPOS: TipoWebhook[] = [
         campus: dondeVa(d),
         activo: !!d.activo,
         ultimo: d.ultima_decision_at,
-        ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}&limit=5`, d.fallidos_30_dias)),
+        ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}&limit=5${conAmbito(ctx.ambito, 'project_id', 'issuer_id')}`, d.fallidos_30_dias)),
         enlace: '/conexion/asignacion-leads',
       })));
     },
@@ -587,6 +621,17 @@ type ConAmbito = {
   proyecto: string | null; empresa: string | null;
   ultimo_envio_at?: string | null; fallidos_30_dias: number;
 };
+
+/**
+ * El ámbito de arriba como parámetros de otra ruta, con sus nombres
+ * (`/webhooks-salientes/envios` usa projectId/issuerId; `/asignacion/decisiones`,
+ * project_id/issuer_id). Sin ámbito («Todos»), nada.
+ */
+function conAmbito(ambito: URLSearchParams, campo: string, empresa: string): string {
+  const p = ambito.get('projectId');
+  const e = ambito.get('issuerId');
+  return p ? `&${campo}=${p}` : e ? `&${empresa}=${e}` : '';
+}
 
 const dondeVa = (w: ConAmbito) => (w.ambito === 'todas' ? 'Todas las empresas' : (w.proyecto || w.empresa));
 const fallidos = (n: number) => (n > 0 ? `${n} ${n === 1 ? 'envío fallido' : 'envíos fallidos'} en 30 días` : null);
