@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /**
  * #690 · Un webhook del Resumen abierto en otra pestaña (Ctrl/Cmd + clic o el
@@ -9,9 +9,9 @@ import { render, screen, waitFor } from '@testing-library/react';
  * dirección quita la empresa.
  */
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/shared/api/client', () => ({
-  default: { get, post: vi.fn() },
+  default: { get, post },
   setAccessToken: vi.fn(),
   setOnAuthFailure: vi.fn(),
 }));
@@ -59,6 +59,22 @@ describe('el campus de la dirección manda sobre la empresa guardada', () => {
     render(<AuthProvider><Ver /></AuthProvider>);
     await waitFor(() => expect(screen.getByTestId('ambito').textContent).toMatch(/empresa:7$/));
     expect(localStorage.getItem('crm_active_issuer_id')).toBe('7');
+  });
+
+  it('al iniciar sesión con ?projectId en la dirección, igual: el campus y sin la empresa', async () => {
+    localStorage.setItem('crm_active_issuer_id', '7');
+    conDireccion('?projectId=2');
+    // Sin sesión de antes: el refresco falla y se entra con el formulario.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    post.mockResolvedValue({ success: true, data: { accessToken: 't', user: { id: 1, role: 'admin' }, projects: PROYECTOS, permissions: {} } });
+    function Entrar() {
+      const { login } = useAuth();
+      return <button type="button" onClick={() => login('a@b.c', 'x')}>entrar</button>;
+    }
+    render(<AuthProvider><Entrar /><Ver /></AuthProvider>);
+    fireEvent.click(await screen.findByText('entrar'));
+    await waitFor(() => expect(screen.getByTestId('ambito').textContent).toBe('campus:2 empresa:null'));
+    expect(localStorage.getItem('crm_active_issuer_id')).toBeNull();
   });
 
   it('un ?projectId que no es de la persona no quita nada', async () => {

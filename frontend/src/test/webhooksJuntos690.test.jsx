@@ -35,6 +35,7 @@ import { NAV_SECTIONS, PERMISOS_WEBHOOKS, rutaPermitida } from '@/shared/compone
 import { pathAllowsAll, rutaAceptaSociedad } from '@/shared/components/layout/AppLayout';
 import WebhooksResumenPage, { enlaceDeFila } from '@/modules/webhooks/pages/WebhooksResumenPage';
 import RedirigirAWebhooks from '@/modules/webhooks/components/RedirigirAWebhooks';
+import { formatDateTime } from '@/shared/lib/format';
 
 const RESPUESTAS = (url) => {
   const [ruta, q = ''] = url.split('?');
@@ -333,23 +334,44 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(woo).getByText(/No guarda cuándo llegó el último pedido/)).toBeTruthy();
   });
 
-  it('Stripe dice que tiene la clave de la API, no «con clave» a secas', async () => {
+  it('Stripe: la firma cifrada o en claro vale, y no se enseña el interruptor', async () => {
     get.mockImplementation((url) => Promise.resolve({
-      data: url === '/integrations/stripe?projectId=1' ? { active: true, config_public: { webhook_secret_preview: 'whsec_…ab12' } }
-        : url === '/integrations/stripe?projectId=2' ? { active: false, config_public: {} }
-          : url === '/integrations/stripe?projectId=5' ? { active: false, config_public: { webhook_secret: 'whsec_en_claro' } }
-            : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+      data: url === '/integrations/stripe?projectId=1' ? { active: true, has_secret: true, config_public: { webhook_secret_preview: 'whsec_…ab12' } }
+        : url === '/integrations/stripe?projectId=5' ? { active: false, has_secret: false, config_public: { webhook_secret: 'whsec_en_claro' } }
+          : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
     }));
     abrir();
     const stripe = await screen.findByTestId('tipo-stripe');
-    // Cifrada (la de ahora) o en claro (la de antes): las dos valen.
     expect(await within(stripe).findAllByText('Con la firma del webhook')).toHaveLength(2);
-    expect(within(stripe).getByText('Sin la firma del webhook')).toBeTruthy();
-    // Aviso, no fallo: los cobros llegan igual por la consulta cada 5 minutos.
-    expect(within(stripe).getByText(/el aviso inmediato se rechaza; los cobros llegan por la consulta/)).toBeTruthy();
     expect(within(stripe).queryByText(/Falló:/)).toBeNull();
-    // El interruptor de la integración no se enseña: el aviso se procesa igual.
     expect(within(stripe).queryByText('Apagado')).toBeNull();
+  });
+
+  it('Stripe sin firma pero con la consulta en marcha: aviso, y dice que las devoluciones no llegan', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/integrations/stripe?projectId=1' ? { active: true, has_secret: true, config_public: {} }
+        : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+    }));
+    abrir();
+    const stripe = await screen.findByTestId('tipo-stripe');
+    expect(await within(stripe).findByText(/los cobros llegan por la consulta cada 5 minutos, pero las devoluciones no se apuntan/)).toBeTruthy();
+    expect(within(stripe).queryByText(/Falló:/)).toBeNull();
+  });
+
+  it('Stripe sin firma y con la integración apagada (o sin clave): no llega nada, y eso es un fallo', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/integrations/stripe?projectId=1' ? { active: false, has_secret: true, config_public: {} }
+        : url === '/integrations/stripe?projectId=2' ? { active: true, has_secret: false, config_public: {} }
+          : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+    }));
+    abrir();
+    const stripe = await screen.findByTestId('tipo-stripe');
+    // Por fila (el texto largo sale dos veces: recortado a la vista y entero para el lector).
+    await within(stripe).findAllByText(/Falló: Sin la firma y sin la consulta periódica/);
+    const conFallo = within(stripe).getAllByRole('listitem').filter((li) => /Falló: Sin la firma y sin la consulta/.test(li.textContent));
+    expect(conFallo).toHaveLength(2);
+    // No promete la consulta cuando no corre.
+    expect(within(stripe).queryByText(/los cobros llegan por la consulta/)).toBeNull();
   });
 
   it('Stripe: el campus sin Stripe no sale, y al pulsar uno con «Todos» se elige su campus', async () => {
@@ -451,6 +473,24 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(enlaceDeFila({ enlace: '/conexion/webhooks/make/3', campusId: 2 }, true)).toBe('/conexion/webhooks/make/3');
   });
 
+  it('con un clic normal se entra por la dirección LIMPIA: el ?projectId= es solo para otra pestaña', async () => {
+    const switchProject = vi.fn();
+    cabecera.value = { ...cabecera.value, switchProject };
+    const Donde = () => { const l = useLocation(); return <p data-testid="donde">{l.pathname}{l.search}</p>; };
+    render(
+      <MemoryRouter initialEntries={['/conexion/webhooks']}>
+        <Routes>
+          <Route path="/conexion/webhooks" element={<WebhooksResumenPage />} />
+          <Route path="*" element={<Donde />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByText('Zapier ventas'), { button: 0 });
+    expect(switchProject).toHaveBeenCalledWith(1);
+    // Sin el parámetro: un F5 después de cambiar el selector respeta lo elegido.
+    expect((await screen.findByTestId('donde')).textContent).toBe('/conexion/webhooks/prospectos/11');
+  });
+
   it('admisión y los tokens antiguos comparten una sola petición por campus', async () => {
     abrir();
     await screen.findByTestId('tipo-admision');
@@ -467,8 +507,32 @@ describe('el resumen sigue al selector de arriba', () => {
     }));
     abrir();
     await screen.findByText('De todas');
-    await waitFor(() => expect(get.mock.calls.map((c) => c[0])).toContain('/webhooks-salientes/envios?webhookId=60&limit=5&issuerId=7'));
-    await waitFor(() => expect(get.mock.calls.map((c) => c[0])).toContain('/asignacion/decisiones?destino_id=9&limit=5&issuer_id=7'));
+    await waitFor(() => expect(get.mock.calls.map((c) => c[0])).toContain('/webhooks-salientes/envios?webhookId=60&limit=200&issuerId=7'));
+    await waitFor(() => expect(get.mock.calls.map((c) => c[0])).toContain('/asignacion/decisiones?destino_id=9&limit=200&issuer_id=7'));
+  });
+
+  it('con una empresa, el último aviso y los fallidos son de esa empresa, no de todo el CRM', async () => {
+    cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 7, activeIssuer: { nombre: 'CEDIA' }, projects: PROYECTOS };
+    const hace = (dias) => new Date(Date.now() - dias * 864e5).toISOString();
+    const elBueno = hace(2);
+    get.mockImplementation((url) => Promise.resolve({
+      // Del servidor (todo el CRM): último aviso hoy y 9 fallidos, por otra empresa.
+      data: url.startsWith('/webhooks-salientes?') ? [{ id: 60, nombre: 'De todas', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: hace(0), fallidos_30_dias: 9 }]
+        // De esta empresa: el último hace 2 días y bien, uno fallido hace 5, uno de prueba que no cuenta, y otro de hace 40.
+        : url.startsWith('/webhooks-salientes/envios?webhookId=60') ? [
+          { estado: 'fallido', prueba: true, created_at: hace(1) },
+          { estado: 'enviado', created_at: elBueno },
+          { estado: 'fallido', created_at: hace(5) },
+          { estado: 'fallido', created_at: hace(40) },
+        ] : RESPUESTAS(url),
+    }));
+    abrir();
+    const salida = await screen.findByTestId('tipo-transferencias');
+    await within(salida).findByText('De todas');
+    expect(await within(salida).findByText(/^1 envío fallido en 30 días aquí$/)).toBeTruthy();
+    expect(within(salida).queryByText(/9 envíos fallidos/)).toBeNull();
+    expect(within(salida).queryByText(/Falló:/)).toBeNull();
+    expect(within(salida).getByText(/Último aviso:/).textContent).toBe(`Último aviso: ${formatDateTime(elBueno)}`);
   });
 
   it('el lector de pantalla oye el estado de cada tarjeta en una frase, no todas sus filas', async () => {
@@ -481,8 +545,8 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(vivos[0].querySelector('li')).toBeNull();
   });
 
-  it('sin campus en el ámbito, no se culpa a los módulos', async () => {
-    permisos.value = ['make.view'];
+  it('sin campus en el ámbito, no se culpa a los módulos (también con tarjetas que no van por módulo)', async () => {
+    permisos.value = ['make.view', 'webhooks_salientes.view', 'integrations.view'];
     cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 99, activeIssuer: { nombre: 'Vacía' }, projects: PROYECTOS };
     abrir();
     expect(await screen.findByText('Sin campus que mirar')).toBeTruthy();

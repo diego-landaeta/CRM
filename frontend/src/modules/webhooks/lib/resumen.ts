@@ -456,19 +456,26 @@ export const TIPOS: TipoWebhook[] = [
     // `getWebhookSecret` (stripe-payments.service). El interruptor de la
     // integración NO se enseña: el aviso se procesa igual esté encendida o no.
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      const i = await (ctx.pedir || datos)<{ config_public?: { webhook_secret_preview?: string | null; webhook_secret?: string | null } } | null>(`/integrations/stripe?projectId=${c.id}`);
+      const i = await (ctx.pedir || datos)<{ active?: boolean; has_secret?: boolean; config_public?: { webhook_secret_preview?: string | null; webhook_secret?: string | null } } | null>(`/integrations/stripe?projectId=${c.id}`);
       if (!i || Array.isArray(i)) return [];
       const conFirma = Boolean(i.config_public?.webhook_secret_preview || i.config_public?.webhook_secret);
+      // La consulta cada 5 minutos solo corre con la integración ENCENDIDA y la
+      // clave de la API puesta (`listProjectsWithStripe`). Y las devoluciones
+      // solo llegan por el aviso (`propagarReembolso`): sin la firma no se
+      // apuntan en la venta ni deshacen la comisión.
+      const consulta = Boolean(i.active && i.has_secret);
       return [{
         clave: `stripe-${c.id}`,
         nombre: conFirma ? 'Con la firma del webhook' : 'Sin la firma del webhook',
         campus: c.nombre,
         activo: null,
-        // Aviso, no fallo: sin la firma el CRM rechaza el aviso inmediato, pero
-        // los cobros llegan igual por la consulta a Stripe cada 5 minutos
-        // (jobs/stripePaymentsSyncScheduler). Un campus que va así a propósito
-        // no está fallando.
-        aviso: conFirma ? undefined : 'Sin la firma, el aviso inmediato se rechaza; los cobros llegan por la consulta cada 5 minutos',
+        // Sin la firma: con la consulta en marcha los cobros llegan igual (aviso,
+        // no fallo), pero las devoluciones no; sin ella, no llega nada de Stripe
+        // (eso sí es un fallo).
+        aviso: conFirma || !consulta ? undefined
+          : 'Sin la firma los avisos se rechazan: los cobros llegan por la consulta cada 5 minutos, pero las devoluciones no se apuntan en la venta ni deshacen la comisión',
+        fallo: conFirma || consulta ? null
+          : 'Sin la firma y sin la consulta periódica (integración apagada o sin clave de la API): no llega nada de Stripe',
         enlace: '/finanzas/integraciones',
         campusId: c.id,
       }];
@@ -551,10 +558,10 @@ export const TIPOS: TipoWebhook[] = [
         nombre: w.nombre,
         campus: dondeVa(w),
         activo: !!w.activo,
-        ultimo: w.ultimo_envio_at,
         // Con el ámbito de arriba: con una empresa, el último envío de un
         // webhook «de todas las empresas» es el de un cobro de esa empresa.
-        ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}&limit=5${conAmbito(ctx.ambito, 'projectId', 'issuerId')}`, w.fallidos_30_dias)),
+        ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}`, conAmbito(ctx.ambito, 'projectId', 'issuerId'),
+          { ultimo: w.ultimo_envio_at ?? null, fallidos30: w.fallidos_30_dias })),
         enlace: '/conexion/webhooks/transferencias',
       })));
     },
@@ -579,8 +586,8 @@ export const TIPOS: TipoWebhook[] = [
         nombre: d.nombre,
         campus: dondeVa(d),
         activo: !!d.activo,
-        ultimo: d.ultima_decision_at,
-        ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}&limit=5${conAmbito(ctx.ambito, 'project_id', 'issuer_id')}`, d.fallidos_30_dias)),
+        ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}`, conAmbito(ctx.ambito, 'project_id', 'issuer_id'),
+          { ultimo: d.ultima_decision_at, fallidos30: d.fallidos_30_dias })),
         enlace: '/conexion/asignacion-leads',
       })));
     },
@@ -644,20 +651,43 @@ const fallidos = (n: number) => (n > 0 ? `${n} ${n === 1 ? 'envío fallido' : 'e
  */
 async function comoFueElUltimo(
   pedir: Pedir,
-  url: string,
-  fallidos30: number,
-): Promise<Pick<FilaWebhook, 'fallo' | 'aviso' | 'sinLeer'>> {
-  const aviso = fallidos(fallidos30) || undefined;
-  try {
-    const envios = await pedir<Array<{ estado: string; prueba?: boolean; error?: string | null; http_status?: number | null }>>(url);
-    const ultimo = envios.find((e) => !e.prueba);
-    if (ultimo?.estado === 'fallido') {
-      const por = ultimo.error || (ultimo.http_status ? `respondió ${ultimo.http_status}` : 'no se pudo entregar');
-      return { fallo: `El último envío falló: ${por}`, aviso };
+  base: string,
+  ambito: string,
+  delServidor: { ultimo: string | null; fallidos30: number },
+): Promise<Pick<FilaWebhook, 'ultimo' | 'fallo' | 'aviso' | 'sinLeer'>> {
+  type Envio = { estado: string; prueba?: boolean; error?: string | null; http_status?: number | null; created_at?: string | null };
+  const falloDe = (e?: Envio) => (e?.estado === 'fallido'
+    ? `El último envío falló: ${e.error || (e.http_status ? `respondió ${e.http_status}` : 'no se pudo entregar')}`
+    : null);
+
+  // «Todos»: la fecha y los fallidos de 30 días los da el servidor, de todo el
+  // CRM, que es lo que se mira. Basta con los últimos envíos para el fallo.
+  if (!ambito) {
+    const aviso = fallidos(delServidor.fallidos30) || undefined;
+    try {
+      const envios = await pedir<Envio[]>(`${base}&limit=5`);
+      return { ultimo: delServidor.ultimo, fallo: falloDe(envios.find((e) => !e.prueba)), aviso };
+    } catch {
+      return { ultimo: delServidor.ultimo, aviso, sinLeer: 'No se pudo leer su último envío' };
     }
-    return { fallo: null, aviso };
+  }
+
+  // Con un campus o una empresa, los del servidor son de TODO el CRM: una fila
+  // de un webhook «de todas las empresas» diría «Último aviso: hoy · 3
+  // fallidos» por otra empresa, junto a un fallo que sí es de esta. Todo sale
+  // de los envíos de este ámbito (los 200 últimos, el tope de la ruta).
+  const TOPE = 200;
+  try {
+    const envios = (await pedir<Envio[]>(`${base}&limit=${TOPE}${ambito}`)).filter((e) => !e.prueba);
+    const hace30 = Date.now() - 30 * 864e5;
+    const en30 = envios.filter((e) => e.created_at && new Date(e.created_at).getTime() >= hace30);
+    const n = en30.filter((e) => e.estado === 'fallido').length;
+    // Si los 200 caben en 30 días, puede haber más: se dice.
+    const masDe = envios.length >= TOPE && en30.length === envios.length;
+    const aviso = n ? `${n}${masDe ? ' o más' : ''} ${n === 1 && !masDe ? 'envío fallido' : 'envíos fallidos'} en 30 días aquí` : undefined;
+    return { ultimo: envios[0]?.created_at ?? null, fallo: falloDe(envios[0]), aviso };
   } catch {
-    return { aviso, sinLeer: 'No se pudo leer su último envío' };
+    return { ultimo: undefined, sinLeer: 'No se pudo leer sus envíos de este ámbito' };
   }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, ArrowsLeftRight, ArrowSquareOut, WebhooksLogo } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import usePermission from '@/shared/hooks/usePermission';
@@ -85,18 +85,22 @@ export default function WebhooksResumenPage() {
     if (fila.campusId && !campusFijo && switchProject) switchProject(fila.campusId);
   };
 
+  // Un ámbito sin campus (una empresa sin ellos, o mientras llegan): lo que se
+  // ve depende de los campus, no del tipo de tarjeta. Antes solo salía si todas
+  // las tarjetas visibles iban por módulo, o sea casi nunca, y se veía una
+  // pantalla llena de «Ninguno en este ámbito» sin decir por qué.
+  if (porPermiso.length && !campus.length) {
+    return (
+      <EmptyState
+        icon={WebhooksLogo}
+        title="Sin campus que mirar"
+        description="El ámbito elegido arriba no tiene campus (o todavía se están cargando). Prueba con otro campus o empresa."
+      />
+    );
+  }
+
   if (!tipos.length) {
-    // Por qué no hay nada: los permisos; que el ámbito no tiene campus (o aún
-    // no han llegado); o que en estos campus su módulo está apagado.
-    if (porPermiso.length && !campus.length) {
-      return (
-        <EmptyState
-          icon={WebhooksLogo}
-          title="Sin campus que mirar"
-          description="El ámbito elegido arriba no tiene campus (o todavía se están cargando). Prueba con otro campus o empresa."
-        />
-      );
-    }
+    // Por qué no hay nada: los permisos, o que en estos campus su módulo está apagado.
     return porPermiso.length ? (
       <EmptyState
         icon={WebhooksLogo}
@@ -255,6 +259,13 @@ function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
  * dirección (`?projectId=`): así, abierto en otra pestaña (Ctrl/Cmd + clic o el
  * botón central), esa pestaña arranca con el campus y no se queda en el muro.
  * El CRM lo lee al cargar (AuthContext, `proyectoDeLaUrl`).
+ *
+ * Ojo, entre pestañas: el campus y la empresa elegidos se guardan en
+ * `localStorage`, que es de todas las pestañas. La pestaña nueva guarda ese
+ * campus y QUITA la empresa guardada; la original sigue como estaba hasta que
+ * se recarga, y entonces abre con ese campus. Antes quedaba peor: campus y
+ * empresa a la vez. El clic normal no lleva el parámetro (navega a la dirección
+ * limpia), así que solo pasa al abrir en otra pestaña.
  */
 export function enlaceDeFila(fila: FilaWebhook, conCampus: boolean): string {
   if (conCampus || !fila.campusId || !fila.enlace) return fila.enlace;
@@ -262,6 +273,7 @@ export function enlaceDeFila(fila: FilaWebhook, conCampus: boolean): string {
 }
 
 function FilaDeWebhook({ fila, alAbrir, conCampus }: { fila: FilaWebhook; alAbrir: (f: FilaWebhook) => void; conCampus: boolean }) {
+  const navigate = useNavigate();
   const estado = fila.activo === null ? null
     : <StatusDot tono={fila.activo ? 'success' : 'neutral'}>{fila.activo ? 'Activo' : 'Apagado'}</StatusDot>;
   const ultimo = fila.ultimo === undefined ? null
@@ -272,7 +284,16 @@ function FilaDeWebhook({ fila, alAbrir, conCampus }: { fila: FilaWebhook; alAbri
     ? (
       <Link
         to={enlaceDeFila(fila, conCampus)}
-        onClick={(e) => { if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) alAbrir(fila); }}
+        // Clic normal: elige el campus aquí y entra por la dirección LIMPIA. El
+        // `?projectId=` del href es solo para abrir en otra pestaña; si se
+        // quedara en esta, un F5 después de cambiar el selector volvería al
+        // campus de la fila y borraría la empresa elegida.
+        onClick={(e) => {
+          if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          alAbrir(fila);
+          navigate(fila.enlace);
+        }}
         className="font-semibold hover:underline"
       >
         {fila.nombre}
