@@ -472,10 +472,16 @@ export const TIPOS: TipoWebhook[] = [
         // Sin la firma: con la consulta en marcha los cobros llegan igual (aviso,
         // no fallo), pero las devoluciones no; sin ella, no llega nada de Stripe
         // (eso sí es un fallo).
-        aviso: conFirma || !consulta ? undefined
-          : 'Sin la firma los avisos se rechazan: los cobros llegan por la consulta cada 5 minutos, pero las devoluciones no se apuntan en la venta ni deshacen la comisión',
-        fallo: conFirma || consulta ? null
-          : 'Sin la firma y sin la consulta periódica (integración apagada o sin clave de la API): no llega nada de Stripe',
+        // Tres casos sin la firma:
+        //  · encendida y con clave: la consulta trae los cobros, no las devoluciones → aviso;
+        //  · APAGADA: puede ser a propósito (el campus no usa Stripe) → aviso, no fallo;
+        //  · encendida SIN clave: alguien quiso conectarla y no entra nada → fallo.
+        aviso: conFirma ? undefined
+          : consulta ? 'Sin la firma los avisos se rechazan: los cobros llegan por la consulta cada 5 minutos, pero las devoluciones no se apuntan en la venta ni deshacen la comisión'
+            : !i.active ? 'Integración apagada: no llega nada de Stripe a este campus'
+              : undefined,
+        fallo: conFirma || consulta || !i.active ? null
+          : 'Encendida pero sin la firma ni la clave de la API: no llega nada de Stripe',
         enlace: '/finanzas/integraciones',
         campusId: c.id,
       }];
@@ -561,7 +567,7 @@ export const TIPOS: TipoWebhook[] = [
         // Con el ámbito de arriba: con una empresa, el último envío de un
         // webhook «de todas las empresas» es el de un cobro de esa empresa.
         ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}`, conAmbito(ctx.ambito, 'projectId', 'issuerId'),
-          { ultimo: w.ultimo_envio_at ?? null, fallidos30: w.fallidos_30_dias })),
+          { ultimo: w.ultimo_envio_at ?? null, fallidos30: w.fallidos_30_dias }, (e) => e.enviado_at)),
         enlace: '/conexion/webhooks/transferencias',
       })));
     },
@@ -587,7 +593,7 @@ export const TIPOS: TipoWebhook[] = [
         campus: dondeVa(d),
         activo: !!d.activo,
         ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}`, conAmbito(ctx.ambito, 'project_id', 'issuer_id'),
-          { ultimo: d.ultima_decision_at, fallidos30: d.fallidos_30_dias })),
+          { ultimo: d.ultima_decision_at, fallidos30: d.fallidos_30_dias }, (e) => e.created_at)),
         enlace: '/conexion/asignacion-leads',
       })));
     },
@@ -649,13 +655,22 @@ const fallidos = (n: number) => (n > 0 ? `${n} ${n === 1 ? 'envío fallido' : 'e
  * está fallando: sus fallidos se dicen como aviso, sin contar en «con fallos».
  * Si no se puede leer el último, se dice, y los fallidos quedan como aviso.
  */
+type Envio = {
+  estado: string; prueba?: boolean; error?: string | null; http_status?: number | null;
+  created_at?: string | null; enviado_at?: string | null;
+};
+
 async function comoFueElUltimo(
   pedir: Pedir,
   base: string,
   ambito: string,
   delServidor: { ultimo: string | null; fallidos30: number },
+  // La fecha que el servidor usa como «último» en cada tipo, para que con un
+  // ámbito se mida lo mismo que con «Todos». Transferencias: `ultimo_envio_at`
+  // = MAX(enviado_at), la última entrega BUENA. Asignación:
+  // `ultima_decision_at` = MAX(created_at), la última decisión.
+  fechaDe: (e: Envio) => string | null | undefined,
 ): Promise<Pick<FilaWebhook, 'ultimo' | 'fallo' | 'aviso' | 'sinLeer'>> {
-  type Envio = { estado: string; prueba?: boolean; error?: string | null; http_status?: number | null; created_at?: string | null };
   const falloDe = (e?: Envio) => (e?.estado === 'fallido'
     ? `El último envío falló: ${e.error || (e.http_status ? `respondió ${e.http_status}` : 'no se pudo entregar')}`
     : null);
@@ -678,14 +693,20 @@ async function comoFueElUltimo(
   // de los envíos de este ámbito (los 200 últimos, el tope de la ruta).
   const TOPE = 200;
   try {
-    const envios = (await pedir<Envio[]>(`${base}&limit=${TOPE}${ambito}`)).filter((e) => !e.prueba);
+    // El tope se mira con lo que llega, ANTES de quitar las pruebas: si no, una
+    // prueba entre los 200 escondía que podía haber más.
+    const crudos = await pedir<Envio[]>(`${base}&limit=${TOPE}${ambito}`);
+    const envios = crudos.filter((e) => !e.prueba);
     const hace30 = Date.now() - 30 * 864e5;
-    const en30 = envios.filter((e) => e.created_at && new Date(e.created_at).getTime() >= hace30);
-    const n = en30.filter((e) => e.estado === 'fallido').length;
-    // Si los 200 caben en 30 días, puede haber más: se dice.
-    const masDe = envios.length >= TOPE && en30.length === envios.length;
-    const aviso = n ? `${n}${masDe ? ' o más' : ''} ${n === 1 && !masDe ? 'envío fallido' : 'envíos fallidos'} en 30 días aquí` : undefined;
-    return { ultimo: envios[0]?.created_at ?? null, fallo: falloDe(envios[0]), aviso };
+    const reciente = (e: Envio) => Boolean(e.created_at && new Date(e.created_at).getTime() >= hace30);
+    const n = envios.filter((e) => reciente(e) && e.estado === 'fallido').length;
+    // Llegaron 200 y el más antiguo aún es de estos 30 días: puede haber más.
+    const masDe = crudos.length >= TOPE && reciente(crudos[crudos.length - 1]);
+    const aviso = n
+      ? `${n}${masDe ? ' o más' : ''} ${n === 1 && !masDe ? 'envío fallido' : 'envíos fallidos'} en 30 días aquí`
+      : masDe ? 'Hay más de 200 envíos en 30 días aquí: los fallidos se ven en su pantalla' : undefined;
+    const fechas = envios.map(fechaDe).filter((f): f is string => Boolean(f)).sort();
+    return { ultimo: fechas.length ? fechas[fechas.length - 1] : null, fallo: falloDe(envios[0]), aviso };
   } catch {
     return { ultimo: undefined, sinLeer: 'No se pudo leer sus envíos de este ámbito' };
   }

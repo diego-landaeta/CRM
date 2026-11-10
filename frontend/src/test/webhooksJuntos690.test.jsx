@@ -358,20 +358,27 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(stripe).queryByText(/Falló:/)).toBeNull();
   });
 
-  it('Stripe sin firma y con la integración apagada (o sin clave): no llega nada, y eso es un fallo', async () => {
+  it('Stripe encendida pero sin firma ni clave: no llega nada, y eso es un fallo', async () => {
     get.mockImplementation((url) => Promise.resolve({
-      data: url === '/integrations/stripe?projectId=1' ? { active: false, has_secret: true, config_public: {} }
-        : url === '/integrations/stripe?projectId=2' ? { active: true, has_secret: false, config_public: {} }
-          : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+      data: url === '/integrations/stripe?projectId=2' ? { active: true, has_secret: false, config_public: {} }
+        : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
     }));
     abrir();
     const stripe = await screen.findByTestId('tipo-stripe');
-    // Por fila (el texto largo sale dos veces: recortado a la vista y entero para el lector).
-    await within(stripe).findAllByText(/Falló: Sin la firma y sin la consulta periódica/);
-    const conFallo = within(stripe).getAllByRole('listitem').filter((li) => /Falló: Sin la firma y sin la consulta/.test(li.textContent));
-    expect(conFallo).toHaveLength(2);
+    expect(await within(stripe).findByText(/Falló: Encendida pero sin la firma ni la clave/)).toBeTruthy();
     // No promete la consulta cuando no corre.
     expect(within(stripe).queryByText(/los cobros llegan por la consulta/)).toBeNull();
+  });
+
+  it('Stripe APAGADA y sin firma: aviso, no fallo (puede ser un campus que no usa Stripe)', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/integrations/stripe?projectId=1' ? { active: false, has_secret: true, config_public: {} }
+        : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+    }));
+    abrir();
+    const stripe = await screen.findByTestId('tipo-stripe');
+    expect(await within(stripe).findByText('Integración apagada: no llega nada de Stripe a este campus')).toBeTruthy();
+    expect(within(stripe).queryByText(/Falló:/)).toBeNull();
   });
 
   it('Stripe: el campus sin Stripe no sale, y al pulsar uno con «Todos» se elige su campus', async () => {
@@ -521,7 +528,7 @@ describe('el resumen sigue al selector de arriba', () => {
         // De esta empresa: el último hace 2 días y bien, uno fallido hace 5, uno de prueba que no cuenta, y otro de hace 40.
         : url.startsWith('/webhooks-salientes/envios?webhookId=60') ? [
           { estado: 'fallido', prueba: true, created_at: hace(1) },
-          { estado: 'enviado', created_at: elBueno },
+          { estado: 'enviado', created_at: elBueno, enviado_at: elBueno },
           { estado: 'fallido', created_at: hace(5) },
           { estado: 'fallido', created_at: hace(40) },
         ] : RESPUESTAS(url),
@@ -533,6 +540,43 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(salida).queryByText(/9 envíos fallidos/)).toBeNull();
     expect(within(salida).queryByText(/Falló:/)).toBeNull();
     expect(within(salida).getByText(/Último aviso:/).textContent).toBe(`Último aviso: ${formatDateTime(elBueno)}`);
+  });
+
+  it('transferencias con una empresa: «Último aviso» es la última entrega BUENA, igual que con «Todos»', async () => {
+    cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 7, activeIssuer: { nombre: 'CEDIA' }, projects: PROYECTOS };
+    const hace = (dias) => new Date(Date.now() - dias * 864e5).toISOString();
+    const entregado = hace(10);
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/webhooks-salientes?') ? [{ id: 61, nombre: 'Falla últimamente', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: entregado, fallidos_30_dias: 3 }]
+        : url.startsWith('/webhooks-salientes/envios?webhookId=61') ? [
+          { estado: 'fallido', created_at: hace(0) },
+          { estado: 'fallido', created_at: hace(1) },
+          { estado: 'fallido', created_at: hace(2) },
+          { estado: 'enviado', created_at: entregado, enviado_at: entregado },
+        ] : RESPUESTAS(url),
+    }));
+    abrir();
+    const salida = await screen.findByTestId('tipo-transferencias');
+    await within(salida).findByText('Falla últimamente');
+    // No «hoy» (el último intento): hace 10 días, la última entrega que llegó.
+    expect((await within(salida).findByText(/Último aviso:/)).textContent).toBe(`Último aviso: ${formatDateTime(entregado)}`);
+    expect(within(salida).getByText(/El último envío falló/)).toBeTruthy();
+  });
+
+  it('el tope de 200 se mira con lo que llega, antes de quitar las pruebas', async () => {
+    cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 7, activeIssuer: { nombre: 'CEDIA' }, projects: PROYECTOS };
+    const ahora = new Date().toISOString();
+    // 200 envíos de estos 30 días: uno de prueba y 5 fallidos.
+    const envios = Array.from({ length: 200 }, (_, i) => ({
+      estado: i > 0 && i <= 5 ? 'fallido' : 'enviado', prueba: i === 0, created_at: ahora, enviado_at: ahora,
+    }));
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/webhooks-salientes?') ? [{ id: 62, nombre: 'Mucho tráfico', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: ahora, fallidos_30_dias: 5 }]
+        : url.startsWith('/webhooks-salientes/envios?webhookId=62') ? envios : RESPUESTAS(url),
+    }));
+    abrir();
+    const salida = await screen.findByTestId('tipo-transferencias');
+    expect(await within(salida).findByText('5 o más envíos fallidos en 30 días aquí')).toBeTruthy();
   });
 
   it('el lector de pantalla oye el estado de cada tarjeta en una frase, no todas sus filas', async () => {
