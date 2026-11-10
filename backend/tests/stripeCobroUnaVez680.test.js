@@ -74,4 +74,43 @@ describe('#680 / #635 · el mismo cargo por varios caminos a la vez', () => {
     await servicio.handleWebhookEvent(ids.project, evento(id, 100));
     expect(await cobros(id)).toHaveLength(1);
   });
+
+  // Revisión de Diego (10/11): con el bloqueo de sesión, cada enlace retenía una conexión
+  // mientras pedía otras al mismo pool (max 20). Con 30 cargos DISTINTOS a la vez entraron
+  // 16, 0 y 6 de 30. Tienen que entrar todos, y cada uno una sola vez.
+  it('30 cargos distintos a la vez (más que el pool) entran todos, cada uno con su cobro', async () => {
+    const lote = Array.from({ length: 30 }, (_, i) => `ch_${MARCA}_r${i}`);
+    await Promise.all(lote.map((id, i) => servicio.handleWebhookEvent(ids.project, evento(id, 10 + 7 * i))));
+    const { rows } = await query(
+      `SELECT stripe_id, conversion_payment_id, link_method FROM stripe_payments
+        WHERE project_id = $1 AND stripe_id = ANY($2)`, [ids.project, lote]);
+    expect(rows).toHaveLength(30);
+    expect(rows.filter((r) => r.conversion_payment_id == null)).toEqual([]);
+    expect(new Set(rows.map((r) => r.link_method))).toEqual(new Set(['auto_email']));
+    const { rows: [{ n }] } = await query(
+      `SELECT COUNT(*)::int AS n FROM conversion_payments WHERE conversion_id = $1 AND notas LIKE $2`,
+      [ids.conversion, `%ch_${MARCA}_r%`]);
+    expect(n).toBe(30);
+  }, 60000);
+
+  it('si no se puede enlazar (correo sin prospecto), la reserva se suelta y la fila queda como estaba', async () => {
+    const id = `ch_${MARCA}_sinlead`;
+    const ev = evento(id, 40);
+    ev.data.object.billing_details.email = `nadie.${MARCA.toLowerCase()}@prueba.test`;
+    await servicio.handleWebhookEvent(ids.project, ev);
+    const { rows: [sp] } = await query(
+      'SELECT link_method, linked_at, conversion_id FROM stripe_payments WHERE project_id = $1 AND stripe_id = $2', [ids.project, id]);
+    expect(sp).toMatchObject({ link_method: null, linked_at: null, conversion_id: null });
+  });
+
+  it('una reserva que se quedó colgada (el proceso murió) se retoma pasados 2 minutos', async () => {
+    const id = `ch_${MARCA}_colgada`;
+    await query(
+      `INSERT INTO stripe_payments (project_id, stripe_id, type, status, amount, currency, customer_email,
+                                    stripe_created_at, link_method, linked_at)
+       VALUES ($1, $2, 'charge', 'succeeded', 70, 'EUR', $3, NOW(), 'auto_enlazando', NOW() - interval '5 minutes')`,
+      [ids.project, id, CORREO]);
+    await servicio.handleWebhookEvent(ids.project, evento(id, 70));
+    expect(await cobros(id)).toHaveLength(1);
+  });
 });
