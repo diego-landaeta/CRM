@@ -177,6 +177,7 @@ const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/Documen
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const TasksPage = lazy(() => import('./modules/tasks/pages/TasksPage'));
 const TaskBoardConfigPage = lazy(() => import('./modules/tasks/pages/TaskBoardConfigPage'));
+const TasksHistoryPage = lazy(() => import('./modules/tasks/pages/TasksHistoryPage'));
 // Facturas de colaboradores (#202)
 const FacturasColaboradoresPage = lazy(() => import('./modules/facturas-colaborador/pages/FacturasColaboradoresPage'));
 const MiFacturaPage = lazy(() => import('./modules/facturas-colaborador/pages/MiFacturaPage'));
@@ -389,7 +390,9 @@ function App() {
           <Route path="/preferencias" element={<PreferencesPage />} />
           {/* El tablero (#210): solo en pruebas hasta que Diego lo apruebe (07/10). */}
           <Route path="/tareas" element={<TasksPage />} />
-          <Route path="/tareas/revisar" element={<TasksPage />} />
+          {/* «Por revisar» pasó a «Historial de tareas» (CRM#707): el enlace viejo lleva al nuevo. */}
+          <Route path="/tareas/historial" element={<TasksHistoryPage />} />
+          <Route path="/tareas/revisar" element={<Navigate to="/tareas/historial" replace />} />
           <Route path="/tareas/configurar" element={<TaskBoardConfigPage />} />
           <Route path="/mi-factura" element={<MiFacturaPage />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
