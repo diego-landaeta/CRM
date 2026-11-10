@@ -109,16 +109,25 @@ export default function WebhooksResumenPage() {
 
   return (
     <div className="space-y-6 pb-8">
+      {/* El subtítulo de la cabecera se recorta (`truncate`) y con un ámbito de
+          nombre largo («CEDIA Investigación y Desarrollo SL») el «1 con fallos»
+          del final no se veía. Los contadores van en las acciones, que no se
+          recortan; el subtítulo, corto. */}
       <PageHeader
         title="Webhooks"
-        subtitle={(
-          <>
-            Todos los de {nombreAmbito}, por lo que hacen. Se configuran en su pantalla: el enlace de cada tarjeta.
-            {fallan > 0 && <span className="ml-1 font-semibold text-destructive">{fallan} con fallos.</span>}
-            {sinLeer > 0 && <span className="ml-1 font-semibold text-warning">{sinLeer} sin poder leer.</span>}
-          </>
-        )}
+        subtitle={`Todos los de ${nombreAmbito}, por lo que hacen`}
+        actions={(fallan > 0 || sinLeer > 0) ? (
+          <span role="status" className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+            {fallan > 0 && (
+              <span className="rounded-full border border-destructive/40 px-2 py-0.5 text-destructive">{fallan} con fallos</span>
+            )}
+            {sinLeer > 0 && (
+              <span className="rounded-full border border-warning/40 px-2 py-0.5 text-warning">{sinLeer} sin poder leer</span>
+            )}
+          </span>
+        ) : null}
       />
+      <p className="text-xs text-muted-foreground">Cada uno se configura en su pantalla: el enlace de su tarjeta.</p>
 
       {GRUPOS.map((g) => {
         // Lo que solo sale si tiene algo (los tokens antiguos) no ocupa sitio vacío.

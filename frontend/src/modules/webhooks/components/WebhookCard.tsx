@@ -49,7 +49,8 @@ export default function WebhookCard({ webhook, onToggleActive, onToggleListen, o
           {!webhook.active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted font-bold">INACTIVO</span>}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5 truncate">
-          {mappedCount} campos mapeados · {webhook.submissions_count || 0} recibidos · <code>{webhook.embed_id}</code>
+          {/* Los que crearon algo; los rechazados están en el historial de su ficha. */}
+          {mappedCount} campos mapeados · {webhook.submissions_count || 0} procesados · <code>{webhook.embed_id}</code>
         </p>
       </div>
 

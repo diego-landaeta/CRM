@@ -576,10 +576,28 @@ describe('el resumen sigue al selector de arriba', () => {
       : Promise.resolve({ success: true, data: RESPUESTAS(url) })));
     abrir();
     await screen.findByText('Zapier ventas');
-    expect(await screen.findByText('1 sin poder leer.')).toBeTruthy();
+    expect(await screen.findByText('1 sin poder leer')).toBeTruthy();
     // Fallos de verdad: solo Zapier (su último aviso dio error). Los 2 envíos
     // fallidos de transferencias son un aviso: su último envío no consta fallido.
-    expect(screen.getByText('1 con fallos.')).toBeTruthy();
+    expect(screen.getByText('1 con fallos')).toBeTruthy();
+    // Fuera del subtítulo, que la cabecera recorta: en las acciones, que no.
+    const subtitulo = screen.getByText(/^Todos los de /);
+    expect(subtitulo.textContent).not.toMatch(/con fallos/);
+  });
+
+  it('webhooks de admisión sin nota: cada uno con su número y su fecha, no cinco filas iguales', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/webhook-tokens?projectId=1&kind=matriculas' ? [
+        { id: 3, notas: null, active: true, last_used_at: null, created_at: '2026-10-22T10:00:00Z' },
+        { id: 4, notas: null, active: true, last_used_at: null, created_at: '2026-10-23T10:00:00Z' },
+        { id: 5, notas: 'Formulario web', active: true, last_used_at: null },
+      ] : RESPUESTAS(url),
+    }));
+    abrir();
+    const admision = await screen.findByTestId('tipo-admision');
+    expect(await within(admision).findByText(/Webhook de admisión n\.º 3 · creado el 22\/10\/2026/)).toBeTruthy();
+    expect(within(admision).getByText(/Webhook de admisión n\.º 4/)).toBeTruthy();
+    expect(within(admision).getByText('Formulario web')).toBeTruthy();
   });
 
   it('un campus con Make apagado no se pide', async () => {

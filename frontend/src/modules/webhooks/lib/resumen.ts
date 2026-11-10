@@ -23,6 +23,7 @@
 */
 import client from '@/shared/api/client';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { formatDateNumeric } from '@/shared/lib/format';
 
 /** `ambos`: recibe un aviso y avisa a otro (la asignación de leads). */
 export type Direccion = 'entra' | 'sale' | 'ambos';
@@ -370,7 +371,7 @@ export const TIPOS: TipoWebhook[] = [
       const filas = await (ctx.pedir || datos)<Array<{ id: number; kind: string; notas?: string | null; active: boolean; last_used_at: string | null }>>(`/webhook-tokens?projectId=${c.id}`);
       return filas.filter((t) => t.kind !== 'matriculas').map((t) => ({
         clave: `token-${t.id}`,
-        nombre: `${t.notas || 'Token'} (${t.kind === 'leads' ? 'prospectos' : 'a medida'})`,
+        nombre: `${t.notas || `Token n.º ${t.id}`} (${t.kind === 'leads' ? 'prospectos' : 'a medida'})`,
         campus: c.nombre,
         activo: !!t.active,
         ultimo: t.last_used_at,
@@ -395,10 +396,12 @@ export const TIPOS: TipoWebhook[] = [
     deUnCampus: true,
     nota: 'Guarda cuándo se usó por última vez, pero no si falló.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      const filas = await (ctx.pedir || datos)<Array<{ id: number; notas?: string | null; active: boolean; last_used_at: string | null }>>(`/webhook-tokens?projectId=${c.id}&kind=matriculas`);
+      const filas = await (ctx.pedir || datos)<Array<{ id: number; notas?: string | null; active: boolean; last_used_at: string | null; created_at?: string | null }>>(`/webhook-tokens?projectId=${c.id}&kind=matriculas`);
       return filas.map((t) => ({
         clave: `admision-${t.id}`,
-        nombre: t.notas || 'Webhook de admisión',
+        // Sin nota, cinco webhooks del mismo campus salían iguales («Webhook de
+        // admisión · Campus»): se distinguen por su número y cuándo se crearon.
+        nombre: t.notas || `Webhook de admisión n.º ${t.id}${t.created_at ? ` · creado el ${formatDateNumeric(t.created_at)}` : ''}`,
         campus: c.nombre,
         activo: !!t.active,
         ultimo: t.last_used_at,
