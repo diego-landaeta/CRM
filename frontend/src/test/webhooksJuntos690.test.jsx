@@ -579,6 +579,20 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(await within(salida).findByText('5 o más envíos fallidos en 30 días aquí')).toBeTruthy();
   });
 
+  it('en el tope y sin ninguna entrega entre los 200: no dice «sin avisos todavía», que puede ser falso', async () => {
+    cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 7, activeIssuer: { nombre: 'CEDIA' }, projects: PROYECTOS };
+    const ahora = new Date().toISOString();
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/webhooks-salientes?') ? [{ id: 63, nombre: 'Solo fallos', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: null, fallidos_30_dias: 0 }]
+        : url.startsWith('/webhooks-salientes/envios?webhookId=63') ? Array.from({ length: 200 }, () => ({ estado: 'pendiente', created_at: ahora }))
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    const salida = await screen.findByTestId('tipo-transferencias');
+    expect(await within(salida).findByText('200 o más envíos en 30 días aquí: los fallidos se ven en su pantalla')).toBeTruthy();
+    expect(within(salida).queryByText('Sin avisos todavía')).toBeNull();
+  });
+
   it('el lector de pantalla oye el estado de cada tarjeta en una frase, no todas sus filas', async () => {
     abrir();
     const make = await screen.findByTestId('tipo-make');

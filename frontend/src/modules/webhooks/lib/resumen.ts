@@ -453,8 +453,9 @@ export const TIPOS: TipoWebhook[] = [
     // CRM rechaza el aviso; con la clave de la API a secas no basta.
     // La firma vale cifrada (`webhook_secret_preview`, la de ahora) o en claro
     // en `config_public.webhook_secret` (la de antes): las dos las acepta
-    // `getWebhookSecret` (stripe-payments.service). El interruptor de la
-    // integración NO se enseña: el aviso se procesa igual esté encendida o no.
+    // `getWebhookSecret` (stripe-payments.service). El interruptor no sale como
+    // «Activo/Apagado» (con la firma, el aviso se procesa igual esté encendida o
+    // no); solo se nombra cuando, sin la firma, explica por qué no llega nada.
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
       const i = await (ctx.pedir || datos)<{ active?: boolean; has_secret?: boolean; config_public?: { webhook_secret_preview?: string | null; webhook_secret?: string | null } } | null>(`/integrations/stripe?projectId=${c.id}`);
       if (!i || Array.isArray(i)) return [];
@@ -469,9 +470,6 @@ export const TIPOS: TipoWebhook[] = [
         nombre: conFirma ? 'Con la firma del webhook' : 'Sin la firma del webhook',
         campus: c.nombre,
         activo: null,
-        // Sin la firma: con la consulta en marcha los cobros llegan igual (aviso,
-        // no fallo), pero las devoluciones no; sin ella, no llega nada de Stripe
-        // (eso sí es un fallo).
         // Tres casos sin la firma:
         //  · encendida y con clave: la consulta trae los cobros, no las devoluciones → aviso;
         //  · APAGADA: puede ser a propósito (el campus no usa Stripe) → aviso, no fallo;
@@ -704,9 +702,13 @@ async function comoFueElUltimo(
     const masDe = crudos.length >= TOPE && reciente(crudos[crudos.length - 1]);
     const aviso = n
       ? `${n}${masDe ? ' o más' : ''} ${n === 1 && !masDe ? 'envío fallido' : 'envíos fallidos'} en 30 días aquí`
-      : masDe ? 'Hay más de 200 envíos en 30 días aquí: los fallidos se ven en su pantalla' : undefined;
+      : masDe ? '200 o más envíos en 30 días aquí: los fallidos se ven en su pantalla' : undefined;
     const fechas = envios.map(fechaDe).filter((f): f is string => Boolean(f)).sort();
-    return { ultimo: fechas.length ? fechas[fechas.length - 1] : null, fallo: falloDe(envios[0]), aviso };
+    // Sin fecha entre los que llegaron: si se llegó al tope, la última entrega
+    // puede ser anterior (o un reenvío antiguo): no se sabe, y no se dice «sin
+    // avisos todavía», que sería falso. Solo sin tope es seguro que no hay.
+    const ultimo = fechas.length ? fechas[fechas.length - 1] : crudos.length >= TOPE ? undefined : null;
+    return { ultimo, fallo: falloDe(envios[0]), aviso };
   } catch {
     return { ultimo: undefined, sinLeer: 'No se pudo leer sus envíos de este ámbito' };
   }
