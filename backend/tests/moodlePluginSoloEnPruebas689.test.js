@@ -55,6 +55,8 @@ vi.mock('../src/modules/consultas/consultas.controller.js', () => {
     'desactivarPlugin', 'escribirAlAlumno', 'estadoDelPlugin', 'guardarMiCarga', 'guardarToken', 'leerAhora',
     'miCarga', 'mias', 'panel', 'panelDeTutores', 'reasignar', 'reintentar', 'responder',
     'sincronizarAlumnosAhora', 'tokensDelTutor', 'tutoresPosibles', 'ver', 'verMetricas',
+    // Notas internas, respuestas guardadas y la ficha del alumno (#679, parte 3).
+    'anotar', 'respuestas', 'crearRespuesta', 'cambiarRespuesta', 'borrarRespuesta', 'importarRespuestas', 'contexto',
   ].map((n) => [n, ok]));
 });
 
