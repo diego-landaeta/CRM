@@ -194,6 +194,11 @@ En el mismo repaso le vuelve a mandar la lista de tutoras «No disponible».
 En el CRM, en Integraciones, el bloque del plugin dice «Al día · repasado a las … · plugin 1.8.0»,
 o el error y cuándo fue el último repaso bueno.
 
+## Probar en local con Docker
+
+Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que probar en
+[`pruebas/README.md`](pruebas/README.md).
+
 ## Comprobar que funciona
 
 - **Del alumno al CRM:** el alumno entra por «Entrar al chat», escribe en su chat de grupo y,
