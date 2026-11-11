@@ -24,6 +24,7 @@
 */
 import client from '@/shared/api/client';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 import { formatDateNumeric, formatDateTime } from '@/shared/lib/format';
 
 /** `ambos`: recibe un aviso y avisa a otro (la asignación de leads). */
@@ -270,10 +271,21 @@ const formulariosDe = (
   // van en «Admisión y matrículas» y los demás en «Captación»: la misma
   // petición (el pedidor la hace una vez) repartida en dos tarjetas.
   cuales: (f: FormFila) => boolean = () => true,
+  // Si esta tarjeta enseña la fila «No se pudo leer» de un campus. Cuando dos
+  // tarjetas comparten la petición, solo una lo dice: si no, el encabezado
+  // contaba dos «sin poder leer» por un solo campus.
+  informaErrores = true,
 ) => (ctx: Contexto) => {
   const pedir = ctx.pedir || datos;
   return porCampus(ctx.campus, async (c) => {
-    const filas = (await pedir<FormFila[]>(`/forms?projectId=${c.id}&kind=${kind}`)).filter(cuales);
+    let todas: FormFila[];
+    try {
+      todas = await pedir<FormFila[]>(`/forms?projectId=${c.id}&kind=${kind}`);
+    } catch (err) {
+      if (informaErrores) throw err;
+      return [];
+    }
+    const filas = todas.filter(cuales);
     return Promise.all(filas.map(async (f) => ({
       clave: `${kind}-${f.id}`,
       nombre: f.nombre,
@@ -340,7 +352,8 @@ export const TIPOS: TipoWebhook[] = [
     moduloCampus: 'webhooks',
     deUnCampus: true,
     ocultarSiVacio: true,
-    cargar: formulariosDe('webhook', (f) => `/conexion/webhooks/prospectos/${f.id}`, true, (f) => f.destination === 'matricula'),
+    // Un campus que no contesta ya lo dice la tarjeta de prospectos (misma petición).
+    cargar: formulariosDe('webhook', (f) => `/conexion/webhooks/prospectos/${f.id}`, true, (f) => f.destination === 'matricula', false),
   },
   {
     id: 'make',
@@ -426,7 +439,14 @@ export const TIPOS: TipoWebhook[] = [
     ocultarSiVacio: true,
     nota: 'No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      const filas = await (ctx.pedir || datos)<Array<{ id: number; kind: string; notas?: string | null; active: boolean; last_used_at: string | null }>>(`/webhook-tokens?projectId=${c.id}`);
+      let filas: Array<{ id: number; kind: string; notas?: string | null; active: boolean; last_used_at: string | null }>;
+      try {
+        filas = await (ctx.pedir || datos)(`/webhook-tokens?projectId=${c.id}`);
+      } catch {
+        // La misma petición que la tarjeta de admisión: el «No se pudo leer» de
+        // ese campus ya lo dice ella; aquí, nada (si no, se contaba dos veces).
+        return [];
+      }
       return filas.filter((t) => t.kind !== 'matriculas').map((t) => ({
         clave: `token-${t.id}`,
         nombre: `${t.notas || `Token n.º ${t.id}`} (${t.kind === 'leads' ? 'prospectos' : 'a medida'})`,
@@ -562,15 +582,16 @@ export const TIPOS: TipoWebhook[] = [
           nombre: conFirma ? 'Con la firma del aviso de pedidos' : 'Sin la firma del aviso de pedidos',
           campus: c.nombre,
           activo: encendida,
-          // Apagada: puede ser a propósito (aviso). Sin firma: con la
-          // sincronización de pedidos en marcha llegan igual, tarde (aviso);
-          // sin ella no llega ninguno (fallo).
+          // Todo aviso, nunca fallo: la conexión de WooCommerce se usa sobre todo
+          // para importar productos, y los pedidos (#14) son un añadido que de
+          // serie va apagado. Una tienda sin firma ni sincronización de pedidos
+          // no está «fallando»: no está montada para recibirlos, y nadie puede
+          // cambiarlo desde el CRM. En rojo sumaría en «con fallos» algo que no
+          // se puede arreglar desde ninguna pantalla.
           aviso: !encendida ? 'Conexión apagada: no llegan pedidos de esta tienda'
             : conFirma ? undefined
               : sincronizaPedidos ? `Sin la firma el aviso se rechaza: los pedidos llegan con la sincronización (cada ${cada} min, si la importación de productos va bien), no al momento`
-                : undefined,
-          fallo: !encendida || conFirma || sincronizaPedidos ? null
-            : 'Sin la firma del aviso y sin sincronizar pedidos: no llega ningún pedido de esta tienda',
+                : 'No está montada para recibir pedidos: sin la firma del aviso ni la sincronización de pedidos, no llega ninguno',
           enlace: '/productos/woocommerce',
           campusId: c.id,
         }];
@@ -592,11 +613,24 @@ export const TIPOS: TipoWebhook[] = [
     // que pide la pantalla de WhatsApp cada 30 segundos. Sin WhatsApp montado en
     // este entorno, `configurado: false`.
     cargar: async (ctx) => {
-      const w = await (ctx.pedir || datos)<{ configurado?: boolean; conectado?: boolean; numero?: string | null; motivo?: string } | null>('/whatsapp/conexion');
+      const w = await (ctx.pedir || datos)<{ configurado?: boolean; conectado?: boolean; numero?: string | null; motivo?: string; estado?: string | null } | null>('/whatsapp/conexion');
       if (!w || Array.isArray(w) || w.configurado === false) {
+        // Sin WhatsApp montado: en pruebas (local, /testeo) es lo normal; en
+        // producción es una caída de verdad y cuenta como fallo. El texto, el
+        // del servidor (`motivo`), que ya distingue los dos casos.
+        const motivo = w && !Array.isArray(w) && w.motivo ? w.motivo : undefined;
         return [{
-          clave: 'whatsapp', nombre: 'WhatsApp no está montado en este entorno', campus: null, activo: null,
-          aviso: w && !Array.isArray(w) && w.motivo ? w.motivo : undefined, enlace: '/whatsapp/conexion',
+          clave: 'whatsapp', nombre: 'WhatsApp no está disponible', campus: null, activo: null,
+          ...(SOLO_EN_PRUEBAS ? { aviso: motivo } : { fallo: motivo || 'WhatsApp no está disponible: avisa a quien lleva el CRM' }),
+          enlace: '/whatsapp/conexion',
+        }];
+      }
+      // Sin `estado`, el servidor de WhatsApp (Evolution) no contestó: no se sabe
+      // si el número está enlazado, y decir que no lo está sería inventarlo.
+      if (!w.estado) {
+        return [{
+          clave: 'whatsapp', nombre: w.numero ? `Tu número (+${w.numero})` : 'Tu número', campus: null, activo: null,
+          sinLeer: 'No se pudo saber su estado: el servidor de WhatsApp no contesta', enlace: '/whatsapp/conexion',
         }];
       }
       return [{
@@ -615,7 +649,9 @@ export const TIPOS: TipoWebhook[] = [
     titulo: 'Consultas de alumnos (Moodle)',
     queHace: 'Las dudas que los alumnos escriben en el Moodle de los campus con la lectura encendida llegan al CRM para que las atienda su tutora.',
     direccion: 'entra',
-    enlace: '/consultas',
+    // «Configurar» lleva a donde se enciende la lectura (la conexión de Moodle
+    // en Integraciones), no a la bandeja de Consultas.
+    enlace: '/finanzas/integraciones',
     // Diego las pone en Mensajería (#690). No son un aviso que llegue: el CRM
     // las LEE del Moodle (jobs/consultasCampusScheduler) de los campus con la
     // conexión de Moodle encendida, con su token y «Leer las consultas»

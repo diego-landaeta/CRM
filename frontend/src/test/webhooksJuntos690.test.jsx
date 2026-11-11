@@ -777,7 +777,7 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(switchProject).not.toHaveBeenCalled();
   });
 
-  it('WooCommerce: la firma del aviso; sin ella, aviso SOLO si la sincronización trae pedidos, y si no, fallo', async () => {
+  it('WooCommerce: la firma del aviso; sin ella ni sincronización de pedidos, aviso de que no está montada para pedidos (no fallo)', async () => {
     get.mockImplementation((url) => Promise.resolve({
       data: url.startsWith('/woocommerce/estado') ? [
         { id: 1, nombre: 'ISEIH', conectado: true, activo: true },
@@ -794,10 +794,12 @@ describe('el resumen sigue al selector de arriba', () => {
     abrir();
     const wc = await screen.findByTestId('tipo-woocommerce');
     expect(await within(wc).findAllByText('Con la firma del aviso de pedidos')).toHaveLength(2);
-    // Por fila: el texto largo sale dos veces (recortado a la vista y entero para el lector).
-    const conFallo = within(wc).getAllByRole('listitem').filter((li) => /Falló: Sin la firma del aviso y sin sincronizar pedidos/.test(li.textContent));
-    expect(conFallo).toHaveLength(1);
-    expect(conFallo[0].textContent).toContain('Psiko Aprende');
+    // Una tienda conectada solo para importar productos (lo de serie) no está
+    // «fallando»: aviso, y no suma en «con fallos».
+    const sinPedidos = within(wc).getAllByRole('listitem').filter((li) => /No está montada para recibir pedidos/.test(li.textContent));
+    expect(sinPedidos).toHaveLength(1);
+    expect(sinPedidos[0].textContent).toContain('Psiko Aprende');
+    expect(within(wc).queryByText(/Falló:/)).toBeNull();
     // No dice que lleguen con la sincronización cuando no la hay.
     expect(within(wc).queryByText(/llegan con la sincronización/)).toBeNull();
     // Apagada: aviso, no fallo (puede ser a propósito).
@@ -816,9 +818,9 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(wc).queryByText(/Falló:/)).toBeNull();
   });
 
-  it('WhatsApp: el estado de tu número, o que no está montado en el entorno', async () => {
+  it('WhatsApp: el estado de tu número', async () => {
     get.mockImplementation((url) => Promise.resolve({
-      data: url === '/whatsapp/conexion' ? { configurado: true, conectado: false, numero: '34600111222' } : RESPUESTAS(url),
+      data: url === '/whatsapp/conexion' ? { configurado: true, conectado: false, estado: 'close', numero: '34600111222' } : RESPUESTAS(url),
     }));
     abrir();
     const w = await screen.findByTestId('tipo-whatsapp');
@@ -827,14 +829,37 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(w).getByText(/Tu número no está enlazado/)).toBeTruthy();
   });
 
-  it('WhatsApp sin montar en el entorno: lo dice, con el motivo del servidor', async () => {
+  it('WhatsApp con su servidor sin contestar: no dice que tu número no esté enlazado', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/whatsapp/conexion' ? { configurado: true, conectado: false, estado: null, numero: null } : RESPUESTAS(url),
+    }));
+    abrir();
+    const w = await screen.findByTestId('tipo-whatsapp');
+    expect(await within(w).findByText(/No se pudo saber su estado: el servidor de WhatsApp no contesta/)).toBeTruthy();
+    expect(within(w).queryByText(/no está enlazado/)).toBeNull();
+  });
+
+  it('WhatsApp sin montar: en pruebas, aviso con el motivo del servidor', async () => {
     get.mockImplementation((url) => Promise.resolve({
       data: url === '/whatsapp/conexion' ? { configurado: false, motivo: 'WhatsApp todavia no esta disponible en este entorno de pruebas.' } : RESPUESTAS(url),
     }));
     abrir();
     const w = await screen.findByTestId('tipo-whatsapp');
-    expect(await within(w).findByText('WhatsApp no está montado en este entorno')).toBeTruthy();
+    expect(await within(w).findByText('WhatsApp no está disponible')).toBeTruthy();
     expect(within(w).getByText(/todavia no esta disponible/)).toBeTruthy();
+    // Las pruebas corren como entorno de pruebas (SOLO_EN_PRUEBAS): aviso, no fallo.
+    expect(within(w).queryByText(/Falló:/)).toBeNull();
+  });
+
+  it('un campus que no contesta a /forms cuenta UNA vez en «sin poder leer», aunque dos tarjetas lo lean', async () => {
+    get.mockImplementation((url) => (url === '/forms?projectId=5&kind=webhook'
+      ? Promise.reject(new Error('500'))
+      : Promise.resolve({ success: true, data: RESPUESTAS(url) })));
+    abrir();
+    await screen.findByText('Zapier ventas');
+    expect(await screen.findByText('1 sin poder leer')).toBeTruthy();
+    // La tarjeta de Matrícula no aparece solo por el error.
+    expect(screen.queryByTestId('tipo-admision-webhooks')).toBeNull();
   });
 
   it('Consultas de alumnos en Mensajería: por campus, encendida o apagada y por qué', async () => {
@@ -853,7 +878,8 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(c).queryByText(/Otro campus/)).toBeNull();
     // Dice la verdad: no llegan como aviso, y un fallo de lectura no se ve en ninguna pantalla.
     expect(within(c).getByText(/No llegan como aviso: el CRM las lee del Moodle\. Si la lectura de un campus falla, no se ve en ninguna pantalla/)).toBeTruthy();
-    expect(within(c).getByRole('link', { name: /Configurar/ }).getAttribute('href')).toBe('/consultas');
+    // «Configurar» lleva a donde se enciende la lectura: la conexión de Moodle.
+    expect(within(c).getByRole('link', { name: /Configurar/ }).getAttribute('href')).toBe('/finanzas/integraciones');
   });
 
   it('Consultas pide también ver Integraciones, que es de donde se lee su estado', () => {
