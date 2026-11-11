@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-837 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+841 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -574,6 +574,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | restore | `PATCH /api/leads/:id/restore` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `leads.restaurar` |
 | reassignPending | `POST /api/leads/reassign-pending` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `leads.assign` |
 | softDelete · borrar por cualquier motivo, aunque no sea suyo o tenga ventas | `DELETE /api/leads/:id` | cuando borrar por cualquier motivo, aunque no sea suyo o tenga ventas: a mano, lead.controller.js · softDelete | superadmin, admin, soporte | `leads.delete_cualquiera` |
+
+## links-pago
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| verConfig | `GET /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` o `links_pago.crear` |
+| guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
+| detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 
 ## make
 
@@ -1485,6 +1494,14 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver pagos de Stripe | `stripe.view` | Los cobros por Stripe, y traer los nuevos. | Admin, Gestora, Soporte, Project manager |  |
 | Asociar pagos de Stripe | `stripe.edit` | Enlazar un pago con su venta y llevar las disputas. | Admin, Soporte | `stripe.view` |
+
+### Links de pago
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Crear links de pago | `links_pago.crear` | Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos. | Admin, Gestora, Soporte |  |
+| Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno). | Admin |  |
+| Configurar los links de pago | `links_pago.configurar` | El descuento máximo de cada campus sobre el precio del catálogo. | Admin |  |
 
 ### Facturas de colaboradores
 
