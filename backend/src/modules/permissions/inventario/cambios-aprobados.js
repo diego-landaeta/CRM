@@ -434,6 +434,28 @@ export const CAMBIOS_DE_MENU = [
     quitadas: ['Equipo de Desarrollo › Por revisar'],
     aprobadoPor: 'Diego, 10/11',
   },
+  {
+    id: 'menu-entradas-de-angel-631',
+    que: '«Conexión › Moodle» sale a superadmin, admin y gestora+admin (CRM#408), y «Catálogo › Cursos pendientes» a la gestora (CRM#401).',
+    motivo: 'Las añadió Ángel el 29/10 y no estaban apuntadas: la foto del menú las daba como sobrantes (#631). Diego las aprobó el 06/11. La tercera, «Análisis › Pregunta a tus datos» (CRM#390), ya no sale: la quitó `menu-sin-pantallas-ia`.',
+    perfiles: {
+      superadmin: ['+ Conexión › Moodle'],
+      admin: ['+ Conexión › Moodle'],
+      'gestora+admin': ['+ Conexión › Moodle'],
+      gestora: ['+ Catálogo › Cursos pendientes'],
+      'gestora+tutor': ['+ Catálogo › Cursos pendientes'],
+      'gestora con factura_manager': ['+ Catálogo › Cursos pendientes'],
+      'gestora con editar_fechas_factura': ['+ Catálogo › Cursos pendientes'],
+      'gestora con usa_mcp': ['+ Catálogo › Cursos pendientes'],
+      'gestora con diplomas.view': ['+ Catálogo › Cursos pendientes'],
+      'gestora con tasks.close': ['+ Catálogo › Cursos pendientes'],
+    },
+    rutas: {
+      'Conexión › Moodle': 'GET /api/moodle/campus',
+      'Catálogo › Cursos pendientes': 'GET /api/cursos-pendientes/',
+    },
+    aprobadoPor: 'Diego, 06/11',
+  },
 ];
 
 /**
