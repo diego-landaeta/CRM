@@ -9,6 +9,7 @@ import { encrypt } from '../src/shared/utils/crypto.js';
 import * as campus from '../src/modules/tutores/tutor.campus.js';
 import tutorRoutes from '../src/modules/tutores/tutor.routes.js';
 import { errorHandler } from '../src/shared/middleware/errorHandler.js';
+import { logger } from '../src/shared/utils/logger.js';
 
 // Como en tutoresCampus187: el superadmin de estas pruebas (`userId: 0`) no está en
 // la base; solo a ese id se le da el mapa de un superadmin, los demás, el de verdad.
@@ -41,20 +42,27 @@ const e = {};
 
 // Dos Moodle, uno por empresa. En A el token es del administrador del sitio (conexión
 // antigua, de antes de `crm_servicio`) y además da clase en el curso 100; el 4 es otro
-// administrador que no da clase; el 20, una alumna. En B el token es de `crm_servicio`.
+// administrador que no da clase; el 6, otro administrador que SÍ da clase; el 20, una
+// alumna. A tiene un plugin anterior a la 1.10.2: sin `local_crm_cuenta`, no se puede
+// saber si el 6 es administrador. En B el token es de `crm_servicio` y el plugin es la
+// 1.10.2: dice que el 5, que da clase en el curso 500, es el administrador del sitio.
 const CAMPUS = {
   'token-a': {
     delToken: 2,
+    admins: [2, 4, 6],
+    plugin: '1.10.1',
     usuarios: {
       2: { id: 2, email: 'admin@a.test', fullname: 'Admin del sitio A', suspended: 0 },
       4: { id: 4, email: 'otroadmin@a.test', fullname: 'Otro admin A', suspended: 0 },
+      6: { id: 6, email: 'admin.profe@a.test', fullname: 'Admin que da clase A', suspended: 0 },
       10: { id: 10, email: 'ana@a.test', fullname: 'Ana en A', suspended: 0 },
       20: { id: 20, email: 'alumna@a.test', fullname: 'Alumna A', suspended: 0 },
     },
-    cursos: { 2: [100], 10: [100], 20: [100] },
+    cursos: { 2: [100], 6: [100], 10: [100], 20: [100] },
     matriculados: {
       100: [
         { id: 2, roles: [{ shortname: 'editingteacher' }] },
+        { id: 6, roles: [{ shortname: 'editingteacher' }] },
         { id: 10, roles: [{ shortname: 'editingteacher' }] },
         { id: 20, roles: [{ shortname: 'student' }] },
       ],
@@ -62,12 +70,20 @@ const CAMPUS = {
   },
   'token-b': {
     delToken: 3,
+    admins: [5],
+    plugin: '1.10.2',
     usuarios: {
       3: { id: 3, email: 'crm@b.test', fullname: 'crm_servicio', suspended: 0 },
+      5: { id: 5, email: 'admin@b.test', fullname: 'Admin del sitio B', suspended: 0 },
       50: { id: 50, email: 'ana@b.test', fullname: 'Ana en B', suspended: 0 },
     },
-    cursos: { 50: [500] },
-    matriculados: { 500: [{ id: 50, roles: [{ shortname: 'teacher' }] }] },
+    cursos: { 5: [500], 50: [500] },
+    matriculados: {
+      500: [
+        { id: 5, roles: [{ shortname: 'editingteacher' }] },
+        { id: 50, roles: [{ shortname: 'teacher' }] },
+      ],
+    },
   },
 };
 
@@ -89,6 +105,15 @@ const moodleFalso = vi.fn(async (_url, { body }) => {
       return json((c.cursos[p.get('userid')] || []).map((id) => ({ id, fullname: `Curso ${id}` })));
     case 'core_enrol_get_enrolled_users':
       return json(c.matriculados[p.get('courseid')] || []);
+    case 'local_crm_cuenta': {
+      // Un plugin anterior no tiene la función: lo que contesta Moodle 5.0 (probado el 11/11).
+      if (c.plugin !== '1.10.2') {
+        return json({ exception: 'dml_missing_record_exception', errorcode: 'invalidrecordunknown', message: 'Can\'t find data record in database.' });
+      }
+      const id = Number(p.get('userid'));
+      const existe = Boolean(c.usuarios[id]);
+      return json({ existe, siteadmin: existe && c.admins.includes(id) });
+    }
     default:
       return json({ exception: 'moodle_exception', errorcode: 'accessexception', message: 'Access control exception' });
   }
@@ -308,5 +333,41 @@ describe('#689 punto 2 · vincular cuentas de Moodle va por empresa', () => {
     await campus.asignarCampus(t, e.campusA);
     await expect(campus.vincularAMano(t, e.campusA, 10)).rejects.toMatchObject({ statusCode: 409, code: 'SIN_COMPROBAR' });
     expect(await vinculada(t, e.campusA)).toBeUndefined();
+  });
+});
+
+describe('#689 · el administrador del sitio no se vincula aunque dé clase (plugin 1.10.2)', () => {
+  it('con el plugin 1.10.2: 409 ADMIN_DEL_SITIO al vincular y al buscar, y no cambia nada', async () => {
+    if (!hayBase) return;
+    const antes = await vinculada(e.tutora, e.campusB);
+    const b = comoAdminB();
+    const r = await b.post(`/api/tutores/${e.tutora}/campus/${e.campusB}/vincular`, { moodleUserId: 5 });
+    expect(r.status, JSON.stringify(r.body)).toBe(409);
+    expect(r.body).toMatchObject({ success: false, code: 'ADMIN_DEL_SITIO' });
+    expect(r.body.error).toMatch(/administrador del sitio/);
+    const buscada = await b.get(`/api/tutores/${e.tutora}/campus/${e.campusB}/buscar-cuenta?q=admin@b.test`);
+    expect(buscada.status).toBe(409);
+    expect(buscada.body).toMatchObject({ code: 'ADMIN_DEL_SITIO' });
+    expect(await vinculada(e.tutora, e.campusB)).toBe(antes);
+    // Una profesora que no es administradora, sí.
+    const ana = await b.post(`/api/tutores/${e.tutora}/campus/${e.campusB}/vincular`, { moodleUserId: 50 });
+    expect(ana.status, JSON.stringify(ana.body)).toBe(200);
+  });
+
+  it('con un plugin anterior, sin la función: sigue como antes y lo deja dicho en el log', async () => {
+    if (!hayBase) return;
+    const t = await crearUsuario('tutor');
+    await campus.asignarCampus(t, e.campusA);
+    await campus.comprobarTutor(t);
+    const aviso = vi.spyOn(logger, 'warn');
+    try {
+      // El 6 es administrador del sitio, pero el plugin de A no lo puede decir: da clase, se vincula.
+      const r = await comoAdminA().post(`/api/tutores/${t}/campus/${e.campusA}/vincular`, { moodleUserId: 6 });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(await vinculada(t, e.campusA)).toBe(6);
+      expect(aviso).toHaveBeenCalledWith(expect.objectContaining({ moodleUserId: 6 }), expect.stringMatching(/local_crm_cuenta/));
+    } finally {
+      aviso.mockRestore();
+    }
   });
 });
