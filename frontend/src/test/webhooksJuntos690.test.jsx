@@ -926,16 +926,20 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(c).getByRole('link', { name: /Configurar/ }).getAttribute('href')).toBe('/finanzas/integraciones');
   });
 
+  // Para los contadores de la cabecera: sin el formulario con error de los
+  // datos base, lo que cuente sale solo de Consultas.
+  const sinFormularios = (url) => (url.startsWith('/forms') ? [] : RESPUESTAS(url));
+  const moodleLee = { active: true, has_secret: true, config_public: { consultas: true } };
+
   it('con el plugin del CRM conectado (solo en pruebas), la fila dice su último aviso y si falló el repaso', async () => {
     const aviso = '2026-11-10T08:30:00Z';
     get.mockImplementation((url) => {
       if (url === '/consultas/campus/1/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: aviso, sincronizacion_error: null } });
-      if (url === '/consultas/campus/2/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: null, sincronizacion_error: 'El Moodle no contesta' } });
-      // Campus 5: la ruta no existe (404): se queda como sin plugin, sin contarlo.
+      // El servidor guarda el error entero, con su frase: se enseña tal cual.
+      if (url === '/consultas/campus/2/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: null, sincronizacion_error: 'No se ha podido repasar el campus: El Moodle no contesta' } });
+      // Campus 5: 404 (la ruta no está montada o el campus no es suyo): se queda como sin plugin, sin contarlo.
       if (url === '/consultas/campus/5/plugin') return Promise.reject(Object.assign(new Error('404'), { status: 404 }));
-      return Promise.resolve({
-        data: url.startsWith('/integrations/moodle') ? { active: true, has_secret: true, config_public: { consultas: true } } : RESPUESTAS(url),
-      });
+      return Promise.resolve({ data: url.startsWith('/integrations/moodle') ? moodleLee : sinFormularios(url) });
     });
     abrir();
     const c = await screen.findByTestId('tipo-consultas');
@@ -943,36 +947,98 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(filas).toHaveLength(2);
     expect(within(c).getByText(`Último aviso: ${formatDateTime(aviso)}`)).toBeTruthy();
     expect(within(c).getByText('Sin avisos todavía')).toBeTruthy();
-    expect(within(c).getByText('Falló: el repaso del campus: El Moodle no contesta')).toBeTruthy();
+    expect(within(c).getByText('Falló: No se ha podido repasar el campus: El Moodle no contesta')).toBeTruthy();
     expect(within(c).getByText('Lectura de consultas encendida')).toBeTruthy();
-    // El 404 del campus 5 no cuenta como «sin poder leer».
+    // El fallo del repaso suma en la cabecera; el 404 del campus 5 no cuenta como «sin poder leer».
+    expect(await screen.findByText('1 con fallos')).toBeTruthy();
     expect(screen.queryByText(/sin poder leer/)).toBeNull();
   });
 
-  it('el estado del plugin solo se pide con «consultas.gestionar», y si el servidor falla se dice', async () => {
+  it('un 403 al leer el plugin tampoco cuenta: la fila se queda como sin plugin', async () => {
+    get.mockImplementation((url) => {
+      if (url.includes('/plugin')) return Promise.reject(Object.assign(new Error('403'), { status: 403 }));
+      return Promise.resolve({ data: url.startsWith('/integrations/moodle') ? moodleLee : sinFormularios(url) });
+    });
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    expect(await within(c).findAllByText('Lectura de consultas encendida')).toHaveLength(3);
+    expect(within(c).queryByText('No se pudo leer el estado del plugin del CRM')).toBeNull();
+    expect(screen.queryByText(/sin poder leer/)).toBeNull();
+    expect(screen.queryByText(/con fallos/)).toBeNull();
+  });
+
+  it('plugin conectado pero sin «Leer las consultas»: no sale activo y dice que los avisos no entran', async () => {
+    get.mockImplementation((url) => {
+      if (url === '/consultas/campus/1/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: '2026-11-10T08:30:00Z', sincronizacion_error: null } });
+      if (url.includes('/plugin')) return Promise.resolve({ data: { activo: false } });
+      return Promise.resolve({
+        data: url === '/integrations/moodle?projectId=1' ? { active: true, has_secret: true, config_public: { consultas: false } }
+          : url.startsWith('/integrations/moodle') ? null : sinFormularios(url),
+      });
+    });
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    const fila = (await within(c).findByText('Plugin del CRM conectado')).closest('li');
+    expect(within(fila).queryByText('Activo')).toBeNull();
+    expect(within(fila).getByText('Los avisos llegan, pero no entran al CRM: Sin «Leer las consultas» en su conexión de Moodle')).toBeTruthy();
+  });
+
+  it('el plugin anterior a la 1.8.0 es un aviso, no un fallo', async () => {
+    const viejo = 'El plugin del campus es anterior a la 1.8.0: se actualizará solo esta noche (o actualízalo desde «Conectar con el CRM»).';
+    get.mockImplementation((url) => {
+      if (url === '/consultas/campus/1/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: null, sincronizacion_error: viejo } });
+      if (url.includes('/plugin')) return Promise.resolve({ data: { activo: false } });
+      return Promise.resolve({
+        data: url === '/integrations/moodle?projectId=1' ? moodleLee
+          : url.startsWith('/integrations/moodle') ? null : sinFormularios(url),
+      });
+    });
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    expect(await within(c).findByText(viejo)).toBeTruthy();
+    expect(within(c).queryByText(/^Falló/)).toBeNull();
+    expect(screen.queryByText(/con fallos/)).toBeNull();
+  });
+
+  it('sin «Leer las consultas» y con el plugin viejo, salen los dos avisos', async () => {
+    const viejo = 'El plugin del campus es anterior a la 1.8.0: se actualizará solo esta noche (o actualízalo desde «Conectar con el CRM»).';
+    get.mockImplementation((url) => {
+      if (url === '/consultas/campus/1/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: null, sincronizacion_error: viejo } });
+      if (url.includes('/plugin')) return Promise.resolve({ data: { activo: false } });
+      return Promise.resolve({
+        data: url === '/integrations/moodle?projectId=1' ? { active: true, has_secret: true, config_public: { consultas: false } }
+          : url.startsWith('/integrations/moodle') ? null : sinFormularios(url),
+      });
+    });
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    expect(await within(c).findByText(/^Los avisos llegan, pero no entran al CRM/)).toBeTruthy();
+    expect(within(c).getByText(viejo)).toBeTruthy();
+  });
+
+  it('el estado del plugin solo se pide con «consultas.gestionar»', async () => {
     permisos.value = ['consultas.view', 'integrations.view'];
-    get.mockImplementation((url) => Promise.resolve({
-      data: url.startsWith('/integrations/moodle') ? { active: true, has_secret: true, config_public: { consultas: true } } : RESPUESTAS(url),
-    }));
+    get.mockImplementation((url) => Promise.resolve({ data: url.startsWith('/integrations/moodle') ? moodleLee : RESPUESTAS(url) }));
     abrir();
     const c = await screen.findByTestId('tipo-consultas');
     await within(c).findAllByText('Lectura de consultas encendida');
     expect(get.mock.calls.some(([u]) => u.includes('/plugin'))).toBe(false);
   });
 
-  it('un 500 al leer el plugin se dice en la fila, sin esconder la lectura', async () => {
+  it('un 500 al leer el plugin se dice en la fila y en la cabecera, sin esconder la lectura', async () => {
     get.mockImplementation((url) => {
       if (url === '/consultas/campus/1/plugin') return Promise.reject(Object.assign(new Error('500'), { status: 500 }));
       if (url.includes('/plugin')) return Promise.resolve({ data: { activo: false } });
       return Promise.resolve({
-        data: url === '/integrations/moodle?projectId=1' ? { active: true, has_secret: true, config_public: { consultas: true } }
-          : url.startsWith('/integrations/moodle') ? null : RESPUESTAS(url),
+        data: url === '/integrations/moodle?projectId=1' ? moodleLee
+          : url.startsWith('/integrations/moodle') ? null : sinFormularios(url),
       });
     });
     abrir();
     const c = await screen.findByTestId('tipo-consultas');
     expect(await within(c).findByText('No se pudo leer el estado del plugin del CRM')).toBeTruthy();
     expect(within(c).getByText('Lectura de consultas encendida')).toBeTruthy();
+    expect(await screen.findByText('1 sin poder leer')).toBeTruthy();
   });
 
   it('Consultas pide también ver Integraciones, que es de donde se lee su estado', () => {

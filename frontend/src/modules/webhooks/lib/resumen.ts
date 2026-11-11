@@ -689,7 +689,7 @@ export const TIPOS: TipoWebhook[] = [
     // `consultas.gestionar`). Va detrás de PLUGIN_MOODLE: solo en pruebas hasta
     // que Diego lo apruebe; en /crm esa ruta ni existe y no se pide.
     nota: PLUGIN_MOODLE
-      ? 'Sin el plugin del CRM no llegan como aviso: el CRM las lee del Moodle, y si esa lectura falla no se ve en ninguna pantalla (solo en el registro del servidor). Con el plugin conectado (solo en pruebas), el campus avisa de cada mensaje y aquí sale su último aviso y si falló su repaso. Se encienden en Finanzas › Integraciones, en la conexión de Moodle.'
+      ? 'Sin el plugin del CRM no llegan como aviso: el CRM las lee del Moodle, y si esa lectura falla no se ve en ninguna pantalla (solo en el registro del servidor). Con el plugin conectado (solo en pruebas), el campus avisa de cada mensaje; quien gestiona las consultas ve aquí su último aviso y si falló su repaso. Se encienden en Finanzas › Integraciones, en la conexión de Moodle.'
       : 'No llegan como aviso: el CRM las lee del Moodle. Si la lectura de un campus falla, no se ve en ninguna pantalla (solo en el registro del servidor). Se encienden en Finanzas › Integraciones, en la conexión de Moodle.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
       const pedir = ctx.pedir || datos;
@@ -710,22 +710,37 @@ export const TIPOS: TipoWebhook[] = [
         try {
           plugin = await pedir(`/consultas/campus/${c.id}/plugin`);
         } catch (err) {
-          // Un 403 (otro campus) o un 404 (sin la ruta) no es un fallo del
-          // webhook: la fila se queda como sin plugin. Lo demás, se dice.
+          // Un 404 (la ruta no está montada, o el campus no es suyo:
+          // `exigirCampusSuyo` contesta 404) o un 403 (sin `consultas.gestionar`,
+          // que ya se mira antes) no es un fallo del webhook: la fila se queda
+          // como sin plugin. Lo demás, se dice.
           const status = (err as { status?: number })?.status;
           if (status !== 403 && status !== 404) sinLeer = 'No se pudo leer el estado del plugin del CRM';
         }
       }
 
       if (plugin?.activo) {
+        // El error del repaso lo escribe el servidor entero («No se ha podido
+        // repasar el campus: …»), y se enseña tal cual. El del plugin anterior
+        // a la 1.8.0 no es un fallo: los avisos llegan y se actualiza solo esa
+        // noche (`consultas.plugin.js`, que solo guarda el texto, no el código).
+        const error = plugin.sincronizacion_error || null;
+        const pluginViejo = Boolean(error && /anterior a la 1\.8\.0/.test(error));
         return [{
           clave: `consultas-${c.id}`,
           nombre: 'Plugin del CRM conectado',
           campus: c.nombre,
-          activo: true,
+          // Sin «Leer las consultas» (o con la conexión apagada o sin token), el
+          // servidor apunta la hora de cada aviso pero lo DESCARTA
+          // (`consultas.avisos.js`, `campusConConsultas`): no está funcionando.
+          activo: lee,
           ultimo: plugin.ultimo_aviso_at ?? null,
-          fallo: plugin.sincronizacion_error ? `el repaso del campus: ${plugin.sincronizacion_error}` : null,
-          detalle: porQueNoLee,
+          fallo: error && !pluginViejo ? error : null,
+          aviso: !lee
+            ? `Los avisos llegan, pero no entran al CRM: ${porQueNoLee}`
+            : pluginViejo ? error! : undefined,
+          // Con los avisos descartados, lo de la versión no se calla: va aparte.
+          detalle: !lee && pluginViejo ? error! : undefined,
           enlace: '/finanzas/integraciones',
           campusId: c.id,
         }];

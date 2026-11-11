@@ -40,6 +40,7 @@ export default function WebhooksResumenPage() {
   // `llevaEquipo`: quien lleva un equipo comercial ve las decisiones de
   // asignación recortadas a su equipo (#704).
   const { can, tieneRol, llevaEquipo } = usePermission();
+  const gestionaConsultas = can('consultas.gestionar');
   const delAmbito = useProyectosDelAmbito<Campus & { sociedad_emisora_id?: number | null }>();
 
   const campusFijo = !activeIssuerId && activeProject?.id && activeProject.id !== TODOS_LOS_PROYECTOS
@@ -80,7 +81,9 @@ export default function WebhooksResumenPage() {
         });
     }
     return () => { vivo = false; corte.abort(); };
-  }, [claveCampus, activeIssuerId, activeProject?.id, llevaEquipo, tipos.map((t) => t.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+    // `gestionaConsultas`: si cambia, se vuelve a pedir (decide si se lee el
+    // estado del plugin de Moodle). `can` cambia en cada render y no sirve.
+  }, [claveCampus, activeIssuerId, activeProject?.id, llevaEquipo, gestionaConsultas, tipos.map((t) => t.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // La ficha de un webhook es de un campus: con «Todos» o una empresa, el muro
   // pararía el enlace. Se elige arriba ese campus y se entra.
@@ -121,11 +124,12 @@ export default function WebhooksResumenPage() {
 
   // Las pantallas relacionadas del pie, solo las que se pueden abrir. «Sus
   // avisos están arriba» solo si su tarjeta sale de verdad.
-  const veAsignacion = tipos.some((t) => t.id === 'asignacion');
+  // «Asignación de leads» sale en el pie con el mismo permiso que su tarjeta
+  // (`webhooks_salientes.view`): quien la ve en el pie, ve sus avisos arriba.
   const relacionados = [
     { to: '/conexion/conectores', label: 'Conectores', detalle: 'mapeo de campos' },
     { to: '/prospectos/revision-duplicados', label: 'Revisión de duplicados', detalle: 'repetidos por webhook' },
-    { to: '/conexion/asignacion-leads', label: 'Asignación de leads', detalle: veAsignacion ? 'sus avisos están arriba; se configura en su pantalla' : 'a quién va cada formulario' },
+    { to: '/conexion/asignacion-leads', label: 'Asignación de leads', detalle: 'sus avisos están arriba; se configura en su pantalla' },
   ].filter((r) => rutaPermitida(r.to, can));
 
   // Lo que falla y lo que no se pudo leer, por separado: un campus que no
