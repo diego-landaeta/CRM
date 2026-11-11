@@ -135,6 +135,8 @@ export interface CreateUserPayload {
   projects: ProjectAssignment[];
   /** Empresas enteras (#220). Solo lo acepta el servidor de un super admin. */
   empresaIds?: number[];
+  /** #694: excepciones de permisos, ya en el alta. Pide «Permisos de cada persona». */
+  excepciones?: Record<string, boolean>;
 }
 
 export interface CreateUserResult {
@@ -156,6 +158,8 @@ export interface UpdateUserPayload {
   email?: string;
   /** Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246). */
   reenviarEnlace?: boolean;
+  /** #211: el correo nuevo no se aplica todavía; le llega un código a esa dirección. */
+  conCodigo?: boolean;
   role?: UserRole;
   /** Roles de MAS. Una lista vacia los quita todos, que es lo que se espera. */
   roles_extra?: UserRole[];
@@ -185,6 +189,13 @@ export async function updateUser(id: number, payload: UpdateUserPayload): Promis
   const res = await client.patch(`/users/${id}`, payload);
   if (!res.success) throw new Error(res.error || 'No se pudo actualizar el usuario');
   return normalizeUser(res.data);
+}
+
+/** #211: el código que le llegó a la persona a su dirección nueva. */
+export async function confirmarCorreoDeUsuario(id: number, codigo: string): Promise<{ cambiado: boolean; email: string }> {
+  const res = await client.post(`/users/${id}/email/confirmar`, { codigo });
+  if (!res.success) throw new Error(res.error || 'No se pudo confirmar el correo');
+  return res.data;
 }
 
 export async function deactivateUser(id: number): Promise<{ leads_huerfanizados?: number; leads_reasignados?: number }> {

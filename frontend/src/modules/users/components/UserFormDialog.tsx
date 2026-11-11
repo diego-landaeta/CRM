@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Lock, ShieldCheck } from '@phosphor-icons/react';
+import { X, Lock } from '@phosphor-icons/react';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import type { Project, UserRole } from '@/shared/types';
 import Portal from '@/shared/components/ui/portal';
@@ -15,6 +15,7 @@ import { confirmacionCambioCorreo, problemaDeContrasena } from '../lib/credencia
 import { motivoNoAsignable, porRol } from '../lib/rolesAsignables';
 import ProjectSelector from './ProjectSelector';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 
 export interface UserFormValues {
   nombre: string;
@@ -26,6 +27,13 @@ export interface UserFormValues {
   whatsapp_phone: string;
   /** Con un correo nuevo: mandarle el enlace para poner contraseña allí (#246). */
   reenviarEnlace: boolean;
+  /** #694: las excepciones de permisos que van con el alta. */
+  excepciones?: Record<string, boolean>;
+  /**
+   * #211: de serie, el correo nuevo no se aplica hasta meter el código que le
+   * llega a esa dirección. Marcado, se aplica al momento (queda en el registro).
+   */
+  aplicarSinCodigo?: boolean;
   /**
    * Empresas enteras de un admin (#220). `undefined` = no se tocan: quien edita
    * no es super admin, o no hay migración. Vacía = quitarlas (sus campus se quedan).
@@ -69,6 +77,7 @@ export default function UserFormDialog({
   const [nombre, setNombre] = useState(user?.nombre ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [reenviarEnlace, setReenviarEnlace] = useState(false);
+  const [aplicarSinCodigo, setAplicarSinCodigo] = useState(false);
   const cambiaCorreo = esEdicion && canChangeEmail && email.trim().toLowerCase() !== user!.email.toLowerCase();
   const [role, setRole] = useState<UserRole>((user?.role as UserRole) ?? 'gestor');
   // Los roles añadidos. Diego, 22/09: «necesitamos que se pueda colocar más de
@@ -109,11 +118,11 @@ export default function UserFormDialog({
   const llevaEmpresa = role === 'admin' || esColaborador;
   const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
   // Facturación, fechas de facturas y el WhatsApp del CRM ya no son casillas de
-  // aquí (#423): son permisos del catálogo y se dan en «Ver permisos», con su
-  // registro de quién y cuándo.
+  // aquí (#423): son permisos del catálogo y se dan en el apartado «Permisos» de
+  // la ficha (o ya en el alta, #694), con su registro de quién y cuándo.
 
-  // Sus permisos y de dónde le viene cada uno (#423).
-  const [verPermisos, setVerPermisos] = useState(false);
+  // #694: en el alta, las excepciones viajan con el formulario y se crean con él.
+  const [excepciones, setExcepciones] = useState<Record<string, boolean>>({});
   const [nuevaPass, setNuevaPass] = useState('');
   const [repetirPass, setRepetirPass] = useState('');
   const [guardandoPass, setGuardandoPass] = useState(false);
@@ -209,10 +218,13 @@ export default function UserFormDialog({
       roles_extra: rolesExtra.filter((r) => r !== role),
       projects: seleccionados,
       whatsapp_phone: telefono.trim(),
-      reenviarEnlace: cambiaCorreo && reenviarEnlace,
+      reenviarEnlace: cambiaCorreo && aplicarSinCodigo && reenviarEnlace,
+      aplicarSinCodigo: cambiaCorreo && aplicarSinCodigo,
       // Solo si quien edita puede darlas. Para otro rol que no sea admin ni
       // colaborador, se mandan vacías: una gestora no tiene empresas enteras.
       ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
+      // #694: solo en el alta; en la ficha cada cambio ya se guarda al momento.
+      ...(!esEdicion && Object.keys(excepciones).length ? { excepciones } : {}),
     });
   }
 
@@ -314,7 +326,27 @@ export default function UserFormDialog({
                 </Field>
                 {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
                     sale ningún correo mientras siga el freno: se dice en vez de esconderlo. */}
+                {/* #211: con código de serie. «Aplicar sin código», para casos como
+                    una dirección que la persona ya no puede abrir. */}
                 {cambiaCorreo && (
+                  <label className="mt-1.5 flex items-start gap-2 px-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aplicarSinCodigo}
+                      onChange={(e) => setAplicarSinCodigo(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm">
+                      Aplicar sin código
+                      <span className="block text-secundario text-muted-foreground">
+                        {aplicarSinCodigo
+                          ? 'Cambia al guardar, sin comprobar que la dirección nueva existe. Queda en el registro.'
+                          : 'Al guardar le llega un código de 6 cifras a la dirección nueva; el correo cambia cuando metas el código que te diga.'}
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {cambiaCorreo && aplicarSinCodigo && (
                   role === 'tutor' ? (
                     <p className="text-secundario text-muted-foreground mt-1.5 px-1">
                       A los tutores no se les manda ningún correo por ahora: si lo necesita, ponle tú una contraseña abajo y pásasela.
@@ -439,26 +471,17 @@ export default function UserFormDialog({
               />
             )}
 
-            {/* Todo lo que puede hacer y de dónde le viene (#423): su rol, su rol a
-                medida o una excepción suya. Ahí mismo se le cambian. */}
-            {esEdicion && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-                <span className="text-sm">
-                  Permisos
-                  <span className="block text-secundario text-muted-foreground">
-                    Lo que puede hacer, de dónde le viene y sus excepciones.
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setVerPermisos(true)}
-                  className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
-                >
-                  <ShieldCheck size={14} weight="bold" /> Ver permisos
-                </button>
-              </div>
-            )}
-            {verPermisos && user && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
+            {/* Todo lo que puede hacer y de dónde le viene (#423), siempre a la
+                vista en su ficha (#694): su rol, su rol a medida o una excepción
+                suya, y ahí mismo se le cambian (cada cambio se guarda al momento).
+                En el alta, lo que trae el rol, con sus excepciones antes de crearla. */}
+            <div className="rounded-lg border border-border p-3">
+              {esEdicion && user
+                ? <PermisosDePersona userId={user.id} enLinea />
+                : <PermisosDelAlta role={role} rolesExtra={rolesExtra.filter((r) => r !== role)}
+                    projectIds={seleccionados.map((p) => p.projectId)}
+                    excepciones={excepciones} onCambiar={setExcepciones} />}
+            </div>
 
             {esEdicion && (
               <Field label="Teléfono (WhatsApp)" htmlFor="user-tel" hint="Se usa para el widget de WhatsApp y el contacto del gestor.">

@@ -114,10 +114,41 @@ export const RUTAS_DEL_TUTOR = [
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
 
+/**
+ * Lo unico que puede pedir un tutor redactor (CRM#708): hace los cursos y
+ * responde en Moodle. Su tablero y su factura del mes, como un colaborador, y
+ * sus consultas de alumnos y sus cursos, como un tutor. Nada de prospectos,
+ * ventas ni finanzas: todo lo demas, 403 aunque la ruta solo pida token.
+ */
+export const RUTAS_DEL_TUTOR_REDACTOR = [
+  /^\/api\/auth(?:\/|$)/,
+  /^\/api\/tasks(?:\/|$)/,
+  /^\/api\/facturas-colaborador\/mias(?:\/|$)/,
+  /^\/api\/tutores(?:\/|$)/,
+  /^\/api\/consultas(?:\/|$)/,
+  /^\/api\/notifications(?:\/|$)/,
+  /^\/api\/permissions\/system-defaults\/?$/,
+  /^\/api\/users\/mis-avisos\/?$/,
+  /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
+];
+
+/**
+ * Los roles que dan clase: el tutor y el tutor redactor (CRM#708). Donde el
+ * CRM pregunta «¿es tutor?» para recortar a lo suyo (sus consultas, sus cursos,
+ * sus comisiones) o para listar tutores, el redactor cuenta como tutor.
+ */
+export const ROLES_DE_TUTOR = ['tutor', 'tutor_redactor'];
+
+/** Si su rol PRINCIPAL es de tutor (lo que antes era `role === 'tutor'`). */
+export function esRolDeTutor(rol) {
+  return ROLES_DE_TUTOR.includes(rol);
+}
+
 /** Las listas cerradas, por rol. Quien solo tiene roles de aqui, solo pide lo suyo. */
 const RUTAS_POR_ROL = {
   colaborador: RUTAS_DEL_COLABORADOR,
   tutor: RUTAS_DEL_TUTOR,
+  tutor_redactor: RUTAS_DEL_TUTOR_REDACTOR,
 };
 
 /** Tutor y NADA MAS. A quien ademas es gestora no se le cierra nada. */
@@ -304,4 +335,22 @@ export async function personaDelInforme(user, pedido, { jefes = ['admin', 'super
   if (alcance && (esJefe || alcance.length > 1)) return acotarAlAlcance(pedido, alcance);
   if (esJefe) return pedido ?? null;
   return user?.userId || -1;
+}
+
+/**
+ * El alcance SOLO si lleva un equipo comercial (QA del 09/11/2026); null si no.
+ *
+ * Para las pantallas que una gestora sigue viendo como siempre (el panel
+ * «Último lead de cada gestora», la cola de facturación, el selector de
+ * WhatsApp, los desplegables de gestora…) pero que a una líder le enseñaban
+ * todo el campus, y para lo que no es «qué filas ve» sino «qué puede hacer»
+ * (egresos y balance de la empresa, mover la fecha de la cola). Una gestora
+ * sola tiene alcance `[ella]`; una líder, `[ella, ...sus gestoras]`, y nunca
+ * está en su propio equipo, así que «más de uno» es «lleva equipo».
+ *
+ * Mismo nombre y contrato en CRM-ISEIE (paridad).
+ */
+export async function alcanceDeLider(user) {
+  const alcance = await alcanceComercial(user);
+  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
 }

@@ -3,6 +3,7 @@ import { CheckCircle, WarningCircle, ArrowRight } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 /**
  * Integraciones con «Todos» o una empresa arriba (#218, Diego 04/11/2026): el
@@ -94,9 +95,10 @@ export default function EstadoDeLasIntegraciones() {
     return <div className="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground">No hay campus en esta vista.</div>;
   }
 
-  // Supabase solo es de los proyectos IA: la columna sale si hay alguno.
+  // Supabase solo es de los proyectos IA: la columna sale si hay alguno, y solo
+  // en pruebas (#44, `shared/lib/proyectosIA`).
   const columnas: Proveedor[] = ['stripe', 'brevo', 'moodle'];
-  if (campus.some((c) => c.type === 'ia')) columnas.push('supabase');
+  if (campus.some((c) => esProyectoIA(c))) columnas.push('supabase');
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">

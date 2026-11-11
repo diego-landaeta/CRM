@@ -8,7 +8,7 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import Card from '@/shared/components/ui/Card';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  avisoCambioCorreo, createUser, deactivateUser, listEmpresas, reactivateUser, setUserPassword, updateUser,
+  avisoCambioCorreo, createUser, deactivateUser, listEmpresas, reactivateUser, setUserPassword, updateUser, confirmarCorreoDeUsuario,
   type CrmUser, type Empresa,
 } from '../api/users.api';
 import useUsers from '../hooks/useUsers';
@@ -85,6 +85,8 @@ export default function UsersPanel() {
           roles_extra: values.roles_extra,
           projects: values.projects,
           ...(values.empresaIds?.length ? { empresaIds: values.empresaIds } : {}),
+          // #694: sus excepciones, en la misma operación que el alta.
+          ...(values.excepciones && Object.keys(values.excepciones).length ? { excepciones: values.excepciones } : {}),
         });
         if (setPasswordToken) {
           const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
@@ -104,7 +106,8 @@ export default function UsersPanel() {
         const cambiaCorreo = esSuperadmin && correoNuevo !== dialogo.user.email.toLowerCase();
         await updateUser(dialogo.user.id, {
           nombre: values.nombre,
-          ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: values.reenviarEnlace } : {}),
+          // #211: con código de serie; «aplicar sin código», al momento.
+          ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: values.reenviarEnlace, conCodigo: !values.aplicarSinCodigo } : {}),
           role: values.role,
           // Se manda SIEMPRE, aunque venga vacia: una lista vacia significa
           // «quitale los de mas», y omitirla dejaria imposible volver atras.
@@ -118,11 +121,28 @@ export default function UsersPanel() {
           // Las empresas enteras (#220): solo viajan si las ha podido tocar.
           ...(values.empresaIds !== undefined ? { empresaIds: values.empresaIds } : {}),
         });
+        // #211: el código le ha llegado a la persona; quien edita lo mete aquí.
+        const conCodigo = cambiaCorreo && !values.aplicarSinCodigo;
+        let correoConfirmado = false;
+        if (conCodigo) {
+          for (let intento = 0; intento < 5 && !correoConfirmado; intento++) {
+            const codigo = window.prompt(`Le hemos mandado un código de 6 cifras a ${correoNuevo}. Escribe el que te diga ${values.nombre} (caduca en 15 minutos):`);
+            if (codigo === null) break;
+            try {
+              await confirmarCorreoDeUsuario(dialogo.user.id, codigo.trim());
+              correoConfirmado = true;
+            } catch (e: any) {
+              toast({ title: 'Ese código no vale', description: e?.message, variant: 'destructive' });
+            }
+          }
+        }
         toast(sinProyectos
           ? {
             title: 'Usuario actualizado, sin proyectos',
             description: `${values.nombre} ya no tiene ningún proyecto asignado: al entrar no verá nada.`,
           }
+          : conCodigo && !correoConfirmado
+            ? { title: 'Usuario actualizado, el correo no', description: `Sigue entrando con ${dialogo.user.email}. Para cambiarlo, vuelve a guardar ${correoNuevo} y mete el código que le llegue.` }
           : cambiaCorreo
             ? { title: 'Usuario actualizado', description: `${values.nombre} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
             : { title: 'Usuario actualizado', description: values.nombre });

@@ -16,6 +16,7 @@ import { decodificarEntidades } from '@/shared/lib/entidadesHtml';
 // funcion que usa SalesPage, para que las dos pantallas digan el mismo mes.
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TutorialesVentas = lazy(() => import('@/modules/sales/components/TutorialesVentas'));
@@ -108,7 +109,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
    * No se esconde por ser IA porque si: se esconde lo que en un proyecto sin
    * equipo NO PUEDE tener contenido nunca.
    */
-  const esIA = activeProject?.type === 'ia';
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
 
   // Se ajusta cuando se sabe de que proyecto se trata, y UNA sola vez por
   // proyecto: si se forzara en cada render, cambiar el filtro a mano no
@@ -162,6 +164,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [viewUserId, setViewUserId] = useState('all');
   const [gestores, setGestores] = useState([]);
   const [filterCurso, setFilterCurso] = useState('all');
+  // Todas · Solo compartidas · Solo enteras (#163): las ventas atendidas entre
+  // dos gestoras, aparte. El servidor filtra; la parte de cada una no cambia.
+  const [filterCompartidas, setFilterCompartidas] = useState<'todas' | 'solo' | 'enteras'>('todas');
   const [cursos, setCursos] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -220,8 +225,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // Cualquier cambio de filtro devuelve a la primera pagina, y tira el desglose
   // de cuotas: era el de las fechas de antes.
   useEffect(() => { setCuotas([]); setVerCuotas(false); },
-    [projectIdParam, issuerIdParam, effectiveResponsableId, rango.from, rango.to]);
-  useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, rango.from, rango.to]);
+    [projectIdParam, issuerIdParam, effectiveResponsableId, filterCompartidas, rango.from, rango.to]);
+  useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, filterCompartidas, rango.from, rango.to]);
 
   useEffect(() => {
     /**
@@ -245,6 +250,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         if (issuerIdParam) params.issuerId = issuerIdParam;
         if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
         if (filterCurso !== 'all') params.producto = filterCurso;
+        if (filterCompartidas !== 'todas') params.compartidas = filterCompartidas;
         if (rango.from) params.from = rango.from;
         if (rango.to) params.to = rango.to;
         const res = await client.get('/conversions', { params });
@@ -277,7 +283,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       } finally { if (!cancelado) setLoading(false); }
     })();
     return () => { cancelado = true; };
-  }, [projectIdParam, issuerIdParam, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
+  }, [projectIdParam, issuerIdParam, reloadKey, effectiveResponsableId, page, filterCurso, filterCompartidas, rango.from, rango.to]);
 
   async function abrirCuotas() {
     if (verCuotas) { setVerCuotas(false); return; }
@@ -289,6 +295,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       if (projectIdParam) params.projectId = projectIdParam;
       if (issuerIdParam) params.issuerId = issuerIdParam;
       if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+      // #163: el mismo «Reparto» que la lista y las tarjetas.
+      if (filterCompartidas !== 'todas') params.compartidas = filterCompartidas;
       const r = await client.get('/conversions/cuotas', { params });
       setCuotas(r?.success ? (r.data || []) : []);
     } catch { setCuotas([]); }
@@ -555,6 +563,17 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               </select>
             </>
           )}
+          <label className="text-xs font-semibold text-muted-foreground" htmlFor="filtro-compartidas">Reparto:</label>
+          <select
+            id="filtro-compartidas"
+            value={filterCompartidas}
+            onChange={(e) => setFilterCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
+          >
+            <option value="todas">Todas</option>
+            <option value="solo">Solo compartidas</option>
+            <option value="enteras">Solo enteras</option>
+          </select>
           {/* Aqui habia OTRO RangoRapido, ademas del de la fila «Rápido:»: salian
               dos filas de «Hoy · Ayer · …» en Ingresos y en Ventas, que es esta
               misma pantalla (#223, #234). Queda el de su fila. */}
@@ -564,8 +583,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
           <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from !== rangoDe('mes').from || rango.to !== rangoDe('mes').to) && (
-            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango(rangoDe('mes')); }} className="text-[11px] text-primary hover:underline">
+          {(viewUserId !== 'all' || filterCurso !== 'all' || filterCompartidas !== 'todas' || rango.from !== rangoDe('mes').from || rango.to !== rangoDe('mes').to) && (
+            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setFilterCompartidas('todas'); setRango(rangoDe('mes')); }} className="text-[11px] text-primary hover:underline">
               Quitar filtros
             </button>
           )}

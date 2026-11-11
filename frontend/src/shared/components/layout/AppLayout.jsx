@@ -26,6 +26,10 @@ const ALL_PROJECTS_OK = [
   // es— y el muro tapaba una vista que funcionaba.
   /^\/finanzas\/ventas$/,
   /^\/ventas$/,
+  // #218 (Diego, /testeo 06/11): el detalle de una venta, al que lleva la
+  // flecha de la lista, también con «Todos». Con una empresa ya abría. El
+  // servidor no lo da si la venta no es de los campus de quien mira (404).
+  /^\/finanzas\/ventas\/\d+$/,
   // Tutores: las tres consultas ya aceptan «sin proyecto» y devuelven el
   // nombre del proyecto en cada fila, asi que la vista general se lee sola.
   // Quien lleva las colaboraciones trabaja con los profesores de todas las
@@ -660,6 +664,9 @@ export default function AppLayout() {
       */}
       <div className={cn('transition-[margin] duration-200', collapsed ? 'lg:ml-16' : 'lg:ml-64')}>
         <Topbar onAbrirMenu={() => setMobileOpen(true)} />
+        {/* El `p-4` del movil lo anulan a mano dos pantallas que van de borde a borde:
+            el chat de WhatsApp (chat.css, `margin: -16px`) y Mensajes (`-m-4`).
+            Si cambia este relleno, hay que cambiarlas tambien. */}
         <main
           id="main-content"
           role="main"

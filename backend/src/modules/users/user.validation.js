@@ -30,11 +30,11 @@ export const puedeTenerEmpresa = (role, rolesExtra = []) =>
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'], { message: 'Rol debe ser admin, gestor, soporte, tutor o colaborador' }),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'], { message: 'Rol debe ser admin, gestor, soporte, tutor, colaborador o tutor redactor' }),
   // Roles de MAS. Quien lleva prospectos y ademas da clase no tiene que elegir.
   // Superadmin no cabe aqui a proposito: un rol añadido no puede dar acceso
   // total --eso se pone como rol principal o no se pone--.
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   // Legacy: lista de ids (recibe_leads queda en false).
   projectIds: z.array(z.number().int().positive()).optional().default([]),
   // Nuevo: lista con flag recibe_leads por proyecto.
@@ -42,6 +42,9 @@ export const createUserSchema = z.object({
   // Empresas ENTERAS de un admin, también los campus que se creen (#220). Solo
   // las da el super admin: lo comprueba el controlador.
   empresaIds: empresaIdsSchema,
+  // #694: sus excepciones de permisos, ya en el alta: `{ 'clave.accion': true | false }`.
+  // Las comprueba el controlador con las reglas de la ficha.
+  excepciones: z.record(z.boolean()).optional(),
 }).refine(
   (d) => d.role !== 'gestor' || tieneCampus(d),
   {
@@ -113,8 +116,12 @@ export const updateUserSchema = z.object({
   // Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246).
   // A un tutor no le sale nada mientras siga el freno.
   reenviarEnlace: z.boolean().optional(),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
+  // #211: con `conCodigo`, el correo nuevo no se aplica todavía: le llega un
+  // código a esa dirección y el cambio entra con POST /users/:id/email/confirmar.
+  // La pantalla lo manda de serie; sin él es «aplicar sin código».
+  conCodigo: z.boolean().optional(),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   // «Se dedica solo a colaboraciones»: no da permisos (eso es «Gestionar
   // colaboraciones»), cambia lo que le toca: no entra en el reparto ni en las
   // listas de gestoras.
@@ -150,17 +157,26 @@ export const buscarUsersSchema = z.object({
 
 export const listUsersSchema = z.object({
   active: z.enum(['true', 'false']).optional(),
-  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
+  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   projectId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   // La pantalla de Usuarios los pide expresamente; el resto de listas no.
   incluirTodos: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+  // Los desplegables de gestora (Prospectos, Ventas, la Cola, Reasignar…):
+  // a quien lleva un equipo comercial, solo ella y su equipo (QA del 09/11/2026).
+  // A los demás no les cambia nada.
+  alcance: z.enum(['comercial']).optional(),
 });
 
 // El equipo comercial de una administradora (Carlos, 09/11/2026): la lista
 // ENTERA de gestoras a su cargo. Vacía = sin equipo (lo ve todo, como antes).
 export const equipoComercialSchema = z.object({
   gestoraIds: z.array(z.number().int().positive()).max(200, 'Demasiadas gestoras'),
+});
+
+/** El código que le llegó a la persona a su dirección nueva (#211). */
+export const confirmarCorreoSchema = z.object({
+  codigo: z.string().trim().regex(/^\d{6}$/, 'El código son 6 cifras'),
 });

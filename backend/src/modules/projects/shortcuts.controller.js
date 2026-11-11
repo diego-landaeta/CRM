@@ -3,6 +3,7 @@ import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { gestoresDelReparto, aQuienLeToca } from '../leads/reparto.js';
 import { activasEntre } from '../asignacion/asignacion.actividad.js';
+import { alcanceDeLider, enElAlcance } from '../../shared/utils/roles.js';
 
 // GET /api/projects/:id/ultimo-lead — que ha recibido cada gestora, de verdad
 //
@@ -49,8 +50,12 @@ export async function getUltimoLead(req, res, next) {
         if (!yaEsta.has(g.id)) yaEsta.set(g.id, g);
       }
     }
-    const gestores = [...yaEsta.values()];
-    const projectId = proyectos && proyectos.length === 1 ? proyectos[0] : null;
+    // Una líder de equipo comercial (QA del 09/11/2026) ve a ella y a sus
+    // gestoras: el panel le enseñaba las diez del campus, con el nombre y el
+    // curso del último prospecto de cada una. Una gestora y una admin sin
+    // equipo, como siempre.
+    const lider = await alcanceDeLider(req.user);
+    const gestores = [...yaEsta.values()].filter((g) => enElAlcance(lider, g.id));
 
     // Y ademas, quien HA RECIBIDO leads este mes aunque hoy no este en el
     // reparto — de vacaciones, o se fue. Sus numeros son historia y esconderlos
@@ -122,7 +127,9 @@ export async function getUltimoLead(req, res, next) {
       f.activa = a ? { hace_min: Math.max(0, Math.round((Date.now() - new Date(a.ultima).getTime()) / 60000)), que: a.que } : null;
     }
 
-    const { rows: sueltos } = await query(
+    // Los sin responsable no los ve una líder en Prospectos (solo los de su
+    // equipo): a ella no se le cuentan.
+    const { rows: sueltos } = lider ? { rows: [{ n: 0 }] } : await query(
       `SELECT COUNT(*)::int AS n FROM leads
         WHERE ($1::int[] IS NULL OR project_id = ANY($1::int[]))
           AND responsable_id IS NULL AND deleted_at IS NULL`,
@@ -188,14 +195,20 @@ export async function getQueueState(req, res, next) {
       [projectId]
     );
 
+    // Una líder de equipo comercial (QA del 09/11/2026): el turno se calcula
+    // con todo el campus (es el de verdad), pero de nombres solo salen ella y
+    // su equipo; la de fuera sale como «null».
+    const lider = await alcanceDeLider(req.user);
+    const visible = (g) => (g && enElAlcance(lider, g.id) ? g : null);
+
     res.json({
       success: true,
       data: {
-        gestores,
+        gestores: gestores.filter((g) => enElAlcance(lider, g.id)),
         last_assigned_at: state[0]?.updated_at || null,
-        last_gestor: lastGestor,
-        next_gestor: nextGestor,
-        sin_responsable: sueltos[0]?.n || 0,
+        last_gestor: visible(lastGestor),
+        next_gestor: visible(nextGestor),
+        sin_responsable: lider ? 0 : (sueltos[0]?.n || 0),
       },
     });
   } catch (err) { next(err); }
