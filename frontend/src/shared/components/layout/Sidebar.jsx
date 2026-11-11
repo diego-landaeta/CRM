@@ -57,7 +57,7 @@ import {
   CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning, Key, ListChecks, Kanban, CheckSquare, SlidersHorizontal, Code, Certificate,
+  UsersThree, QrCode, Warning, Key, ListChecks, Kanban, ClockCounterClockwise, SlidersHorizontal, Code, Certificate,
   // Los de los encabezados de seccion (#105). Ninguno repite el de una
   // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
   // que una de sus filas, deja de ordenar y pasa a confundir.
@@ -79,6 +79,9 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
+// Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -194,9 +197,10 @@ export const NAV_SECTIONS = [
     ],
   },
   // El tablero del equipo (#210 y mejoras del 07/10). Es lo único que ve quien
-  // es solo colaborador. «Por revisar» y «Configurar tablero» se enseñan por
-  // permiso (`permiso`), no por rol: lo que se cambie en Configuración › Roles
-  // manda también aquí.
+  // es solo colaborador. «Configurar tablero» se enseña por permiso (`permiso`),
+  // no por rol: lo que se cambie en Configuración › Roles manda también aquí.
+  // «Por revisar» pasó a «Historial de tareas» (CRM#707): quien hace la tarea la
+  // cierra él mismo y nadie tiene una bandeja de «por aprobar» (tampoco Carlos).
   // Aprobada para producción en la 2.2.0 (Diego, 16/10).
   {
     label: 'Equipo de Desarrollo',
@@ -204,7 +208,7 @@ export const NAV_SECTIONS = [
     items: [
       // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
       { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
-      { label: 'Por revisar', to: '/tareas/revisar', detail: 'Aprobar o devolver', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close', oPermiso: 'tasks.close' },
+      { label: 'Historial de tareas', to: '/tareas/historial', detail: 'Lo hecho: quién y cuándo', icon: ClockCounterClockwise, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador'], permiso: 'facturas_colaborador.subir' },
@@ -326,18 +330,20 @@ export const NAV_SECTIONS = [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports.view' },
       // Por que no compran: enviados, respondidos y motivos (#170).
       { label: 'Feedback', to: '/informes/feedback', detail: 'Por qué no compran', icon: ChatCircleText, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'feedback.view' },
-      // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
-      { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
-      // Preguntarle a los datos (#30): solo en pruebas hasta que haya clave y tope (#22).
-      ...(SOLO_EN_PRUEBAS
-        ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+      // Las pantallas de IA del CRM (#30) —Análisis IA, Pregunta a tus datos y
+      // Chat IA— están APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP).
+      // Se encienden las tres juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
+      ...(PANTALLAS_IA
+        ? [
+          // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
+          { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
+          // Preguntarle a los datos (#30): además, solo en pruebas hasta que haya clave y tope (#22).
+          ...(SOLO_EN_PRUEBAS
+            ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+            : []),
+          { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+        ]
         : []),
-      // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
-      // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
-      // probado—, pero no se ofrece en el menu: enseñar una puerta que no
-      // lleva a ningun sitio es peor que no tenerla.
-      // Para devolverla, quitar el comentario de la linea de abajo.
-      // { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
@@ -538,6 +544,10 @@ export function pasaPermisoDeRoles(item, can) {
 const SIN_ENTRADA = {
   // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
   '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+  // La pestaña Tutores de Consultas: la del panel de tutores en el servidor
+  // (`/api/consultas/tutores-panel`). Escrita a mano por una tutora decía «No
+  // hay tutores aquí» en vez de que no tiene acceso (#188).
+  '/consultas/tutores': 'consultas.view',
 };
 
 export function rutaPermitida(pathname, can) {
@@ -1019,12 +1029,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const idsDelAmbitoCsv = idsDelAmbito.join(',');
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
   const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
-  const [tasksReviewBadge, setTasksReviewBadge] = useState(0);
   const { can } = usePermission();
   // Para los contadores: un sí o un no, no la función `can`, que es nueva en
   // cada render y, en las dependencias de un efecto, lo relanzaría sin parar.
   const veProspectosNuevos = can('leads.view');
   const veReportesDeSpam = can('leads.spam');
+  const usaMensajes = can('mensajes.usar');
 
   // Estado de secciones colapsadas (Captación, Catálogo, Finanzas, etc.).
   // Persistido en localStorage. Por defecto, abierto: Principal + la sección
@@ -1203,9 +1213,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     return () => { cancelled = true; clearInterval(interval); };
   }, [veReportesDeSpam]);
 
-  // Badge de mensajes no leidos
+  // Badge de mensajes no leidos: solo a quien puede usar Mensajes. A quien se lo
+  // han quitado (la tutora de prueba de /testeo) el servidor le daba un 403 en
+  // cada página (#188).
   useEffect(() => {
-    if (soloEsColaborador(user)) return;
+    if (soloEsColaborador(user) || !usaMensajes) return;
     let cancelled = false;
     async function fetchMsgCount() {
       try {
@@ -1216,23 +1228,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     fetchMsgCount();
     const interval = setInterval(fetchMsgCount, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user]);
-
-  // «Por revisar (n)» en el menú: solo a quien puede cerrar tareas.
-  const puedeRevisar = can('tasks.close');
-  useEffect(() => {
-    if (!puedeRevisar) return;
-    let cancelled = false;
-    async function fetchReviewCount() {
-      try {
-        const res = await client.get('/tasks/review/count');
-        if (!cancelled && res.success) setTasksReviewBadge(res.data?.count || 0);
-      } catch {}
-    }
-    fetchReviewCount();
-    const interval = setInterval(fetchReviewCount, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [puedeRevisar]);
+  }, [user, usaMensajes]);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   // Vanessa y quien lleve las colaboraciones: solo tutores, nada mas.
@@ -1363,9 +1359,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           // Una seccion entera puede no aplicar a un tipo de proyecto (en IA no hay
           // campañas, ni catalogo, ni tutores).
           const seccionAplica = !(Array.isArray(section.salvoTipo)
-            && section.salvoTipo.includes(activeProject?.type));
+            && section.salvoTipo.includes(tipoDelMenu(activeProject?.type)));
           const visibleItems = seccionAplica
-            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab })
+            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type), soloColab })
             : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
@@ -1382,7 +1378,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 // tener mas de uno, el menu tiene que sumar lo de cada uno.
                 role={rolesDe(user)}
                 modules={activeProject?.modules}
-                projectType={activeProject?.type}
+                projectType={tipoDelMenu(activeProject?.type)}
                 soloColab={soloColab}
                 permisos={user}
                 can={can}
@@ -1399,7 +1395,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
                   : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
                   : item.to === '/mensajes' && msgUnreadBadge > 0 ? msgUnreadBadge
-                  : item.to === '/tareas/revisar' && tasksReviewBadge > 0 ? tasksReviewBadge
                   : undefined
                 }
                 labelOverrides={activeProject?.sidebar_labels}

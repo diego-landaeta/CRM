@@ -3,6 +3,8 @@ import { condicionDeCompartidas } from './compartidas.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
+// Una gestora o varias (las de un equipo comercial, 09/11/2026).
+import { comoIds } from '../../shared/utils/roles.js';
 
 const LEAD_EXISTS_SQL = `SELECT id, project_id FROM leads WHERE id = $1`;
 
@@ -329,7 +331,7 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
   if (lista) { conditions.push(`c.project_id = ANY($${idx++}::int[])`); params.push(lista); }
   else conditions.push(SIN_PRUEBAS('c.project_id'));
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
-  if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++})`); params.push(responsableId); }
+  if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push(comoIds(responsableId)); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
@@ -447,7 +449,7 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     // Los mismos recortes que la lista y que «Por proyecto»: gestora y curso.
     // Sin esto la tarjeta decia 3 cuotas y la lista enseñaba 1 al filtrar.
     let porGestora = '', porProducto = '';
-    if (responsableId) { args.push(responsableId); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = cv.id AND r.vendedora_id = $${args.length})`; }
+    if (responsableId) { args.push(comoIds(responsableId)); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${args.length}::int[]))`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(cv.producto_contratado) = $${args.length}`; }
     // Y el «Reparto» (#163, revisión de Diego 05/11). Con `cv` en LEFT JOIN, una
     // factura suelta (sin venta) no es compartida: no sale con «Solo
@@ -509,7 +511,7 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     // Los MISMOS recortes que las tarjetas --gestora y curso--, o la columna no
     // sumaria la tarjeta en cuanto se filtre. Salio en la revision.
     let porGestora = '', porProducto = '';
-    if (responsableId) { args.push(responsableId); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`; }
+    if (responsableId) { args.push(comoIds(responsableId)); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`; }
     // Y el «Reparto» (#163): la columna tiene que sumar la tarjeta con el filtro puesto.
     const repartoC = condicionDeCompartidas(compartidas, 'c');
@@ -659,13 +661,13 @@ export async function cuotasDelPeriodo({
   if (lista) { args.push(lista); alcance = `i.project_id = ANY($${args.length}::int[])`; }
   let porGestora = '';
   if (responsableId) {
-    args.push(responsableId);
+    args.push(comoIds(responsableId));
     // Por la vista y no por COALESCE(vendedora_id, responsable_id): con una
     // venta repartida, la gestora que puso la mitad TAMBIEN tiene que verla.
     // Si no, el equipo diria que lleva 2,5 ventas y la lista de abajo enseñaria
     // 2 — dos cifras que se contradicen en la misma pantalla.
     porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r
-                               WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`;
+                               WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`;
   }
   // El «Reparto» (#163): la lista de cuotas, igual que la tarjeta.
   const repartoC = condicionDeCompartidas(compartidas, 'c');
@@ -722,13 +724,13 @@ export async function filasDelPeriodo({
   if (lista) { args.push(lista); alcanceC = `c.project_id = ANY($${args.length}::int[])`; alcanceI = `i.project_id = ANY($${args.length}::int[])`; }
   let porGestora = '';
   if (responsableId) {
-    args.push(responsableId);
+    args.push(comoIds(responsableId));
     // Por la vista y no por COALESCE(vendedora_id, responsable_id): con una
     // venta repartida, la gestora que puso la mitad TAMBIEN tiene que verla.
     // Si no, el equipo diria que lleva 2,5 ventas y la lista de abajo enseñaria
     // 2 — dos cifras que se contradicen en la misma pantalla.
     porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r
-                               WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`;
+                               WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`;
   }
   let porProducto = '';
   if (producto) {
@@ -998,7 +1000,7 @@ export async function listProductos({ projectId, projectIds = null, responsableI
   const listaP = comoLista(projectId, projectIds);
   if (listaP) { cond.push(`c.project_id = ANY($${idx++}::int[])`); params.push(listaP); }
   else cond.push(SIN_PRUEBAS('c.project_id'));
-  if (responsableId) { cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++})`); params.push(responsableId); }
+  if (responsableId) { cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push(comoIds(responsableId)); }
   const { rows } = await query(
     `SELECT DISTINCT TRIM(c.producto_contratado) AS producto
        FROM conversions c

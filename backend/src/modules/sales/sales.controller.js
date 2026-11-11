@@ -5,7 +5,7 @@ import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, acotarAlAlcance } from '../../shared/utils/roles.js';
 
 export async function create(req, res, next) {
   try {
@@ -38,8 +38,9 @@ export async function topProducts(req, res, next) {
     const from = dateRe.test(req.query.from || '') ? req.query.from : null;
     const to = dateRe.test(req.query.to || '') ? req.query.to : null;
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-    // Gestor: forzar su propio responsableId (no puede consultar el de otros)
-    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
+    // Gestor: forzar su propio responsableId (no puede consultar el de otros).
+    // Quien lleva un equipo comercial (09/11/2026), el de su equipo.
+    responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
     const result = await salesService.getTopProducts({ projectId, projectIds, limit, days, from, to, responsableId });
     // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
     // y no tiene por qué enterarse. Lo que no es un programa va aparte, y los
@@ -66,10 +67,8 @@ export async function facturado(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const { projectId, projectIds } = await proyectosDelAmbito(req);
-    // Una gestora, solo su parte, pida lo que pida.
-    const responsableId = soloLoSuyo(req.user)
-      ? req.user.userId
-      : (parsed.data.responsableId ?? null);
+    // Una gestora, solo su parte, pida lo que pida (y una líder, la de su equipo).
+    const responsableId = acotarAlAlcance(parsed.data.responsableId ?? null, await alcanceComercial(req.user));
     const data = await salesService.getFacturado({
       projectId, projectIds,
       from: parsed.data.from ?? null,
@@ -91,6 +90,12 @@ export async function gestoresStats(req, res, next) {
     const from = re.test(req.query.from || '') ? req.query.from : null;
     const to = re.test(req.query.to || '') ? req.query.to : null;
     const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo, from, to });
+    // Quien lleva un equipo comercial (09/11/2026) ve en la tabla a su equipo,
+    // no a todas. Sin equipo, como siempre (lo decide `ventas.view_equipo`).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance && alcance.length > 1) {
+      result.gestores = result.gestores.filter((g) => alcance.includes(Number(g.user_id)));
+    }
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -136,8 +141,8 @@ export async function deleteGoal(req, res, next) {
 async function filtrosDeQuery(req) {
   const dateRe2 = /^\d{4}-\d{2}-\d{2}$/;
   let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-  // Gestor: solo lo suyo, ignorando lo que pida por query.
-  if (soloLoSuyo(req.user)) responsableId = req.user.userId;
+  // Gestor: solo lo suyo, ignorando lo que pida por query (y una líder, lo de su equipo).
+  responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
   return {
     // El ambito puede ser un proyecto O una sociedad entera: si viene
     // `issuerId`, se traduce a la lista de sus campus.
@@ -176,6 +181,8 @@ export async function sinFormacion(req, res, next) {
         projectId, projectIds,
         from: req.query.from || null,
         to: req.query.to || null,
+        // Alumnos e importes: quien lleva un equipo comercial, los de su equipo (09/11/2026).
+        responsableId: await alcanceComercial(req.user),
       }),
     });
   } catch (err) { next(err); }
@@ -208,8 +215,9 @@ export async function desglose(req, res, next) {
       from: dateRe.test(req.query.from || '') ? req.query.from : null,
       to: dateRe.test(req.query.to || '') ? req.query.to : null,
       // Una gestora ve su propio reparto, no el del proyecto entero.
-      responsableId: soloLoSuyo(req.user) ? req.user.userId
-        : (req.query.responsableId ? parseInt(req.query.responsableId) : null),
+      responsableId: acotarAlAlcance(
+        req.query.responsableId ? parseInt(req.query.responsableId) : null,
+        await alcanceComercial(req.user)),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }

@@ -5,6 +5,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
+// `responsableId` puede ser una gestora o varias: las de un equipo comercial (09/11/2026).
+import { comoIds } from '../../shared/utils/roles.js';
 // Lo facturado tiene UNA definición y vive en los informes (#224).
 import { IMPORTE_FACTURADO, FACTURA_QUE_CUENTA } from '../reports/report.model.js';
 
@@ -301,11 +303,13 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
   // del importe: una venta atendida entre dos es media para cada una.
   let PESO = '1';
   if (responsableId) {
-    params.push(responsableId);
+    params.push(comoIds(responsableId));
     where.push(`EXISTS (SELECT 1 FROM conversion_reparto rx
-                         WHERE rx.conversion_id = c.id AND rx.vendedora_id = $${params.length})`);
-    PESO = `COALESCE((SELECT r.peso FROM conversion_reparto r
-                       WHERE r.conversion_id = c.id AND r.vendedora_id = $${params.length}), 1)`;
+                         WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($${params.length}::int[]))`);
+    // SUM: con un equipo, la parte de todas las suyas (una venta repartida
+    // entre dos del mismo equipo vale entera para el equipo).
+    PESO = `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                       WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${params.length}::int[])), 1)`;
   }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
   // Rango de fechas explícito (tiene prioridad de uso desde el frontend: hoy/semana/mes/personalizado).
@@ -438,7 +442,7 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
   if (from) { params.push(from); w.push(`i.fecha_emision >= $${params.length}::date`); }
   if (to) { params.push(to); w.push(`i.fecha_emision <= $${params.length}::date`); }
   let soloGestora = '';
-  if (responsableId) { params.push(responsableId); soloGestora = `WHERE r.vendedora_id = $${params.length}`; }
+  if (responsableId) { params.push(comoIds(responsableId)); soloGestora = `WHERE r.vendedora_id = ANY($${params.length}::int[])`; }
 
   const CTE = `WITH fac AS (
       SELECT i.conversion_id,
@@ -550,8 +554,8 @@ function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, 
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
   if (responsableId) {
     cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r
-                        WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx++})`);
-    params.push(responsableId);
+                        WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${idx++}::int[]))`);
+    params.push(comoIds(responsableId));
   }
   // Recortado, igual que en leads: un espacio pegado al nombre vaciaba la lista.
   const termino = typeof search === 'string' ? search.trim() : '';
@@ -595,9 +599,10 @@ function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, 
 function pesoDe(responsableId, params, idx) {
   if (!responsableId) return { PESO: '1', params: [...params], idx };
   return {
-    PESO: `COALESCE((SELECT r.peso FROM conversion_reparto r
-                      WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx}), 1)`,
-    params: [...params, Number(responsableId)],
+    // SUM: con un equipo comercial, la parte de todas las de su equipo.
+    PESO: `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                      WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${idx}::int[])), 1)`,
+    params: [...params, comoIds(responsableId)],
     idx: idx + 1,
   };
 }
@@ -748,7 +753,7 @@ export async function getResumenVentas(filtros = {}) {
   atar --lo segundo se ve en un aviso; lo primero se paga a quien no era--, y
   ese aviso ya esta escrito en `scripts/venta-177-sin-formacion.sql`.
 */
-export async function ventasSinFormacion({ projectId, projectIds = null, from = null, to = null } = {}) {
+export async function ventasSinFormacion({ projectId, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   const params = [];
   const cond = [];
   const lista = comoLista(projectId, projectIds);
@@ -759,6 +764,12 @@ export async function ventasSinFormacion({ projectId, projectIds = null, from = 
   cond.push('EXISTS (SELECT 1 FROM conversion_payments cp WHERE cp.conversion_id = c.id)');
   if (from) { params.push(from); cond.push(`c.fecha_conversion >= $${params.length}::date`); }
   if (to) { params.push(to); cond.push(`c.fecha_conversion <= $${params.length}::date`); }
+  // De una gestora o de un equipo comercial (09/11/2026): por el reparto.
+  if (responsableId) {
+    params.push(comoIds(responsableId));
+    cond.push(`EXISTS (SELECT 1 FROM conversion_reparto rx
+                        WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($${params.length}::int[]))`);
+  }
 
   const { rows } = await query(
     `SELECT c.id,
@@ -961,7 +972,7 @@ export async function getDesglose({ projectId = null, projectIds = null, from = 
   const listaV = comoLista(projectId, projectIds);
   if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
   else wv.push(SIN_PRUEBAS('c.project_id'));
-  if (responsableId) { pv.push(responsableId); wv.push(`${VENDEDORA_C} = $${pv.length}`); }
+  if (responsableId) { pv.push(comoIds(responsableId)); wv.push(`${VENDEDORA_C} = ANY($${pv.length}::int[])`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
   wv.push('NOT c.es_mensualidad');
@@ -981,7 +992,7 @@ export async function getDesglose({ projectId = null, projectIds = null, from = 
   const listaC = comoLista(projectId, projectIds);
   if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
   else wc.push(SIN_PRUEBAS('c.project_id'));
-  if (responsableId) { pc.push(responsableId); wc.push(`${VENDEDORA_C} = $${pc.length}`); }
+  if (responsableId) { pc.push(comoIds(responsableId)); wc.push(`${VENDEDORA_C} = ANY($${pc.length}::int[])`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
 
@@ -1046,8 +1057,8 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
   else wv.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) {
-    pv.push(responsableId);
-    wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pv.length}`);
+    pv.push(comoIds(responsableId));
+    wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pv.length}::int[])`);
   }
   pv.push(from); const iFrom = pv.length;
   pv.push(to); const iTo = pv.length;
@@ -1067,8 +1078,8 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
   else wc.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) {
-    pc.push(responsableId);
-    wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pc.length}`);
+    pc.push(comoIds(responsableId));
+    wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pc.length}::int[])`);
   }
   pc.push(from); const cFrom = pc.length;
   pc.push(to); const cTo = pc.length;
@@ -1086,7 +1097,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   const listaL = comoLista(projectId, projectIds);
   if (listaL) { pl.push(listaL); wl.push(`l.project_id = ANY($${pl.length}::int[])`); }
   else wl.push(SIN_PRUEBAS('l.project_id'));
-  if (responsableId) { pl.push(responsableId); wl.push(`l.responsable_id = $${pl.length}`); }
+  if (responsableId) { pl.push(comoIds(responsableId)); wl.push(`l.responsable_id = ANY($${pl.length}::int[])`); }
   pl.push(from); const lFrom = pl.length;
   pl.push(to); const lTo = pl.length;
   const { rows: leads } = await query(

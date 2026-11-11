@@ -42,7 +42,15 @@ const PROYECTOS = [
   { id: 20, nombre: 'Ictess', sociedad_id: 2, sociedad_nombre: 'Ictess' },
 ];
 const persona = (role, extra = {}) => ({ id: 7, nombre: 'Ana', role, active: true, usa_mcp: false, ...extra });
-const ambitoDe = (role, proyectos = PROYECTOS) => construirAmbito(persona(role), proyectos);
+const ambitoDe = (role, proyectos = PROYECTOS, equipo = []) => construirAmbito(persona(role), proyectos, equipo);
+
+// La persona impuesta: el id suelto o, desde el equipo comercial (09/11/2026),
+// la lista de personas. Para una gestora, la lista es SOLO ella: [7].
+const llevaSoloA7 = (params) => (params || []).some((p) => p === 7
+  || (Array.isArray(p) && p.length === 1 && p[0] === 7));
+// Una líder (7) con su equipo (8 y 9): la lista exacta, ni una más.
+const llevaAlEquipo = (params) => (params || []).some((p) => Array.isArray(p)
+  && [...p].sort().join(',') === '7,8,9');
 
 beforeEach(() => { consultas.length = 0; });
 
@@ -245,8 +253,42 @@ describe('cada consulta va acotada a los campus de la persona', () => {
       /\b(leads l|conversions c|invoices i)\b/.test(c.sql) && !/lead_interactions|WHERE c\.lead_id/.test(c.sql));
     expect(deDatos.length).toBeGreaterThan(10);
     for (const { params } of deDatos) {
-      expect(params).toContain(7);
+      expect(llevaSoloA7(params)).toBe(true);
     }
+  });
+
+  it('a una líder de equipo comercial se le impone ella y su equipo en todas las consultas de datos (09/11/2026)', async () => {
+    const lider = ambitoDe('admin', PROYECTOS, [8, 9]);
+    expect(lider.alcance).toEqual([7, 8, 9]);
+    expect(responsableImpuesto(lider)).toEqual([7, 8, 9]);
+    // La publicidad (cuentas y campañas de Meta) es del campus, no de una
+    // gestora: la ve por su permiso, como la pantalla de Meta Ads. No se mira aquí.
+    await ejecutarTodas(lider, {}, ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias', 'meta_ads']);
+    const deDatos = consultas.filter((c) =>
+      /\b(leads l|conversions c|invoices i)\b/.test(c.sql) && !/lead_interactions|WHERE c\.lead_id/.test(c.sql));
+    expect(deDatos.length).toBeGreaterThan(10);
+    for (const { params } of deDatos) {
+      expect(llevaAlEquipo(params)).toBe(true);
+    }
+  });
+
+  it('una líder puede pedir a una de su equipo, no a otra gestora', async () => {
+    const lider = ambitoDe('admin', PROYECTOS, [8, 9]);
+    const buscar = HERRAMIENTAS.find((h) => h.nombre === 'buscar_prospectos');
+    await expect(buscar.ejecutar(lider, { gestora_id: 12 })).rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
+    await expect(buscar.ejecutar(lider, { gestora_id: 8 })).resolves.toBeDefined();
+    const ventas = HERRAMIENTAS.find((h) => h.nombre === 'listar_ventas');
+    await expect(ventas.ejecutar(lider, { vendedora_id: 12 })).rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
+    // Los informes «de todo el campus» tampoco: solo ve su equipo.
+    const informe = HERRAMIENTAS.find((h) => h.nombre === 'informe');
+    const soloAdmin = Object.keys(INFORMES).find((k) => INFORMES[k].soloAdmin);
+    await expect(informe.ejecutar(lider, { tipo: soloAdmin })).rejects.toMatchObject({ code: 'MCP_INFORME_SOLO_ADMIN' });
+  });
+
+  it('un super admin con filas de equipo lo sigue viendo todo', () => {
+    const sa = construirAmbito(persona('superadmin'), PROYECTOS, [8, 9]);
+    expect(sa.alcance).toBeNull();
+    expect(responsableImpuesto(sa)).toBeNull();
   });
 
   it('cada informe, a un gestor, o le recorta a lo suyo o se le niega', async () => {
@@ -263,7 +305,7 @@ describe('cada consulta va acotada a los campus de la persona', () => {
         expect(consultas).toEqual([]);
       } else {
         expect(consultas.length).toBeGreaterThan(0);
-        for (const { params } of consultas) expect(params).toContain(7);
+        for (const { params } of consultas) expect(llevaSoloA7(params)).toBe(true);
       }
     }
   });
@@ -275,8 +317,8 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     await HERRAMIENTAS.find((h) => h.nombre === 'actividad_por_comercial').ejecutar(ambitoDe('gestor'), ARGS.actividad_por_comercial);
     expect(consultas.length).toBe(3);
     for (const { sql, params } of consultas) {
-      expect(sql).toMatch(/li\.created_by = \$\d|m\.enviado_por = \$\d/);
-      expect(params).toContain(7);
+      expect(sql).toMatch(/li\.created_by = ANY\(\$\d|m\.enviado_por = ANY\(\$\d/);
+      expect(llevaSoloA7(params)).toBe(true);
     }
   });
 

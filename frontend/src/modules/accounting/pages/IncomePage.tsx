@@ -16,6 +16,7 @@ import { decodificarEntidades } from '@/shared/lib/entidadesHtml';
 // funcion que usa SalesPage, para que las dos pantallas digan el mismo mes.
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TutorialesVentas = lazy(() => import('@/modules/sales/components/TutorialesVentas'));
@@ -108,7 +109,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
    * No se esconde por ser IA porque si: se esconde lo que en un proyecto sin
    * equipo NO PUEDE tener contenido nunca.
    */
-  const esIA = activeProject?.type === 'ia';
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
 
   // Se ajusta cuando se sabe de que proyecto se trata, y UNA sola vez por
   // proyecto: si se forzara en cada render, cambiar el filtro a mano no

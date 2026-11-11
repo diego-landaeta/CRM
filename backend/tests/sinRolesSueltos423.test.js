@@ -41,7 +41,7 @@ const DECLARADAS = {
   'leads/lead.controller.js': [1, 'alcance: la gestora, sus prospectos'],
   'leads/lead.model.js': [1, 'alcance: el resumen del día de la gestora'],
   'leads/lead.service.js': [2, 'alcance y comportamiento: interacciones propias; el reparto no da a tutores'],
-  'mcp/mcp.acceso.js': [1, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin'],
+  'mcp/mcp.acceso.js': [2, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin; el equipo comercial no recorta a un super admin'],
   'mcp/mcp.actividad.js': [1, 'alcance: el superadmin ve la actividad de todos'],
   'mcp/mcp.controller.js': [4, 'alcance y avisos: soloLoSuyo, por qué un rol no se marca, campus'],
   'mcp/mcp.model.js': [2, 'alcance: personas y campus de quien pregunta'],
@@ -53,8 +53,10 @@ const DECLARADAS = {
   // Diego, 26/10/2026: sobre CADA tarea, mover, comentar, aprobar y devolver son del superadmin, del supervisor y de
   // quien la lleva; el superadmin edita y borra comentarios de cualquiera. Es quién actúa sobre una tarea concreta,
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
-  'tasks/tasks.reglas.js': [5, 'alcance por tarea: el superadmin (y admin/superadmin como supervisor válido) en todas'],
-  'tasks/tasks.service.js': [9, 'alcance: superadmin y soporte ven todas las empresas; por tarea, lo que el superadmin mueve, aprueba y borra'],
+  // CRM#707 (10/11/2026): cerrar y devolver, cada una con su regla por tarea (`puedeCerrar`, `puedeDevolver`), y sin
+  // la bandeja de «Por revisar», que miraba si era superadmin para enseñarle todas.
+  'tasks/tasks.reglas.js': [6, 'alcance por tarea: el superadmin (y admin/superadmin como supervisor válido) en todas'],
+  'tasks/tasks.service.js': [7, 'alcance: superadmin y soporte ven todas las empresas; por tarea, lo que el superadmin mueve y borra'],
   'tutores/tutor.controller.js': [6, 'alcance: el tutor, lo suyo; fichas de sus campus'],
   'users/user.empresas.js': [1, 'comportamiento: la empresa entera solo le da campus a un admin (al colaborador, no)'],
   'users/user.controller.js': [5, 'alcance: contraseña solo de tutores de su campus; su foto y su vista'],
@@ -67,7 +69,6 @@ const DECLARADAS = {
   'asignacion/asignacion.controller.js': [3, 'alcance: el superadmin ve todas las configuraciones de la asignación; la de todas las empresas, solo él'],
   'whatsapp/chat.controller.js': [2, 'alcance: supervisar solo a quien comparte campus'],
   'whatsapp/roles.js': [2, 'comportamiento: por qué un rol no tiene WhatsApp (el motivo que se enseña)'],
-  'whatsapp/vozOTexto.js': [1, 'alcance: admin, superadmin y soporte ven a todas las gestoras; la gestora, solo a si misma'],
 };
 
 function ficheros(dir) {

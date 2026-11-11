@@ -63,12 +63,20 @@ router.get('/campus-sin-tutor', administracion, ctrl.campusSinTutor);
 router.post('/sincronizar-alumnos', gestion, ctrl.sincronizarAlumnosAhora);
 router.get('/metricas', suyasOTodas, ctrl.verMetricas);
 
+// Un :id que no es un número no es ninguna consulta: 404, no el 500 de Postgres
+// (22P02) que daba, por ejemplo, /api/consultas/tutores (#188).
+function idDeConsulta(req, _res, next) {
+  const { id } = req.params;
+  if (/^\d{1,10}$/.test(id) && Number(id) > 0 && Number(id) <= 2147483647) return next();
+  return next(new AppError('Consulta no encontrada', 404, 'NOT_FOUND'));
+}
+
 router.get('/', administracion, ctrl.panel);
-router.get('/:id', ctrl.ver);
-router.post('/:id/responder', conAdjuntos, ctrl.responder);
-router.post('/:id/cerrar', ctrl.cerrar);
-router.get('/:id/tutores', gestion, ctrl.tutoresPosibles);
-router.post('/:id/reasignar', gestion, ctrl.reasignar);
+router.get('/:id', idDeConsulta, ctrl.ver);
+router.post('/:id/responder', idDeConsulta, conAdjuntos, ctrl.responder);
+router.post('/:id/cerrar', idDeConsulta, ctrl.cerrar);
+router.get('/:id/tutores', idDeConsulta, gestion, ctrl.tutoresPosibles);
+router.post('/:id/reasignar', idDeConsulta, gestion, ctrl.reasignar);
 
 // El enlace del adjunto que recibe el alumno en el campus: sin sesión, con su
 // token largo y su caducidad. Va aparte porque el router de arriba pide sesión.
