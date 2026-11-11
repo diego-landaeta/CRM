@@ -1,4 +1,5 @@
 import * as leadService from '../leads/lead.service.js';
+import { condicionDeCompartidas } from '../conversions/compartidas.js';
 import * as conversionService from '../conversions/conversion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -542,7 +543,7 @@ const SIN_TILDES = (expr) =>
 // `sinCobro = true` da lo contrario de la segunda regla: las ventas del mismo
 // filtro que aún NO tienen ningún cobro. Es la cifra que va al lado de las
 // tarjetas como «sin cobro (en proformas)» (#225).
-function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search }, startIdx = 1, { sinCobro = false } = {}) {
+function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search, compartidas = null }, startIdx = 1, { sinCobro = false } = {}) {
   const cond = [];
   const params = [];
   let idx = startIdx;
@@ -566,6 +567,10 @@ function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, 
                 OR ${SIN_TILDES('cv.producto_contratado')} ILIKE ${SIN_TILDES('$' + idx)})`);
     params.push(`%${termino}%`); idx++;
   }
+  // Solo compartidas o solo enteras (#163). La parte de cada gestora la sigue
+  // poniendo `pesoDe`: una compartida le cuenta la mitad, con filtro o sin él.
+  const deCompartidas = condicionDeCompartidas(compartidas, 'cv');
+  if (deCompartidas) cond.push(deCompartidas);
   // Las dos reglas que definen que es una venta, iguales que en los informes:
   // una ficha marcada como mensualidad no es una venta nueva, y una venta sin
   // ningun cobro es una proforma que el cliente no llego a pagar.
