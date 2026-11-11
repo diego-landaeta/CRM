@@ -659,8 +659,19 @@ describe('el resumen sigue al selector de arriba', () => {
     cabecera.value = { ...cabecera.value, switchProject };
     abrir();
     const fila = await screen.findByText('Zapier ventas');
-    fireEvent.click(fila, { ctrlKey: true });
-    fireEvent.click(fila, { metaKey: true });
+    // Después de la página (que escucha en su raíz), se apunta si ella paró el
+    // clic —no debe: el navegador es quien abre la pestaña— y se para aquí,
+    // porque jsdom no sabe navegar («Not implemented: navigation»).
+    const bloqueadoPorLaPagina = [];
+    const alClic = (e) => { bloqueadoPorLaPagina.push(e.defaultPrevented); e.preventDefault(); };
+    document.addEventListener('click', alClic);
+    try {
+      fireEvent.click(fila, { ctrlKey: true });
+      fireEvent.click(fila, { metaKey: true });
+    } finally {
+      document.removeEventListener('click', alClic);
+    }
+    expect(bloqueadoPorLaPagina).toEqual([false, false]);
     expect(switchProject).not.toHaveBeenCalled();
   });
 
