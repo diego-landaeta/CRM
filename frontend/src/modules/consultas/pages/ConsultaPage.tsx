@@ -10,6 +10,7 @@ import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import Iniciales from '@/shared/components/ui/Iniciales';
 import { cn } from '@/shared/lib/utils';
+import { PLUGIN_MOODLE } from '@/shared/lib/pluginMoodle';
 import {
   consultasApi, semaforo, haceCuanto as horasEnTexto,
   type ConsultaDetalle, type ConsultaFila, type ContextoConsulta, type NotaInterna, type ParticipanteChat, type RespuestaGuardada, type TipoDeGrupo,
@@ -290,11 +291,19 @@ function Ficha({ c, ctx, cargando, alInsertar, puedeEscribir, admin }: {
                       <span className="block truncate text-secundario font-medium text-foreground">{e.tarea}</span>
                       <span className="block truncate text-secundario text-muted-foreground">Entregada el {fechaCorta(e.entregadaAt)}</span>
                     </span>
-                    {/* Se corrige en Moodle, en su calificador. */}
-                    <a href={e.corregirUrl} target="_blank" rel="noopener noreferrer" aria-label={`Corregir «${e.tarea || 'la tarea'}» en Moodle`}
-                      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-secundario font-medium text-foreground hover:bg-muted">
-                      Moodle <ArrowSquareOut size={11} aria-hidden />
-                    </a>
+                    {/* Se corrige en el CRM (#681) si es una tarea suya con nota numérica y el plugin
+                        está aprobado (poner la nota escribe en Moodle); si no, en el calificador de Moodle. */}
+                    {PLUGIN_MOODLE && puedeEscribir && e.enElCrm ? (
+                      <Link to={`/mis-cursos/campus/tarea/${c.project_id}/${e.cursoId}/${e.tareaId}`} aria-label={`Corregir «${e.tarea || 'la tarea'}» en el CRM`}
+                        className="inline-flex h-7 shrink-0 items-center rounded-md border border-border bg-card px-2.5 text-secundario font-medium text-foreground hover:bg-muted">
+                        Corregir
+                      </Link>
+                    ) : (
+                      <a href={e.corregirUrl} target="_blank" rel="noopener noreferrer" aria-label={`Corregir «${e.tarea || 'la tarea'}» en Moodle`}
+                        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-secundario font-medium text-foreground hover:bg-muted">
+                        Moodle <ArrowSquareOut size={11} aria-hidden />
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
