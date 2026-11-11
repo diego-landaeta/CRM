@@ -2,8 +2,8 @@ import { Flask } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 
 /*
-  Lo que todavía se está probando (#679/#681): de momento, el plugin del CRM en Moodle
-  (Integraciones); después, «Mi campus» y corregir desde el CRM. Se dice en la propia
+  Lo que todavía se está probando (#679/#681): el plugin del CRM en Moodle
+  (Integraciones), «Mi campus» y corregir desde el CRM. Se dice en la propia
   pantalla, no solo en el menú, para que quien la usa sepa que puede cambiar y que
   conviene avisar si algo no cuadra. Es compartido (shared/components/ui) porque lo usan
   pantallas de varios módulos.

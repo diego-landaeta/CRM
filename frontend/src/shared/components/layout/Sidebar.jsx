@@ -264,8 +264,10 @@ export const NAV_SECTIONS = [
     icon: ChalkboardTeacher,
     items: [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
-      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { label: 'Mis cursos', to: '/mis-cursos', detail: 'Tus cursos y tu parte', icon: GraduationCap, roles: ['tutor'], permiso: 'tutores.mis_cursos' },
+      // «Mis cursos» (sus cursos y su parte) ya no va en el menú (05/11): la tutora trabaja
+      // desde «Mi campus». La pantalla sigue en /mis-cursos para los enlaces de los correos.
+      // #681: sus cursos en Moodle, con lo que tiene por corregir y contestar.
+      { label: 'Mi campus', to: '/mis-cursos/campus', detail: 'Por corregir, dudas y alumnos', icon: ClipboardText, roles: ['tutor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188): el tutor, su bandeja; administración, todas.
       { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor'], module: 'tutores', statusTag: 'Pruebas', permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { label: 'Sin tutor', to: '/tutores/sin-tutor', detail: 'Formaciones sin asignar', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
