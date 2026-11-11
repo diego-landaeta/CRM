@@ -64,6 +64,11 @@ class calificar extends external_api {
         $contexto = \context_module::instance($cm->id);
         $curso = $DB->get_record('course', ['id' => $cm->course], '*', MUST_EXIST);
         $tutora = \core_user::get_user($p['desde'], '*', MUST_EXIST);
+        // Nunca como el administrador del sitio (1.10.1, revisión de la #689): tiene todos los
+        // permisos, así que `mod/assign:grade` no lo pararía.
+        if (is_siteadmin($tutora)) {
+            throw new \invalid_parameter_exception('No se puede calificar como el administrador del sitio.');
+        }
         if (!has_capability('mod/assign:grade', $contexto, $tutora)) {
             throw new \invalid_parameter_exception('Esa persona no puede calificar esta tarea.');
         }

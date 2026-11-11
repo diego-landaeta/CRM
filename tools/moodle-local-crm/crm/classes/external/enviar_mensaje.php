@@ -36,7 +36,7 @@ use core_external\external_value;
  *
  * Lo llama el CRM con el token de su servicio («CRM»), cuyo usuario tiene
  * `local/crm:enviarcomo`. Solo puede enviar como alguien que es personal del
- * campus (tutor, profesor, gestor o administrador): nunca como un alumno.
+ * campus (tutor, profesor o gestor): nunca como un alumno ni como el administrador del sitio.
  *
  *  - Sin `conversacionid`: por la conversación privada de los dos (se abre si no
  *    existía), así que el alumno lo ve en el mismo hilo que el resto.
@@ -73,6 +73,11 @@ class enviar_mensaje extends external_api {
         }
         if ($p['desde'] === $p['para']) {
             throw new \invalid_parameter_exception('No se puede enviar un mensaje a uno mismo.');
+        }
+        // Nunca como el administrador del sitio (1.10.1): no es una tutora. `es_personal`
+        // ya no lo acepta; se dice aparte para que el error explique qué pasa.
+        if (is_siteadmin($p['desde'])) {
+            throw new \invalid_parameter_exception('No se puede enviar como el administrador del sitio.');
         }
         if (!\local_crm\aviso::es_personal($p['desde'])) {
             throw new \invalid_parameter_exception('Solo se puede enviar como personal del campus.');

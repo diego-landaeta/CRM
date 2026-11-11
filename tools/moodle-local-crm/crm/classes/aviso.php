@@ -30,7 +30,7 @@ defined('MOODLE_INTERNAL') || die();
  * El aviso que recibe el CRM por cada mensaje privado del campus.
  *
  * Lleva quién escribe, a quién, el texto y si cada uno es «personal» del campus
- * (tutor, profesor, gestor o administrador). Con eso el CRM distingue la duda de
+ * (tutor, profesor o gestor; nunca el administrador del sitio). Con eso el CRM distingue la duda de
  * un alumno a su tutora, la respuesta de la tutora escrita en el campus y los
  * mensajes entre alumnos (que no le importan).
  *
@@ -47,11 +47,17 @@ class aviso {
             && trim((string) get_config('local_crm', 'secreto')) !== '';
     }
 
-    /** ¿Es personal del campus (y no alumno)? */
+    /**
+     * ¿Es personal del campus (y no alumno)?
+     *
+     * El administrador del sitio NO (1.10.1, revisión de la #689, punto 2): no es una
+     * tutora, y como lo puede todo, dejarlo pasar permitía que el CRM escribiera o
+     * calificara como él. Aunque además tenga un rol de profesor o de gestor.
+     */
     public static function es_personal(int $userid): bool {
         global $DB;
         if (is_siteadmin($userid)) {
-            return true;
+            return false;
         }
         [$sql, $params] = $DB->get_in_or_equal(self::ARQUETIPOS_PERSONAL, SQL_PARAMS_NAMED);
         $params['userid'] = $userid;
@@ -116,7 +122,7 @@ class aviso {
         // Un privado entre alumnos no es una consulta y no es asunto del CRM: no sale del
         // campus. Antes llegaba entero y el CRM lo descartaba («entre alumnos»), pero el
         // texto ya había viajado (revisión de la #689, 8c). Va solo si quien escribe o
-        // alguien que lo recibe es personal del campus (tutora, profesor, gestor, admin).
+        // alguien que lo recibe es personal del campus (tutora, profesor o gestor).
         $conpersonal = !empty($de['personal'])
             || (bool) array_filter($para, static fn(array $u): bool => !empty($u['personal']));
         if (!$conpersonal) {
