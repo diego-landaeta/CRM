@@ -136,7 +136,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
       {abierto && (
         <div id={panel} className="border-t border-border bg-muted/20 px-4 pb-3 pt-1 sm:pl-[3.75rem]">
           {curso.error && (
-            <p role="alert" className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-warning/15 px-3 py-2 text-secundario text-warning-soft-foreground">
+            <p role="alert" className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-transparent dark:ring-1 dark:ring-inset dark:ring-warning/35 px-3 py-2 text-secundario text-warning-soft-foreground">
               <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {curso.error}
             </p>
           )}
@@ -434,7 +434,7 @@ export default function MiCampusPage() {
           <Resumen porCorregir={totales.porCorregir} dudas={totales.dudas} porDesarrollar={datos.pendientes.length} conCampus={datos.campus.length > 0} />
 
           {(datos.sinConectar?.length ?? 0) > 0 && (
-            <section aria-labelledby="sin-conectar" className="rounded-lg border border-warning/40 bg-warning-soft dark:bg-warning/15 px-4 py-3">
+            <section aria-labelledby="sin-conectar" className="rounded-lg border border-warning/40 bg-warning-soft dark:bg-transparent px-4 py-3">
               <h2 id="sin-conectar" className="flex items-center gap-2 text-normal font-semibold text-warning-soft-foreground">
                 <Warning size={15} weight="bold" aria-hidden /> Campus en los que tu cuenta de Moodle no está conectada
               </h2>
@@ -476,7 +476,7 @@ export default function MiCampusPage() {
                     )}
                   </div>
                   {c.error && (
-                    <p role="alert" className="m-4 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-warning/15 px-3 py-2 text-secundario text-warning-soft-foreground">
+                    <p role="alert" className="m-4 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-transparent dark:ring-1 dark:ring-inset dark:ring-warning/35 px-3 py-2 text-secundario text-warning-soft-foreground">
                       <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {c.error}
                     </p>
                   )}
