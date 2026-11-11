@@ -116,7 +116,6 @@ const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
-const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 const MiCampusPage = lazy(() => import('./modules/tutores/pages/MiCampusPage'));
 const CorregirTareaPage = lazy(() => import('./modules/tutores/pages/CorregirTareaPage'));
 const CursoCompletoPage = lazy(() => import('./modules/tutores/pages/CursoCompletoPage'));
@@ -284,7 +283,8 @@ function App() {
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
-          <Route path="/mis-cursos" element={<MisCursosPage />} />
+          {/* «Mis cursos» va dentro de «Mi campus» como pestaña (Diego, 11/11); los enlaces de los correos siguen sirviendo. */}
+          <Route path="/mis-cursos" element={<Navigate to="/mis-cursos/campus?vista=cursos" replace />} />
           <Route path="/mis-cursos/campus" element={<MiCampusPage />} />
           <Route path="/mis-cursos/campus/tarea/:projectId/:cursoId/:tareaId" element={<CorregirTareaPage />} />
           <Route path="/mis-cursos/campus/curso/:projectId/:cursoId" element={<CursoCompletoPage />} />
