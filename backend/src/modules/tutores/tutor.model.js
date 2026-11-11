@@ -103,7 +103,7 @@ export async function listar({ projectId, projectIds = null, activos = true }) {
                      WHERE upx.user_id = u.id AND ($1::int IS NULL OR upx.project_id = $1)) AS es_de_este_proyecto
        FROM users u
        LEFT JOIN tutor_profiles perfil ON perfil.user_id = u.id
-      WHERE u.role = 'tutor'
+      WHERE u.role IN ('tutor', 'tutor_redactor')
         ${activos ? 'AND u.active' : ''}
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = u.id AND up.project_id IN (SELECT id FROM alcance))
@@ -119,7 +119,7 @@ export async function ficha(tutorId) {
             p.dni_nif, p.iban, p.banco, p.telefono, p.notas
        FROM users u
        LEFT JOIN tutor_profiles p ON p.user_id = u.id
-      WHERE u.id = $1 AND u.role = 'tutor'`,
+      WHERE u.id = $1 AND u.role IN ('tutor', 'tutor_redactor')`,
     [tutorId]
   );
   return t || null;
@@ -152,7 +152,7 @@ export async function ponerContrasena(userId, password) {
 export async function renombrarTutor(tutorId, nombre) {
   const { rows } = await query(
     `UPDATE users SET nombre = $2, updated_at = now()
-      WHERE id = $1 AND role = 'tutor' AND nombre IS DISTINCT FROM $2
+      WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') AND nombre IS DISTINCT FROM $2
       RETURNING id, nombre`,
     [tutorId, String(nombre).trim()]
   );
@@ -393,7 +393,7 @@ export async function crearColaboracionEnOtroCampus({
   try {
     await client.query('BEGIN');
     const { rows: [tutor] } = await client.query(
-      `SELECT id FROM users WHERE id = $1 AND role = 'tutor' FOR UPDATE`, [tutorId]);
+      `SELECT id FROM users WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') FOR UPDATE`, [tutorId]);
     if (!tutor) { await client.query('ROLLBACK'); return null; }
 
     await client.query(
@@ -1176,7 +1176,7 @@ export async function retirarTutor(tutorId) {
     await client.query('BEGIN');
     const { rows: [t] } = await client.query(
       `UPDATE users SET active = false, updated_at = NOW()
-        WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+        WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') RETURNING id, nombre, email`, [tutorId]);
     if (!t) { await client.query('ROLLBACK'); return null; }
     const { rowCount } = await client.query(
       `UPDATE tutor_collaborations
@@ -1200,6 +1200,6 @@ export async function retirarTutor(tutorId) {
 export async function reactivarTutor(tutorId) {
   const { rows: [t] } = await query(
     `UPDATE users SET active = true, updated_at = NOW()
-      WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+      WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') RETURNING id, nombre, email`, [tutorId]);
   return t || null;
 }

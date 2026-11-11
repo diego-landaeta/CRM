@@ -80,6 +80,47 @@ export function colaboradorPuede(ruta) {
 }
 
 /**
+ * Lo unico que puede pedir un tutor redactor (CRM#708): hace los cursos y
+ * responde en Moodle. Su tablero y su factura del mes, como un colaborador, y
+ * sus cursos, como un tutor. Nada de prospectos, ventas ni finanzas: todo lo
+ * demas, 403 aunque la ruta solo pida token. Sus consultas de alumnos entran
+ * cuando llegue a produccion el modulo de Consultas (#187), que aqui aun no esta.
+ */
+export const RUTAS_DEL_TUTOR_REDACTOR = [
+  /^\/api\/auth(?:\/|$)/,
+  /^\/api\/tasks(?:\/|$)/,
+  /^\/api\/facturas-colaborador\/mias(?:\/|$)/,
+  /^\/api\/tutores(?:\/|$)/,
+  /^\/api\/notifications(?:\/|$)/,
+  /^\/api\/permissions\/system-defaults\/?$/,
+  /^\/api\/users\/mis-avisos\/?$/,
+  /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
+];
+
+/**
+ * Los roles que dan clase: el tutor y el tutor redactor (CRM#708). Donde el
+ * CRM pregunta «¿es tutor?» para recortar a lo suyo (sus cursos, sus
+ * comisiones) o para listar tutores, el redactor cuenta como tutor.
+ */
+export const ROLES_DE_TUTOR = ['tutor', 'tutor_redactor'];
+
+/** Si su rol PRINCIPAL es de tutor (lo que antes era `role === 'tutor'`). */
+export function esRolDeTutor(rol) {
+  return ROLES_DE_TUTOR.includes(rol);
+}
+
+/** Tutor redactor y NADA MAS. A quien ademas tiene otro rol no se le cierra nada aqui. */
+export function soloEsTutorRedactor(user) {
+  const suyos = rolesDe(user);
+  return suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor');
+}
+
+export function tutorRedactorPuede(ruta) {
+  const limpia = String(ruta || '').split('?')[0];
+  return RUTAS_DEL_TUTOR_REDACTOR.some((re) => re.test(limpia));
+}
+
+/**
  * Deja la lista de añadidos como debe guardarse.
  *
  * Sin repetidos, sin el rol principal --estaria dos veces-- y SIN superadmin:
