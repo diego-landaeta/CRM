@@ -24,6 +24,7 @@ const PERFILES = {
   project_manager: inv.personaDePrueba('project_manager'),
   'gestora con factura_manager': inv.personaDePrueba('gestor', { factura_manager: true }),
   'gestora+admin': inv.personaDePrueba('gestor', { roles_extra: ['admin'] }),
+  'gestora+tutor': inv.personaDePrueba('gestor', { roles_extra: ['tutor'] }),
 };
 
 let porId;
