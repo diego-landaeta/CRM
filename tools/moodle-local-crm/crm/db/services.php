@@ -57,6 +57,15 @@ $functions['local_crm_calificar'] = [
     'capabilities' => 'local/crm:enviarcomo',
 ];
 
+// 1.10.2 (revisión de la #689): para que el CRM no vincule nunca al administrador del
+// sitio a una tutora. Moodle registra la función y la añade al servicio al actualizar.
+$functions['local_crm_cuenta'] = [
+    'classname'    => '\local_crm\external\cuenta',
+    'description'  => 'Si una cuenta existe y si es administradora del sitio: el CRM no la vincula a una tutora si lo es.',
+    'type'         => 'read',
+    'capabilities' => 'local/crm:enviarcomo',
+];
+
 $services = [
     'CRM' => [
         'functions' => [
@@ -74,6 +83,7 @@ $services = [
             'local_crm_calificar',
             'local_crm_disponibilidad',
             'local_crm_mensajes_desde',
+            'local_crm_cuenta',
         ],
         'shortname'       => 'local_crm',
         // Sin lista de usuarios autorizados: el token lo crea el propio plugin al

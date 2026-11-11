@@ -52,6 +52,22 @@ $string['conectado_que'] = 'Los mensajes privados del campus llegan al CRM y las
 $string['desconectar_boton'] = 'Desconectar este campus del CRM';
 $string['desconectar_ok'] = 'Campus desconectado. El CRM ya no recibe sus mensajes.';
 $string['errorcalificar'] = 'No se ha podido guardar la nota.';
+// Los motivos por los que el plugin no envía o no califica (1.10.2). Van en el mensaje del
+// error, que llega al CRM aunque el campus tenga el modo de depuración apagado.
+$string['usuarionovalido'] = 'Usuario no válido: {$a}';
+$string['enviaramismo'] = 'No se puede enviar un mensaje a uno mismo.';
+$string['enviarcomoadmin'] = 'No se puede enviar como el administrador del sitio.';
+$string['enviarnopersonal'] = 'Solo se puede enviar como personal del campus.';
+$string['mensajevacio'] = 'El mensaje está vacío.';
+$string['chatnoesdeellos'] = 'Esa conversación no es un chat de grupo de ese alumno con esa tutora.';
+$string['chatnoesdelalumno'] = 'Esa conversación no es el chat de grupo de ese alumno.';
+$string['chatsoloprofesora'] = 'Solo responde en el chat de grupo una profesora de ese curso.';
+$string['calificarcomoadmin'] = 'No se puede calificar como el administrador del sitio.';
+$string['calificarsinpermiso'] = 'Esa persona no puede calificar esta tarea.';
+$string['alumnonoentarea'] = 'El alumno no está en esta tarea.';
+$string['alumnootrogrupo'] = 'El alumno es de otro grupo: no lo puede calificar.';
+$string['calificarconescala'] = 'Esta tarea se califica con escala o sin nota: corrígela en el campus.';
+$string['notafueraderango'] = 'La nota tiene que estar entre 0 y {$a}.';
 $string['paso_1'] = 'En el CRM: Finanzas › Integraciones › el proyecto › Campus (Moodle) › «Conectar campus».';
 $string['paso_2'] = 'Copia el código que aparece (empieza por «crm1.»).';
 $string['paso_3'] = 'Pégalo aquí y pulsa «Conectar». El plugin hace el resto.';

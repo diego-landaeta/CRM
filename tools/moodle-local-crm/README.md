@@ -238,8 +238,12 @@ Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que p
 - **Enviar y calificar en nombre de la tutora.** `local_crm_enviar_mensaje` y
   `local_crm_calificar` exigen `local/crm:enviarcomo`, que solo tiene el rol del servicio.
   Al calificar se comprueba que la tutora puede calificar esa tarea y, con grupos
-  separados, que el alumno es de su grupo. Solo envía **como personal del campus** (tutor, profesor, gestor o
-  administrador), nunca como un alumno.
+  separados, que el alumno es de su grupo. Solo envía **como personal del campus** (tutor, profesor o
+  gestor), nunca como un alumno. **Nunca como el administrador del sitio** (1.10.1): ni envía ni
+  califica como él aunque tenga rol de profesor, y sus mensajes no cuentan como «personal».
+  Desde la 1.10.2 el CRM tampoco lo vincula a una tutora: pregunta con `local_crm_cuenta`
+  (solo lectura: si la cuenta existe y si es administradora del sitio). Los rechazos llevan
+  el motivo en el mensaje del error, que llega al CRM con la depuración apagada.
 - **Si el CRM está caído.** Cada aviso es una tarea de Moodle: si el CRM no contesta o
   falla, se reintenta sola. Si el CRM lo rechaza (campus desconectado, clave cambiada),
   no se reintenta. Lo que se escribe a una tutora mientras el campus está desconectado
