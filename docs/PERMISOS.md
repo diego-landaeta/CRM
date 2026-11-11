@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-822 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+825 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1033,6 +1033,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusDelTutor | `GET /api/tutores/:id/campus` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
 | asignarCampus | `POST /api/tutores/:id/campus` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | comprobarCampus | `POST /api/tutores/:id/campus/comprobar` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
+| desvincularCuenta | `POST /api/tutores/:id/campus/:projectId/desvincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| buscarCuentaMoodle | `GET /api/tutores/:id/campus/:projectId/buscar-cuenta` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| vincularCuentaMoodle | `POST /api/tutores/:id/campus/:projectId/vincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | asignarEmpresa | `POST /api/tutores/:id/empresas` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | quitarEmpresa | `DELETE /api/tutores/:id/empresas/:issuerId` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | cambiarDisponible | `PATCH /api/tutores/:id/disponible` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
