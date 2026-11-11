@@ -270,7 +270,7 @@ function Ficha({ c, ctx, cargando, alInsertar, puedeEscribir, admin }: {
       )}
 
       {ctx?.error && (
-        <p role="alert" className="mx-4 my-3 flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+        <p role="alert" className="mx-4 my-3 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-warning/15 px-3 py-2 text-secundario text-warning-soft-foreground">
           <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {ctx.error}
         </p>
       )}
@@ -284,7 +284,7 @@ function Ficha({ c, ctx, cargando, alInsertar, puedeEscribir, admin }: {
               <ul className="-mx-2 space-y-0.5">
                 {ctx.entregas.map((e) => (
                   <li key={e.tareaId} className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/60">
-                    <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-warning-soft text-warning-soft-foreground">
+                    <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-warning-soft dark:bg-warning/15 text-warning-soft-foreground">
                       <ClipboardText size={14} weight="bold" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -396,7 +396,7 @@ function Guardadas({ lista, texto, alElegir, alCrear, alBorrar, alCerrar }: {
             <button type="button" onClick={() => alElegir(g.texto)} className="min-w-0 flex-1 rounded-md px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <span className="flex items-center gap-1.5 text-secundario font-medium text-foreground">
                 {g.titulo}
-                {!g.personal && <span className="rounded-full bg-info-soft px-1.5 py-px text-[10px] font-medium text-info-soft-foreground">Del campus{g.campus ? ` · ${g.campus}` : ''}</span>}
+                {!g.personal && <span className="rounded-full bg-info-soft dark:bg-info/15 px-1.5 py-px text-[10px] font-medium text-info-soft-foreground">Del campus{g.campus ? ` · ${g.campus}` : ''}</span>}
               </span>
               <span className="line-clamp-2 text-secundario text-muted-foreground">{g.texto}</span>
             </button>
@@ -428,7 +428,7 @@ function Guardadas({ lista, texto, alElegir, alCrear, alBorrar, alCerrar }: {
 function Nota({ n }: { n: NotaInterna }) {
   return (
     <li className="my-3 flex justify-center">
-      <div className="w-full max-w-[92%] rounded-lg border border-warning/40 bg-warning-soft px-3.5 py-2.5 sm:max-w-[80%]">
+      <div className="w-full max-w-[92%] rounded-lg border border-warning/40 bg-warning-soft dark:bg-warning/15 px-3.5 py-2.5 sm:max-w-[80%]">
         <p className="mb-1 flex flex-wrap items-center gap-x-2 text-[11px] font-semibold uppercase tracking-wide text-warning-soft-foreground">
           <NotePencil size={12} weight="bold" aria-hidden /> Nota interna · solo personal
           <span className="font-normal normal-case tracking-normal">{n.autor_nombre || 'Alguien del equipo'} · {fecha(n.at)}</span>
@@ -476,7 +476,7 @@ function ChatDeGrupo({ participantes, alumno, tipo }: { participantes: Participa
 function AvisoGrupoDelCurso() {
   return (
     <p role="note" data-testid="aviso-grupo-del-curso"
-      className="mx-auto mb-2 flex max-w-3xl items-start gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+      className="mx-auto mb-2 flex max-w-3xl items-start gap-2 rounded-md border border-warning/40 bg-warning-soft dark:bg-warning/15 px-3 py-2 text-secundario text-warning-soft-foreground">
       <Warning size={14} weight="fill" className="mt-[2px] shrink-0" aria-hidden />
       <span>
         <strong className="font-semibold">Lo leen todos los alumnos del grupo.</strong>
@@ -646,7 +646,7 @@ export default function ConsultaPage() {
     return (
       <div className="mx-auto max-w-xl space-y-3 py-6">
         <Link to="/consultas" className="inline-flex items-center gap-1 text-normal font-medium text-primary hover:underline"><ArrowLeft size={14} aria-hidden /> Consultas</Link>
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft p-4">
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 p-4">
           <p className="text-normal font-semibold text-foreground">No se ha podido abrir la consulta</p>
           <p className="mt-1 text-secundario text-muted-foreground">{error}</p>
         </div>
@@ -736,7 +736,7 @@ export default function ConsultaPage() {
 
               {/* El relevo solo existe en las consultas privadas de antes: en el chat de grupo lo ven todas. */}
               {relevo && c.conversacion_grupo_id == null && c.puedes === 'tutor' && !relevoVisto && (
-                <div role="note" className="flex items-center gap-2 border-b border-border bg-info-soft px-4 py-1.5 text-secundario text-info-soft-foreground sm:px-8">
+                <div role="note" className="flex items-center gap-2 border-b border-border bg-info-soft dark:bg-info/15 px-4 py-1.5 text-secundario text-info-soft-foreground sm:px-8">
                   <ArrowsLeftRight size={14} weight="bold" className="shrink-0" aria-hidden />
                   <span className="min-w-0 flex-1 truncate" title="Su tutora anterior no está disponible: lee el historial y las notas internas antes de responder.">
                     <strong className="font-semibold">Relevo:</strong> su tutora anterior no está disponible{(c.notas || []).length ? ' · hay notas internas' : ''}
@@ -808,7 +808,7 @@ export default function ConsultaPage() {
                           </span>
                         </div>
                         {delTutor && !m.en_el_campus && (
-                          <div role="alert" className="mt-1 flex max-w-[88%] flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warning-soft px-2.5 py-1.5 text-secundario text-warning-soft-foreground sm:max-w-[75%]">
+                          <div role="alert" className="mt-1 flex max-w-[88%] flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warning-soft dark:bg-warning/15 px-2.5 py-1.5 text-secundario text-warning-soft-foreground sm:max-w-[75%]">
                             <Warning size={13} weight="fill" className="shrink-0" aria-hidden />
                             <span>No ha llegado al campus{m.error_envio ? `: ${m.error_envio}` : '.'}</span>
                             <button type="button" disabled={ocupado} className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline" onClick={() => reintentar(m.id)}>
@@ -869,7 +869,7 @@ export default function ConsultaPage() {
                         <button type="button" aria-pressed={modoReal === 'nota'} onClick={() => setModo(modoReal === 'nota' ? 'respuesta' : 'nota')}
                           title={modoReal === 'nota' ? 'Volver a responder al alumno' : 'Escribir una nota interna (el alumno no la ve)'}
                           className={cn('inline-flex h-8 items-center gap-1 rounded-md px-2 text-secundario font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                            modoReal === 'nota' ? 'bg-warning-soft text-warning-soft-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
+                            modoReal === 'nota' ? 'bg-warning-soft dark:bg-warning/15 text-warning-soft-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
                           <NotePencil size={16} aria-hidden />
                           <span className={cn(modoReal === 'nota' ? 'inline' : 'sr-only')}>Nota interna</span>
                         </button>

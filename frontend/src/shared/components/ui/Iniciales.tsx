@@ -9,10 +9,10 @@ import { cn } from '@/shared/lib/utils';
   que ya cumplen 4,5:1 en claro y en oscuro: nada de colores con número.
 */
 const TONOS = [
-  'bg-info-soft text-info-soft-foreground',
-  'bg-success-soft text-success-soft-foreground',
-  'bg-warning-soft text-warning-soft-foreground',
-  'bg-indigo-soft text-indigo-soft-foreground',
+  'bg-info-soft dark:bg-info/15 text-info-soft-foreground',
+  'bg-success-soft dark:bg-success/15 text-success-soft-foreground',
+  'bg-warning-soft dark:bg-warning/15 text-warning-soft-foreground',
+  'bg-indigo-soft dark:bg-indigo/15 text-indigo-soft-foreground',
   'bg-accent text-accent-foreground',
 ];
 
