@@ -297,21 +297,24 @@ export async function matriculadosDe(conexion, cursoId, opciones) {
   const r = await llamar(conexion, 'core_enrol_get_enrolled_users', {
     courseid: cursoId,
     'options[0][name]': 'onlyactive', 'options[0][value]': 1,
-    'options[1][name]': 'userfields', 'options[1][value]': 'id,fullname,email,lastaccess,lastcourseaccess,roles',
+    'options[1][name]': 'userfields', 'options[1][value]': 'id,fullname,email,lastaccess,lastcourseaccess,roles,groups',
   }, opciones);
   return (Array.isArray(r) ? r : []).map((u) => ({
     id: Number(u.id),
     nombre: u.fullname || null,
     email: u.email || null,
     roles: (u.roles || []).map((x) => x.shortname),
+    // Sus grupos en el curso (para los cursos con grupos separados).
+    grupos: (u.groups || []).map((g) => Number(g.id)),
     // 0 = nunca ha entrado.
     ultimoAcceso: Number(u.lastcourseaccess || u.lastaccess) > 0 ? new Date(Number(u.lastcourseaccess || u.lastaccess) * 1000) : null,
   }));
 }
 
-// ─── La ficha del alumno en Consultas (#679): sus tareas sin corregir ───────
+// ─── La ficha del alumno en Consultas (#679) y Mi campus (#681): las tareas ───
 //
-// Solo LEEN. Calificar desde el CRM va aparte.
+// Todo LEE salvo `calificarComoTutora`, que escribe la nota en Moodle y solo va
+// con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION).
 
 /** Las tareas (mod_assign) de esos cursos, en UNA llamada: { cursoId: [{ id, cmid, nombre, entrega }] }. */
 export async function tareasDeCursos(conexion, cursoIds, opciones) {
@@ -347,6 +350,28 @@ export async function tareasDeCursos(conexion, cursoIds, opciones) {
   return porCurso;
 }
 
+/**
+ * TODAS las entregas de una tarea, con lo entregado (#681: corregir desde el CRM):
+ * el texto en línea y los archivos (con su dirección de Moodle, que solo se abre con
+ * el token: el CRM la sirve por su cuenta, el navegador nunca ve el token).
+ */
+export async function entregasDeTarea(conexion, tareaId, opciones) {
+  const r = await llamar(conexion, 'mod_assign_get_submissions', { 'assignmentids[0]': tareaId }, opciones);
+  const subs = (r?.assignments || []).find((a) => Number(a.assignmentid) === Number(tareaId))?.submissions || [];
+  return subs.map((s) => {
+    const plugins = s.plugins || [];
+    const texto = plugins.flatMap((p) => p.editorfields || []).map((e) => e.text).filter(Boolean).join('\n\n');
+    const archivos = plugins.flatMap((p) => (p.fileareas || []).flatMap((fa) => fa.files || []))
+      .filter((f) => f.filename && f.filename !== '.')
+      .map((f) => ({ nombre: f.filename, tamano: Number(f.filesize) || null, tipo: f.mimetype || null, url: f.fileurl }));
+    return {
+      alumnoId: Number(s.userid), estado: s.status, gradingstatus: s.gradingstatus || null,
+      entregadaAt: Number(s.timemodified) > 0 ? new Date(Number(s.timemodified) * 1000) : null,
+      texto, archivos,
+    };
+  });
+}
+
 /** Estados de `gradingstatus` que son «ya corregida» (sin flujo: graded; con flujo: los de después de calificar). */
 export const YA_CORREGIDA = new Set(['graded', 'released', 'readyforrelease']);
 
@@ -364,6 +389,11 @@ async function notasDeTareas(conexion, tareaIds, opciones) {
   return porTarea;
 }
 
+/** Las notas puestas en una tarea: { alumnoId: { nota, at } }. */
+export async function notasDeTarea(conexion, tareaId, opciones) {
+  return (await notasDeTareas(conexion, [tareaId], opciones)).get(Number(tareaId)) || new Map();
+}
+
 /**
  * ¿Está por corregir? Entregada y, o sin corregir, o vuelta a entregar después de la
  * nota (Moodle la sigue llamando «graded» aunque la entrega sea posterior).
@@ -374,8 +404,52 @@ export function porCorregir(entrega, nota) {
   return Boolean(nota?.at && entrega.entregadaAt && entrega.entregadaAt > nota.at);
 }
 
+/**
+ * El curso entero, como lo ve la profesora en Moodle: sus secciones (temas) en orden y,
+ * en cada una, sus actividades y recursos (tareas, cuestionarios, foros, archivos…), con
+ * si están ocultos y sus fechas. Sin los archivos de cada recurso (`excludecontents`):
+ * solo la estructura. Los bloques de texto sueltos (`label`) no son actividades y no salen.
+ */
+export async function contenidoDelCurso(conexion, cursoId, opciones) {
+  const r = await llamar(conexion, 'core_course_get_contents', {
+    courseid: cursoId, 'options[0][name]': 'excludecontents', 'options[0][value]': 1,
+  }, opciones);
+  return (Array.isArray(r) ? r : []).map((s) => ({
+    id: Number(s.id),
+    numero: Number(s.section) || 0,
+    nombre: s.name || null,
+    visible: Number(s.visible ?? 1) !== 0,
+    actividades: (s.modules || []).filter((m) => m.modname !== 'label').map((m) => ({
+      cmid: Number(m.id),
+      instancia: Number(m.instance) || null,
+      tipo: m.modname || null,
+      nombre: m.name || null,
+      url: m.url || null,
+      visible: Number(m.visible ?? 1) !== 0,
+      restringida: Boolean(m.availabilityinfo),
+      fechas: (m.dates || []).filter((d) => Number(d.timestamp) > 0)
+        .map((d) => ({ etiqueta: d.label || null, at: new Date(Number(d.timestamp) * 1000) })),
+    })),
+  }));
+}
+
 /** Tareas por llamada a Moodle: con muchas a la vez, una sola llamada pasa del tiempo de espera. */
 const TAREAS_POR_LLAMADA = 20;
+
+/**
+ * Califica a nombre de la tutora, por el plugin (`local_crm_calificar`). ESCRIBE en
+ * Moodle: solo en pruebas mientras no se apruebe (PLUGIN_MOODLE_EN_PRODUCCION). Apagado
+ * no llama a nadie y falla con 'APAGADO', aunque quien llame se haya saltado su propia
+ * comprobación (como `enviarComoTutor`).
+ */
+export async function calificarComoTutora(conexion, { desde, tarea, alumno, nota, comentario }, opciones) {
+  if (!pluginMoodleActivo()) {
+    throw new MoodleError('El plugin del CRM en Moodle aún no está aprobado en producción.', 'APAGADO');
+  }
+  const r = await llamar(conexion, 'local_crm_calificar', { desde, tarea, alumno, nota, comentario: comentario || '' }, opciones);
+  if (!r?.ok) throw new MoodleError('El campus no ha guardado la nota.', 'NO_CALIFICADO');
+  return { nota: Number(r.nota), maxima: Number(r.maxima), comentario: Boolean(r.comentario) };
+}
 
 /**
  * Las entregas POR CORREGIR de esas tareas: { tareaId: [{ alumnoId, entregadaAt }] }.
