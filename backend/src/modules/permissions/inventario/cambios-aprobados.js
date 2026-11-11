@@ -395,13 +395,64 @@ export const CAMBIOS_DE_MENU = [
     rutas: { 'Equipo de Desarrollo › Mi tablero': 'GET /api/tasks/' },
     aprobadoPor: 'Diego, 04/11',
   },
+  {
+    id: 'menu-sin-pantallas-ia',
+    que: 'Las pantallas de IA del CRM salen del menú y del buscador para todos: «Análisis › Análisis IA» (y «Pregunta a tus datos» y «Chat IA», que la foto ya no tenía). Su dirección lleva al inicio.',
+    motivo: 'Diego (10/11/2026): el chatbot de IA del CRM ya no va, porque se usa Claude por el MCP (#30). Solo se esconden: el acceso no cambia, el servidor responde igual y el código se queda. Se vuelven a encender las tres con `VITE_PANTALLAS_IA=1` en el frontal.',
+    // Solo menú: no cambia el acceso (ni gana ni pierde nadie), así que la ruta
+    // no tiene que dar 403. `menuSinCambioDeAcceso423` comprueba que sigue ahí.
+    soloMenu: true,
+    perfiles: {
+      superadmin: ['- Análisis › Análisis IA'],
+      admin: ['- Análisis › Análisis IA'],
+      soporte: ['- Análisis › Análisis IA'],
+      'gestora+admin': ['- Análisis › Análisis IA'],
+      // Lo ganaba con `menu-pm-ve-todo` (04/11): este cambio lo anula.
+      project_manager: ['- Análisis › Análisis IA'],
+    },
+    rutas: { 'Análisis › Análisis IA': 'GET /api/reports-ia/:projectId' },
+    aprobadoPor: 'Diego, 10/11',
+  },
+  {
+    id: 'historial-de-tareas',
+    que: '«Equipo de Desarrollo › Por revisar» desaparece y en su sitio sale «Historial de tareas» a quien tiene tablero (CRM#707).',
+    motivo: 'Diego y Carlos (10/11): quien hace la tarea la pasa a «Hecha» él mismo; las de programación las cierra Diego. Ya no hay una bandeja de «por aprobar» ni su contador (tampoco para Carlos): la pantalla y su ruta (`/api/tasks/review`) se quitan enteras. El historial enseña lo hecho con el alcance del tablero: no abre nada que no se viera ya en «Mi tablero».',
+    perfiles: {
+      superadmin: ['- Equipo de Desarrollo › Por revisar', '+ Equipo de Desarrollo › Historial de tareas'],
+      admin: ['- Equipo de Desarrollo › Por revisar', '+ Equipo de Desarrollo › Historial de tareas'],
+      'gestora+admin': ['- Equipo de Desarrollo › Por revisar', '+ Equipo de Desarrollo › Historial de tareas'],
+      // Quien tiene tablero sin «Aprobar y cerrar»: no tenía «Por revisar» y gana el historial de lo suyo.
+      colaborador: ['+ Equipo de Desarrollo › Historial de tareas'],
+      tutor: ['+ Equipo de Desarrollo › Historial de tareas'],
+      'gestora+tutor': ['+ Equipo de Desarrollo › Historial de tareas'],
+    },
+    rutas: {
+      'Equipo de Desarrollo › Por revisar': 'GET /api/tasks/review',
+      'Equipo de Desarrollo › Historial de tareas': 'GET /api/tasks/historial',
+    },
+    // La pantalla se va con su ruta: no es que se le cierre a alguien, es que ya no existe.
+    quitadas: ['Equipo de Desarrollo › Por revisar'],
+    aprobadoPor: 'Diego, 10/11',
+  },
 ];
 
-/** `{ perfil: ['+ …', '- …'] }`, todos los cambios de menú juntos. */
+/**
+ * `{ perfil: ['+ …', '- …'] }`, todos los cambios de menú juntos, en orden: si
+ * uno posterior quita lo que otro anterior añadía (o al revés), se anulan y la
+ * entrada queda como en la foto (`menu-sin-pantallas-ia` sobre `menu-pm-ve-todo`).
+ */
 export function cambiosDeMenuPorPerfil() {
   const out = {};
   for (const c of CAMBIOS_DE_MENU) {
-    for (const [perfil, lineas] of Object.entries(c.perfiles)) out[perfil] = [...(out[perfil] || []), ...lineas];
+    for (const [perfil, lineas] of Object.entries(c.perfiles)) {
+      const lista = out[perfil] || [];
+      for (const l of lineas) {
+        const contraria = `${l[0] === '+' ? '-' : '+'}${l.slice(1)}`;
+        const i = lista.indexOf(contraria);
+        if (i >= 0) lista.splice(i, 1); else lista.push(l);
+      }
+      out[perfil] = lista;
+    }
   }
   return out;
 }
@@ -437,5 +488,13 @@ export const CAMBIOS_DE_REGLA = [
     roles: ['tutor'],
     sentido: 'gana',
     aprobadoPor: 'Diego, 04/11',
+  },
+  {
+    id: 'historial-de-tareas',
+    que: 'El tutor puede pedir `/api/tasks/historial`: lo hecho de su tablero de tutores (lo suyo y lo de su equipo), con quién y cuándo.',
+    motivo: 'CRM#707 (Diego y Carlos, 10/11): «Por revisar» pasa a «Historial de tareas». Ya entraba por `/api/tasks` en el corte del tutor (`tutores-tablero`); el historial no enseña nada que no viera ya en su tablero.',
+    roles: ['tutor'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 10/11',
   },
 ];
