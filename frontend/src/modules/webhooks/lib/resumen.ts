@@ -720,12 +720,14 @@ export const TIPOS: TipoWebhook[] = [
       }
 
       if (plugin?.activo) {
-        // El error del repaso lo escribe el servidor entero («No se ha podido
-        // repasar el campus: …»), y se enseña tal cual. El del plugin anterior
-        // a la 1.8.0 no es un fallo: los avisos llegan y se actualiza solo esa
-        // noche (`consultas.plugin.js`, que solo guarda el texto, no el código).
+        // El error del repaso se enseña tal cual lo guarda el servidor (puede
+        // ser «No se ha podido repasar el campus: …», «El campus no está
+        // conectado en Integraciones», el del token…: `consultas.plugin.js`).
+        // El del plugin anterior a la 1.8.0 no es un fallo: los avisos llegan y
+        // se actualiza solo esa noche (el servidor guarda el texto, no el código).
         const error = plugin.sincronizacion_error || null;
         const pluginViejo = Boolean(error && /anterior a la 1\.8\.0/.test(error));
+        const ultimo = plugin.ultimo_aviso_at ?? null;
         return [{
           clave: `consultas-${c.id}`,
           nombre: 'Plugin del CRM conectado',
@@ -734,13 +736,15 @@ export const TIPOS: TipoWebhook[] = [
           // servidor apunta la hora de cada aviso pero lo DESCARTA
           // (`consultas.avisos.js`, `campusConConsultas`): no está funcionando.
           activo: lee,
-          ultimo: plugin.ultimo_aviso_at ?? null,
-          fallo: error && !pluginViejo ? error : null,
+          ultimo,
+          // Sin lectura, el repaso de cada 15 minutos ya no corre
+          // (`moodleSincronizacionScheduler`) y su error se queda guardado: no
+          // es un fallo de ahora y no se cuenta; va como dato, abajo.
+          fallo: lee && error && !pluginViejo ? error : null,
           aviso: !lee
-            ? `Los avisos llegan, pero no entran al CRM: ${porQueNoLee}`
+            ? (ultimo ? `Los avisos llegan, pero no entran al CRM: ${porQueNoLee}` : `Si el campus avisa, no entrará al CRM: ${porQueNoLee}`)
             : pluginViejo ? error! : undefined,
-          // Con los avisos descartados, lo de la versión no se calla: va aparte.
-          detalle: !lee && pluginViejo ? error! : undefined,
+          detalle: !lee && error ? `Último repaso guardado, de cuando leía: ${error}` : undefined,
           enlace: '/finanzas/integraciones',
           campusId: c.id,
         }];

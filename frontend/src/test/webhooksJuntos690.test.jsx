@@ -962,6 +962,8 @@ describe('el resumen sigue al selector de arriba', () => {
     abrir();
     const c = await screen.findByTestId('tipo-consultas');
     expect(await within(c).findAllByText('Lectura de consultas encendida')).toHaveLength(3);
+    // Se pidió (y dio 403): no es que no se llegara a pedir.
+    expect(get.mock.calls.some(([u]) => u.includes('/plugin'))).toBe(true);
     expect(within(c).queryByText('No se pudo leer el estado del plugin del CRM')).toBeNull();
     expect(screen.queryByText(/sin poder leer/)).toBeNull();
     expect(screen.queryByText(/con fallos/)).toBeNull();
@@ -1012,8 +1014,37 @@ describe('el resumen sigue al selector de arriba', () => {
     });
     abrir();
     const c = await screen.findByTestId('tipo-consultas');
-    expect(await within(c).findByText(/^Los avisos llegan, pero no entran al CRM/)).toBeTruthy();
-    expect(within(c).getByText(viejo)).toBeTruthy();
+    // Sin avisos todavía: no dice «llegan», sino lo que pasaría.
+    expect(await within(c).findByText(/^Si el campus avisa, no entrará al CRM/)).toBeTruthy();
+    expect(within(c).getByText(`Último repaso guardado, de cuando leía: ${viejo}`)).toBeTruthy();
+  });
+
+  it('sin lectura, un error viejo del repaso no cuenta como fallo: el repaso ya no corre', async () => {
+    get.mockImplementation((url) => {
+      if (url === '/consultas/campus/1/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: '2026-11-10T08:30:00Z', sincronizacion_error: 'No se ha podido repasar el campus: timeout' } });
+      if (url.includes('/plugin')) return Promise.resolve({ data: { activo: false } });
+      return Promise.resolve({
+        data: url === '/integrations/moodle?projectId=1' ? { active: false, has_secret: true, config_public: { consultas: true } }
+          : url.startsWith('/integrations/moodle') ? null : sinFormularios(url),
+      });
+    });
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    expect(await within(c).findByText('Los avisos llegan, pero no entran al CRM: La conexión de Moodle está apagada')).toBeTruthy();
+    expect(within(c).getByText('Último repaso guardado, de cuando leía: No se ha podido repasar el campus: timeout')).toBeTruthy();
+    expect(within(c).queryByText(/^Falló/)).toBeNull();
+    expect(screen.queryByText(/con fallos/)).toBeNull();
+  });
+
+  it('si le dan «consultas.gestionar» con la pantalla abierta, se pide el estado del plugin', async () => {
+    permisos.value = ['consultas.view', 'integrations.view'];
+    get.mockImplementation((url) => Promise.resolve({ data: url.startsWith('/integrations/moodle') ? moodleLee : sinFormularios(url) }));
+    const { rerender } = abrir();
+    await within(await screen.findByTestId('tipo-consultas')).findAllByText('Lectura de consultas encendida');
+    expect(get.mock.calls.some(([u]) => u.includes('/plugin'))).toBe(false);
+    permisos.value = ['consultas.view', 'integrations.view', 'consultas.gestionar'];
+    rerender(<MemoryRouter><WebhooksResumenPage /></MemoryRouter>);
+    await waitFor(() => expect(get.mock.calls.some(([u]) => u.includes('/plugin'))).toBe(true));
   });
 
   it('el estado del plugin solo se pide con «consultas.gestionar»', async () => {
