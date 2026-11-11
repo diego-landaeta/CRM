@@ -73,7 +73,7 @@ function Progreso({ valor, motivo }: { valor: number | null | undefined; motivo:
       <span aria-hidden className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-muted sm:block">
         <span className={cn('block h-full rounded-full', valor >= 100 ? 'bg-success' : 'bg-primary')} style={{ width: `${valor}%` }} />
       </span>
-      <span className="tabular-nums text-foreground">{valor}&nbsp;%</span>
+      <span className="tabular-nums text-foreground">{valor}%</span>
     </span>
   );
 }
@@ -223,7 +223,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
                           <span className="min-w-0">
                             <span className="block truncate text-secundario font-medium text-foreground">{a.nombre || 'Sin nombre'}</span>
                             <span className="block truncate text-secundario text-muted-foreground sm:hidden">
-                              {ultimoAcceso(a.ultimoAcceso)} · {a.progreso === null || a.progreso === undefined ? <span title={sinProgreso(curso)}>— hecho</span> : <span className="tabular-nums">{a.progreso}&nbsp;% hecho</span>}
+                              {ultimoAcceso(a.ultimoAcceso)} · {a.progreso === null || a.progreso === undefined ? <span title={sinProgreso(curso)}>— hecho</span> : <span className="tabular-nums">{a.progreso}% hecho</span>}
                             </span>
                           </span>
                         </span>

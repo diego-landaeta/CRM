@@ -72,7 +72,7 @@ describe('Mi campus · el contador de cursos por desarrollar', () => {
 });
 
 describe('Mi campus · el % hecho de cada alumno', () => {
-  it('el % de Moodle; «—» si no hay dato; un 0 real es 0 %', async () => {
+  it('el % de Moodle; «—» si no hay dato; un 0 real es 0%', async () => {
     datos = conCampus([curso()], []);
     pagina();
     // El curso sin nada que hacer sale cerrado: se abre.
@@ -80,9 +80,9 @@ describe('Mi campus · el % hecho de cada alumno', () => {
     const celdas = await screen.findAllByTestId('progreso-alumno');
     const texto = celdas.map((c) => c.textContent?.replace(/ /g, ' '));
     // Ordenados por nombre: Ana, Beto, Carla.
-    expect(texto[0]).toBe('40 %');
+    expect(texto[0]).toBe('40%');
     expect(texto[1]).toMatch(/^—/);
-    expect(texto[2]).toBe('0 %');
+    expect(texto[2]).toBe('0%');
   });
 
   it('curso sin seguimiento de finalización: «—» en todos y se explica', async () => {
