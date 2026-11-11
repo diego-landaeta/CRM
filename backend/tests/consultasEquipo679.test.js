@@ -76,6 +76,12 @@ vi.stubGlobal('fetch', vi.fn(async (url, { body } = {}) => {
         return { id, fullname: `Curso ${id}`, lastaccess: yo.ultimoAcceso ? segundos(yo.ultimoAcceso) : 0 };
       }));
   }
+  if (f === 'core_enrol_get_enrolled_users') {
+    // El reparto por curso (#724, parte 2) pregunta quién es profesora del curso: sin esto,
+    // la consulta del curso 41 se quedaba sin tutora y Laura no la veía.
+    return json((c.cursos.get(Number(p.get('courseid'))) || [])
+      .map((g) => ({ id: g.id, fullname: `Usuario ${g.id}`, roles: [{ shortname: g.rol }] })));
+  }
   if (f === 'mod_assign_get_assignments') {
     return json({
       courses: listaDe(p, 'courseids').map((id) => ({
