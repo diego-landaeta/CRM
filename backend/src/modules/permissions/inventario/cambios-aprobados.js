@@ -254,6 +254,21 @@ export const CAMBIOS_POR_DATOS = [
  */
 export const CAMBIOS_DE_MENU = [
   {
+    id: 'menu-mi-campus',
+    que: '«Tutores › Mi campus»: la tutora ve sus cursos de Moodle con lo que tiene por corregir y sus dudas, y corrige desde el CRM (CRM#681).',
+    motivo: 'Pantalla nueva dentro de «Mis cursos»: entra por el mismo permiso (`tutores.mis_cursos`) y el servidor solo enseña los cursos donde la tutora es profesora en Moodle.',
+    perfiles: {
+      superadmin: ['+ Tutores › Mi campus', '- Tutores › Mis cursos'],
+      tutor: ['+ Tutores › Mi campus', '- Tutores › Mis cursos'],
+      'gestora+tutor': ['+ Tutores › Mi campus', '- Tutores › Mis cursos'],
+    },
+    rutas: { 'Tutores › Mi campus': 'GET /api/tutores/mi-campus', 'Tutores › Mis cursos': 'GET /api/tutores/colaboraciones' },
+    // «Mis cursos» (sus cursos y su parte) sale del menú pero NO se pierde: se abre desde
+    // «Mi campus» («Tu parte · comisiones») y sigue en /mis-cursos (los correos enlazan ahí).
+    seMueve: { 'Tutores › Mis cursos': 'Tutores › Mi campus' },
+    aprobadoPor: 'Pendiente de Diego (PR de #679/#681)',
+  },
+  {
     id: 'menu-claves-admin',
     que: '«Sistema › Claves y variables» la ve también el admin, con las claves de sus campus (CRM#632).',
     motivo: 'Va con el cambio `admin-ve-claves`: el admin ya puede leerlas en el servidor, y el menú se la enseña.',
