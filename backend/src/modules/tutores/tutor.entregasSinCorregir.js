@@ -9,7 +9,7 @@
       con `leerSusCampus` (sin el % de cada alumno, que aquí no hace falta). Las
       entregas en grupo no cuentan, como allí.
     · UNA vez por entrega y tutora: la tabla `entregas_sin_corregir_avisos` (migración
-      253) recuerda cada una por su fecha de entrega. Si el alumno vuelve a entregar,
+      254) recuerda cada una por su fecha de entrega. Si el alumno vuelve a entregar,
       es otra entrega y se vuelve a avisar.
     · UN correo por tutora y pasada, con todas sus entregas nuevas, el enlace a «Mi
       campus» y el de cada entrega en Moodle. Y un aviso en la campana.

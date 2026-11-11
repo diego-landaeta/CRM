@@ -1,4 +1,4 @@
--- 253 · Aviso a la tutora de las entregas sin corregir de más de 48 h (#681)
+-- 254 · Aviso a la tutora de las entregas sin corregir de más de 48 h (#681)
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Indicaciones de Carlos (05/11): «aviso por correo si una tarea lleva más de 48 h

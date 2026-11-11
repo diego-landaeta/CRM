@@ -13,7 +13,7 @@ import fs from 'node:fs';
  *     un correo por tutora con todas, respeta el freno de correos a tutores y el interruptor
  *     del plugin, y no avisa de lo corregido ni de lo que lleva menos de 48 h.
  *
- * Contra la base LOCAL (las tutoras, sus campus y la tabla de la migración 253) y con los
+ * Contra la base LOCAL (las tutoras, sus campus y la tabla de la migración 254) y con los
  * dos Moodle de mentira: un `fetch` que contesta según el campus y apunta lo que se le pide.
  */
 
