@@ -6,9 +6,10 @@ import bcrypt from 'bcrypt';
  *
  *  - «Mi perfil»: POST /auth/me/email/codigo (con la contraseña actual) y
  *    PATCH /auth/me/email (con el código). Sin el código bueno no cambia nada.
- *  - Administración: PATCH /users/:id con `conCodigo` no aplica el correo; le
- *    llega un código a la dirección nueva y entra con POST /users/:id/email/confirmar.
- *    Sin `conCodigo` («aplicar sin código»), como hasta ahora.
+ *  - Administración (Diego, 06/11, #688): el superadmin cambia el correo de
+ *    otra persona al momento y sin código, como antes; y eso anula el código
+ *    que la persona tuviera pendiente.
+ *  - Un tutor, con el freno puesto: no se le manda el código, y se le dice.
  *
  * El correo no sale: Brevo está simulado y guarda el código, para meterlo como
  * lo haría la persona.
@@ -32,7 +33,7 @@ const MARCA = `R211${Date.now().toString(36)}`.toLowerCase();
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const one = async (sql, p) => (await q(sql, p))[0];
 const ids = [];
-let ANA; let SUPER;
+let ANA; let SUPER; let TUTOR;
 const CLAVE = 'Clave-de-prueba-211';
 const correoDe = async (id) => (await one('SELECT email FROM users WHERE id = $1', [id])).email;
 const ultimo = () => enviados[enviados.length - 1];
@@ -40,6 +41,8 @@ const ultimo = () => enviados[enviados.length - 1];
 const llamar = async (fn, req) => {
   let error = null; let cuerpo = null;
   await fn({ ip: '1.1.1.1', headers: {}, socket: {}, params: {}, ...req }, { json: (b) => { cuerpo = b; }, status() { return this; } }, (e) => { error = e; });
+  // El código sale sin esperar (revisión de Diego, #688): se deja correr la cola.
+  await new Promise((ok) => setImmediate(ok));
   return { error, cuerpo };
 };
 
@@ -53,6 +56,7 @@ beforeAll(async () => {
   };
   ANA = await persona('ana', 'gestor');
   SUPER = await persona('super', 'superadmin');
+  TUTOR = await persona('tutor', 'tutor');
 }, 60000);
 
 beforeEach(async () => {
@@ -108,37 +112,49 @@ describe('#211 · «Mi perfil»: el correo propio con código', () => {
   });
 });
 
-describe('#211 · administración: el superadmin, con código o sin él', () => {
-  it('con `conCodigo` no aplica el correo: le llega un código a la dirección nueva', async () => {
-    const { error, cuerpo } = await llamar(userController.update, { params: { id: String(ANA) }, body: { email: NUEVO, conCodigo: true }, user: elSuper() });
-    expect(error?.message).toBeUndefined();
-    expect(cuerpo.data.correo).toMatchObject({ pendiente: true, email: NUEVO, enviado: true });
-    expect(ultimo().a).toBe(NUEVO);
-    expect(await correoDe(ANA)).toBe(`ana@${MARCA}.test`);
-    // Queda apuntado quién lo pidió.
-    const p = await one('SELECT pedido_por_user_id FROM cambios_de_correo WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL', [ANA]);
-    expect(p.pedido_por_user_id).toBe(SUPER);
-  });
-
-  it('y entra cuando se confirma con el código que le llegó', async () => {
-    await llamar(userController.update, { params: { id: String(ANA) }, body: { email: NUEVO, conCodigo: true }, user: elSuper() });
-    const { error, cuerpo } = await llamar(userController.confirmarCorreo, { params: { id: String(ANA) }, body: { codigo: ultimo().codigo }, user: elSuper() });
-    expect(error?.message).toBeUndefined();
-    expect(cuerpo.data).toMatchObject({ cambiado: true, email: NUEVO });
-    expect(await correoDe(ANA)).toBe(NUEVO);
-  });
-
-  it('confirmar el de otro, solo el superadmin', async () => {
-    await llamar(userController.update, { params: { id: String(ANA) }, body: { email: NUEVO, conCodigo: true }, user: elSuper() });
-    const { error } = await llamar(userController.confirmarCorreo, { params: { id: String(ANA) }, body: { codigo: ultimo().codigo }, user: registrar({ userId: 999001, role: 'admin' }) });
-    expect(error?.statusCode).toBe(403);
-    expect(await correoDe(ANA)).toBe(`ana@${MARCA}.test`);
-  });
-
-  it('sin `conCodigo` («aplicar sin código»), cambia al momento, como hasta ahora', async () => {
+describe('#211 · administración: el superadmin, sin código y al momento (Diego, 06/11, #688)', () => {
+  it('cambia el correo de otra persona al guardar, sin mandar ningún código', async () => {
     const { error } = await llamar(userController.update, { params: { id: String(ANA) }, body: { email: NUEVO }, user: elSuper() });
     expect(error?.message).toBeUndefined();
     expect(await correoDe(ANA)).toBe(NUEVO);
     expect(enviados).toHaveLength(0);
+  });
+
+  it('un `conCodigo` que llegue de una pantalla vieja no cambia nada: va al momento igual', async () => {
+    const { error } = await llamar(userController.update, { params: { id: String(ANA) }, body: { email: NUEVO, conCodigo: true }, user: elSuper() });
+    expect(error?.message).toBeUndefined();
+    expect(await correoDe(ANA)).toBe(NUEVO);
+    expect(enviados).toHaveLength(0);
+  });
+
+  it('el camino «con código» de administración ya no existe', () => {
+    expect(userController.confirmarCorreo).toBeUndefined();
+  });
+
+  it('y anula el código que la persona tuviera pendiente: meterlo después no deshace el cambio', async () => {
+    await llamar(authController.pedirCodigoMiCorreo, { body: { email: `otra.mia@${MARCA}.test`, password: CLAVE }, user: yo() });
+    await new Promise((ok) => setImmediate(ok));
+    const suyo = ultimo().codigo;
+    await llamar(userController.update, { params: { id: String(ANA) }, body: { email: NUEVO }, user: elSuper() });
+    const { error } = await llamar(authController.updateMyEmail, { body: { codigo: suyo }, user: yo() });
+    expect(error?.code).toBe('SIN_CODIGO');
+    expect(await correoDe(ANA)).toBe(NUEVO);
+  });
+});
+
+describe('#211 · «Mi perfil» de un tutor, con el freno puesto (Diego, 06/11, #688)', () => {
+  it('pedir el código no da error: dice por qué no se manda, y no se manda', async () => {
+    const { error, cuerpo } = await llamar(authController.pedirCodigoMiCorreo, { body: { email: `tutor.nuevo@${MARCA}.test`, password: CLAVE }, user: registrar({ userId: TUTOR, role: 'tutor' }) });
+    expect(error?.message).toBeUndefined();
+    expect(cuerpo.data).toMatchObject({ frenado: true, enviado: false });
+    expect(cuerpo.data.motivo).toMatch(/administración/);
+    expect(enviados).toHaveLength(0);
+  });
+
+  it('/auth/me se lo dice a la pantalla de entrada; a quien no es tutor, no', async () => {
+    const tutor = await llamar(authController.me, { user: registrar({ userId: TUTOR, role: 'tutor' }) });
+    expect(tutor.cuerpo.data.user.correo_propio_frenado).toMatch(/administración/);
+    const ana = await llamar(authController.me, { user: yo() });
+    expect(ana.cuerpo.data.user.correo_propio_frenado).toBeNull();
   });
 });

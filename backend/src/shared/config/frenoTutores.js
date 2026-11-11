@@ -16,12 +16,15 @@
  * rama de Angel, ya escrito: sin este fichero habria entrado en testeo mandando
  * correos, que es justo lo que se acababa de prohibir.
  *
- * Para levantarlo: poner `false` AQUI, en los dos CRM. Antes hay que arreglar
- * el enlace de contrasena de Brevo, que sigue roto.
+ * Para levantarlo: `CORREOS_A_TUTORES=1` en el `.env` de cada CRM y reiniciar
+ * (Diego, 06/11, en la #688: «que quitar el freno no exija tocar codigo»).
+ * Sin la variable, o con cualquier otro valor, el freno SIGUE PUESTO: olvidarla
+ * nunca suelta correos. Antes de levantarlo hay que arreglar el enlace de
+ * contrasena de Brevo, que sigue roto.
  */
 //
-// El código para cambiar el correo (#211) NO pasa por el freno, a propósito: lo
-// pide el propio tutor (o un superadmin) y va a la dirección NUEVA. Sin él, un
-// tutor no podría cambiar su correo mientras siga el freno. El aviso a la
-// dirección vieja sí sigue frenado (`cambiarCorreo`).
-export const NO_ESCRIBIR_A_TUTORES = true;
+// El código para cambiar el propio correo (#211) TAMBIÉN pasa por el freno
+// (Diego, 06/11): mientras siga puesto, a un tutor no se le manda; su correo lo
+// cambia el superadmin. Se encenderá cuando esté el chat de Moodle (#679), para
+// contestarles por allí. Ver `pedirCodigo` (users/cambio-de-correo.js).
+export const NO_ESCRIBIR_A_TUTORES = process.env.CORREOS_A_TUTORES !== '1';

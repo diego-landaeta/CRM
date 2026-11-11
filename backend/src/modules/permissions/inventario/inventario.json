@@ -15718,28 +15718,6 @@
   "puertas": []
  },
  {
-  "id": "POST /api/users/:id/email/confirmar",
-  "tipo": "ruta",
-  "modulo": "users",
-  "metodo": "POST",
-  "ruta": "/api/users/:id/email/confirmar",
-  "relativa": "POST /:id/email/confirmar",
-  "controlador": "confirmarCorreo",
-  "publica": false,
-  "guardias": [
-   {
-    "tipo": "token"
-   },
-   {
-    "tipo": "puede",
-    "claves": [
-     "users.edit"
-    ]
-   }
-  ],
-  "puertas": []
- },
- {
   "id": "DELETE /api/users/:id",
   "tipo": "ruta",
   "modulo": "users",
