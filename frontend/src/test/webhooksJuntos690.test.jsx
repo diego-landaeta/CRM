@@ -1047,6 +1047,22 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(screen.queryByText(/con fallos/)).toBeNull();
   });
 
+  it('plugin conectado con la conexión de Moodle sin token: no sale activo y dice por qué', async () => {
+    get.mockImplementation((url) => {
+      if (url === '/consultas/campus/1/plugin') return Promise.resolve({ data: { activo: true, ultimo_aviso_at: '2026-11-10T08:30:00Z', sincronizacion_error: null } });
+      if (url.includes('/plugin')) return Promise.resolve({ data: { activo: false } });
+      return Promise.resolve({
+        data: url === '/integrations/moodle?projectId=1' ? { active: true, has_secret: false, config_public: { consultas: true } }
+          : url.startsWith('/integrations/moodle') ? null : sinFormularios(url),
+      });
+    });
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    const fila = (await within(c).findByText('Plugin del CRM conectado')).closest('li');
+    expect(within(fila).queryByText('Activo')).toBeNull();
+    expect(within(fila).getByText('Los avisos llegan, pero no entran al CRM: La conexión de Moodle no tiene token')).toBeTruthy();
+  });
+
   it('si le dan «consultas.gestionar» con la pantalla abierta, se pide el estado del plugin', async () => {
     permisos.value = ['consultas.view', 'integrations.view'];
     get.mockImplementation((url) => Promise.resolve({ data: url.startsWith('/integrations/moodle') ? moodleLee : sinFormularios(url) }));
