@@ -12,10 +12,11 @@
 
   REPARTO (decisión 2). El alumno ya le escribe a un tutor: si ese tutor puede
   recibir consultas (matriculado, activo y disponible), es suyo. Si no, va al
-  tutor del campus (o de su empresa) con menos consultas abiertas. El reparto
-  «por curso o especialidad» no tiene de dónde salir todavía (nadie lo ha
-  definido), y la carga «completa» (decisión 10) llega con la fase 3: aquí queda
-  el hueco para las dos.
+  tutor del campus (o de su empresa) con menos consultas abiertas. Desde #679,
+  solo entre las tutoras que son profesoras de ESE curso en Moodle, y con cada
+  mensaje del alumno (relevo): si la suya ya no puede, pasa a otra del curso. Lo
+  que se pregunta a Moodle para eso se pregunta ANTES de la transacción del
+  mensaje, nunca con sus bloqueos puestos.
 
   RESPUESTA (decisión 1 de la fase 0, sin decidir). Con un token común la
   respuesta no sale como el tutor, así que se usa EL TOKEN DEL TUTOR, guardado
@@ -39,7 +40,7 @@ import {
 } from '../../shared/services/email-plantilla.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import {
-  conversacionesDe, mensajesDeConversacion, usuarioPorId, enviarMensaje, enviarComoTutor, MoodleError,
+  conversacionesDe, mensajesDeConversacion, usuarioPorId, enviarMensaje, enviarComoTutor, matriculadosDe, cursosDe, MoodleError,
 } from '../../shared/services/moodle.client.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import { pluginActivo } from './consultas.plugin.js';
@@ -50,19 +51,41 @@ import { marcarContactado } from './consultas.alumnos.js';
 // ─── Reparto ─────────────────────────────────────────────────────────────────
 
 /**
- * El tutor de una consulta de ese campus.
+ * El tutor de una consulta de ese campus, con todo lo que haga falta (también Moodle).
+ * Para fuera de una transacción: dentro, `elegirTutorEntre` con las candidatas ya leídas.
+ */
+export async function elegirTutor(projectId, {
+  preferido = null, nueva = true, cursoId = null, alumnoMoodleId = null, soloEntre = null,
+} = {}) {
+  const delCurso = await candidatasDelCurso(projectId, { cursoId, alumnoMoodleId, soloEntre });
+  return elegirTutorEntre(projectId, { preferido, nueva, soloEntre, delCurso });
+}
+
+/**
+ * El tutor de una consulta de ese campus, SOLO con la base: no pregunta a Moodle. Es lo que
+ * se llama con la transacción del mensaje abierta (y sus bloqueos puestos); las tutoras del
+ * curso (`delCurso`) llegan ya calculadas de antes (`candidatasDelCurso`).
  *
- *   · `preferido` (al que escribió el alumno) si puede recibir consultas;
+ *   · solo tutoras de ese curso (`delCurso`, #679): si una no está, la cubre otra del mismo
+ *     curso, nunca una de otro; `delCurso` null = no se sabe (sin curso ni alumno, o el
+ *     campus no contesta) y no se filtra: mejor repartir que dejar la consulta sin nadie;
+ *   · `preferido` (al que escribió el alumno, o el que ya la lleva) si puede recibir consultas;
  *   · si no, el que tenga menos consultas abiertas; a igualdad, el que lleva
  *     más tiempo sin recibir una, y luego el de id más bajo (para que sea fijo);
  *   · null si no hay nadie: la consulta queda «sin tutor» en el panel.
  */
-export async function elegirTutor(projectId, { preferido = null, nueva = true, soloEntre = null } = {}) {
+export async function elegirTutorEntre(projectId, {
+  preferido = null, nueva = true, soloEntre = null, delCurso = null,
+} = {}) {
   let candidatos = await tutoresQueRecibenConsultas(projectId);
   // La conversación de un grupo del curso (#285): solo una tutora que esté DENTRO, o la
   // respuesta desde el CRM no podría salir (el plugin no añade a nadie a un grupo del curso).
   if (soloEntre) candidatos = candidatos.filter((t) => soloEntre.has(t.id));
   if (!candidatos.length) return null;
+  if (delCurso) {
+    candidatos = candidatos.filter((x) => delCurso.has(x.id));
+    if (!candidatos.length) return null;
+  }
   // Decisión 10 (#189): con la carga «completa» no recibe consultas NUEVAS si
   // hay otro tutor en el campus. Si es el único, sí (no se deja sin tutor). Una
   // que se reabre sigue con el tutor que ya la llevaba: no es nueva.
@@ -84,6 +107,90 @@ export async function elegirTutor(projectId, { preferido = null, nueva = true, s
   return ordenados[0].id;
 }
 
+/**
+ * Las tutoras del curso entre las que se puede repartir, preguntando a Moodle si hace falta.
+ * Si ninguna de las que pueden recibir consultas está en la copia, se pregunta otra vez a
+ * Moodle (`fresco`) antes de dejarla sin tutora: alguien pudo entrar en el curso hace un
+ * momento. Null si no se sabe (ver `elegirTutorEntre`).
+ *
+ * Nunca con una transacción abierta: son llamadas HTTP de hasta 10 s cada una (punto 3 de
+ * la revisión de Diego en #689).
+ */
+export async function candidatasDelCurso(projectId, { cursoId = null, alumnoMoodleId = null, soloEntre = null } = {}, opciones = {}) {
+  let delCurso = await tutorasDelCurso(projectId, { cursoId, alumnoMoodleId }, opciones);
+  if (!delCurso) return null;
+  let candidatos = await tutoresQueRecibenConsultas(projectId);
+  if (soloEntre) candidatos = candidatos.filter((t) => soloEntre.has(t.id));
+  if (candidatos.length && !candidatos.some((x) => delCurso.has(x.id))) {
+    delCurso = await tutorasDelCurso(projectId, { cursoId, alumnoMoodleId }, { ...opciones, fresco: true });
+  }
+  return delCurso;
+}
+
+/*
+  La copia de lo que dice Moodle, por campus y curso (sus profesoras) o por campus y alumno
+  (sus cursos), también cuando la respuesta es una lista vacía.
+
+    · CACHE_MOODLE_MS (2 min): lo que dura una copia en el reparto normal.
+    · REPREGUNTA_MIN_MS (1 min): el reintento `fresco` no vuelve a preguntar por una copia
+      más nueva que esto. Sin este mínimo, un curso SIN tutora vinculada preguntaba a Moodle
+      con cada mensaje del alumno (la copia valía, pero el reintento la saltaba siempre).
+      Así, como mucho una pregunta por curso y minuto; y quien entra en un curso se ve en
+      menos de un minuto cuando hace falta (la consulta se iba a quedar sin tutora).
+*/
+const CACHE_MOODLE_MS = 2 * 60 * 1000;
+const REPREGUNTA_MIN_MS = 60 * 1000;
+const MAX_COPIAS = 5000;
+const copiasDeMoodle = new Map();
+
+async function desdeLaCopia(clave, fresco, pedir) {
+  const copia = copiasDeMoodle.get(clave);
+  const edad = copia ? Date.now() - copia.at : Infinity;
+  if (edad < (fresco ? REPREGUNTA_MIN_MS : CACHE_MOODLE_MS)) return copia.valor;
+  const valor = await pedir();
+  if (copiasDeMoodle.size >= MAX_COPIAS) {
+    for (const [k, c] of copiasDeMoodle) if (Date.now() - c.at >= CACHE_MOODLE_MS) copiasDeMoodle.delete(k);
+    if (copiasDeMoodle.size >= MAX_COPIAS) copiasDeMoodle.clear();
+  }
+  copiasDeMoodle.set(clave, { at: Date.now(), valor });
+  return valor;
+}
+
+/**
+ * Las tutoras del CRM que son profesoras de ese curso (o, sin curso, de alguno de los
+ * cursos del alumno), por su cuenta de Moodle vinculada. Null si no se sabe (sin curso
+ * ni alumno, o el campus no contesta). Con copia (ver arriba); `fresco`, sin ella si tiene
+ * más de un minuto.
+ */
+export async function tutorasDelCurso(projectId, { cursoId = null, alumnoMoodleId = null } = {}, { fresco = false, ...opciones } = {}) {
+  if (!cursoId && !alumnoMoodleId) return null;
+  const conexion = await conexionDelCampus(projectId);
+  if (!conexion || conexion.error) return null;
+  try {
+    const cursos = cursoId
+      ? [Number(cursoId)]
+      : await desdeLaCopia(`${projectId}:alumno:${alumnoMoodleId}`, fresco,
+        async () => (await cursosDe(conexion, alumnoMoodleId, opciones)).map((k) => k.id).slice(0, 15));
+    // Un alumno sin cursos (dado de baja, o que escribe por la mensajería general): no hay
+    // curso por el que filtrar. Sin esto, la lista vacía dejaba la consulta sin nadie, ni
+    // siquiera la tutora a la que escribió.
+    if (!cursos.length) return null;
+    const profesoras = new Set();
+    for (const id of cursos) {
+      const ids = await desdeLaCopia(`${projectId}:curso:${id}`, fresco, async () => (await matriculadosDe(conexion, id, opciones))
+        .filter((g) => g.roles.some((r) => r === 'editingteacher' || r === 'teacher')).map((g) => g.id));
+      ids.forEach((x) => profesoras.add(x));
+    }
+    const { rows } = await query(
+      `SELECT tutor_id FROM tutor_campus WHERE project_id = $1 AND estado = 'activa' AND moodle_user_id = ANY($2::bigint[])`,
+      [projectId, [...profesoras]]);
+    return new Set(rows.map((r) => Number(r.tutor_id)));
+  } catch (err) {
+    logger.warn({ projectId, cursoId, err: err.message }, 'consultas: no se han podido leer las profesoras del curso');
+    return null;
+  }
+}
+
 /** Los tutores cuya carga de ahora (la última que pusieron) es «completa». */
 async function tutoresConCargaCompleta(tutorIds) {
   if (!tutorIds.length) return new Set();
@@ -100,10 +207,18 @@ async function tutoresConCargaCompleta(tutorIds) {
  * y lo usarían otras entradas (un webhook del campus) sin cambiar nada.
  */
 export async function entraMensajeDelAlumno(datos, { tutorPreferido = null, avisar = true, soloEntre = null } = {}) {
-  // Al reabrir, primero el tutor que ya la lleva (puede ser otro que el de la
-  // conversación, si se reasignó); en una nueva, al que escribió el alumno.
-  const r = await model.guardarMensajeDelAlumno(datos,
-    (actual) => elegirTutor(datos.projectId, { preferido: actual ?? tutorPreferido, nueva: actual == null, soloEntre }));
+  // Moodle, ANTES de la transacción: dentro están el bloqueo del alumno y el FOR UPDATE de su
+  // consulta, y hasta 16 llamadas de 10 s ahí podían agotar el pool (punto 3 de Diego, #689).
+  const antes = await candidatasAntesDeGuardar(datos, soloEntre);
+  // Al reabrir (y con cada mensaje, el relevo), primero el tutor que ya la lleva (puede ser
+  // otro que el de la conversación, si se reasignó); en una nueva, al que escribió el alumno.
+  const r = await model.guardarMensajeDelAlumno(datos, (actual, cursoDeLaConsulta) => {
+    const curso = cursoDeLaConsulta ?? datos.curso?.moodleId ?? null;
+    // Si entre la lectura de antes y el bloqueo otra entrada cambió el curso de la consulta,
+    // las candidatas no son de ese curso: no se filtra (como con el campus sin contestar).
+    const delCurso = antes && mismoCurso(antes.cursoId, curso) ? antes.candidatas : null;
+    return elegirTutorEntre(datos.projectId, { preferido: actual ?? tutorPreferido, nueva: actual == null, soloEntre, delCurso });
+  });
   // `sinReabrir`: lo que escribe un alumno en un grupo del curso a una consulta cerrada se
   // queda dentro como contexto (consultas.avisos.js): no hay a quién avisar.
   if (r.duplicado || r.sinReabrir) return r;
@@ -116,6 +231,24 @@ export async function entraMensajeDelAlumno(datos, { tutorPreferido = null, avis
       .catch((err) => logger.warn({ consultaId: r.consulta.id, err: err.message }, 'consultas: el aviso al tutor ha fallado'));
   }
   return r;
+}
+
+const mismoCurso = (a, b) => (a == null ? null : Number(a)) === (b == null ? null : Number(b));
+
+/**
+ * Las tutoras del curso de ESE mensaje, leídas sin bloquear nada: el curso de la consulta en
+ * la que va a entrar (la misma búsqueda que hace el modelo, sin FOR UPDATE) o, si no hay, el
+ * del mensaje. Null si no hace falta elegir (mensaje repetido, o uno que se queda en una
+ * consulta cerrada sin reabrirla): así un repetido no le cuesta a Moodle ninguna llamada.
+ */
+async function candidatasAntesDeGuardar(datos, soloEntre) {
+  const { projectId, alumno, conversacionId, externoId } = datos;
+  if (externoId != null && await model.existeMensajeExterno(projectId, externoId)) return null;
+  const previa = await model.consultaPrevia(projectId, alumno.moodleId, conversacionId);
+  if (previa?.estado === 'cerrada' && datos.reabrir === false) return null;
+  const cursoId = previa?.curso_moodle_id != null ? Number(previa.curso_moodle_id) : (datos.curso?.moodleId ?? null);
+  const candidatas = await candidatasDelCurso(projectId, { cursoId, alumnoMoodleId: alumno.moodleId ?? null, soloEntre });
+  return { cursoId, candidatas };
 }
 
 const MARGEN_LECTURA_MS = 10 * 60 * 1000;

@@ -24,6 +24,8 @@ import {
 } from './tutor.acceso.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+// El tutor redactor (CRM#708) ve lo suyo como un tutor.
+import { ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 
 // Quien manda aqui.
 //
@@ -246,7 +248,7 @@ export async function guardarPerfil(req, res, next) {
 export async function colaboraciones(req, res, next) {
   try {
     // Un tutor solo ve las suyas, ignorando lo que pida por query.
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     res.json({ success: true, data: await model.colaboraciones({
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
@@ -417,7 +419,7 @@ export async function guardarAjustes(req, res, next) {
 // revisar las colaboraciones antes de que generen dinero de verdad.
 export async function simulacion(req, res, next) {
   try {
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     const hoy = new Date().toISOString().slice(0, 10);
     res.json({ success: true, data: await model.simular({
@@ -464,7 +466,7 @@ export async function listarComisiones(req, res, next) {
   try {
     // Un tutor ve las SUYAS y nada mas: se le fuerza su identificador y se
     // ignora lo que pida por la URL.
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
@@ -480,7 +482,7 @@ export async function listarComisiones(req, res, next) {
 // GET /api/tutores/comisiones/resumen — una fila por tutor y mes.
 export async function resumenComisiones(req, res, next) {
   try {
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     res.json({ success: true, data: await model.resumenComisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
@@ -606,7 +608,7 @@ export async function cursoDetalle(req, res, next) {
     const productId = parseInt(req.params.productId);
     // Un profesor solo ve la ficha de lo que IMPARTE. Estar en la marca no
     // basta: el temario de un curso que no da no es asunto suyo.
-    if (req.user.role === 'tutor') {
+    if (ROLES_DE_TUTOR.includes(req.user.role)) {
       if (!(await model.imparteEsteCurso(req.user.userId, productId))) {
         throw new AppError('Ese curso no es tuyo', 403, 'FORBIDDEN');
       }
@@ -630,7 +632,7 @@ export async function cursoDetalle(req, res, next) {
 export async function brochureDelCurso(req, res, next) {
   try {
     const productId = parseInt(req.params.productId);
-    if (req.user.role === 'tutor') {
+    if (ROLES_DE_TUTOR.includes(req.user.role)) {
       if (!(await model.imparteEsteCurso(req.user.userId, productId))) {
         throw new AppError('Ese curso no es tuyo', 403, 'FORBIDDEN');
       }
@@ -785,13 +787,24 @@ export function avisosDeLaComprobacion(resultados, campus) {
   return avisos;
 }
 
-/** Lo que enseña la ficha: campus, empresas, disponibilidad y avisos. */
-async function panelDelTutor(id, avisos = []) {
-  const [campus, empresas, disp] = await Promise.all([
+/**
+ * Lo que enseña la ficha: campus, empresas, disponibilidad y avisos.
+ *
+ * Cada campus dice si es de quien mira (`gestionable`): sus vínculos con Moodle solo
+ * los toca quien gestiona tutores en esa empresa (punto 2 de la revisión de la #689).
+ * De un campus de otra empresa se ve que lo tiene y su estado, pero no su error, que
+ * habla de la cuenta vinculada allí. La propia tutora y super admin/soporte, todo.
+ */
+async function panelDelTutor(req, id, avisos = []) {
+  const [campusTodos, empresas, disp, mios] = await Promise.all([
     campusTutor.campusDelTutor(id),
     campusTutor.empresasDelTutor(id),
     campusTutor.disponibilidad(id),
+    (veTodoElCrm(req.user) || req.user?.userId === id) ? null : campusDeLaPersona(req.user?.userId),
   ]);
+  const campus = campusTodos.map((c) => (mios === null || mios.includes(c.project_id)
+    ? { ...c, gestionable: true }
+    : { ...c, gestionable: false, error: null }));
   return {
     campus,
     empresas,
@@ -812,6 +825,25 @@ async function exigirTutorGestionable(req) {
   return id;
 }
 
+/**
+ * Que el campus sea de quien pide (#245): poner un campus y vincular, buscar o
+ * desvincular una cuenta de Moodle, solo en los campus de tu empresa (punto 2 de la
+ * revisión de la #689). Super admin y soporte, en cualquiera. Un 403, como siempre
+ * ha contestado «Asignar campus»: que la tutora existe ya lo sabe quien la gestiona.
+ */
+async function exigirCampusMio(req, projectId) {
+  if (veTodoElCrm(req.user)) return;
+  const mios = await campusDeLaPersona(req.user.userId);
+  if (!mios.includes(Number(projectId))) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+}
+
+/** El `:projectId` de la ruta, o un 400. */
+function campusDeLaRuta(req) {
+  const projectId = parseInt(req.params.projectId);
+  if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Campus no válido', 400, 'VALIDATION_ERROR');
+  return projectId;
+}
+
 // GET /api/tutores/:id/campus
 export async function campusDelTutor(req, res, next) {
   try {
@@ -824,7 +856,7 @@ export async function campusDelTutor(req, res, next) {
     // repite. Si el campus no contesta, se enseña lo guardado (no falla la ficha).
     const { resultados, campus } = await campusTutor.comprobarSiHaceFalta(id)
       .catch(() => ({ resultados: [], campus: null }));
-    res.json({ success: true, data: await panelDelTutor(id, campus ? avisosDeLaComprobacion(resultados, campus) : []) });
+    res.json({ success: true, data: await panelDelTutor(req, id, campus ? avisosDeLaComprobacion(resultados, campus) : []) });
   } catch (err) { next(err); }
 }
 
@@ -846,7 +878,7 @@ export async function asignarEmpresa(req, res, next) {
     }
     await campusTutor.asignarEmpresa(id, issuerId, req.user.userId);
     const { resultados, campus } = await campusTutor.comprobarTutor(id, { soloProyectos: deLaEmpresa });
-    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+    res.json({ success: true, data: await panelDelTutor(req, id, avisosDeLaComprobacion(resultados, campus)) });
   } catch (err) { next(err); }
 }
 
@@ -863,7 +895,7 @@ export async function quitarEmpresa(req, res, next) {
       }
     }
     await campusTutor.quitarEmpresa(id, issuerId);
-    res.json({ success: true, data: await panelDelTutor(id) });
+    res.json({ success: true, data: await panelDelTutor(req, id) });
   } catch (err) { next(err); }
 }
 
@@ -872,13 +904,10 @@ export async function asignarCampus(req, res, next) {
   try {
     const id = await exigirTutorGestionable(req);
     const { projectId } = valida(campusDelTutorSchema, req.body);
-    if (!veTodoElCrm(req.user)) {
-      const mios = await campusDeLaPersona(req.user.userId);
-      if (!mios.includes(projectId)) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
-    }
+    await exigirCampusMio(req, projectId);
     await campusTutor.asignarCampus(id, projectId);
     const { resultados, campus } = await campusTutor.comprobarTutor(id, { soloProyectos: [projectId] });
-    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+    res.json({ success: true, data: await panelDelTutor(req, id, avisosDeLaComprobacion(resultados, campus)) });
   } catch (err) { next(err); }
 }
 
@@ -887,7 +916,46 @@ export async function comprobarCampus(req, res, next) {
   try {
     const id = await exigirTutorGestionable(req);
     const { resultados, campus } = await campusTutor.comprobarTutor(id);
-    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+    res.json({ success: true, data: await panelDelTutor(req, id, avisosDeLaComprobacion(resultados, campus)) });
+  } catch (err) { next(err); }
+}
+
+// Su cuenta de Moodle en un campus (#679; punto 2 de la revisión de la #689). Las tres,
+// en este orden: la tutora es de mis campus, el campus es mío (403 si no) y la tutora
+// tiene ese campus (409 si no). El vínculo de otra empresa no se ve ni se toca.
+
+// POST /api/tutores/:id/campus/:projectId/desvincular — olvida su cuenta de Moodle en ese campus y la busca de nuevo
+export async function desvincularCuenta(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const projectId = campusDeLaRuta(req);
+    await exigirCampusMio(req, projectId);
+    const { resultados, campus } = await campusTutor.desvincularCuenta(id, projectId);
+    res.json({ success: true, data: await panelDelTutor(req, id, avisosDeLaComprobacion(resultados, campus)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/:id/campus/:projectId/buscar-cuenta?q= — su cuenta de Moodle por su correo de Moodle
+export async function buscarCuentaMoodle(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const projectId = campusDeLaRuta(req);
+    await exigirCampusMio(req, projectId);
+    const cuenta = await campusTutor.buscarCuentaMoodle(id, projectId, req.query.q);
+    res.json({ success: true, data: cuenta ? { id: cuenta.id, nombre: cuenta.nombre, email: cuenta.email, suspendido: cuenta.suspendido } : null });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/:id/campus/:projectId/vincular  { moodleUserId } — vincular a mano esa cuenta
+export async function vincularCuentaMoodle(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const projectId = campusDeLaRuta(req);
+    const moodleUserId = parseInt(req.body?.moodleUserId);
+    if (!Number.isInteger(moodleUserId) || moodleUserId <= 0) throw new AppError('Cuenta de Moodle no válida', 400, 'VALIDATION_ERROR');
+    await exigirCampusMio(req, projectId);
+    await campusTutor.vincularAMano(id, projectId, moodleUserId);
+    res.json({ success: true, data: await panelDelTutor(req, id, []) });
   } catch (err) { next(err); }
 }
 
@@ -902,6 +970,6 @@ export async function cambiarDisponible(req, res, next) {
     query('SELECT project_id FROM tutor_campus WHERE tutor_id = $1', [id])
       .then(({ rows }) => avisarDisponibilidad(rows.map((r) => Number(r.project_id))))
       .catch((err) => logger.warn({ tutorId: id, err: err.message }, 'tutores: no se ha avisado a los campus de la disponibilidad'));
-    res.json({ success: true, data: await panelDelTutor(id) });
+    res.json({ success: true, data: await panelDelTutor(req, id) });
   } catch (err) { next(err); }
 }
