@@ -118,19 +118,39 @@ describe('#211 · el código', () => {
   });
 
   // Revisión de Diego (#688, 06/11): antes un 409 EMAIL_EXISTS decía quién tiene cuenta.
-  it('para uno que ya usa otra persona responde IGUAL, pero no manda nada ni deja nada pendiente', async () => {
+  it('para uno que ya usa otra persona responde IGUAL, y no manda nada', async () => {
     const libre = await pedir({ userId: ANA, emailNuevo: NUEVO(), enviar });
+    const codigoDeLaLibre = enviado.codigo;
     enviado = null;
     const deOtra = await pedir({ userId: ANA, emailNuevo: `OTRA@${MARCA.toLowerCase()}.test`, enviar });
     expect(Object.keys(deOtra).sort()).toEqual(Object.keys(libre).sort());
     expect(deOtra).toMatchObject({ email: `otra@${MARCA.toLowerCase()}.test`, enviado: true });
     expect(enviado).toBeNull();
-    // La que había pendiente se anula igual (solo vale la última petición), y no queda ninguna viva.
-    const vivas = await q('SELECT id FROM cambios_de_correo WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL', [ANA]);
-    expect(vivas).toHaveLength(0);
+    // La que había pendiente se anula igual (solo vale la última petición): su código ya no abre nada.
+    await expect(confirmarCodigo({ userId: ANA, codigo: codigoDeLaLibre })).rejects.toMatchObject({ code: 'CODIGO_INCORRECTO' });
     // Queda en el registro que no se mandó, y por qué.
     const r = await one(`SELECT details FROM user_activity_log WHERE user_id = $1 AND action = 'usuario.pedir_cambio_correo' ORDER BY id DESC LIMIT 1`, [ANA]);
     expect(JSON.stringify(r.details)).toMatch(/ya es de otro usuario/);
+  });
+
+  it('y confirmar tampoco lo delata: igual que con un correo libre, «incorrecto», cuenta intentos y al quinto se anula', async () => {
+    const recorrido = async (email) => {
+      await q('DELETE FROM cambios_de_correo WHERE user_id = $1', [ANA]);
+      await pedir({ userId: ANA, emailNuevo: email, enviar });
+      const codigos = [];
+      // Códigos que no son el de la libre (si lo hay): lo que importa es la forma de las respuestas.
+      const prueba = ['000000', '111111', '222222', '333333', '444444', '555555'].filter((c) => c !== enviado?.codigo);
+      for (const c of prueba.slice(0, INTENTOS + 1)) {
+        codigos.push(await confirmarCodigo({ userId: ANA, codigo: c }).then(() => 'CAMBIADO', (e) => e.code));
+      }
+      return codigos;
+    };
+    const libre = await recorrido(`libre.${NUEVO()}`);
+    enviado = null;
+    const deOtra = await recorrido(`OTRA@${MARCA.toLowerCase()}.test`);
+    expect(deOtra).toEqual(libre);
+    expect(libre).toEqual([...Array(INTENTOS - 1).fill('CODIGO_INCORRECTO'), 'DEMASIADOS_INTENTOS', 'SIN_CODIGO']);
+    expect(await correoDe(ANA)).toBe(`ana@${MARCA.toLowerCase()}.test`);
   });
 
   it('el código se guarda como HMAC con la clave del servidor, no como un sha256 sin secreto', async () => {

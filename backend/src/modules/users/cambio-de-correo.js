@@ -103,8 +103,9 @@ async function sustituirPeticion({ userId, emailNuevo = null, codigoHash = null,
  *     motivo, sin error. No se guarda nada.
  *   - Si la dirección ya es de otra persona, la respuesta es LA MISMA que si
  *     no (antes, un 409 EMAIL_EXISTS decía quién tiene cuenta en el CRM, y con
- *     todos los roles pudiendo preguntar). Simplemente no se manda el código:
- *     queda en el registro, y la pendiente que hubiera se anula igual.
+ *     todos los roles pudiendo preguntar). No se manda el código y queda en el
+ *     registro; y se guarda una petición que ningún código abre, para que
+ *     confirmar tampoco lo delate.
  *   - El correo sale sin esperar, como en «he olvidado la contraseña»: si se
  *     esperase, tardar distinto delataría también el caso de arriba.
  * @returns {{ email: string, expira_at: Date|null, enviado: boolean, frenado?: boolean, motivo?: string }}
@@ -122,7 +123,13 @@ export async function pedirCodigo({ userId, emailNuevo, porUserId = userId, ip =
   const expira = new Date(Date.now() + MINUTOS * 60_000);
   const otro = await userModel.findByEmail(nuevo);
   if (otro && otro.id !== userId) {
-    await sustituirPeticion({ userId, porUserId });
+    // Una petición SEÑUELO, con el hash de algo que no es un código de seis
+    // cifras: ninguno la abre. Sin ella, al confirmar se notaría la diferencia
+    // («no hay ningún cambio pendiente» frente a «código incorrecto») y se
+    // volvería a saber de quién es la dirección. Así, el mismo camino: cuenta
+    // intentos, dice «incorrecto» y al quinto se anula.
+    const senuelo = hash(crypto.randomBytes(32).toString('hex'));
+    await sustituirPeticion({ userId, emailNuevo: nuevo, codigoHash: senuelo, expira, porUserId });
     await anotar(porUserId, 'usuario.pedir_cambio_correo', { usuario_id: userId, de: user.email, a: nuevo, no_mandado: 'ya es de otro usuario' }, ip);
     return { email: nuevo, expira_at: expira, enviado: true };
   }

@@ -284,7 +284,7 @@ export default function ProfilePage() {
             </Field>
             <Field label="Email" error={errProfile.email?.message}>
               <input {...regProfile('email')} type="email" readOnly aria-readonly="true"
-                title={puedeCambiarCorreo ? "Es con lo que entras. Cámbialo abajo." : "Es con lo que entras. Para cambiarlo, pídeselo a un administrador."}
+                title={puedeCambiarCorreo && !frenado ? "Es con lo que entras. Cámbialo abajo." : "Es con lo que entras. Para cambiarlo, pídeselo a un administrador."}
                 className={inputClass + ' bg-muted/40 text-muted-foreground cursor-not-allowed'} />
             </Field>
           </div>
