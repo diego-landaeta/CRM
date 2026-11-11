@@ -57,12 +57,30 @@ export async function ultimoDeLaConversacion(projectId, conversacionId) {
   return rows[0]?.hasta || null;
 }
 
+/** La consulta en la que entra un mensaje del alumno: la de esa conversación (o la que la recogió). */
+const SQL_PREVIA = `SELECT * FROM consultas
+        WHERE project_id = $1 AND alumno_moodle_id = $2
+          AND (conversacion_externa_id = $3 OR $3 = ANY(conversaciones_extra) OR conversacion_grupo_id = $3
+               OR ($3::bigint IS NULL AND conversacion_externa_id IS NULL))
+        ORDER BY id DESC LIMIT 1`;
+
+/**
+ * La misma búsqueda, sin bloquear: para saber, antes de la transacción, de qué curso es la
+ * consulta y preguntar a Moodle por sus tutoras fuera de ella.
+ */
+export async function consultaPrevia(projectId, alumnoMoodleId, conversacionId) {
+  const { rows } = await query(SQL_PREVIA, [projectId, alumnoMoodleId, conversacionId ?? null]);
+  return rows[0] || null;
+}
+
 /**
  * Mete un mensaje del ALUMNO. Abre la consulta si no hay ninguna, la reabre si
  * estaba cerrada y la devuelve a «abierta» si estaba respondida.
  *
- * `elegirTutor()` solo se llama si hay que asignar: consulta nueva, o una que se
- * reabre con su tutor ya fuera (no disponible, sin matrícula).
+ * `elegirTutorEntre(actual, cursoId)` elige la tutora en una consulta nueva y, con cada
+ * mensaje, en la que ya hay (el relevo): si la suya ya no puede, a otra de ese curso. Se
+ * llama con la transacción abierta, así que SOLO puede leer la base: lo que haya que
+ * preguntar a Moodle se pregunta antes (consultas.service.js, `entraMensajeDelAlumno`).
  *
  * Con `grupo` (plugin 1.9.0) la conversación es el chat de grupo del alumno con las tutoras
  * del curso: queda como `conversacion_grupo_id` (ahí va la respuesta desde el CRM) y se
@@ -76,7 +94,7 @@ export async function ultimoDeLaConversacion(projectId, conversacionId) {
 export async function guardarMensajeDelAlumno({
   projectId, conversacionId, alumno, curso = null, texto, externoId, escritoAt, origen = 'moodle',
   grupo = false, participantes = null, unirPorCurso = true, grupoTipo = null, reabrir = true,
-}, elegirTutor) {
+}, elegirTutorEntre) {
   return enTransaccion(async (db) => {
     // Un mensaje del mismo alumno cada vez: con dos seguidos («Hola», «tengo una duda») el
     // plugin y la lectura periódica pueden llegar a la vez, y sin consulta previa no hay fila
@@ -89,14 +107,7 @@ export async function guardarMensajeDelAlumno({
       if (ya.rows.length) return { duplicado: true };
     }
     const fecha = escritoAt || new Date();
-    const previa = await db.query(
-      `SELECT * FROM consultas
-        WHERE project_id = $1 AND alumno_moodle_id = $2
-          AND (conversacion_externa_id = $3 OR $3 = ANY(conversaciones_extra) OR conversacion_grupo_id = $3
-               OR ($3::bigint IS NULL AND conversacion_externa_id IS NULL))
-        ORDER BY id DESC LIMIT 1 FOR UPDATE`,
-      [projectId, alumno.moodleId, conversacionId]
-    );
+    const previa = await db.query(`${SQL_PREVIA} FOR UPDATE`, [projectId, alumno.moodleId, conversacionId]);
     const grupoId = grupo && conversacionId != null ? Number(conversacionId) : null;
     const participantesJson = grupo && Array.isArray(participantes) ? JSON.stringify(participantes) : null;
     let c = previa.rows[0];
@@ -123,7 +134,7 @@ export async function guardarMensajeDelAlumno({
     }
 
     if (!c) {
-      const tutorId = await elegirTutor();
+      const tutorId = await elegirTutorEntre(null, curso?.moodleId ?? null);
       const r = await db.query(
         `INSERT INTO consultas (project_id, issuer_id, alumno_moodle_id, alumno_nombre, alumno_email,
                                 curso_moodle_id, curso_nombre, tutor_id, estado, origen,
@@ -181,17 +192,16 @@ export async function guardarMensajeDelAlumno({
         c = r.rows[0];
       }
       if (reabierta) await evento(db, c.id, 'reabierta');
-      // Al reabrir, si su tutor ya no puede (no disponible, sin matrícula), a otro.
-      if (reabierta || !c.tutor_id) {
-        const tutorId = await elegirTutor(c.tutor_id);
-        if (tutorId && tutorId !== c.tutor_id) {
-          const r = await db.query(
-            'UPDATE consultas SET tutor_id = $2, asignada_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *',
-            [c.id, tutorId]);
-          await evento(db, c.id, c.tutor_id ? 'reasignada' : 'asignada',
-            { detalle: { de: c.tutor_id, a: tutorId, automatica: true } });
-          c = r.rows[0];
-        }
+      // Con cada mensaje del alumno: si su tutora ya no puede (no disponible, sin matrícula,
+      // fuera del curso), la consulta pasa a otra de ese curso. Si puede, sigue con ella.
+      const tutorId = await elegirTutorEntre(c.tutor_id, c.curso_moodle_id ? Number(c.curso_moodle_id) : null);
+      if (tutorId && tutorId !== c.tutor_id) {
+        const r = await db.query(
+          'UPDATE consultas SET tutor_id = $2, asignada_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *',
+          [c.id, tutorId]);
+        await evento(db, c.id, c.tutor_id ? 'reasignada' : 'asignada',
+          { detalle: { de: c.tutor_id, a: tutorId, automatica: true } });
+        c = r.rows[0];
       }
     }
 

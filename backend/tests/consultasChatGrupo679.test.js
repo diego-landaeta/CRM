@@ -110,6 +110,8 @@ async function tutora(projectId, moodleId) {
   return t;
 }
 
+const noDisponible = (t) => query('UPDATE users SET consultas_disponible = false WHERE id = $1', [t]);
+
 /**
  * El curso 7 con Laura (701) y Carmen (702), profesoras; el alumno escribe en su chat de
  * grupo con las dos. Laura lleva ya una consulta abierta: el reparto le da la nueva a Carmen
@@ -264,6 +266,24 @@ describe('#679 · el chat de grupo del alumno con las tutoras del curso', () => 
     const { rows: [n] } = await query(`SELECT COUNT(*)::int AS n FROM consulta_mensajes WHERE consulta_id = $1 AND autor = 'tutor'`, [r.consultaId]);
     expect(n.n).toBe(1);
     expect((await estado(r.consultaId)).estado).toBe('respondida');
+  });
+
+  it('el relevo cambia la tutora de la consulta, no la conversación: todas siguen en el mismo chat', async () => {
+    if (!hayBase) return;
+    const { campus, laura, carmen, alumno, conversacion } = await escenario('Relevo');
+    const r = await procesarAviso(campus.id, avisoGrupo({ conversacion, alumno, de: { id: alumno } }));
+    const antes = Number((await estado(r.consultaId)).tutor_id);
+    await noDisponible(antes);
+    // La que no está ya no sale en el chat (el plugin la ha sacado).
+    const quedan = [{ id: alumno, nombre: 'Alumno', tutora: false, alumno: true },
+      antes === laura ? { id: 702, nombre: 'Carmen', tutora: true, alumno: false } : { id: 701, nombre: 'Laura', tutora: true, alumno: false }];
+    const r2 = await procesarAviso(campus.id, avisoGrupo({ conversacion, alumno, de: { id: alumno }, texto: 'Sigo esperando', miembros: quedan }));
+    expect(r2).toMatchObject({ resultado: 'mensaje', consultaId: r.consultaId });
+    const c = await estado(r.consultaId);
+    expect(Number(c.tutor_id)).toBe(antes === laura ? carmen : laura);
+    expect(Number(c.conversacion_grupo_id)).toBe(conversacion);
+    expect(c.conversaciones_extra || []).toHaveLength(0);
+    expect(c.participantes).toHaveLength(2);
   });
 
   it('una consulta abierta del chat directo de antes (mismo alumno y curso) sigue en el chat de grupo, y la respuesta va a ese chat', async () => {
