@@ -10,6 +10,9 @@ import * as leadModel from '../modules/leads/lead.model.js';
 import { lecturaDeLaSemana } from '../modules/ia-analisis/lectura.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
 import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
+// Por el espacio de nombres, como `leadModel`: si en algún CRM faltara la
+// actividad por comercial (#203), el resumen sale sin esa tabla en vez de caerse.
+import * as mcpModel from '../modules/mcp/mcp.model.js';
 
 /**
  * Los correos al equipo, con datos y con la marca (Diego, 28/09):
@@ -110,18 +113,31 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
   const cabecera = cabeceraUrl
     ? `<img src="${esc(cabeceraUrl)}" width="600" alt="${esc(CRM.nombre)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px 12px 0 0">`
     : `<div style="background:${CRM.color};border-radius:12px 12px 0 0;padding:20px 28px;color:#ffffff;font:bold 18px Arial,Helvetica,sans-serif">${esc(CRM.nombre)}</div>`;
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  // · Modo oscuro (#203 C: «en claro y en oscuro»): el correo se declara CLARO.
+  //   Este envoltorio lo usan también los correos de las gestoras, con colores en
+  //   línea por todas partes; darle una paleta oscura a medias dejaba textos y
+  //   enlaces oscuros sobre fondo oscuro. Declarado claro, Apple Mail y los que
+  //   respetan `color-scheme` lo enseñan tal cual (se lee bien); Gmail y
+  //   Outlook invierten por su cuenta, como con cualquier correo, y eso no lo
+  //   cambia ningún CSS: los colores en línea de cada texto y cada celda son lo
+  //   que hace que su inversión se lea.
+  // · Móvil estrecho (360 px): los márgenes de siempre dejaban sin sitio a las
+  //   tablas de seis columnas y el correo se desplazaba de lado. Va en su propio
+  //   <style> y es un añadido: si un cliente se lo come, los márgenes de siempre.
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<style>@media only screen and (max-width:420px){.crm-marco{padding:16px 6px !important}.crm-caja{padding:20px 16px 24px !important}}</style></head>
 <body style="margin:0;padding:0;background:#f2f4f7">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td align="center" style="padding:24px 12px">
-  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td class="crm-marco" align="center" style="padding:24px 12px">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;table-layout:fixed">
     <tr><td>${cabecera}</td></tr>
-    <tr><td style="background:#ffffff;padding:26px 28px 30px;border-radius:0 0 12px 12px;font-family:Arial,Helvetica,sans-serif;color:${TINTA}">
+    <tr><td class="crm-caja" style="background:#ffffff;padding:26px 28px 30px;border-radius:0 0 12px 12px;font-family:Arial,Helvetica,sans-serif;color:${TINTA}">
       <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${CRM.color};font-weight:bold">${esc(preTitulo)}</div>
       <div style="font-size:22px;font-weight:bold;line-height:1.3;margin:6px 0 4px">${esc(titulo)}</div>
       ${subtitulo ? `<div style="font-size:14px;color:${GRIS};line-height:1.5">${subtitulo}</div>` : ''}
       ${contenido}
     </td></tr>
-    <tr><td style="padding:16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#8a939e;text-align:center">
+    <tr><td style="padding:16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:${GRIS};text-align:center">
       ${pie ? `${pie}<br>` : ''}Correo automático de ${esc(CRM.nombre)}: no lo contestes. Puedes apagarlo en «Mis preferencias».
     </td></tr>
   </table>
@@ -160,17 +176,23 @@ export function tarjetas(lista) {
  * Una tabla sencilla: cabeceras y filas (la primera columna a la izquierda).
  * `compacta` para las de muchas columnas (el ranking): letra de 12 y menos aire.
  * Una fila puede ser `{ celdas, estilo }` para pintarla distinta (el Total).
+ * `mayusculas: false` deja las cabeceras en letra normal: en mayúsculas y con
+ * espaciado, seis columnas no caben en el móvil.
  */
-export function tabla(cabeceras, filas, { compacta = false } = {}) {
+export function tabla(cabeceras, filas, { compacta = false, mayusculas = true } = {}) {
   if (!filas.length) return '';
   const pad = compacta ? '6px 4px' : '7px 6px';
-  const th = cabeceras.map((c, i) => `<th style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 10 : 11}px;text-transform:uppercase;letter-spacing:.5px;color:${GRIS};padding:6px ${compacta ? 4 : 8}px;border-bottom:1px solid ${LINEA}">${esc(c)}</th>`).join('');
+  const letra = mayusculas ? 'text-transform:uppercase;letter-spacing:.5px' : 'text-transform:none';
+  const th = cabeceras.map((c, i) => `<th style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 10 : 11}px;${letra};color:${GRIS};padding:6px ${compacta ? 4 : 8}px;border-bottom:1px solid ${LINEA}">${esc(c)}</th>`).join('');
   const tr = filas.map((f) => {
     const celdas = Array.isArray(f) ? f : f.celdas;
     const extra = Array.isArray(f) ? '' : (f.estilo || '');
     return `<tr>${celdas.map((v, i) => `<td style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 12 : 13}px;padding:${pad};border-bottom:1px solid #f1f3f6;color:${TINTA}${i ? ';white-space:nowrap' : ''}${extra}">${v}</td>`).join('')}</tr>`;
   }).join('');
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">${`<tr>${th}</tr>`}${tr}</table>`;
+  // Si en un móvil no cabe (el ranking del semanal, con ocho columnas; o un
+  // móvil de 320 px), se desliza de lado la tabla y no el correo entero. El
+  // cliente que no entiende `overflow` la enseña como siempre.
+  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">${`<tr>${th}</tr>`}${tr}</table></div>`;
 }
 
 // ─── Las cifras separadas del ranking (Diego, 19/10/2026) ────────────────────
@@ -244,7 +266,12 @@ export function tablaDelRanking(puesto, { periodo = 'semana', tope = 12 } = {}) 
   const grandes = [...filas.map((g) => ({ quien: g.nombre || '—', l: anterioresGrandes(g.anteriores_grandes) })),
     ...(sg ? [{ quien: 'Sin gestora', l: anterioresGrandes(sg.anteriores_grandes) }] : [])]
     .flatMap((x) => x.l.map((t) => `${esc(x.quien)} · ${t}`));
-  return `${tabla(['Gestora', 'Vendido', 'Facturado', 'Cobrado', `De la ${periodo}`, 'Anteriores', 'Cuotas', 'Pendiente'], cuerpo, { compacta: true })}
+  // Ocho columnas no caben en un móvil: se desliza de lado (ver `tabla`), y sin
+  // mayúsculas hay que deslizar menos. En el móvil la barra no se ve, así que se
+  // avisa. Siempre, y dicho en condicional: si la tabla cabe o no depende de la
+  // pantalla Y de lo grandes que sean los importes (con «125.400 €» no cabe ni
+  // a 600 px), y eso un correo no lo puede saber.
+  return `<div style="font-size:11px;color:${GRIS};margin-top:4px">Si no ves todas las columnas, desliza la tabla →</div>${tabla(['Gestora', 'Vendido', 'Facturado', 'Cobrado', `De la ${periodo}`, 'Anteriores', 'Cuotas', 'Pendiente'], cuerpo, { compacta: true, mayusculas: false })}
     ${grandes.length ? `<div style="font-size:12px;color:${TINTA};margin:10px 0 0"><strong>De ventas anteriores, lo grande:</strong><br>${grandes.join('<br>')}</div>` : ''}
     ${notaDeLasFechas(periodo)}`;
 }
@@ -601,6 +628,97 @@ export function prospectosConOrigen(g) {
 /** Lo que significa cada origen, debajo de la tabla. */
 export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-top:6px">Formulario: lo reparte la regla o Make. WhatsApp: pulsó el botón de la web y la gestora lo dio de alta. A mano: el resto de altas.</div>`;
 
+// ─── Actividad por comercial (#203, parte C) ─────────────────────────────────
+//
+// La tabla de Reportes y del Dashboard (parte B), en el resumen de la tarde. Sale
+// de `actividadPorComercial`, la misma consulta que Claude y la pantalla: cada
+// contacto cuenta para QUIÉN LO HIZO, no para quien lleva el prospecto (por eso
+// no cuadra con «Por gestora», que es la cartera), y el día es el de Madrid.
+//
+// Las notas internas no son contactos (ficha de Diego del 07/10), pero los
+// «Contactos» del resumen sí las cuentan, como «Trabajo hecho» de Reportes. La
+// nota de debajo dice cuántas son, para que el total más las notas dé esa cifra.
+
+/**
+ * «12 escritos · 3 de voz», debajo del WhatsApp, como en la pantalla. Puede
+ * partirse en dos renglones: en el móvil era lo que más ensanchaba la tabla.
+ */
+const escritosYVoz = (f) => (n(f.whatsapp_texto) || n(f.whatsapp_voz)
+  ? `<div style="font-size:11px;line-height:1.35;color:${GRIS};white-space:normal">${entero(f.whatsapp_texto)} ${n(f.whatsapp_texto) === 1 ? 'escrito' : 'escritos'} · ${entero(f.whatsapp_voz)} de voz</div>`
+  : '');
+
+const celdasDeActividad = (f) => [entero(f.llamadas), `${entero(f.whatsapp)}${escritosYVoz(f)}`, entero(f.correos), entero(f.personas), entero(f.toques)];
+
+/**
+ * Quién vende en esos campus, para la línea «Sin actividad registrada» (ideas de
+ * Diego del 01/10: «solo las comerciales con actividad ese día» y una línea con
+ * las que no tuvieron ninguna). Activa y con el campus asignado, y quien vende
+ * según el reparto de prospectos (`gestoresDelReparto`): la gestora, o el admin
+ * que recibe prospectos en ese campus; más el admin que además es gestora
+ * (`roles_extra`). La de colaboraciones no vende.
+ *
+ * `noDisponible`: de vacaciones ese día o marcada como no disponible (lo que el
+ * reparto salta): sale en la línea, pero dicho, para que no parezca que no hizo nada.
+ */
+export async function comercialesDe(ids, dia) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre,
+            (NOT COALESCE(u.is_available, true) OR EXISTS (
+               SELECT 1 FROM user_availability_blocks ab
+                WHERE ab.user_id = u.id AND $2::date BETWEEN ab.fecha_inicio AND ab.fecha_fin)) AS "noDisponible"
+       FROM users u
+      WHERE u.active
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+        AND EXISTS (
+          SELECT 1 FROM user_projects up
+           WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($1::int[])
+             AND (u.role = 'gestor' OR 'gestor' = ANY(u.roles_extra::text[])
+                  OR (u.role IN ('admin', 'superadmin') AND up.recibe_leads = TRUE)))`, [ids, dia]);
+  return rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+/**
+ * `actividad`: lo que devuelve `actividadPorComercial` para la empresa.
+ * `contactos`: los «Contactos» del día de esa empresa en el propio resumen.
+ * `comerciales`: quién vende en esa empresa (`comercialesDe`); las que no tienen
+ * fila salen en la línea de debajo.
+ */
+export function tablaActividadPorComercial(actividad, contactos, comerciales = []) {
+  const todas = actividad?.filas || [];
+  // Quien solo escribió notas no ocupa una fila (como en la pantalla).
+  const filas = todas.filter((f) => n(f.toques) + n(f.whatsapp_texto) + n(f.whatsapp_voz) > 0);
+  const conFila = new Set(filas.map((f) => f.user_id).filter((id) => id != null));
+  const soloNotas = new Set(todas.filter((f) => !conFila.has(f.user_id) && n(f.notas) > 0).map((f) => f.user_id));
+  const sinActividad = comerciales.filter((c) => !conFila.has(c.id))
+    .map((c) => `${esc(c.nombre)}${[soloNotas.has(c.id) && 'solo notas internas', c.noDisponible && 'no disponible']
+      .filter(Boolean).map((x) => ` (${x})`).join('')}`);
+  const titulo = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Actividad por comercial</div>`;
+  // «En esta empresa»: quien está en dos puede haber trabajado en la otra (y
+  // eso no se dice aquí: un admin no ve lo de una empresa que no es suya).
+  const lineaSin = sinActividad.length
+    ? `<div style="font-size:12px;color:${TINTA};margin-top:8px"><strong>Sin actividad registrada en esta empresa:</strong> ${sinActividad.join(', ')}.</div>`
+    : '';
+  if (!filas.length) return lineaSin ? titulo + lineaSin : '';
+  const eq = actividad.equipo;
+  // «Sin asignar» (los WhatsApp sin autora) al final, en cursiva y gris, como
+  // «Sin gestora» en «Por gestora»: no es una comercial.
+  const sinAutora = (f) => f.user_id == null;
+  const cuerpo = [...filas.filter((f) => !sinAutora(f)), ...filas.filter(sinAutora)].map((f) => (sinAutora(f)
+    ? { celdas: ['<em>Sin asignar</em>', ...celdasDeActividad(f)], estilo: `;color:${GRIS}` }
+    : [esc(f.comercial), ...celdasDeActividad(f)]));
+  cuerpo.push({
+    celdas: ['<strong>Equipo</strong>', ...celdasDeActividad(eq).map((c) => `<strong>${c}</strong>`)],
+    estilo: `;border-top:2px solid ${LINEA}`,
+  });
+  const notas = n(eq.notas)
+    ? ` Las notas internas no son contactos: ${entero(eq.toques)} ${n(eq.toques) === 1 ? 'contacto' : 'contactos'} y ${entero(eq.notas)} ${n(eq.notas) === 1 ? 'nota' : 'notas'} suman ${n(contactos) === 1 ? 'el 1 contacto' : `los ${entero(contactos)} contactos`} del día, como los cuenta Reportes.`
+    : '';
+  return titulo
+    + tabla(['Comercial', 'Llamadas registradas', 'WhatsApp', 'Correos', 'Personas', 'Total'], cuerpo, { compacta: true, mayusculas: false })
+    + `<div style="font-size:11px;color:${GRIS};margin-top:6px">Cada contacto cuenta para quien lo hizo, aunque el prospecto lo lleve otra. Llamadas: solo las registradas en el CRM. Personas del equipo no es la suma: dos pueden haber contactado a la misma.${notas}</div>`
+    + lineaSin;
+}
+
 // ─── DIRECCIÓN, cada tarde: «Resumen del día», por empresa ───────────────────
 
 /**
@@ -701,7 +819,9 @@ export function tablaResumenPorEmpresa(empresas, { etiquetaCobrado = 'Cobrado' }
     estilo: `;border-top:2px solid ${LINEA}`,
   });
   return `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Resumen por empresa</div>`
-    + tabla(['Empresa', 'Prospectos', 'Contactos', 'Ventas', etiquetaCobrado], cuerpo);
+    // Compacta y sin mayúsculas, como «Actividad por comercial»: con cinco
+    // columnas en mayúsculas era la que ensanchaba el correo en el móvil (479 px).
+    + tabla(['Empresa', 'Prospectos', 'Contactos', 'Ventas', etiquetaCobrado], cuerpo, { compacta: true, mayusculas: false });
 }
 
 export async function correoDiarioDireccion(persona, ahora = new Date()) {
@@ -712,19 +832,24 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
   const resumen = [];
   for (const e of empresas) {
     const ids = e.campus.map((c) => c.id);
-    const [dia, cola, cobradoHoy, gestoras, contactosCampus] = await Promise.all([
+    const [dia, cola, cobradoHoy, gestoras, contactosCampus, actividad, comerciales] = await Promise.all([
       resumenDelDia({ projectIds: ids, referencia: hoyIso }),
       resumenDeLaCola({ projectIds: ids }),
       cobrado({ from: hoyIso, to: hoyIso, projectIds: ids }),
       actividadPorGestora(ids, hoyIso, hoyIso),
       informes.contactosPorCampus({ projectIds: ids, from: hoyIso, to: hoyIso }),
+      mcpModel.actividadPorComercial
+        ? mcpModel.actividadPorComercial({ projectIds: ids, desde: hoyIso, hasta: hoyIso })
+        : null,
+      comercialesDe(ids, hoyIso),
     ]);
     const hoy = dia.find((x) => x.dia === 'hoy') || {};
     const ayer = dia.find((x) => x.dia === 'ayer') || {};
     const filas = gestoras.map(filaDeGestora);
     const contactosDe = (id) => n((contactosCampus.find((c) => c.project_id === id) || {}).contactos);
+    const contactosEmpresa = contactosCampus.reduce((t, c) => t + n(c.contactos), 0);
     resumen.push({
-      nombre: e.nombre, leads: n(hoy.leads), contactos: contactosCampus.reduce((t, c) => t + n(c.contactos), 0),
+      nombre: e.nombre, leads: n(hoy.leads), contactos: contactosEmpresa,
       ventas: n(hoy.ventas), cobrado: cobradoHoy,
     });
     // Por campus, cuando la empresa tiene varios: TODOS, también los parados.
@@ -745,7 +870,12 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado hoy', valor: eur(cobradoHoy) },
         { etiqueta: 'Pasos atrasados', valor: entero(cola.atrasados), nota: `${entero(hoy.sin_tocar)} de hoy sin contactar` },
       ]),
-      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
+      // Compacta y sin mayúsculas, como las otras dos tablas del día: así era la
+      // que ensanchaba el correo en el móvil (no cabía en 390 px).
+      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas, { compacta: true, mayusculas: false })}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
+      // Sin la consulta (un CRM que aún no la tiene) no hay sección: no se puede
+      // decir quién no ha hecho nada sin saber quién ha hecho algo.
+      actividad ? tablaActividadPorComercial(actividad, contactosEmpresa, comerciales) : '',
       porCampus,
     ].join(''));
   }
@@ -816,7 +946,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
       porCampus = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por campus · con la semana anterior</div>${tablaPorCampus(filasCampus, { conAnterior: true })}`;
     }
     const porGestora = gestoras.length
-      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora))}${LEYENDA_ORIGEN}`
+      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora), { compacta: true, mayusculas: false })}${LEYENDA_ORIGEN}`
       : '';
 
     // LA LECTURA DE LA SEMANA, escrita por IA (#30). Apagada por defecto:

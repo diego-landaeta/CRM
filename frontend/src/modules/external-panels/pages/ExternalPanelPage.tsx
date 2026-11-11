@@ -66,7 +66,8 @@ export default function ExternalPanelPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    // 4rem más que antes: el hueco de abajo de AppLayout para el botón de tickets.
+    <div className="flex flex-col h-[calc(100vh-8rem)]">
       <header className="flex items-center justify-between gap-3 px-4 sm:px-6 py-2 border-b border-border bg-card flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Globe size={16} className="text-muted-foreground flex-shrink-0" weight="regular" />

@@ -220,7 +220,7 @@ export default function ProductsPage() {
           ? `Catálogo de tus campus · ${filteredProducts.length} de ${products.length}. Para crear o sincronizar, elige un campus arriba.`
           : `Catálogo — ${activeProject.nombre} · ${filteredProducts.length} de ${products.length}${selectedCat ? ` en "${selectedCat.nombre}"` : ''}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {can('woocommerce.sync') && !general && (
             <button
               onClick={handleSyncWc}

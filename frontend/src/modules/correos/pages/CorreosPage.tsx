@@ -132,7 +132,7 @@ export default function CorreosPage() {
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {PESTANAS.map(({ clave, rotulo, icono: Icono }) => (
             <button
               key={clave}

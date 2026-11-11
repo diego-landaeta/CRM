@@ -90,17 +90,19 @@ describe('la cabecera de pantalla', () => {
     );
     const fila = screen.getByRole('banner').firstElementChild;
     expect(fila.className).toMatch(/flex-wrap sm:flex-nowrap|flex-wrap.*sm:flex-nowrap/);
-    const hueco = screen.getByRole('heading', { level: 1 }).closest('div.min-w-0.flex-1').parentElement;
+    const bloqueDelTitulo = screen.getByRole('heading', { level: 1 }).closest('div.flex-1');
+    const hueco = bloqueDelTitulo.parentElement;
     expect(hueco.className).toMatch(/order-last/);
     expect(hueco.className).toMatch(/basis-full/);
-    // En ordenador, como siempre: una fila.
+    // En ordenador, en la misma fila que el resto de la barra.
     expect(hueco.className).toMatch(/sm:order-none/);
     expect(hueco.className).toMatch(/sm:flex-1/);
     // Y si los botones no caben junto al título, bajan; el título no se aplasta
     // (Ventas, con tres botones, se quedaba en 0 px; Ingresos en «Ingr…»).
+    // También en ordenador: Reportes y Tareas a 1024px se montaban (#203C).
     expect(hueco.className).toMatch(/flex-wrap/);
-    expect(hueco.className).toMatch(/sm:flex-nowrap/);
-    const bloqueDelTitulo = screen.getByRole('heading', { level: 1 }).closest('div.min-w-0.flex-1');
+    expect(hueco.className).not.toMatch(/sm:flex-nowrap/);
+    expect(bloqueDelTitulo.className).toMatch(/min-w-32/);
     expect(bloqueDelTitulo.className).toMatch(/max-sm:min-w-40/);
   });
 

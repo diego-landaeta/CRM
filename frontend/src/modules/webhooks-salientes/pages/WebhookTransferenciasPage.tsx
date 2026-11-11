@@ -189,7 +189,7 @@ export default function WebhookTransferenciasPage() {
           ? activeIssuer?.nombre || 'Empresa'
           : projectId ? activeProject?.nombre || '' : 'Todos los proyectos'}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={cargar} disabled={cargando}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-bold hover:bg-muted disabled:opacity-50">
               <ArrowClockwise size={15} className={cargando ? 'animate-spin' : ''} /> Actualizar

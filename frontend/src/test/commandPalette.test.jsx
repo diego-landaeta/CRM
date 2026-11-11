@@ -120,9 +120,11 @@ describe('qué encuentra cada perfil (tabla de la #591)', () => {
     for (const r of FINANZAS_RESTRINGIDAS) expect(rutas).not.toContain(r);
   });
 
-  it('project manager: como una gestora, con clientes', () => {
+  // Desde la #668 (Diego, 04/11: «el project manager ve todo», `pm-ve-todo`): también
+  // Finanzas, de sus campus y en solo lectura.
+  it('project manager: personas y clientes, y también Finanzas (ve todo, #668)', () => {
     expect(buscaDe(PERFILES.project_manager)).toMatchObject({ personas: true, clientes: true });
-    for (const r of FINANZAS_RESTRINGIDAS) expect(rutasDe(PERFILES.project_manager)).not.toContain(r);
+    for (const r of FINANZAS_RESTRINGIDAS) expect(rutasDe(PERFILES.project_manager)).toContain(r);
   });
 
   it('tutor: ni personas ni productos, porque el catálogo ya no se los da (Diego, 03/11); solo lo suyo', () => {
@@ -337,7 +339,9 @@ describe('ventas, facturas, tareas y consultas (punto 6)', () => {
     expect(buscaDe(PERFILES.superadmin).usuarios).toBe(true);
     expect(buscaDe(PERFILES.admin).usuarios).toBe(true);
     expect(buscaDe(PERFILES.soporte).usuarios).toBe(true);
-    for (const p of ['gestora', 'project_manager', 'tutor', 'colaborador']) {
+    // El project manager ve usuarios y roles en solo lectura (#668, `pm-ve-todo`).
+    expect(buscaDe(PERFILES.project_manager).usuarios).toBe(true);
+    for (const p of ['gestora', 'tutor', 'colaborador']) {
       expect(buscaDe(PERFILES[p]).usuarios, p).toBe(false);
     }
   });
@@ -367,12 +371,14 @@ describe('tutores, facturas de colaboradores, diplomas y cursos de Moodle (punto
     return { tutores: b.tutores, facturasColaborador: b.facturasColaborador, diplomas: b.diplomas, cursosMoodle: b.cursosMoodle };
   };
 
-  it('cada perfil: solo administración, que es quien tiene esas pantallas en el menú', () => {
+  it('cada perfil: administración y el project manager, que es quien tiene esas pantallas en el menú', () => {
     const todo = { tutores: true, facturasColaborador: true, diplomas: CERTIFEX_PANEL, cursosMoodle: true };
     expect(tipos(PERFILES.superadmin)).toEqual(todo);
     expect(tipos(PERFILES.admin)).toEqual(todo);
+    // #668 (`pm-ve-todo`): facturas de colaboradores, diplomas y Moodle sí; Tutores no está en su lista.
+    expect(tipos(PERFILES.project_manager)).toEqual({ ...todo, tutores: false });
     const nada = { tutores: false, facturasColaborador: false, diplomas: false, cursosMoodle: false };
-    for (const p of ['soporte', 'gestora', 'project_manager', 'tutor', 'colaborador']) {
+    for (const p of ['soporte', 'gestora', 'tutor', 'colaborador']) {
       expect(tipos(PERFILES[p]), p).toEqual(nada);
     }
   });

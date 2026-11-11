@@ -85,7 +85,7 @@ export default function ClientesVentas({ projectId = null, issuerId = null, from
   return (
     <div className="bg-card border border-border rounded-lg p-4 sm:p-5">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <UserList size={18} weight="duotone" className="text-muted-foreground" />
           <div>
             <h3 className="text-base font-bold">Clientes</h3>
@@ -102,12 +102,12 @@ export default function ClientesVentas({ projectId = null, issuerId = null, from
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-shrink-0 items-center gap-1">
           {VISTAS.map((v) => (
             <button
               key={v.clave} type="button" onClick={() => { setVista(v.clave); setAbierto(true); }}
               aria-pressed={v.clave === vista}
-              className={`h-7 px-2.5 rounded-md text-xs font-semibold transition-colors ${
+              className={`h-7 px-2.5 whitespace-nowrap rounded-md text-xs font-semibold transition-colors ${
                 v.clave === vista ? 'bg-primary text-primary-foreground'
                   : 'border border-border text-muted-foreground hover:text-foreground'
               }`}

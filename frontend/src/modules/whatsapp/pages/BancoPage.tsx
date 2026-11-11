@@ -181,7 +181,7 @@ export default function BancoPage() {
         title="Banco de mensajes"
         subtitle="Todo lo que ha pasado por WhatsApp, para buscarlo y guardarlo. No depende de que la sesión siga enlazada."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={descargando}

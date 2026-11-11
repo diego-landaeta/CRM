@@ -114,7 +114,7 @@ export default function NovedadesPage() {
         title="Novedades"
         subtitle={`${datos.crm.nombre} · ${v.titulo} · ${fechaLarga(v.fecha)}`}
         actions={(
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {datos.versiones.length > 1 && (
               <select value={v.version} onChange={(e) => setVersion(e.target.value)} aria-label="Versión"
                 className="h-9 rounded-md border border-border bg-card px-2 text-sm">

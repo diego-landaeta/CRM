@@ -317,19 +317,19 @@ export default function InvoicesPage() {
         title="Facturas"
         subtitle={`Histórico fiscal — ${activeIssuer ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus` : (activeProject?.nombre || '')}`}
         actions={(
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <TutorialButton />
             {/* Los abonos (rectificativas) los emite un admin o una gestora con
                 permiso factura_manager. Las demás ven la pestaña pero no crean. */}
             {!(esAbonos && !puedeCorregir) && (
               <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold whitespace-nowrap hover:bg-primary/90">
                 {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
                 {esAbonos ? 'Nuevo abono' : esProformas ? 'Nueva proforma' : 'Nueva factura'}
               </Link>
             )}
             <Link to="configuracion"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold whitespace-nowrap hover:bg-muted">
               <Gear size={14} weight="bold" /> Configuración
             </Link>
           </div>
@@ -548,13 +548,19 @@ export default function InvoicesPage() {
           <option value="pagada">Pagada</option>
           <option value="cancelada">Cancelada</option>
         </select>
-        <div className="flex items-center gap-1 text-xs">
-          <label className="text-muted-foreground">Desde</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          <label className="text-muted-foreground ml-1">Hasta</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        {/* Cada fecha con su etiqueta, y si no caben las dos en el móvil,
+            «Hasta» baja de línea en vez de salirse de la tarjeta. */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
+          <span className="flex items-center gap-1">
+            <label className="text-muted-foreground">Desde</label>
+            <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          </span>
+          <span className="flex items-center gap-1">
+            <label className="text-muted-foreground">Hasta</label>
+            <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          </span>
         </div>
         {/* Los atajos van DESPUES de las casillas y no en su lugar: escribir dos
             fechas sigue siendo posible para el caso raro, y para los cinco de

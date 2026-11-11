@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
@@ -359,7 +358,6 @@ function PantallaDeReportes() {
                   </button>
                 ))}
               </div>
-              <RangoRapido valor={range} alElegir={(r) => setRange(r)} />
               <input
                 type="date"
                 value={range.from}
@@ -464,7 +462,7 @@ function PantallaDeReportes() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
         {/* Aquí había una tarjeta «Tasa conversión» con `data.tasa_conversion`,
             que es OTRA cuenta: los leads en estado «convertido», un campo que

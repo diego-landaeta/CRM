@@ -181,7 +181,7 @@ export default function WebhookDetailPage() {
         title={webhook.nombre}
         subtitle={`${webhook.submissions_count || 0} eventos recibidos · ${webhook.embed_id}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               to="/captacion/webhooks"
               aria-label="Volver"

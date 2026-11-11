@@ -96,7 +96,7 @@ function SaasMonitor({ projectId }) {
         <CreditCard size={16} className="text-primary" weight="duotone" />
         <h2 className="font-semibold text-sm">Monitor SaaS — Stripe</h2>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         {[
           { icon: CurrencyEur, label: 'MRR actual', value: fmtMoney(metrics.mrr), delta: mrrDelta, color: 'text-primary bg-primary/10' },
           { icon: Users, label: 'Suscripciones activas', value: fmtNum(metrics.activeSubs), delta: subsDelta, color: 'text-info bg-info-soft' },
@@ -335,7 +335,7 @@ export default function DashboardPage() {
       )}
 
       {/* Top KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard
           icon={Users}
           iconBg="bg-info-soft text-info-soft-foreground"

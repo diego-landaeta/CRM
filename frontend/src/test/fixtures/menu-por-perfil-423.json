@@ -56,6 +56,7 @@
   "Análisis › Reportes",
   "Análisis › Análisis IA",
   "Análisis › Feedback",
+  "Análisis › Pregunta a tus datos",
   "Clientes › Clientes",
   "Clientes › Revisión duplicados",
   "Clientes › Buscar duplicados",
@@ -65,6 +66,7 @@
   "Conexión › Conectores",
   "Conexión › Webhook de transferencias",
   "Conexión › Asignación de leads",
+  "Conexión › Moodle",
   "Sistema › Novedades",
   "Sistema › Mensajes",
   "Sistema › Solicitudes de cambio",
@@ -131,6 +133,7 @@
   "Análisis › Reportes",
   "Análisis › Análisis IA",
   "Análisis › Feedback",
+  "Análisis › Pregunta a tus datos",
   "Clientes › Clientes",
   "Clientes › Revisión duplicados",
   "Clientes › Buscar duplicados",
@@ -140,6 +143,7 @@
   "Conexión › Conectores",
   "Conexión › Webhook de transferencias",
   "Conexión › Asignación de leads",
+  "Conexión › Moodle",
   "Sistema › Novedades",
   "Sistema › Mensajes",
   "Sistema › Solicitudes de cambio",
@@ -205,6 +209,7 @@
   "Análisis › Reportes",
   "Análisis › Análisis IA",
   "Análisis › Feedback",
+  "Análisis › Pregunta a tus datos",
   "Clientes › Clientes",
   "Clientes › Revisión duplicados",
   "Clientes › Buscar duplicados",
@@ -251,7 +256,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ],
  "project_manager": [
   "Testeo › TESTEO2",
@@ -343,6 +349,7 @@
   "Análisis › Reportes",
   "Análisis › Análisis IA",
   "Análisis › Feedback",
+  "Análisis › Pregunta a tus datos",
   "Clientes › Clientes",
   "Clientes › Revisión duplicados",
   "Clientes › Buscar duplicados",
@@ -351,6 +358,7 @@
   "Conexión › Conectores",
   "Conexión › Webhook de transferencias",
   "Conexión › Asignación de leads",
+  "Conexión › Moodle",
   "Sistema › Novedades",
   "Sistema › Mensajes",
   "Sistema › Solicitudes de cambio",
@@ -391,7 +399,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con factura_manager": [
   "Testeo › TESTEO2",
@@ -420,7 +429,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con editar_fechas_factura": [
   "Testeo › TESTEO2",
@@ -449,7 +459,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con gestor_colaboraciones": [
   "Tutores › Tutores",
@@ -485,7 +496,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con diplomas.view": [
   "Testeo › TESTEO2",
@@ -515,7 +527,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con tasks.close": [
   "Testeo › TESTEO2",
@@ -544,6 +557,7 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Status",
-  "Sistema › Manual de usuario"
+  "Sistema › Manual de usuario",
+  "Catálogo › Cursos pendientes"
  ]
 }

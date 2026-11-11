@@ -1109,7 +1109,9 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{lead.telefono || <span className="text-muted-foreground/50">—</span>}</td>
-                  <td className="px-5 py-3.5 text-xs">
+                  {/* Ancho mínimo: con trece columnas, el programa quedaba en 76px,
+                      una palabra por línea y filas altísimas. */}
+                  <td className="px-5 py-3.5 text-xs min-w-[11rem]">
                     {lead.producto_interes ? (
                       <span className="inline-block px-2 py-1 bg-primary/10 text-primary rounded font-medium max-w-[260px] whitespace-normal leading-snug" title={lead.producto_interes}>
                         {lead.producto_interes.length > 90 ? lead.producto_interes.slice(0, 88) + '…' : lead.producto_interes}

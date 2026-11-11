@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 
 export default function InfoField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
+    // `min-w-0`: en una rejilla, sin esto el contenido ancho se sale de su
+    // columna y se monta sobre la de al lado.
+    <div className="min-w-0">
       <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <div className="text-[13px] font-medium break-words">{children}</div>
     </div>

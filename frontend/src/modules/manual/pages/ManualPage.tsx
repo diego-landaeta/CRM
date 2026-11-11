@@ -99,7 +99,7 @@ function FeatureCard({ icon: Icon, title, children }: {
         </div>
       )}
       {!Icon && title && <p className="text-[13px] font-semibold text-foreground mb-1.5 tracking-tight">{title}</p>}
-      <p className="text-[13px] text-muted-foreground leading-relaxed">{children}</p>
+      <p className="text-[13px] text-muted-foreground leading-relaxed [overflow-wrap:anywhere]">{children}</p>
     </div>
   );
 }
@@ -1050,7 +1050,7 @@ export default function ManualPage() {
             { case: 'Formación 2 días al mes', sol: 'Un bloque por cada día/rango. Puedes tener varios bloques futuros.' },
             { case: 'Gestor de baja médica indefinida', sol: 'Toggle rojo "No disponible" con motivo "Baja médica". No tiene fecha de vuelta, lo reactivas cuando sea.' },
           ].map((row, i) => (
-            <div key={i} className={`grid grid-cols-[280px_1fr] gap-4 px-4 py-3 ${i > 0 ? 'border-t border-border' : ''}`}>
+            <div key={i} className={`grid grid-cols-1 sm:grid-cols-[280px_1fr] gap-1 sm:gap-4 px-4 py-3 ${i > 0 ? 'border-t border-border' : ''}`}>
               <p className="text-xs font-semibold text-foreground">{row.case}</p>
               <p className="text-xs text-muted-foreground">{row.sol}</p>
             </div>

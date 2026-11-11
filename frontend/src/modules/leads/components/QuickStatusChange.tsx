@@ -114,7 +114,7 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
           onClick={abrir}
           disabled={saving}
           title="Cambiar estado"
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${STATUS_STYLES[currentStatus] || 'bg-muted text-muted-foreground'} ${saving ? 'opacity-50' : ''}`}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 whitespace-nowrap rounded text-xs font-medium cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${STATUS_STYLES[currentStatus] || 'bg-muted text-muted-foreground'} ${saving ? 'opacity-50' : ''}`}
         >
           {STATUS_LABELS[currentStatus] || currentStatus}
           <CaretDown size={10} weight="bold" className="opacity-70" />
