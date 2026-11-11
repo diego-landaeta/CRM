@@ -93,7 +93,8 @@ const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
 // Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend.
-const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+// El tutor redactor (CRM#708) tiene su tablero como un colaborador.
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 // Ninguna entrada puede llevar a «Página no encontrada» (#226). Diego, 10/10:
 // lo que no existe se marca «Próximamente» (sin enlace, `comingSoon: true`); lo
@@ -211,7 +212,7 @@ export const NAV_SECTIONS = [
       { label: 'Historial de tareas', to: '/tareas/historial', detail: 'Lo hecho: quién y cuándo', icon: ClockCounterClockwise, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
-      { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador'], permiso: 'facturas_colaborador.subir' },
+      { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
     ],
   },
   {
@@ -269,9 +270,9 @@ export const NAV_SECTIONS = [
       // «Mis cursos» (sus cursos y su parte) ya no va en el menú (05/11): la tutora trabaja
       // desde «Mi campus». La pantalla sigue en /mis-cursos para los enlaces de los correos.
       // #681: sus cursos en Moodle, con lo que tiene por corregir y contestar.
-      { label: 'Mi campus', to: '/mis-cursos/campus', detail: 'Por corregir, dudas y alumnos', icon: ClipboardText, roles: ['tutor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      { label: 'Mi campus', to: '/mis-cursos/campus', detail: 'Por corregir, dudas y alumnos', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188): el tutor, su bandeja; administración, todas.
-      { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor'], module: 'tutores', statusTag: 'Pruebas', permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
+      { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor', 'tutor_redactor'], module: 'tutores', statusTag: 'Pruebas', permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { label: 'Sin tutor', to: '/tutores/sin-tutor', detail: 'Formaciones sin asignar', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       { label: 'Comisiones', to: '/tutores/comisiones', detail: 'Lo que se les debe', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
     ],
@@ -399,7 +400,7 @@ export const NAV_SECTIONS = [
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge, permiso: 'change_requests.view' },
       { label: 'Notificaciones', to: '/notificaciones', detail: 'Lo que ha pasado', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador'] },
+      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
       // Claves y variables (#80). Desde CRM#632 (03/11) también el admin, que
       // ve las de sus campus; guardar y revelar siguen siendo de soporte.
@@ -611,6 +612,11 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
     // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
     if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
+  }
+  // Y para quien es SOLO tutor redactor (CRM#708): su tablero, su factura, sus
+  // consultas y sus cursos. El servidor le responde 403 en todo lo demas.
+  if (suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor')) {
+    return Array.isArray(item.roles) && item.roles.includes('tutor_redactor');
   }
   // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
   // Va ANTES del atajo de soporte: «roles únicamente», dijo Diego.
@@ -1241,7 +1247,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // que es dar de alta profesores y ajustarles el porcentaje.
   const rolLabel = user?.gestor_colaboraciones
     ? 'Colaboraciones'
-    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' }[user?.role] || '');
+    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' }[user?.role] || '');
 
   async function handleLogout() {
     await logout();
