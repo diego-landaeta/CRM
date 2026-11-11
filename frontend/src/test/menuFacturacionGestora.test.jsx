@@ -48,11 +48,12 @@ describe('menú › Facturación', () => {
 });
 
 describe('las claves del sistema de Roles siguen pasando por `can`', () => {
-  it('«Por revisar» (tasks.close) solo con el permiso', () => {
-    const item = entrada('/tareas/revisar');
-    expect(item?.permiso).toBe('tasks.close');
+  it('«Historial de tareas» (tasks.view_own) solo con el permiso; «Por revisar» ya no está (CRM#707)', () => {
+    const item = entrada('/tareas/historial');
+    expect(item?.permiso).toBe('tasks.view_own');
     expect(pasaPermisoDeRoles(item, can([]))).toBe(false);
-    expect(pasaPermisoDeRoles(item, can(['tasks.close']))).toBe(true);
+    expect(pasaPermisoDeRoles(item, can(['tasks.view_own']))).toBe(true);
+    expect(entrada('/tareas/revisar')).toBeFalsy();
   });
 
   it('una entrada sin permiso pasa siempre', () => {

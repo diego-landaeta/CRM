@@ -1,14 +1,17 @@
 import { query, getClient } from '../../shared/config/db.js';
-import { existeEquipos } from './tasks.equipos.model.js';
+import { existeEquipos, existeTipos, sqlConTablero } from './tasks.equipos.model.js';
 
 // Quien tiene tablero de tareas: el equipo de desarrollo (Diego, 09/10: «las
 // tareas son del equipo de desarrollo, las gestoras no tienen tareas»). Ni
 // gestoras, ni soporte, ni project manager, ni tutores (un tutor que trabaje en
 // el equipo entra con el rol colaborador).
+//
+// Tutores (Diego, 04/11/2026): «un tablero de tutores separado del de
+// colaboradores». Un tutor tiene tablero mientras esté en un equipo de TUTORES
+// (task_teams.tipo): lo decide `sqlConTablero` (tasks.equipos.model.js).
 export const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
 
-const CON_TABLERO = `(u.role::text = ANY($ROLES::text[]) OR u.roles_extra::text[] && $ROLES::text[])`;
-const conTablero = (n) => CON_TABLERO.replaceAll('$ROLES', `$${n}`);
+const conTablero = (n, tipos) => sqlConTablero('u', n, tipos);
 
 /**
  * La gente del ámbito (#245, decisiones de Diego del 08/10).
@@ -117,6 +120,7 @@ const columnasSupervisor = (hay) => (hay
 const joinSupervisor = (hay) => (hay ? '\n  LEFT JOIN users u_sup ON u_sup.id = t.supervisor_id' : '');
 
 // El equipo de la tarea y el cargo de quien la lleva en él (migración 226).
+// `de_programacion` ya no sale (11/11/2026): quien cierra lo dice el supervisor.
 const columnasEquipo = (eq) => (eq
   ? `t.team_id,
   tm_t.name AS team_name,
@@ -173,10 +177,25 @@ const joins = (hay, eq = false) => `
   LEFT JOIN users u_assign ON u_assign.id = t.assigned_to
   LEFT JOIN users u_create ON u_create.id = t.created_by${joinSupervisor(hay)}${joinEquipo(eq)}`;
 
+/*
+  Quién la terminó (27/10/2026): quien la pasó a «Hecha» por última vez
+  —arrastrándola, aprobándola o, desde la CRM#707, quien la lleva—, del
+  historial (`task_events`). Si nació ya hecha, quien la creó.
+*/
+const COLUMNAS_CIERRE = `CASE WHEN t.status = 'hecha' THEN COALESCE(cierre.user_id, t.created_by) END AS completed_by,
+       CASE WHEN t.status = 'hecha' THEN COALESCE(u_cierre.nombre, u_create.nombre) END AS completed_by_name`;
+const JOIN_CIERRE = `
+     LEFT JOIN LATERAL (
+       SELECT te.user_id FROM task_events te
+        WHERE te.task_id = t.id AND te.event_type = 'status_changed' AND te.details->>'new_status' = 'hecha'
+        ORDER BY te.created_at DESC, te.id DESC LIMIT 1) cierre ON t.status = 'hecha'
+     LEFT JOIN users u_cierre ON u_cierre.id = cierre.user_id`;
+
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
   periodo_desde, periodo_hasta, incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
   team_id, visibles_para = null, mias_de = null, de_la_cabecera = null,
+  cerradas_desde = null, cerradas_hasta = null, con_cierre = false,
 }) {
   const { sup: hay, eq } = await extras();
   const conditions = [];
@@ -265,10 +284,21 @@ export async function findTasks({
       OR (t.status <> 'hecha' AND t.created_at < ${fin}))`);
   }
 
+  // El día del cierre (Historial de tareas, CRM#707), en días de la oficina.
+  if (cerradas_desde) {
+    params.push(cerradas_desde, zona);
+    conditions.push(`t.completed_at >= ($${params.length - 1}::date::timestamp AT TIME ZONE $${params.length})`);
+  }
+  if (cerradas_hasta) {
+    params.push(cerradas_hasta, zona);
+    conditions.push(`t.completed_at < (($${params.length - 1}::date + 1)::timestamp AT TIME ZONE $${params.length})`);
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const sql = `
-    SELECT ${columnas(hay, eq)},
+    SELECT ${columnas(hay, eq)},${con_cierre ? `
+      ${COLUMNAS_CIERRE},` : ''}
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id) AS checklist_total,
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id AND ci.is_completed) AS checklist_completed,
       (SELECT COUNT(*)::int FROM task_comments cm WHERE cm.task_id = t.id) AS comments_count,
@@ -278,36 +308,17 @@ export async function findTasks({
         SELECT json_agg(json_build_object('id', tg.id, 'name', tg.name, 'color', tg.color) ORDER BY tg.id)
         FROM task_tags tg WHERE tg.task_id = t.id
       ), '[]'::json) AS tags
-    ${joins(hay, eq)}
+    ${joins(hay, eq)}${con_cierre ? JOIN_CIERRE : ''}
     ${whereClause}
     ORDER BY ${orden === 'vencimiento'
     ? 't.due_date ASC NULLS LAST, t.updated_at ASC'
-    : 't.position ASC, t.created_at DESC'}
+    : orden === 'cierre'
+      ? 't.completed_at DESC NULLS LAST, t.id DESC'
+      : 't.position ASC, t.created_at DESC'}
   `;
 
   const { rows } = await query(sql, params);
   return rows;
-}
-
-/** Cuántas tareas esperan revisión: el número del selector y del menú. */
-export async function countReview(ambito = null, yo = null, { tambienSupervisa = false, deLaCabecera = null } = {}) {
-  const { sup: hay, eq } = await extras();
-  const params = [];
-  let filtro = '';
-  if (ambito) {
-    params.push(ambito, yo);
-    filtro = `AND (${genteDelAmbito('t.assigned_to', 1, 2)}${tambienSupervisa && hay ? ' OR t.supervisor_id = $2' : ''})`;
-  }
-  if (deLaCabecera) {
-    params.push(deLaCabecera);
-    filtro += ` AND ${deLaEmpresa('t', params.length, eq)}`;
-  }
-  const { rows } = await query(
-    `SELECT COUNT(*)::int AS total FROM tasks t
-      WHERE t.status = 'en_revision' AND t.archived_at IS NULL ${filtro}`,
-    params
-  );
-  return rows[0].total;
 }
 
 /** Si una persona está en el ámbito de quien mira (ver `genteDelAmbito`). */
@@ -322,19 +333,11 @@ export async function personaEnAmbito(personaId, ambito, yo) {
 
 export async function findTaskById(id) {
   const { sup: hay, eq } = await extras();
-  // Quién la terminó (27/10/2026): quien la pasó a «Hecha» por última vez
-  // —arrastrándola o aprobándola—, del historial. Si nació ya hecha, quien la creó.
   const { rows } = await query(
     `SELECT ${columnas(hay, eq)},
        (SELECT cm.content FROM task_comments cm WHERE cm.task_id = t.id ORDER BY cm.created_at DESC, cm.id DESC LIMIT 1) AS last_comment,
-       CASE WHEN t.status = 'hecha' THEN COALESCE(cierre.user_id, t.created_by) END AS completed_by,
-       CASE WHEN t.status = 'hecha' THEN COALESCE(u_cierre.nombre, u_create.nombre) END AS completed_by_name
-     ${joins(hay, eq)}
-     LEFT JOIN LATERAL (
-       SELECT te.user_id FROM task_events te
-        WHERE te.task_id = t.id AND te.event_type = 'status_changed' AND te.details->>'new_status' = 'hecha'
-        ORDER BY te.created_at DESC, te.id DESC LIMIT 1) cierre ON t.status = 'hecha'
-     LEFT JOIN users u_cierre ON u_cierre.id = cierre.user_id
+       ${COLUMNAS_CIERRE}
+     ${joins(hay, eq)}${JOIN_CIERRE}
      WHERE t.id = $1`,
     [id]
   );
@@ -522,6 +525,8 @@ export async function archiveTask(id) {
 /**
  * Devolver tarea atómicamente: en una única transacción de Postgres
  * pasa a «en_curso», inserta el comentario obligatorio y registra los eventos.
+ * Se devuelve lo que está «En revisión» o, desde la CRM#707 (quien la hace la
+ * cierra él mismo), lo que ya está «Hecha».
  */
 export async function returnTaskAtomic({ taskId, comment, user }) {
   const client = await getClient();
@@ -537,7 +542,7 @@ export async function returnTaskAtomic({ taskId, comment, user }) {
       await client.query('ROLLBACK');
       return null;
     }
-    if (task.status !== 'en_revision') {
+    if (!['en_revision', 'hecha'].includes(task.status)) {
       await client.query('ROLLBACK');
       return { noEnRevision: true, oldTask: task };
     }
@@ -897,10 +902,11 @@ export async function findAssignees(ambito = null, yo = null, ambitoAsignar = nu
     params.push(ambitoAsignar);
     asignable = asignableEnAmbito('u.id', params.length, yoEn());
   }
+  const tipos = await existeTipos();
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, ${asignable} AS asignable
        FROM users u
-      WHERE u.active AND ${conTablero(1)} ${filtro}
+      WHERE u.active AND ${conTablero(1, tipos)} ${filtro}
       ORDER BY u.nombre ASC`,
     params
   );
@@ -915,9 +921,10 @@ export async function personaAsignable(personaId, ambito, yo) {
 }
 
 export async function findUserBasic(id) {
+  const tipos = await existeTipos();
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.active, u.role::text AS role,
-            (u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[]) AS con_tablero
+            ${conTablero(2, tipos)} AS con_tablero
        FROM users u WHERE u.id = $1`,
     [id, ROLES_TAREAS]
   );
@@ -963,7 +970,7 @@ export async function getTeamMetrics(projectId = null, areaId = null, ambito = n
        COUNT(t.id) FILTER (WHERE t.status = 'hecha' AND t.completed_at >= date_trunc('month', NOW()))::int AS completed_this_month
      FROM users u
      LEFT JOIN tasks t ON t.assigned_to = u.id ${filtroProyecto} ${filtroArea}
-     WHERE u.active AND ${conTablero(1)} ${filtroGente}
+     WHERE u.active AND ${conTablero(1, await existeTipos())} ${filtroGente}
      GROUP BY u.id, u.nombre, u.email, u.role
      ORDER BY open_tasks DESC, u.nombre ASC`,
     params
@@ -1305,7 +1312,7 @@ export async function findDailyDigest(aviso, hoy, tz = 'Europe/Madrid') {
        JOIN tasks t ON t.assigned_to = u.id
       WHERE u.active
         AND u.email IS NOT NULL
-        AND ${conTablero(4)}
+        AND ${conTablero(4, await existeTipos())}
         AND t.archived_at IS NULL
         AND t.status <> 'hecha'
         AND t.due_date < (($2::date + 1)::timestamp AT TIME ZONE $3)

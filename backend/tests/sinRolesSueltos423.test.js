@@ -43,8 +43,10 @@ const DECLARADAS = {
   'sales/sales.service.js': [1, 'comportamiento: a quién se asigna la venta'],
   // Equipos (26/10/2026): quién mueve, comenta y aprueba UNA tarea es alcance,
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
-  'tasks/tasks.reglas.js': [5, 'alcance por tarea: el superadmin (y admin/superadmin como supervisor válido) en todas'],
-  'tasks/tasks.service.js': [9, 'alcance: superadmin y soporte ven todas las empresas; por tarea, lo que el superadmin mueve, aprueba y borra'],
+  // CRM#707 (10/11/2026): cerrar y devolver, cada una con su regla por tarea (`puedeCerrar`, `puedeDevolver`), y sin
+  // la bandeja de «Por revisar», que miraba si era superadmin para enseñarle todas.
+  'tasks/tasks.reglas.js': [6, 'alcance por tarea: el superadmin (y admin/superadmin como supervisor válido) en todas'],
+  'tasks/tasks.service.js': [7, 'alcance: superadmin y soporte ven todas las empresas; por tarea, lo que el superadmin mueve y borra'],
   'tutores/tutor.controller.js': [6, 'alcance: el tutor, lo suyo; fichas de sus campus'],
   'users/user.empresas.js': [1, 'comportamiento: la empresa entera solo le da campus a un admin (al colaborador, no)'],
   'users/user.controller.js': [5, 'alcance: contraseña solo de tutores de su campus; su foto y su vista'],
