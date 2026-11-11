@@ -95,6 +95,7 @@ import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js'
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
+import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
@@ -481,6 +482,8 @@ if (process.env.NODE_ENV !== 'test') {
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
     startCursosPendientesScheduler();
+    // Lee Moodle y escribe a las tutoras (#681): con el resto de la #689, apagado en producción hasta aprobarlo.
+    if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startNovedadesScheduler();
