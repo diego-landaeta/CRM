@@ -254,6 +254,21 @@ export const CAMBIOS_POR_DATOS = [
  */
 export const CAMBIOS_DE_MENU = [
   {
+    id: 'menu-mi-campus',
+    que: '«Tutores › Mi campus»: la tutora ve sus cursos de Moodle con lo que tiene por corregir y sus dudas, y corrige desde el CRM (CRM#681).',
+    motivo: 'Pantalla nueva dentro de «Mis cursos»: entra por el mismo permiso (`tutores.mis_cursos`) y el servidor solo enseña los cursos donde la tutora es profesora en Moodle.',
+    perfiles: {
+      superadmin: ['+ Tutores › Mi campus', '- Tutores › Mis cursos'],
+      tutor: ['+ Tutores › Mi campus', '- Tutores › Mis cursos'],
+      'gestora+tutor': ['+ Tutores › Mi campus', '- Tutores › Mis cursos'],
+    },
+    rutas: { 'Tutores › Mi campus': 'GET /api/tutores/mi-campus', 'Tutores › Mis cursos': 'GET /api/tutores/colaboraciones' },
+    // «Mis cursos» (sus cursos y su parte) sale del menú pero NO se pierde: se abre desde
+    // «Mi campus» («Tu parte · comisiones») y sigue en /mis-cursos (los correos enlazan ahí).
+    seMueve: { 'Tutores › Mis cursos': 'Tutores › Mi campus' },
+    aprobadoPor: 'Pendiente de Diego (PR de #679/#681)',
+  },
+  {
     id: 'menu-claves-admin',
     que: '«Sistema › Claves y variables» la ve también el admin, con las claves de sus campus (CRM#632).',
     motivo: 'Va con el cambio `admin-ve-claves`: el admin ya puede leerlas en el servidor, y el menú se la enseña.',
@@ -433,6 +448,28 @@ export const CAMBIOS_DE_MENU = [
     // La pantalla se va con su ruta: no es que se le cierre a alguien, es que ya no existe.
     quitadas: ['Equipo de Desarrollo › Por revisar'],
     aprobadoPor: 'Diego, 10/11',
+  },
+  {
+    id: 'menu-entradas-de-angel-631',
+    que: '«Conexión › Moodle» sale a superadmin, admin y gestora+admin (CRM#408), y «Catálogo › Cursos pendientes» a la gestora (CRM#401).',
+    motivo: 'Las añadió Ángel el 29/10 y no estaban apuntadas: la foto del menú las daba como sobrantes (#631). Diego las aprobó el 06/11. La tercera, «Análisis › Pregunta a tus datos» (CRM#390), ya no sale: la quitó `menu-sin-pantallas-ia`.',
+    perfiles: {
+      superadmin: ['+ Conexión › Moodle'],
+      admin: ['+ Conexión › Moodle'],
+      'gestora+admin': ['+ Conexión › Moodle'],
+      gestora: ['+ Catálogo › Cursos pendientes'],
+      'gestora+tutor': ['+ Catálogo › Cursos pendientes'],
+      'gestora con factura_manager': ['+ Catálogo › Cursos pendientes'],
+      'gestora con editar_fechas_factura': ['+ Catálogo › Cursos pendientes'],
+      'gestora con usa_mcp': ['+ Catálogo › Cursos pendientes'],
+      'gestora con diplomas.view': ['+ Catálogo › Cursos pendientes'],
+      'gestora con tasks.close': ['+ Catálogo › Cursos pendientes'],
+    },
+    rutas: {
+      'Conexión › Moodle': 'GET /api/moodle/campus',
+      'Catálogo › Cursos pendientes': 'GET /api/cursos-pendientes/',
+    },
+    aprobadoPor: 'Diego, 06/11',
   },
 ];
 

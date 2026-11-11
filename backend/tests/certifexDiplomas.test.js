@@ -114,6 +114,22 @@ describe('POST /api/certifex/solicitudes (desde el servidor de Certifex)', () =>
   it('se guarda, se enlaza con la ficha por correo y suena la campana de administracion', async () => {
     const { rows: [lead] } = await pool.query(
       `INSERT INTO leads (project_id, nombre, email) VALUES (1, 'Alumna Diploma', 'ALUMNA.DIPLOMA@prueba.test') RETURNING id`);
+    // A quién debe sonar, contado ANTES y DESPUÉS: los demás ficheros crean y borran sus
+    // usuarios a la vez, y uno creado (o borrado) en medio no puede contar. Es lo mismo que
+    // la prueba de «completado» de más abajo (fallaba a ratos en la CI: 04/11 y 10/11).
+    const destinatarios = async () => {
+      const { rows: sas } = await pool.query(
+        `SELECT id FROM users WHERE active AND (role = 'superadmin' OR roles_extra && ARRAY['superadmin']::user_role[])`);
+      const { rows: delCampus } = await pool.query(
+        `SELECT DISTINCT u.id FROM users u JOIN user_projects up ON up.user_id = u.id AND up.active
+           JOIN projects p ON p.id = up.project_id AND NOT COALESCE(p.es_prueba, false)
+          WHERE u.active AND (u.role = 'admin' OR u.roles_extra && ARRAY['admin']::user_role[])
+            AND (regexp_replace(lower(p.nombre), '[^a-z0-9]', '', 'g') LIKE 'iseih%' OR regexp_replace(lower(p.slug), '[^a-z0-9]', '', 'g') LIKE 'iseih%')`);
+      return new Set([...sas, ...delCampus].map((x) => x.id));
+    };
+    const usuarios = async () => new Set((await pool.query('SELECT id FROM users')).rows.map((u) => u.id));
+    const antes = await destinatarios();
+    const existianAntes = await usuarios();
     try {
       const r = await entregar(solicitud());
       expect(r.status).toBe(201);
@@ -130,15 +146,14 @@ describe('POST /api/certifex/solicitudes (desde el servidor de Certifex)', () =>
       expect(a.message).toContain('en Moodle: maria perez');
       expect(a.metadata).toMatchObject({ matriculaId: base, leadId: lead.id });
       // Dirigida: super admin y los admin del proyecto de ese campus (ISEIH), no el
-      // reparto general (que ve soporte) ni los admin de otros campus.
-      const { rows: sas } = await pool.query(
-        `SELECT id FROM users WHERE active AND (role = 'superadmin' OR roles_extra && ARRAY['superadmin']::user_role[])`);
-      const { rows: delCampus } = await pool.query(
-        `SELECT DISTINCT u.id FROM users u JOIN user_projects up ON up.user_id = u.id AND up.active
-           JOIN projects p ON p.id = up.project_id AND NOT COALESCE(p.es_prueba, false)
-          WHERE u.active AND (u.role = 'admin' OR u.roles_extra && ARRAY['admin']::user_role[])
-            AND (regexp_replace(lower(p.nombre), '[^a-z0-9]', '', 'g') LIKE 'iseih%' OR regexp_replace(lower(p.slug), '[^a-z0-9]', '', 'g') LIKE 'iseih%')`);
-      expect([...a.targetUserIds].sort()).toEqual([...new Set([...sas, ...delCampus].map((x) => x.id))].sort());
+      // reparto general (que ve soporte) ni los admin de otros campus. Se comparan solo los
+      // usuarios que existían antes y siguen después, y que eran destinatarios en los dos momentos.
+      const despues = await destinatarios();
+      const existenAhora = await usuarios();
+      const estable = (id) => existianAntes.has(id) && existenAhora.has(id);
+      const esperados = [...antes].filter((id) => despues.has(id) && estable(id)).sort();
+      const recibidos = [...a.targetUserIds].filter(estable).sort();
+      expect(recibidos).toEqual(esperados);
       expect(a.broadcast).toBeUndefined();
     } finally {
       await pool.query('UPDATE certifex_solicitudes SET lead_id = NULL WHERE lead_id = $1', [lead.id]);

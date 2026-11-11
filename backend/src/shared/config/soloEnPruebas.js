@@ -63,3 +63,20 @@ export function linksPagoActivos(env = process.env) {
 export function proyectosIAActivos(env = process.env) {
   return enPruebasOAprobado('PROYECTOS_IA_EN_PRODUCCION', env);
 }
+
+/**
+ * El plugin del CRM en cada Moodle (#679, PR #689): todo lo que ESCRIBE en un
+ * campus o lo cambia — la respuesta de la tutora por el plugin, el aviso de
+ * disponibilidad, el código de conexión, el repaso de los campus conectados y
+ * el aviso que el plugin manda al CRM (`/api/moodle-avisos`). Diego, revisión
+ * de la #689: «que no salga a producción sin verlo». Sin esto, al pasar
+ * `staging` a `main` el CRM de producción empezaría a escribir en los Moodle
+ * de los alumnos. Se aprueba con PLUGIN_MOODLE_EN_PRODUCCION=1.
+ *
+ * Apagado, la respuesta de la tutora sale como hasta ahora (con su token del
+ * campus) y el CRM no acepta avisos del plugin. El plugin también viene
+ * apagado de serie en el propio Moodle (ajustes del plugin).
+ */
+export function pluginMoodleActivo(env = process.env) {
+  return enPruebasOAprobado('PLUGIN_MOODLE_EN_PRODUCCION', env);
+}
