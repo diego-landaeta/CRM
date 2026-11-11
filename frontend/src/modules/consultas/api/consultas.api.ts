@@ -49,7 +49,18 @@ export interface MensajeConsulta {
 
 export interface EventoConsulta { tipo: string; at: string; quien: string | null; detalle: Record<string, unknown> | null }
 
+/** Quién está en el chat de grupo de la consulta (plugin 1.9.0), con su id de Moodle. */
+export interface ParticipanteChat { id: number; nombre: string | null; tutora: boolean; alumno: boolean }
+/** 'plugin': el chat del alumno con las tutoras de su curso · 'curso': la conversación de un grupo del curso (la leen todos sus alumnos). */
+export type TipoDeGrupo = 'plugin' | 'curso';
+
 export interface ConsultaDetalle extends ConsultaFila {
+  /** El chat de grupo del alumno con las tutoras del curso (#679, plugin 1.9.0); null = conversación privada. */
+  conversacion_grupo_id?: number | string | null;
+  /** Quién estaba en ese chat en el último mensaje. */
+  participantes?: ParticipanteChat[] | null;
+  /** De qué chat de grupo es (null en las privadas). */
+  grupo_tipo?: TipoDeGrupo | null;
   mensajes: MensajeConsulta[];
   eventos: EventoConsulta[];
   plazoHoras: number;

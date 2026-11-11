@@ -2411,6 +2411,78 @@
   ]
  },
  {
+  "id": "GET /api/consultas/campus/:projectId/plugin",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/campus/:projectId/plugin",
+  "relativa": "GET /campus/:projectId/plugin",
+  "controlador": "estadoDelPlugin",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/campus/:projectId/plugin/codigo",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/campus/:projectId/plugin/codigo",
+  "relativa": "POST /campus/:projectId/plugin/codigo",
+  "controlador": "codigoDeConexion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/consultas/campus/:projectId/plugin",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "DELETE",
+  "ruta": "/api/consultas/campus/:projectId/plugin",
+  "relativa": "DELETE /campus/:projectId/plugin",
+  "controlador": "desactivarPlugin",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/consultas/",
   "tipo": "ruta",
   "modulo": "consultas",

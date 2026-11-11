@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Paperclip, PaperPlaneRight, CheckCircle, Warning, ArrowsClockwise, X } from '@phosphor-icons/react';
+import { ArrowLeft, Paperclip, PaperPlaneRight, CheckCircle, Warning, ArrowsClockwise, X, UsersThree } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { Button } from '@/shared/components/ui/button';
 import Field from '@/shared/components/ui/Field';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
-import { consultasApi, type ConsultaDetalle } from '../api/consultas.api';
+import { consultasApi, type ConsultaDetalle, type ParticipanteChat, type TipoDeGrupo } from '../api/consultas.api';
 import { Semaforo } from './ConsultasPage';
 
 /*
@@ -33,6 +33,53 @@ const MAX_MB = 10;
 function mensajeDeError(e: unknown) {
   const err = e as { data?: { error?: string }; message?: string };
   return err?.data?.error || err?.message || 'Inténtalo de nuevo.';
+}
+
+// ─── Chat de grupo (#679, plugin 1.9.0) ──────────────────────────────────────
+
+/**
+ * La consulta es un chat de grupo (plugin 1.9.0). Se dice arriba, con las tutoras de dentro:
+ *  · 'plugin': el chat del alumno con las tutoras de su curso; todas lo ven y cualquiera responde;
+ *  · 'curso' (#285): la conversación de un grupo del curso, que leen TODOS sus alumnos.
+ */
+function ChatDeGrupo({ participantes, alumno, tipo }: { participantes: ParticipanteChat[]; alumno: string | null; tipo: TipoDeGrupo }) {
+  const tutoras = participantes.filter((p) => p.tutora).map((p) => p.nombre || 'Sin nombre');
+  const delCurso = tipo === 'curso';
+  const quien = delCurso
+    ? (tutoras.length ? `tutoras dentro: ${tutoras.join(', ')}` : 'sin ninguna tutora dentro')
+    : (tutoras.length
+      ? `${tutoras.join(', ')} y ${alumno || 'el alumno'}`
+      : `Solo ${alumno || 'el alumno'}: ahora no hay ninguna tutora disponible dentro`);
+  return (
+    <div role="note" aria-label={delCurso ? 'Conversación de un grupo del curso' : 'Chat de grupo'} data-testid="chat-de-grupo"
+      className="flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-4 py-2 text-secundario text-muted-foreground">
+      <UsersThree size={14} weight="bold" className="mt-[1px] shrink-0 text-foreground" aria-hidden />
+      <p className="min-w-0 flex-1 break-words">
+        <strong className="font-semibold text-foreground">{delCurso ? 'Grupo del curso' : 'Chat de grupo'}</strong>
+        {' · '}
+        <span>{quien}</span>
+        {!delCurso && <span className="hidden sm:inline">{' · '}todas lo ven y cualquiera responde, desde Moodle o desde aquí</span>}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Antes de responder en la conversación de un grupo del curso: la respuesta la leen todos
+ * sus alumnos, no solo el de la consulta. Obligatorio (revisión de la #689).
+ */
+function AvisoGrupoDelCurso() {
+  return (
+    <p role="note" data-testid="aviso-grupo-del-curso"
+      className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+      <Warning size={14} weight="fill" className="mt-[1px] shrink-0" aria-hidden />
+      <span>
+        <strong className="font-semibold">Lo leen todos los alumnos del grupo.</strong>
+        {' '}Esta consulta viene de la conversación de un grupo del curso: tu respuesta sale ahí, no en privado.
+        Para algo solo de este alumno, escríbele por su chat con las tutoras.
+      </span>
+    </p>
+  );
 }
 
 export default function ConsultaPage() {
@@ -152,6 +199,10 @@ export default function ConsultaPage() {
         </div>
       </header>
 
+      {c.conversacion_grupo_id != null && (
+        <ChatDeGrupo participantes={c.participantes || []} alumno={c.alumno_nombre} tipo={c.grupo_tipo ?? 'plugin'} />
+      )}
+
       {c.puedes === 'admin' && (
         <section className="rounded-lg border border-border bg-card p-4">
           <Field label="Reasignar a otro tutor" hint="Solo tutores matriculados en este campus y disponibles.">
@@ -214,6 +265,7 @@ export default function ConsultaPage() {
 
       {c.puedes === 'tutor' && (
         <form onSubmit={enviar} noValidate className="rounded-lg border border-border bg-card p-4 space-y-3">
+          {c.grupo_tipo === 'curso' && <AvisoGrupoDelCurso />}
           <Field label="Tu respuesta" htmlFor="consulta-respuesta" required
             error={faltaTexto ? 'Falta la respuesta: escríbela aquí.' : undefined}
             hint="Le llega al alumno en el campus, como un mensaje tuyo.">

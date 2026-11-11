@@ -16,6 +16,7 @@
   si falta una, Moodle contesta con una excepción y aquí se traduce a algo que se
   entienda, no a «error».
 */
+import { pluginMoodleActivo } from '../config/soloEnPruebas.js';
 
 const TIEMPO_MAXIMO_MS = parseInt(process.env.MOODLE_TIMEOUT_MS || '10000', 10);
 
@@ -62,6 +63,9 @@ export async function llamar({ url, token }, funcion, parametros = {}, { fetchIm
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: cuerpo.toString(),
       signal: control.signal,
+      // Un Moodle no redirige su API. Seguir una redirección permitiría que una dirección
+      // pública llevara al CRM a la red interna (la comprobación de la dirección es previa).
+      redirect: 'error',
     });
   } catch (err) {
     const tarde = err?.name === 'AbortError';
@@ -223,15 +227,48 @@ export async function enviarMensaje(conexion, paraMoodleUserId, texto, opciones)
   return { id: Number(m.msgid), conversacionId: Number(m.conversationid) || null };
 }
 
+/**
+ * Manda un mensaje privado EN NOMBRE de la tutora, por el plugin del CRM
+ * (`local_crm_enviar_mensaje`, #679), con el token del campus: sin el token
+ * personal de cada tutora. El plugin solo deja enviar como personal del campus.
+ *
+ * Con `conversacionId` (plugin 1.9.0) va al chat de grupo del alumno con las tutoras del
+ * curso, donde lo ven todas; sin él, a la conversación privada de los dos.
+ *
+ * Solo en pruebas mientras no se apruebe (PLUGIN_MOODLE_EN_PRODUCCION): apagado no llama
+ * a nadie y falla con 'APAGADO', aunque quien llame se haya saltado su propia comprobación.
+ */
+export async function enviarComoTutor(conexion, desdeMoodleUserId, paraMoodleUserId, texto, { conversacionId = null, ...opciones } = {}) {
+  if (!pluginMoodleActivo()) {
+    throw new MoodleError('El plugin del CRM en Moodle aún no está aprobado en producción.', 'APAGADO');
+  }
+  const r = await llamar(conexion, 'local_crm_enviar_mensaje', {
+    desde: desdeMoodleUserId, para: paraMoodleUserId, texto,
+    ...(conversacionId ? { conversacionid: Number(conversacionId) } : {}),
+  }, opciones);
+  if (!r || !(Number(r.id) > 0)) throw new MoodleError('El campus no ha aceptado el mensaje.', 'NO_ENVIADO');
+  return { id: Number(r.id), conversacionId: Number(r.conversacion_id) || null };
+}
+
 /** El texto de un mensaje de Moodle (viene en HTML) como texto normal. */
 export function textoDeMoodle(html) {
   return String(html || '')
+    // Un enlace con texto propio conserva su dirección; una imagen se dice, no desaparece.
+    .replace(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_, url, txt) => {
+      const limpio = txt.replace(/<[^>]+>/g, '').trim();
+      return !limpio || limpio === url ? url : `${limpio} (${url})`;
+    })
+    .replace(/<img\s[^>]*>/gi, (img) => {
+      const alt = /alt="([^"]*)"/i.exec(img)?.[1]?.trim();
+      return alt ? `[Imagen: ${alt}]` : '[Imagen]';
+    })
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(Number(n)); } catch { return ''; } })
     .replace(/\r\n?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
