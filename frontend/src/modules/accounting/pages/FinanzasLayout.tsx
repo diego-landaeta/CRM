@@ -6,6 +6,7 @@ import {
 } from '@phosphor-icons/react';
 import SubNav from '@/shared/components/ui/SubNav';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 export const TABS = [
   { label: 'Dashboard', to: '/finanzas', icon: ChartBar },
@@ -60,7 +61,8 @@ export default function FinanzasLayout() {
   const { pathname } = useLocation();
   const conSubmenu = !SIN_SUBMENU.includes(pathname.replace(/\/$/, ''));
   const { activeProject } = useProjectContext() as { activeProject: { type?: string } | null };
-  const tabs = activeProject?.type === 'ia'
+  // Solo en pruebas (`shared/lib/proyectosIA`): en /crm, las pestañas de siempre.
+  const tabs = esProyectoIA(activeProject)
     // En IA los cobros no entran por Stripe: la pestaña se llama como lo que enseña.
     ? TABS.filter((t) => EN_IA.has(t.to)).map((t) => (t.to === '/finanzas/pagos-stripe' ? { ...t, label: 'Cobros' } : t))
     : TABS;

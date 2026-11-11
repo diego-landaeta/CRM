@@ -25,6 +25,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { formatDate } from '@/shared/lib/format';
 import { ponerAmbito, ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -49,7 +50,8 @@ export default function AccountingDashboardPage() {
    * Lo que si aplica se queda: lo cobrado, los gastos --que los hay, del
    * software de la propia app-- y el balance.
    */
-  const esIA = activeProject?.type === 'ia';
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
 
   /**
    * Y lo que SÍ tiene un proyecto IA, aqui mismo.
