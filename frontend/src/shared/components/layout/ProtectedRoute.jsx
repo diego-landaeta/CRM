@@ -58,7 +58,8 @@ export default function ProtectedRoute({ children }) {
   // entrar en Prospectos, que es justo lo que se viene a arreglar al dejar
   // poner mas de un rol.
   if (soloEsTutor(user) && !tutorPuede(location.pathname)) {
-    return <Navigate to="/mis-cursos" replace />;
+    // La tutora aterriza en «Mi campus» (#681), que es donde trabaja.
+    return <Navigate to="/mis-cursos/campus" replace />;
   }
 
   if (soloEsColaborador(user) && !colaboradorPuede(location.pathname)) {

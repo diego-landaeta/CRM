@@ -87,11 +87,27 @@ function idDeConsulta(req, _res, next) {
   if (/^\d{1,10}$/.test(id) && Number(id) > 0 && Number(id) <= 2147483647) return next();
   return next(new AppError('Consulta no encontrada', 404, 'NOT_FOUND'));
 }
+// Lo mismo con el :rid de una respuesta guardada.
+function idDeRespuesta(req, _res, next) {
+  const { rid } = req.params;
+  if (/^\d{1,10}$/.test(rid) && Number(rid) > 0 && Number(rid) <= 2147483647) return next();
+  return next(new AppError('Respuesta no encontrada', 404, 'NOT_FOUND'));
+}
+
+// Respuestas guardadas (#679): las suyas y las de sus campus. Antes que /:id.
+router.get('/respuestas', ctrl.respuestas);
+router.post('/respuestas', ctrl.crearRespuesta);
+router.post('/respuestas/importar', ctrl.importarRespuestas);
+router.put('/respuestas/:rid', idDeRespuesta, ctrl.cambiarRespuesta);
+router.delete('/respuestas/:rid', idDeRespuesta, ctrl.borrarRespuesta);
 
 router.get('/', administracion, ctrl.panel);
 router.get('/:id', idDeConsulta, ctrl.ver);
+router.get('/:id/contexto', idDeConsulta, ctrl.contexto);
 router.post('/:id/responder', idDeConsulta, conAdjuntos, ctrl.responder);
 router.post('/:id/cerrar', idDeConsulta, ctrl.cerrar);
+// Nota interna (#679): para el relevo y coordinación; el alumno no la ve.
+router.post('/:id/notas', idDeConsulta, ctrl.anotar);
 router.get('/:id/tutores', idDeConsulta, gestion, ctrl.tutoresPosibles);
 router.post('/:id/reasignar', idDeConsulta, gestion, ctrl.reasignar);
 
