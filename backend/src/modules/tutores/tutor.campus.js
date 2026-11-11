@@ -24,7 +24,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
-  usuarioPorCorreo, usuarioPor, estadoDeLaMatricula, MoodleError, cuentaDelToken, cursosDe, matriculadosDe,
+  usuarioPorCorreo, usuarioPor, estadoDeLaMatricula, MoodleError, cuentaDelToken, cuentaDelCampus, cursosDe, matriculadosDe,
 } from '../../shared/services/moodle.client.js';
 
 // Tutor = rol principal o añadido. `roles_extra` es un array de ENUM: se pide
@@ -244,19 +244,27 @@ const errorDelCampus = (err, porDefecto) => (err instanceof AppError ? err
 
 /**
  * Que esa cuenta se pueda vincular a una tutora en ese campus: que sea profesora
- * (`editingteacher` o `teacher`) de al menos un curso del campus y que no sea la
- * cuenta del token, con la que el propio CRM habla con el campus.
+ * (`editingteacher` o `teacher`) de al menos un curso del campus, que no sea la
+ * cuenta del token, con la que el propio CRM habla con el campus, y que no sea
+ * administradora del sitio aunque dé clase (Diego: «nunca el administrador del sitio»).
  *
- * El administrador del sitio: Moodle no dice por su API si una cuenta cualquiera
- * es administradora del sitio (solo lo dice de la del token). Si no da clase en
- * ningún curso, aquí se rechaza por no ser profesora; si además está matriculada
- * como profesora, la para el plugin (1.10.1): no envía ni califica como el
- * administrador del sitio.
+ * El administrador del sitio: la API de Moodle solo dice si lo es la cuenta del token,
+ * así que se pregunta al plugin (`local_crm_cuenta`, 1.10.2). Con un plugin anterior no
+ * se puede saber: se sigue como antes (si no da clase, se rechaza por no ser profesora;
+ * si da clase, se vincula, y el plugin, desde la 1.10.1, no envía ni califica como él)
+ * y queda dicho en el log.
  */
 async function exigirCuentaDeProfesora(conexion, cuenta, opciones) {
   const delToken = await cuentaDelToken(conexion, opciones);
   if (delToken.id && delToken.id === Number(cuenta.id)) {
     throw new AppError('Esa es la cuenta con la que el CRM se conecta al campus, no la de una tutora.', 409, 'NO_ES_PROFESORA');
+  }
+  const datos = await cuentaDelCampus(conexion, cuenta.id, opciones);
+  if (!datos) {
+    logger.warn({ campus: conexion.url, moodleUserId: Number(cuenta.id) },
+      'tutores/campus: el plugin del campus no tiene local_crm_cuenta (anterior a la 1.10.2): no se puede saber si es el administrador del sitio');
+  } else if (datos.esAdministrador) {
+    throw new AppError('Esa cuenta es la del administrador del sitio: no se vincula a una tutora aunque dé clase. Vincula la cuenta con la que ella da clase.', 409, 'ADMIN_DEL_SITIO');
   }
   // De uno en uno y parando en el primero: lo normal es que lo sea del primer curso.
   for (const curso of await cursosDe(conexion, cuenta.id, opciones)) {
