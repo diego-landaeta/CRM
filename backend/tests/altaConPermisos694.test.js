@@ -63,7 +63,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const todos = (await q('SELECT id FROM users WHERE email LIKE $1', [`%@${MARCA}.test`])).map((r) => r.id);
-  await q('DELETE FROM permission_change_log WHERE usuario_id = ANY($1::int[]) OR quien_id = ANY($1::int[])', [todos]).catch(() => {});
+  // Antes borraba de `permission_change_log`, que no existe, y el .catch se lo
+  // tragaba: los apuntes quedaban huérfanos en el Registro (revisión de la #698).
+  await q('DELETE FROM permisos_registro WHERE usuario_id = ANY($1::int[]) OR quien_id = ANY($1::int[])', [todos]);
   await q('DELETE FROM user_permission_overrides WHERE user_id = ANY($1::int[])', [todos]);
   await q('DELETE FROM user_activity_log WHERE user_id = ANY($1::int[])', [todos]).catch(() => {});
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [todos]);
@@ -81,6 +83,18 @@ describe('#694 · la vista previa del alta', () => {
     expect(con.mapa[DAR]).toBe(true);
     expect(con.origenes[DAR]).toMatchObject({ tipo: 'excepcion' });
     expect(con.puedeEditar).toBe(true);
+  });
+
+  it('si la persona nueva es admin, un admin no puede ajustarle nada (y se le dice por qué)', async () => {
+    const r = await editar.vistaPreviaDeAlta({ role: 'admin' }, { userId: ADMIN, role: 'admin' });
+    expect(r.puedeEditar).toBe(false);
+    expect(r.motivo).toMatch(/superadmin/);
+    const comoExtra = await editar.vistaPreviaDeAlta({ role: 'gestor', roles_extra: ['admin'] }, { userId: ADMIN, role: 'admin' });
+    expect(comoExtra.puedeEditar).toBe(false);
+    // El superadmin sí.
+    const s = await editar.vistaPreviaDeAlta({ role: 'admin' }, { userId: SUPER, role: 'superadmin' });
+    expect(s.puedeEditar).toBe(true);
+    expect(s.motivo).toBeNull();
   });
 
   it('a un admin le dice qué tiene él, para no ofrecerle dar lo que no tiene', async () => {
@@ -102,6 +116,9 @@ describe('#694 · crear con excepciones', () => {
     expect(e.mapa[DAR]).toBe(true);
     expect(e.excepciones[DAR]).toBe(true);
     expect(correos).toContain(email);
+    // Y deja su apunte en el Registro, marcado como alta (no como edición de la ficha).
+    const apuntes = await q('SELECT quien_id, clave, despues, origen FROM permisos_registro WHERE usuario_id = $1', [cuerpo.data.id]);
+    expect(apuntes).toEqual([expect.objectContaining({ quien_id: SUPER, clave: DAR, despues: 'sí', origen: 'alta_usuario' })]);
   });
 
   it('quien da lo que no tiene: 403 y no se crea nadie', async () => {

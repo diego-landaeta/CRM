@@ -336,9 +336,20 @@ export async function vistaPreviaDeAlta({ role, roles_extra = [], excepciones = 
   const ajustesRol = await model.ajustesDeRoles();
   const { mapa, origenes } = resolverPermisos({ role, roles_extra, excepciones, ajustesRol });
   const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+  // Revisión de la #698: la misma regla que `exigirExcepcionesDeAlta`. Si la
+  // persona nueva es admin, sus excepciones solo las pone el superadmin; la
+  // pantalla no las ofrece para luego dar 403 al crear.
+  const esAdmin = [role, ...(roles_extra || [])].some((r) => r === 'admin' || r === 'superadmin');
+  let puedeEditar = mios ? mios['users.excepciones'] === true : true;
+  let motivo = null;
+  if (puedeEditar && mios && esAdmin) {
+    puedeEditar = false;
+    motivo = 'Los permisos de un admin los cambia el superadmin';
+  }
   return {
     mapa, origenes,
-    puedeEditar: mios ? mios['users.excepciones'] === true : true,
+    puedeEditar,
+    motivo,
     misPermisos: mios ? Object.keys(mios).filter((k) => mios[k] === true) : null,
   };
 }
@@ -372,7 +383,7 @@ export async function exigirExcepcionesDeAlta(quien, { role, roles_extra = [] },
  * Cambia excepciones de una persona: `{ clave: true | false | null }` (null =
  * como diga su rol). Solo las claves que se mandan; las demás, igual.
  */
-export async function guardarExcepciones(userId, cambios, quien) {
+export async function guardarExcepciones(userId, cambios, quien, { origen = 'ficha_usuario' } = {}) {
   soloClavesDelCatalogo(cambios);
   return enTransaccion(async (db) => {
     const datos = await model.datosDePermisos(userId, db);
@@ -409,7 +420,8 @@ export async function guardarExcepciones(userId, cambios, quien) {
         quienId: quien.userId, destino: 'usuario', usuarioId: userId, clave,
         antes: exAntes === undefined ? `como su rol (${antes[clave] ? 'sí' : 'no'})` : (exAntes ? 'sí' : 'no'),
         despues: exDespues === null || exDespues === undefined ? `como su rol (${despues[clave] ? 'sí' : 'no'})` : (exDespues ? 'sí' : 'no'),
-        origen: 'ficha_usuario',
+        // 'alta_usuario' cuando vienen con el alta (#694): así no se confunden con una edición posterior.
+        origen,
       });
     }
     return despues;

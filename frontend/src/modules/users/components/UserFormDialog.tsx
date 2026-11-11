@@ -118,8 +118,8 @@ export default function UserFormDialog({
   const llevaEmpresa = role === 'admin' || esColaborador;
   const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
   // Facturación, fechas de facturas y el WhatsApp del CRM ya no son casillas de
-  // aquí (#423): son permisos del catálogo y se dan en «Ver permisos», con su
-  // registro de quién y cuándo.
+  // aquí (#423): son permisos del catálogo y se dan en el apartado «Permisos» de
+  // la ficha (o ya en el alta, #694), con su registro de quién y cuándo.
 
   // #694: en el alta, las excepciones viajan con el formulario y se crean con él.
   const [excepciones, setExcepciones] = useState<Record<string, boolean>>({});

@@ -167,6 +167,8 @@ export interface VistaPreviaDeAlta {
   mapa: PermissionMap;
   origenes: Record<string, Origen>;
   puedeEditar: boolean;
+  /** Por qué no puede ajustarlo, cuando no es solo que le falte el permiso (la persona nueva es admin). */
+  motivo?: string | null;
   /** Lo que tiene quien da de alta (null = superadmin, todo): no se ofrece dar más. */
   misPermisos: string[] | null;
 }

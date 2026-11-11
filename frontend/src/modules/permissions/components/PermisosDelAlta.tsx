@@ -46,6 +46,13 @@ export default function PermisosDelAlta({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave]);
 
+  // Si ya no puede ajustarlas (por ejemplo, ha pasado el rol a admin y no es
+  // superadmin), las excepciones que llevaba se quitan: si no, el alta daría 403.
+  useEffect(() => {
+    if (vista && !vista.puedeEditar && Object.keys(excepciones).length) onCambiar({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vista]);
+
   function elegir(c: string, e: Eleccion) {
     const siguiente = { ...excepciones };
     if (e === 'rol') delete siguiente[c]; else siguiente[c] = e === 'si';
@@ -67,6 +74,7 @@ export default function PermisosDelAlta({
           {cuantas > 0 && ` · ${cuantas} ${cuantas === 1 ? 'excepción' : 'excepciones'} suyas`}
           {vista && !vista.puedeEditar && ' · solo lectura'}
         </p>
+        {vista?.motivo && <p className="text-secundario text-muted-foreground">{vista.motivo}.</p>}
       </div>
       {error && <p className="rounded-lg bg-destructive-soft p-3 text-normal text-destructive-soft-foreground">{error}</p>}
       {(!vista || !catalogo) && !error && <p className="text-normal text-muted-foreground">Cargando…</p>}

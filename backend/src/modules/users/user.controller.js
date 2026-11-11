@@ -113,7 +113,7 @@ export async function create(req, res, next) {
     }
     const user = await userService.create(datos, {
       porUserId: req.user?.userId ?? null,
-      alCrear: hayExcepciones ? (u) => editar.guardarExcepciones(u.id, excepciones, req.user) : null,
+      alCrear: hayExcepciones ? (u) => editar.guardarExcepciones(u.id, excepciones, req.user, { origen: 'alta_usuario' }) : null,
     });
     res.status(201).json({ success: true, data: user });
   } catch (err) { next(err); }

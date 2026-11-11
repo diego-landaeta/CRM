@@ -139,4 +139,21 @@ describe('#694 · en el alta: lo que trae el rol, y sus excepciones antes de cre
     expect(si).toBeDisabled();
     expect(si).toHaveAttribute('title', 'No lo puedes dar: tú no lo tienes');
   });
+
+  it('si deja de poder ajustarlas (la persona nueva es admin), se quitan las que llevaba y se dice por qué', async () => {
+    // Revisión de la #698: con excepciones puestas, pasar a un rol que no le
+    // toca ajustar haría que el alta diera 403 al crear.
+    let esAdmin = false;
+    api.vistaPreviaDeAlta.mockImplementation(async ({ excepciones }) => (esAdmin
+      ? { ...vista(excepciones), puedeEditar: false, motivo: 'Los permisos de un admin los cambia el superadmin' }
+      : vista(excepciones)));
+    render(<UserFormDialog {...base} user={null} />);
+    await esperar();
+    verTodo(); abrirComercial();
+    esAdmin = true;
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Excepción para Exportar prospectos' })).getByRole('radio', { name: 'Sí' }));
+    await waitFor(() => expect(api.vistaPreviaDeAlta).toHaveBeenLastCalledWith(expect.objectContaining({ excepciones: {} })));
+    expect(await screen.findByText('Los permisos de un admin los cambia el superadmin.')).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
 });
