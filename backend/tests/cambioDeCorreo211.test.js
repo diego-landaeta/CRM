@@ -23,7 +23,7 @@ const MARCA = `C211${Date.now().toString(36)}`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const one = async (sql, p) => (await q(sql, p))[0];
 const ids = { users: [] };
-let ANA; let OTRA; let TUTOR; let SUPER;
+let ANA; let OTRA; let TUTOR;
 let enviado = null;
 const enviar = async (m) => { enviado = m; return { sent: true }; };
 // El correo sale sin esperar (revisión de Diego, #688): se deja correr la cola.
@@ -38,7 +38,11 @@ beforeAll(async () => {
     return u.id;
   };
   ANA = await persona('ana'); OTRA = await persona('otra');
-  TUTOR = await persona('tutor', 'tutor'); SUPER = await persona('super', 'superadmin');
+  // Sin superadmin de prueba: otras pruebas (certifexDiplomas) cuentan los
+  // superadmin de la base mientras corren en paralelo, y uno que aparece y
+  // desaparece se las rompe. Para cambiarle el correo a una gestora basta
+  // cualquiera (el superadmin solo se exige si la persona lo es).
+  TUTOR = await persona('tutor', 'tutor');
 }, 60000);
 
 beforeEach(async () => {
@@ -169,11 +173,11 @@ describe('#211 · el código', () => {
     expect(vivas).toHaveLength(1);
   });
 
-  it('si el superadmin le cambia el correo, el código pendiente ya no vale (no deshace su cambio)', async () => {
+  it('si administración le cambia el correo, el código pendiente ya no vale (no deshace su cambio)', async () => {
     await pedir({ userId: ANA, emailNuevo: NUEVO(), enviar });
     const pendiente = enviado.codigo;
     const puesto = `puesto.por.super@${MARCA.toLowerCase()}.test`;
-    await cambiarCorreo(ANA, puesto, { porUserId: SUPER });
+    await cambiarCorreo(ANA, puesto, { porUserId: OTRA });
     await expect(confirmarCodigo({ userId: ANA, codigo: pendiente })).rejects.toMatchObject({ code: 'SIN_CODIGO' });
     expect(await correoDe(ANA)).toBe(puesto);
   });
