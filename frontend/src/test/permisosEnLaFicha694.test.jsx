@@ -145,7 +145,7 @@ describe('#694 · en el alta: lo que trae el rol, y sus excepciones antes de cre
     // toca ajustar haría que el alta diera 403 al crear.
     let esAdmin = false;
     api.vistaPreviaDeAlta.mockImplementation(async ({ excepciones }) => (esAdmin
-      ? { ...vista(excepciones), puedeEditar: false, motivo: 'Los permisos de un admin los cambia el superadmin' }
+      ? { ...vista(excepciones), puedeEditar: false, motivo: 'Los permisos de un admin los cambia el superadmin.' }
       : vista(excepciones)));
     render(<UserFormDialog {...base} user={null} />);
     await esperar();
@@ -155,5 +155,23 @@ describe('#694 · en el alta: lo que trae el rol, y sus excepciones antes de cre
     await waitFor(() => expect(api.vistaPreviaDeAlta).toHaveBeenLastCalledWith(expect.objectContaining({ excepciones: {} })));
     expect(await screen.findByText('Los permisos de un admin los cambia el superadmin.')).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
+
+  it('sin uno de sus campus elegido no deja tocarlas, y dice por qué; al marcar el campus, se lo pregunta al servidor', async () => {
+    api.vistaPreviaDeAlta.mockImplementation(async ({ projectIds = [] }) => (projectIds.length
+      ? vista({})
+      : { ...vista({}), puedeEditar: false, motivo: 'Para darle permisos, ponle primero uno de tus campus.' }));
+    const { container } = render(<UserFormDialog {...base} user={null} />);
+    await esperar();
+    expect(api.vistaPreviaDeAlta).toHaveBeenLastCalledWith(expect.objectContaining({ projectIds: [] }));
+    expect(screen.getByText('Para darle permisos, ponle primero uno de tus campus.')).toBeInTheDocument();
+    verTodo(); abrirComercial();
+    expect(screen.queryByRole('radiogroup', { name: 'Excepción para Exportar prospectos' })).toBeNull();
+    const campus = container.querySelector('input[type="checkbox"][value="1"]') || screen.getAllByRole('checkbox').find((c) => /ISEIH/.test(c.closest('label')?.textContent || ''));
+    fireEvent.click(campus);
+    await esperar();
+    expect(api.vistaPreviaDeAlta).toHaveBeenLastCalledWith(expect.objectContaining({ projectIds: [1] }));
+    expect(screen.queryByText('Para darle permisos, ponle primero uno de tus campus.')).toBeNull();
+    expect(screen.getByRole('radiogroup', { name: 'Excepción para Exportar prospectos' })).toBeInTheDocument();
   });
 });

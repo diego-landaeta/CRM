@@ -167,13 +167,13 @@ export interface VistaPreviaDeAlta {
   mapa: PermissionMap;
   origenes: Record<string, Origen>;
   puedeEditar: boolean;
-  /** Por qué no puede ajustarlo, cuando no es solo que le falte el permiso (la persona nueva es admin). */
+  /** Por qué no se pueden dar excepciones (la persona nueva es admin, o falta un campus suyo), o null. */
   motivo?: string | null;
   /** Lo que tiene quien da de alta (null = superadmin, todo): no se ofrece dar más. */
   misPermisos: string[] | null;
 }
 
-export async function vistaPreviaDeAlta(datos: { role: string; roles_extra: string[]; excepciones: PermissionMap }): Promise<VistaPreviaDeAlta> {
+export async function vistaPreviaDeAlta(datos: { role: string; roles_extra: string[]; excepciones: PermissionMap; projectIds?: number[] }): Promise<VistaPreviaDeAlta> {
   const res = await client.post('/permissions/vista-previa-alta', datos);
   return res.data as VistaPreviaDeAlta;
 }
