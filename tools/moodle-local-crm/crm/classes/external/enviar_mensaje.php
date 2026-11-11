@@ -68,22 +68,22 @@ class enviar_mensaje extends external_api {
         foreach ([$p['desde'], $p['para']] as $id) {
             $u = \core_user::get_user($id, 'id, deleted, suspended');
             if (!$u || $u->deleted || $u->suspended) {
-                throw new \invalid_parameter_exception('Usuario no válido: ' . $id);
+                throw new \moodle_exception('usuarionovalido', 'local_crm', '', $id);
             }
         }
         if ($p['desde'] === $p['para']) {
-            throw new \invalid_parameter_exception('No se puede enviar un mensaje a uno mismo.');
+            throw new \moodle_exception('enviaramismo', 'local_crm');
         }
         // Nunca como el administrador del sitio (1.10.1): no es una tutora. `es_personal`
         // ya no lo acepta; se dice aparte para que el error explique qué pasa.
         if (is_siteadmin($p['desde'])) {
-            throw new \invalid_parameter_exception('No se puede enviar como el administrador del sitio.');
+            throw new \moodle_exception('enviarcomoadmin', 'local_crm');
         }
         if (!\local_crm\aviso::es_personal($p['desde'])) {
-            throw new \invalid_parameter_exception('Solo se puede enviar como personal del campus.');
+            throw new \moodle_exception('enviarnopersonal', 'local_crm');
         }
         if (trim(strip_tags($p['texto'])) === '') {
-            throw new \invalid_parameter_exception('El mensaje está vacío.');
+            throw new \moodle_exception('mensajevacio', 'local_crm');
         }
 
         if ((int) $p['conversacionid'] > 0) {
@@ -112,17 +112,17 @@ class enviar_mensaje extends external_api {
             $curso = \local_crm\chat_grupo::curso_de_conversacion($conversacionid);
             if (!$curso || !in_array($desde, \local_crm\chat_grupo::tutoras_dentro($conversacionid, $curso), true)
                     || !\core_message\api::is_user_in_conversation($alumno, $conversacionid)) {
-                throw new \invalid_parameter_exception('Esa conversación no es un chat de grupo de ese alumno con esa tutora.');
+                throw new \moodle_exception('chatnoesdeellos', 'local_crm');
             }
             return $conversacionid;
         }
         if ((int) $fila->userid !== $alumno) {
-            throw new \invalid_parameter_exception('Esa conversación no es el chat de grupo de ese alumno.');
+            throw new \moodle_exception('chatnoesdelalumno', 'local_crm');
         }
         if (!\core_message\api::is_user_in_conversation($desde, $conversacionid)) {
             $curso = \context_course::instance((int) $fila->courseid);
             if (!\local_crm\chat_directo::es_tutora($curso, $desde)) {
-                throw new \invalid_parameter_exception('Solo responde en el chat de grupo una profesora de ese curso.');
+                throw new \moodle_exception('chatsoloprofesora', 'local_crm');
             }
             \core_message\api::add_members_to_conversation([$desde], $conversacionid);
         }

@@ -67,20 +67,20 @@ class calificar extends external_api {
         // Nunca como el administrador del sitio (1.10.1, revisión de la #689): tiene todos los
         // permisos, así que `mod/assign:grade` no lo pararía.
         if (is_siteadmin($tutora)) {
-            throw new \invalid_parameter_exception('No se puede calificar como el administrador del sitio.');
+            throw new \moodle_exception('calificarcomoadmin', 'local_crm');
         }
         if (!has_capability('mod/assign:grade', $contexto, $tutora)) {
-            throw new \invalid_parameter_exception('Esa persona no puede calificar esta tarea.');
+            throw new \moodle_exception('calificarsinpermiso', 'local_crm');
         }
         if (!is_enrolled($contexto, $p['alumno'], 'mod/assign:submit')) {
-            throw new \invalid_parameter_exception('El alumno no está en esta tarea.');
+            throw new \moodle_exception('alumnonoentarea', 'local_crm');
         }
         if (groups_get_activity_groupmode($cm) == SEPARATEGROUPS
                 && !has_capability('moodle/site:accessallgroups', $contexto, $tutora)) {
             $suyos = groups_get_user_groups($cm->course, $tutora->id)[$cm->groupingid] ?? [];
             $delalumno = groups_get_user_groups($cm->course, $p['alumno'])[$cm->groupingid] ?? [];
             if (!array_intersect($suyos, $delalumno)) {
-                throw new \invalid_parameter_exception('El alumno es de otro grupo: no lo puede calificar.');
+                throw new \moodle_exception('alumnootrogrupo', 'local_crm');
             }
         }
 
@@ -88,10 +88,10 @@ class calificar extends external_api {
         $maxima = (float) $assign->get_instance()->grade;
         // Con escala (grade < 0) o sin nota (0), una cifra no tiene sentido: se corrige en Moodle.
         if ($maxima <= 0) {
-            throw new \invalid_parameter_exception('Esta tarea se califica con escala o sin nota: corrígela en el campus.');
+            throw new \moodle_exception('calificarconescala', 'local_crm');
         }
         if ($p['nota'] < 0 || $p['nota'] > $maxima) {
-            throw new \invalid_parameter_exception('La nota tiene que estar entre 0 y ' . format_float($maxima, 2));
+            throw new \moodle_exception('notafueraderango', 'local_crm', '', format_float($maxima, 2));
         }
 
         // Se guarda COMO la tutora: así figura ella como quien califica, como en el campus.

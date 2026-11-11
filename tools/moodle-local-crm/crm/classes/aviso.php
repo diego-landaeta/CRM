@@ -68,7 +68,10 @@ class aviso {
 
     /** Lo que el CRM necesita de un usuario. */
     private static function usuario(int $userid): ?array {
-        $u = \core_user::get_user($userid, 'id, firstname, lastname, email, deleted');
+        // Todos los campos del nombre: `fullname()` los usa (fonéticos, segundo nombre…) y,
+        // con el modo de depuración alto, avisa de los que faltan.
+        $nombre = implode(', ', \core_user\fields::for_name()->get_required_fields());
+        $u = \core_user::get_user($userid, 'id, email, deleted, ' . $nombre);
         if (!$u || $u->deleted) {
             return null;
         }
