@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, ArrowsLeftRight, ArrowSquareOut, WebhooksLogo } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import usePermission from '@/shared/hooks/usePermission';
-import { useAuth } from '@/contexts/AuthContext';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { ponerAmbito, TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { moduloEncendido } from '@/shared/lib/modulos';
@@ -37,9 +36,9 @@ export default function WebhooksResumenPage() {
     activeIssuer: { nombre?: string } | null;
     switchProject?: (id: number) => void;
   };
-  const { can, tieneRol } = usePermission();
-  // Quien lleva un equipo comercial ve las decisiones de asignación recortadas (#704).
-  const llevaEquipo = Boolean((useAuth() as { user?: { lleva_equipo?: boolean } | null })?.user?.lleva_equipo);
+  // `llevaEquipo`: quien lleva un equipo comercial ve las decisiones de
+  // asignación recortadas a su equipo (#704).
+  const { can, tieneRol, llevaEquipo } = usePermission();
   const delAmbito = useProyectosDelAmbito<Campus & { sociedad_emisora_id?: number | null }>();
 
   const campusFijo = !activeIssuerId && activeProject?.id && activeProject.id !== TODOS_LOS_PROYECTOS

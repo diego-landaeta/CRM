@@ -33,7 +33,7 @@ export type GrupoId = 'captacion' | 'admision' | 'pagos' | 'mensajeria' | 'salid
 export const GRUPOS: ReadonlyArray<{ id: GrupoId; titulo: string; detalle: string }> = [
   { id: 'captacion', titulo: 'Captación de prospectos', detalle: 'Lo que mete prospectos en el CRM' },
   { id: 'admision', titulo: 'Admisión y matrículas', detalle: 'Solicitudes de admisión con sus documentos' },
-  { id: 'pagos', titulo: 'Pagos y ventas', detalle: 'Cobros y pedidos que avisan al CRM' },
+  { id: 'pagos', titulo: 'Pagos y ventas', detalle: 'Cobros y pedidos que avisan al CRM, y el aviso que el CRM manda con cada transferencia' },
   { id: 'mensajeria', titulo: 'Mensajería', detalle: 'Mensajes que entran por WhatsApp, la web y el Moodle' },
   { id: 'salida', titulo: 'Avisos que salen del CRM', detalle: 'El CRM avisa a otro sistema' },
 ];
@@ -262,10 +262,18 @@ type FormFila = { id: number; nombre: string; active: boolean; submissions_count
  * Los formularios de la web son muchos y sus envíos se ven en su pantalla;
  * pedir el historial de cada uno era una petición por formulario y campus.
  */
-const formulariosDe = (kind: 'webhook' | 'form', enlace: (f: FormFila) => string, conAvisos: boolean) => (ctx: Contexto) => {
+const formulariosDe = (
+  kind: 'webhook' | 'form',
+  enlace: (f: FormFila) => string,
+  conAvisos: boolean,
+  // Cuáles de la lista van en esta tarjeta. Los webhooks con destino Matrícula
+  // van en «Admisión y matrículas» y los demás en «Captación»: la misma
+  // petición (el pedidor la hace una vez) repartida en dos tarjetas.
+  cuales: (f: FormFila) => boolean = () => true,
+) => (ctx: Contexto) => {
   const pedir = ctx.pedir || datos;
   return porCampus(ctx.campus, async (c) => {
-    const filas = await pedir<FormFila[]>(`/forms?projectId=${c.id}&kind=${kind}`);
+    const filas = (await pedir<FormFila[]>(`/forms?projectId=${c.id}&kind=${kind}`)).filter(cuales);
     return Promise.all(filas.map(async (f) => ({
       clave: `${kind}-${f.id}`,
       nombre: f.nombre,
@@ -315,7 +323,24 @@ export const TIPOS: TipoWebhook[] = [
     requiere: ['forms.view'],
     moduloCampus: 'webhooks',
     deUnCampus: true,
-    cargar: formulariosDe('webhook', (f) => `/conexion/webhooks/prospectos/${f.id}`, true),
+    cargar: formulariosDe('webhook', (f) => `/conexion/webhooks/prospectos/${f.id}`, true, (f) => f.destination !== 'matricula'),
+  },
+  {
+    // Los mismos webhooks de Captación › Webhooks, pero con destino Matrícula:
+    // lo que reciben son solicitudes de admisión, así que van en su grupo. Se
+    // configuran en la misma pantalla que los de prospectos.
+    id: 'admision-webhooks',
+    grupo: 'admision',
+    titulo: 'Webhooks con destino Matrícula',
+    queHace: 'Reciben formularios de fuera (Make, Zapier, la web…) y crean una solicitud de admisión en Matrículas.',
+    direccion: 'entra',
+    enlace: '/conexion/webhooks/prospectos',
+    permisos: ['webhooks.view'],
+    requiere: ['forms.view'],
+    moduloCampus: 'webhooks',
+    deUnCampus: true,
+    ocultarSiVacio: true,
+    cargar: formulariosDe('webhook', (f) => `/conexion/webhooks/prospectos/${f.id}`, true, (f) => f.destination === 'matricula'),
   },
   {
     id: 'make',
@@ -501,14 +526,19 @@ export const TIPOS: TipoWebhook[] = [
     enlace: '/productos/woocommerce',
     permisos: ['woocommerce.view'],
     moduloCampus: 'woocommerce',
-    // El aviso de pedidos (`POST /api/woocommerce/webhook`) se acepta solo con
-    // la conexión ENCENDIDA y su FIRMA (`wc_credentials.webhook_secret`,
+    // El aviso de pedidos (`POST /api/woocommerce/webhook/:projectId`) se acepta
+    // solo con la conexión ENCENDIDA y su FIRMA (`wc_credentials.webhook_secret`,
     // `wc.orders.recibirAviso`). La firma se pone con `POST
-    // /woocommerce/webhook-secret`, que no tiene pantalla; si está puesta se
-    // lee en `GET /woocommerce/credentials` (enmascarada). Sin ella los
-    // pedidos no se pierden: llegan con la sincronización periódica
-    // (jobs/wooCommerceSyncScheduler), no al momento.
-    nota: 'La firma del aviso de pedidos no se pone desde ninguna pantalla del CRM. No guarda cuándo llegó el último pedido por aviso ni si falló.',
+    // /woocommerce/webhook-secret`, que no tiene pantalla; si está puesta se lee
+    // en `GET /woocommerce/credentials` (enmascarada, '****').
+    //
+    // Sin la firma, los pedidos SOLO llegan si la sincronización automática
+    // trae pedidos (jobs/wooCommerceSyncScheduler): conexión encendida,
+    // `auto_sync_enabled`, `sync_orders` y `consumer_key`, y que la importación
+    // de productos de esa vuelta salga bien. `auto_sync_enabled` y `sync_orders`
+    // vienen APAGADOS de serie (migraciones 024 y 218), y `sync_orders` no tiene
+    // pantalla. Con lo de serie, sin la firma no llega ningún pedido.
+    nota: 'La firma del aviso de pedidos y la sincronización de pedidos no se ponen desde ninguna pantalla del CRM. No guarda cuándo llegó el último pedido ni si falló.',
     cargar: async (ctx) => {
       const pedir = ctx.pedir || datos;
       const filas = await pedir<Array<{ id: number; nombre: string; conectado: boolean; activo: boolean }>>(`/woocommerce/estado?${ctx.ambito.toString()}`);
@@ -518,16 +548,29 @@ export const TIPOS: TipoWebhook[] = [
       const conectados = ctx.campus.filter((c) => filas.some((f) => f.id === c.id && f.conectado && ids.has(f.id)));
       return porCampus(conectados, async (c) => {
         const f = filas.find((x) => x.id === c.id)!;
-        const cred = await pedir<{ webhook_secret?: string | null } | null>(`/woocommerce/credentials?projectId=${c.id}`);
-        const conFirma = Boolean(cred && !Array.isArray(cred) && cred.webhook_secret);
+        const cred = await pedir<{
+          active?: boolean; webhook_secret?: string | null; auto_sync_enabled?: boolean;
+          sync_orders?: boolean; consumer_key?: string | null; sync_interval_minutes?: number | null;
+        } | null>(`/woocommerce/credentials?projectId=${c.id}`);
+        const cr = cred && !Array.isArray(cred) ? cred : null;
+        const conFirma = Boolean(cr?.webhook_secret);
+        const encendida = Boolean(f.activo);
+        const sincronizaPedidos = Boolean(encendida && cr?.auto_sync_enabled && cr?.sync_orders && cr?.consumer_key);
+        const cada = cr?.sync_interval_minutes || 30;
         return [{
           clave: `wc-${c.id}`,
           nombre: conFirma ? 'Con la firma del aviso de pedidos' : 'Sin la firma del aviso de pedidos',
           campus: c.nombre,
-          activo: !!f.activo,
-          aviso: !f.activo ? 'Conexión apagada: no llegan pedidos de esta tienda'
+          activo: encendida,
+          // Apagada: puede ser a propósito (aviso). Sin firma: con la
+          // sincronización de pedidos en marcha llegan igual, tarde (aviso);
+          // sin ella no llega ninguno (fallo).
+          aviso: !encendida ? 'Conexión apagada: no llegan pedidos de esta tienda'
             : conFirma ? undefined
-              : 'Sin la firma el aviso se rechaza: los pedidos llegan con la sincronización periódica, no al momento',
+              : sincronizaPedidos ? `Sin la firma el aviso se rechaza: los pedidos llegan con la sincronización (cada ${cada} min, si la importación de productos va bien), no al momento`
+                : undefined,
+          fallo: !encendida || conFirma || sincronizaPedidos ? null
+            : 'Sin la firma del aviso y sin sincronizar pedidos: no llega ningún pedido de esta tienda',
           enlace: '/productos/woocommerce',
           campusId: c.id,
         }];
@@ -544,25 +587,66 @@ export const TIPOS: TipoWebhook[] = [
     // El de su pantalla, `/whatsapp/conexion`: supervisar sin usar no la abre.
     permisos: ['whatsapp.usar'],
     modulo: 'whatsapp',
-    nota: 'Es uno para todo el CRM: no va por campus.',
-    cargar: async () => [{ clave: 'whatsapp', nombre: 'Aviso de WhatsApp', campus: null, activo: null, enlace: '/whatsapp/conexion' }],
+    nota: 'El aviso es uno para todo el CRM; el estado es el de tu número. No guarda cuándo llegó el último mensaje ni si falló.',
+    // El estado del número de quien mira (`GET /whatsapp/conexion`): lo mismo
+    // que pide la pantalla de WhatsApp cada 30 segundos. Sin WhatsApp montado en
+    // este entorno, `configurado: false`.
+    cargar: async (ctx) => {
+      const w = await (ctx.pedir || datos)<{ configurado?: boolean; conectado?: boolean; numero?: string | null; motivo?: string } | null>('/whatsapp/conexion');
+      if (!w || Array.isArray(w) || w.configurado === false) {
+        return [{
+          clave: 'whatsapp', nombre: 'WhatsApp no está montado en este entorno', campus: null, activo: null,
+          aviso: w && !Array.isArray(w) && w.motivo ? w.motivo : undefined, enlace: '/whatsapp/conexion',
+        }];
+      }
+      return [{
+        clave: 'whatsapp',
+        nombre: w.numero ? `Tu número (+${w.numero})` : 'Tu número',
+        campus: null,
+        activo: Boolean(w.conectado),
+        aviso: w.conectado ? undefined : 'Tu número no está enlazado: no te llegan sus mensajes',
+        enlace: '/whatsapp/conexion',
+      }];
+    },
   },
   {
     id: 'consultas',
     grupo: 'mensajeria',
     titulo: 'Consultas de alumnos (Moodle)',
-    queHace: 'Las dudas que los alumnos escriben en el Moodle de cada campus llegan al CRM para que las atienda su tutora.',
+    queHace: 'Las dudas que los alumnos escriben en el Moodle de los campus con la lectura encendida llegan al CRM para que las atienda su tutora.',
     direccion: 'entra',
     enlace: '/consultas',
     // Diego las pone en Mensajería (#690). No son un aviso que llegue: el CRM
-    // las LEE del Moodle de cada campus cada pocos minutos
-    // (jobs/consultasCampusScheduler). Por eso no hay «último aviso» ni
-    // «falló» que enseñar aquí: un campus que no responde se ve en
-    // Conexión › Moodle. Los permisos y el módulo, los de su entrada del menú.
+    // las LEE del Moodle (jobs/consultasCampusScheduler) de los campus con la
+    // conexión de Moodle encendida, con su token y «Leer las consultas»
+    // marcado (`consultas.service.campusConConsultas`: `provider = 'moodle'
+    // AND active AND encrypted_value IS NOT NULL AND config_public.consultas`).
+    // Eso se lee aquí por campus (`GET /integrations/moodle`, por eso pide
+    // también `integrations.view`). Si la lectura de un campus falla, solo va al
+    // registro del servidor: no hay dónde verlo, y la tarjeta lo dice.
     permisos: ['consultas.view', 'consultas.atender'],
+    requiere: ['integrations.view'],
     moduloCampus: 'tutores',
-    nota: 'No llegan como aviso: el CRM las lee del Moodle de cada campus. Si un campus no responde, se ve en Conexión › Moodle.',
-    cargar: async () => [{ clave: 'consultas', nombre: 'Lectura del Moodle de cada campus', campus: null, activo: null, enlace: '/consultas' }],
+    nota: 'No llegan como aviso: el CRM las lee del Moodle. Si la lectura de un campus falla, no se ve en ninguna pantalla (solo en el registro del servidor). Se encienden en Finanzas › Integraciones, en la conexión de Moodle.',
+    cargar: (ctx) => porCampus(ctx.campus, async (c) => {
+      const m = await (ctx.pedir || datos)<{ active?: boolean; has_secret?: boolean; config_public?: { consultas?: boolean | string } } | null>(`/integrations/moodle?projectId=${c.id}`);
+      // Sin conexión de Moodle en ese campus, no hay consultas que leer: no sale.
+      if (!m || Array.isArray(m)) return [];
+      const marcada = String(m.config_public?.consultas) === 'true';
+      const lee = Boolean(m.active && m.has_secret && marcada);
+      return [{
+        clave: `consultas-${c.id}`,
+        nombre: lee ? 'Lectura de consultas encendida' : 'Lectura de consultas apagada',
+        campus: c.nombre,
+        activo: lee,
+        detalle: lee ? undefined
+          : !marcada ? 'Sin «Leer las consultas» en su conexión de Moodle'
+            : !m.active ? 'La conexión de Moodle está apagada'
+              : 'La conexión de Moodle no tiene token',
+        enlace: '/finanzas/integraciones',
+        campusId: c.id,
+      }];
+    }),
   },
   {
     id: 'widget',
@@ -713,7 +797,7 @@ async function comoFueElUltimo(
   // `/asignacion` no va recortado) y todo sale de su lista, sin dar nada por
   // completo.
   recortada = false,
-): Promise<Pick<FilaWebhook, 'ultimo' | 'fallo' | 'aviso' | 'sinLeer'>> {
+): Promise<Pick<FilaWebhook, 'ultimo' | 'fallo' | 'aviso' | 'sinLeer' | 'detalle'>> {
   const falloDe = (e?: Envio) => (e?.estado === 'fallido'
     ? `El último envío falló: ${e.error || (e.http_status ? `respondió ${e.http_status}` : 'no se pudo entregar')}`
     : null);
@@ -761,7 +845,12 @@ async function comoFueElUltimo(
     // «Todos» sí, porque lo calcula el servidor. Haría falta que la ruta
     // ordenara por `enviado_at` o devolviera el último por ámbito.
     const ultimo = fechas.length ? fechas[fechas.length - 1] : (enElTope || recortada) ? undefined : null;
-    return { ultimo, fallo: falloDe(envios[0]), aviso };
+    // Con la lista recortada a su equipo, se dice: si no, una fila sin fecha ni
+    // fallidos parecía «todo bien» o «nada todavía», y no está demostrado.
+    const detalle = !recortada ? undefined
+      : envios.length ? 'Solo se ven las decisiones de tu equipo comercial'
+        : 'Tu equipo no tiene decisiones entre las 200 últimas: las demás se ven en su pantalla';
+    return { ultimo, fallo: falloDe(envios[0]), aviso, detalle };
   } catch {
     return { ultimo: undefined, sinLeer: 'No se pudo leer sus envíos de este ámbito' };
   }

@@ -29,7 +29,7 @@ vi.mock('@/shared/hooks/usePermission', () => ({
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch: vi.fn(), delete: vi.fn() }, API_BASE_URL: '/crm/api' }));
 
 import { TIPOS, GRUPOS, tiposVisibles, porCampus, ordenarFilas, crearPedidor, campusDelTipo, delAmbitoDeArriba, enlaceDeFila } from '@/modules/webhooks/lib/resumen';
-import { pestanasDe } from '@/modules/webhooks/pages/WebhooksLayout';
+import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
 import { TRASLADOS_DE_MENU, aplicarTraslados } from '@/shared/components/layout/trasladosDeMenu';
 import { NAV_SECTIONS, PERMISOS_WEBHOOKS, rutaPermitida } from '@/shared/components/layout/Sidebar';
 import { pathAllowsAll, rutaAceptaSociedad } from '@/shared/components/layout/AppLayout';
@@ -142,7 +142,7 @@ describe('cada tipo, en su grupo y por su permiso', () => {
   it('están todas las entradas y salidas del servidor (inventario de la auditoría del 09/11)', () => {
     // Cada punto por el que entra un aviso de fuera o sale uno a una URL configurable.
     expect(TIPOS.map((t) => t.id).sort()).toEqual([
-      'admision', 'asignacion', 'certifex', 'clave-campus', 'consultas', 'formularios', 'make',
+      'admision', 'admision-webhooks', 'asignacion', 'certifex', 'clave-campus', 'consultas', 'formularios', 'make',
       'prospectos', 'stripe', 'tokens', 'transferencias', 'whatsapp', 'widget', 'woocommerce',
     ]);
   });
@@ -183,7 +183,7 @@ describe('cada tipo, en su grupo y por su permiso', () => {
   });
 
   it('prospectos pide además leer formularios, que es lo que pide su GET', () => {
-    expect(tiposVisibles((p) => ['webhooks.view', 'forms.view'].includes(p)).map((t) => t.id)).toEqual(['prospectos', 'formularios', 'tokens']);
+    expect(tiposVisibles((p) => ['webhooks.view', 'forms.view'].includes(p)).map((t) => t.id)).toEqual(['prospectos', 'admision-webhooks', 'formularios', 'tokens']);
   });
 
   it('cada tarjeta solo a quien puede abrir adonde lleva', () => {
@@ -419,14 +419,31 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(make).queryByText(/Error de hace un mes/)).toBeNull();
   });
 
-  it('prospectos con destino Matrícula: no dice «sin avisos todavía», que sería falso', async () => {
+  it('webhooks con destino Matrícula: en «Admisión y matrículas», no en Captación, y sin un «sin avisos» falso', async () => {
     get.mockImplementation((url) => Promise.resolve({
-      data: url.startsWith('/forms?projectId=1&kind=webhook') ? [{ id: 12, nombre: 'Admisiones web', active: true, destination: 'matricula' }] : RESPUESTAS(url),
+      data: url.startsWith('/forms?projectId=1&kind=webhook') ? [
+        { id: 11, nombre: 'Zapier ventas', active: true, destination: 'lead' },
+        { id: 12, nombre: 'Admisiones web', active: true, destination: 'matricula' },
+      ] : RESPUESTAS(url),
     }));
     abrir();
-    const prospectos = await screen.findByTestId('tipo-prospectos');
-    expect(await within(prospectos).findByText(/los avisos que salen bien no se apuntan aquí/)).toBeTruthy();
-    expect(within(prospectos).queryByText('Sin avisos todavía')).toBeNull();
+    const matricula = await screen.findByTestId('tipo-admision-webhooks');
+    expect(matricula.closest('section').querySelector('h2').textContent).toBe('Admisión y matrículas');
+    expect(await within(matricula).findByText('Admisiones web')).toBeTruthy();
+    expect(within(matricula).getByText(/los avisos que salen bien no se apuntan aquí/)).toBeTruthy();
+    expect(within(matricula).queryByText('Sin avisos todavía')).toBeNull();
+    // Y en Captación solo el de prospectos.
+    const prospectos = screen.getByTestId('tipo-prospectos');
+    expect(await within(prospectos).findByText('Zapier ventas')).toBeTruthy();
+    expect(within(prospectos).queryByText('Admisiones web')).toBeNull();
+    // Una sola petición de formularios por campus para las dos tarjetas.
+    expect(get.mock.calls.filter((c) => c[0] === '/forms?projectId=1&kind=webhook')).toHaveLength(1);
+  });
+
+  it('sin webhooks con destino Matrícula, su tarjeta no sale', async () => {
+    abrir();
+    await screen.findByText('Zapier ventas');
+    expect(screen.queryByTestId('tipo-admision-webhooks')).toBeNull();
   });
 
   it('prospectos con destino Matrícula: su último error SÍ se enseña, como aviso con su fecha', async () => {
@@ -436,10 +453,10 @@ describe('el resumen sigue al selector de arriba', () => {
           : RESPUESTAS(url),
     }));
     abrir();
-    const prospectos = await screen.findByTestId('tipo-prospectos');
-    expect(await within(prospectos).findByText(/Último error registrado el .*: Falta el DNI/)).toBeTruthy();
+    const matricula = await screen.findByTestId('tipo-admision-webhooks');
+    expect(await within(matricula).findByText(/Último error registrado el .*: Falta el DNI/)).toBeTruthy();
     // Aviso, no fallo: puede haber otros posteriores que fueron bien y no se apuntan.
-    expect(within(prospectos).queryByText(/Falló: Falta el DNI/)).toBeNull();
+    expect(within(matricula).queryByText(/Falló: Falta el DNI/)).toBeNull();
   });
 
   it('transferencias: rojo solo si falló el ÚLTIMO envío; los fallidos de 30 días, como aviso', async () => {
@@ -693,12 +710,15 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(get.mock.calls.map((c) => c[0])).toContain('/asignacion/decisiones?destino_id=9&limit=200');
     expect(fila.aviso).toBe('2 o más envíos fallidos en 30 días de tu equipo');
     expect(fila.ultimo).toBe(ahora);
+    expect(fila.detalle).toBe('Solo se ven las decisiones de tu equipo comercial');
     // Sin ninguna decisión de su equipo, no se dice «sin avisos todavía».
     get.mockImplementation((url) => Promise.resolve({
       data: url === '/asignacion' ? [{ id: 9, nombre: 'Reparto', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultima_decision_at: ahora, fallidos_30_dias: 0 }] : [],
     }));
     const [vacia] = await asignacion.cargar(ctx);
     expect(vacia.ultimo).toBeUndefined();
+    // Y se explica por qué no hay fecha.
+    expect(vacia.detalle).toBe('Tu equipo no tiene decisiones entre las 200 últimas: las demás se ven en su pantalla');
   });
 
   it('asignación de leads: entra y sale, con sus fallos, y sin los campus de pruebas con «Todos»', async () => {
@@ -757,34 +777,89 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(switchProject).not.toHaveBeenCalled();
   });
 
-  it('WooCommerce: si tiene la firma del aviso de pedidos; sin ella, aviso (llegan con la sincronización)', async () => {
+  it('WooCommerce: la firma del aviso; sin ella, aviso SOLO si la sincronización trae pedidos, y si no, fallo', async () => {
     get.mockImplementation((url) => Promise.resolve({
       data: url.startsWith('/woocommerce/estado') ? [
         { id: 1, nombre: 'ISEIH', conectado: true, activo: true },
         { id: 2, nombre: 'Psiko Aprende', conectado: true, activo: true },
         { id: 5, nombre: 'Otro campus', conectado: true, activo: false },
       ]
+        // Con firma.
         : url === '/woocommerce/credentials?projectId=1' ? { webhook_secret: '****' }
-          : url === '/woocommerce/credentials?projectId=2' ? { webhook_secret: null }
+          // Sin firma y con lo de serie (sin sincronizar pedidos): no llega ninguno.
+          : url === '/woocommerce/credentials?projectId=2' ? { webhook_secret: null, auto_sync_enabled: false, sync_orders: false, consumer_key: 'ck_x' }
             : url === '/woocommerce/credentials?projectId=5' ? { webhook_secret: '****' }
               : RESPUESTAS(url),
     }));
     abrir();
     const wc = await screen.findByTestId('tipo-woocommerce');
-    // Con firma: ISEIH y el campus apagado; sin ella, Psiko.
     expect(await within(wc).findAllByText('Con la firma del aviso de pedidos')).toHaveLength(2);
-    expect(within(wc).getAllByText('Sin la firma del aviso de pedidos')).toHaveLength(1);
-    expect(within(wc).getByText(/los pedidos llegan con la sincronización periódica, no al momento/)).toBeTruthy();
+    // Por fila: el texto largo sale dos veces (recortado a la vista y entero para el lector).
+    const conFallo = within(wc).getAllByRole('listitem').filter((li) => /Falló: Sin la firma del aviso y sin sincronizar pedidos/.test(li.textContent));
+    expect(conFallo).toHaveLength(1);
+    expect(conFallo[0].textContent).toContain('Psiko Aprende');
+    // No dice que lleguen con la sincronización cuando no la hay.
+    expect(within(wc).queryByText(/llegan con la sincronización/)).toBeNull();
+    // Apagada: aviso, no fallo (puede ser a propósito).
     expect(within(wc).getByText('Conexión apagada: no llegan pedidos de esta tienda')).toBeTruthy();
+  });
+
+  it('WooCommerce sin firma pero sincronizando pedidos: aviso, con cada cuánto', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/woocommerce/estado') ? [{ id: 2, nombre: 'Psiko Aprende', conectado: true, activo: true }]
+        : url === '/woocommerce/credentials?projectId=2' ? { webhook_secret: null, auto_sync_enabled: true, sync_orders: true, consumer_key: 'ck_x', sync_interval_minutes: 60 }
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    const wc = await screen.findByTestId('tipo-woocommerce');
+    expect(await within(wc).findByText(/los pedidos llegan con la sincronización \(cada 60 min/)).toBeTruthy();
     expect(within(wc).queryByText(/Falló:/)).toBeNull();
   });
 
-  it('Consultas de alumnos en Mensajería, diciendo que el CRM las lee del Moodle', async () => {
+  it('WhatsApp: el estado de tu número, o que no está montado en el entorno', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/whatsapp/conexion' ? { configurado: true, conectado: false, numero: '34600111222' } : RESPUESTAS(url),
+    }));
+    abrir();
+    const w = await screen.findByTestId('tipo-whatsapp');
+    expect(await within(w).findByText('Tu número (+34600111222)')).toBeTruthy();
+    expect(within(w).getByText('Apagado')).toBeTruthy();
+    expect(within(w).getByText(/Tu número no está enlazado/)).toBeTruthy();
+  });
+
+  it('WhatsApp sin montar en el entorno: lo dice, con el motivo del servidor', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/whatsapp/conexion' ? { configurado: false, motivo: 'WhatsApp todavia no esta disponible en este entorno de pruebas.' } : RESPUESTAS(url),
+    }));
+    abrir();
+    const w = await screen.findByTestId('tipo-whatsapp');
+    expect(await within(w).findByText('WhatsApp no está montado en este entorno')).toBeTruthy();
+    expect(within(w).getByText(/todavia no esta disponible/)).toBeTruthy();
+  });
+
+  it('Consultas de alumnos en Mensajería: por campus, encendida o apagada y por qué', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/integrations/moodle?projectId=1' ? { active: true, has_secret: true, config_public: { consultas: true } }
+        : url === '/integrations/moodle?projectId=2' ? { active: true, has_secret: true, config_public: { consultas: false } }
+          // Campus 5 sin conexión de Moodle: no sale.
+          : url.startsWith('/integrations/moodle') ? null : RESPUESTAS(url),
+    }));
     abrir();
     const c = await screen.findByTestId('tipo-consultas');
-    expect(within(c).getByText(/No llegan como aviso: el CRM las lee del Moodle/)).toBeTruthy();
-    expect(within(c).getByRole('link', { name: /Configurar/ }).getAttribute('href')).toBe('/consultas');
     expect(c.closest('section').querySelector('h2').textContent).toBe('Mensajería');
+    expect(await within(c).findByText('Lectura de consultas encendida')).toBeTruthy();
+    expect(within(c).getByText('Lectura de consultas apagada')).toBeTruthy();
+    expect(within(c).getByText('Sin «Leer las consultas» en su conexión de Moodle')).toBeTruthy();
+    expect(within(c).queryByText(/Otro campus/)).toBeNull();
+    // Dice la verdad: no llegan como aviso, y un fallo de lectura no se ve en ninguna pantalla.
+    expect(within(c).getByText(/No llegan como aviso: el CRM las lee del Moodle\. Si la lectura de un campus falla, no se ve en ninguna pantalla/)).toBeTruthy();
+    expect(within(c).getByRole('link', { name: /Configurar/ }).getAttribute('href')).toBe('/consultas');
+  });
+
+  it('Consultas pide también ver Integraciones, que es de donde se lee su estado', () => {
+    const consultas = TIPOS.find((t) => t.id === 'consultas');
+    expect(tiposVisibles((p) => p === 'consultas.view', undefined, [consultas])).toHaveLength(0);
+    expect(tiposVisibles((p) => ['consultas.view', 'integrations.view'].includes(p), undefined, [consultas])).toHaveLength(1);
   });
 
   it('un aviso largo va en su propia línea y no aplasta el nombre de la fila', async () => {

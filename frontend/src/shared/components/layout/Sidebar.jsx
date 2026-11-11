@@ -387,7 +387,8 @@ export const NAV_SECTIONS = [
       // Todos los webhooks en un sitio, señalados por su función (#690, Diego 05/11:
       // «hay demasiados y están repartidos por el menú»). Reúne los que estaban en
       // Captación (Webhooks, Make) y el de transferencias, que estaba aquí suelto
-      // (Diego, 15/10). Se ve con el permiso de cualquiera de los que enseña.
+      // (Diego, 15/10). Se ve con el permiso de alguna de las tres entradas que
+      // sustituye (PERMISOS_WEBHOOKS, arriba); dentro, cada tarjeta pide el suyo.
       { label: 'Webhooks', to: '/conexion/webhooks', detail: 'Todos, por su función', icon: WebhooksLogo, roles: ['superadmin', 'admin'], permiso: PERMISOS_WEBHOOKS,
         // Para que el buscador (Ctrl K) los siga encontrando por su nombre de antes.
         keywords: 'make escenarios zapier n8n transferencias depósitos stripe woocommerce admisión matrícula formularios entradas avisos' },
