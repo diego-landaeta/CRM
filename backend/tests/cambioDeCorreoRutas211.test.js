@@ -55,7 +55,11 @@ beforeAll(async () => {
     return u.id;
   };
   ANA = await persona('ana', 'gestor');
-  SUPER = await persona('super', 'superadmin');
+  // En la base NO es superadmin: los permisos de la prueba salen de `registrar`
+  // (elSuper), y un superadmin de verdad que aparece y desaparece a mitad rompe
+  // a otras pruebas que corren a la vez y cuentan los de la base
+  // (certifexDiplomas, CI de la #731).
+  SUPER = await persona('super', 'gestor');
   TUTOR = await persona('tutor', 'tutor');
 }, 60000);
 
