@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/AppError.js';
 // Una persona puede tener mas de un rol: el principal y los añadidos. Quien
 // decide cuales son vive en un solo sitio.
-import { tieneRol, soloEsColaborador, colaboradorPuede } from '../utils/roles.js';
+import { tieneRol, soloEsColaborador, colaboradorPuede, soloEsTutorRedactor, tutorRedactorPuede } from '../utils/roles.js';
 // La sesión se mira contra la base: rol y activo (hotfix del 26/10/2026).
 import { comprobarSesion, sesionVigente } from './sesionViva.js';
 
@@ -49,6 +49,10 @@ export async function verifyToken(req, _res, next) {
   // modulo porque muchas rutas solo piden token —/api/leads entre ellas— y un
   // roleGuard olvidado le abriria prospectos, ventas o finanzas.
   if (soloEsColaborador(req.user) && !colaboradorPuede(req.originalUrl)) {
+    return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
+  }
+  // El tutor redactor (CRM#708), igual: su tablero, su factura y sus cursos.
+  if (soloEsTutorRedactor(req.user) && !tutorRedactorPuede(req.originalUrl)) {
     return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
   }
   next();

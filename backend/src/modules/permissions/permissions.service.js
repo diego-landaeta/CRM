@@ -105,6 +105,7 @@ export async function getSystemDefaults() {
       colaborador: permisosDelRol('colaborador', filas),
       project_manager: permisosDelRol('project_manager', filas),
       tutor: permisosDelRol('tutor', filas),
+      tutor_redactor: permisosDelRol('tutor_redactor', filas),
     },
     views: SYSTEM_ROLE_VIEWS,
     catalogs: {
