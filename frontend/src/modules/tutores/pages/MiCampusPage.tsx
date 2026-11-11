@@ -125,7 +125,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
                 <PorHacer key={`t-${t.id}`} tono="corregir" icono={<ClipboardText size={15} weight="bold" />}
                   titulo={t.nombre || 'Tarea'}
                   detalle={`${t.sinCorregir.map((e) => e.alumno || 'Alumno').join(', ')} · entregada ${fechaCorta(t.sinCorregir[0]?.entregadaAt ?? null)}${t.entrega ? ` · fecha límite ${fechaCorta(t.entrega)}` : ''}`}>
-                  <Link to={corregir(t.id)} className={cn(accion, 'bg-primary text-primary-foreground hover:bg-primary/90')}>
+                  <Link to={corregir(t.id)} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
                     Corregir{t.sinCorregir.length > 1 ? ` (${t.sinCorregir.length})` : ''}
                   </Link>
                 </PorHacer>
