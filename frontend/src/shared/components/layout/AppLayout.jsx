@@ -664,6 +664,9 @@ export default function AppLayout() {
       */}
       <div className={cn('transition-[margin] duration-200', collapsed ? 'lg:ml-16' : 'lg:ml-64')}>
         <Topbar onAbrirMenu={() => setMobileOpen(true)} />
+        {/* El `p-4` del movil lo anulan a mano dos pantallas que van de borde a borde:
+            el chat de WhatsApp (chat.css, `margin: -16px`) y Mensajes (`-m-4`).
+            Si cambia este relleno, hay que cambiarlas tambien. */}
         <main
           id="main-content"
           role="main"
