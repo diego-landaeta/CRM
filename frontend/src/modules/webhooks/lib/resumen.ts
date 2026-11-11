@@ -25,6 +25,7 @@
 import client from '@/shared/api/client';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { PLUGIN_MOODLE } from '@/shared/lib/pluginMoodle';
 import { formatDateNumeric, formatDateTime } from '@/shared/lib/format';
 
 /** `ambos`: recibe un aviso y avisa a otro (la asignación de leads). */
@@ -110,6 +111,11 @@ export interface Contexto {
    * DESPUÉS del tope, así que una lista de menos de 200 puede no ser toda.
    */
   llevaEquipo?: boolean;
+  /**
+   * Los permisos de quien mira, para lo que una tarjeta lee solo si los tiene
+   * (el estado del plugin de Moodle pide `consultas.gestionar`).
+   */
+  can?: (permiso: string) => boolean;
 }
 
 export interface TipoWebhook {
@@ -676,22 +682,61 @@ export const TIPOS: TipoWebhook[] = [
     permisos: ['consultas.view', 'consultas.atender'],
     requiere: ['integrations.view'],
     moduloCampus: 'tutores',
-    nota: 'No llegan como aviso: el CRM las lee del Moodle. Si la lectura de un campus falla, no se ve en ninguna pantalla (solo en el registro del servidor). Se encienden en Finanzas › Integraciones, en la conexión de Moodle.',
+    //
+    // El plugin del CRM en Moodle (#679) SÍ avisa al CRM de cada mensaje
+    // (`/api/moodle-avisos/:campus`) y el servidor guarda su último aviso y el
+    // error del último repaso (`GET /consultas/campus/:id/plugin`, con
+    // `consultas.gestionar`). Va detrás de PLUGIN_MOODLE: solo en pruebas hasta
+    // que Diego lo apruebe; en /crm esa ruta ni existe y no se pide.
+    nota: PLUGIN_MOODLE
+      ? 'Sin el plugin del CRM no llegan como aviso: el CRM las lee del Moodle, y si esa lectura falla no se ve en ninguna pantalla (solo en el registro del servidor). Con el plugin conectado (solo en pruebas), el campus avisa de cada mensaje y aquí sale su último aviso y si falló su repaso. Se encienden en Finanzas › Integraciones, en la conexión de Moodle.'
+      : 'No llegan como aviso: el CRM las lee del Moodle. Si la lectura de un campus falla, no se ve en ninguna pantalla (solo en el registro del servidor). Se encienden en Finanzas › Integraciones, en la conexión de Moodle.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      const m = await (ctx.pedir || datos)<{ active?: boolean; has_secret?: boolean; config_public?: { consultas?: boolean | string } } | null>(`/integrations/moodle?projectId=${c.id}`);
+      const pedir = ctx.pedir || datos;
+      const m = await pedir<{ active?: boolean; has_secret?: boolean; config_public?: { consultas?: boolean | string } } | null>(`/integrations/moodle?projectId=${c.id}`);
       // Sin conexión de Moodle en ese campus, no hay consultas que leer: no sale.
       if (!m || Array.isArray(m)) return [];
       const marcada = String(m.config_public?.consultas) === 'true';
       const lee = Boolean(m.active && m.has_secret && marcada);
+      const porQueNoLee = lee ? undefined
+        : !marcada ? 'Sin «Leer las consultas» en su conexión de Moodle'
+          : !m.active ? 'La conexión de Moodle está apagada'
+            : 'La conexión de Moodle no tiene token';
+
+      // El plugin, si este entorno lo tiene y quien mira puede verlo.
+      let plugin: { activo?: boolean; ultimo_aviso_at?: string | null; sincronizacion_error?: string | null } | null = null;
+      let sinLeer: string | undefined;
+      if (PLUGIN_MOODLE && ctx.can?.('consultas.gestionar')) {
+        try {
+          plugin = await pedir(`/consultas/campus/${c.id}/plugin`);
+        } catch (err) {
+          // Un 403 (otro campus) o un 404 (sin la ruta) no es un fallo del
+          // webhook: la fila se queda como sin plugin. Lo demás, se dice.
+          const status = (err as { status?: number })?.status;
+          if (status !== 403 && status !== 404) sinLeer = 'No se pudo leer el estado del plugin del CRM';
+        }
+      }
+
+      if (plugin?.activo) {
+        return [{
+          clave: `consultas-${c.id}`,
+          nombre: 'Plugin del CRM conectado',
+          campus: c.nombre,
+          activo: true,
+          ultimo: plugin.ultimo_aviso_at ?? null,
+          fallo: plugin.sincronizacion_error ? `el repaso del campus: ${plugin.sincronizacion_error}` : null,
+          detalle: porQueNoLee,
+          enlace: '/finanzas/integraciones',
+          campusId: c.id,
+        }];
+      }
       return [{
         clave: `consultas-${c.id}`,
         nombre: lee ? 'Lectura de consultas encendida' : 'Lectura de consultas apagada',
         campus: c.nombre,
         activo: lee,
-        detalle: lee ? undefined
-          : !marcada ? 'Sin «Leer las consultas» en su conexión de Moodle'
-            : !m.active ? 'La conexión de Moodle está apagada'
-              : 'La conexión de Moodle no tiene token',
+        detalle: porQueNoLee,
+        sinLeer,
         enlace: '/finanzas/integraciones',
         campusId: c.id,
       }];

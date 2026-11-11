@@ -11,6 +11,7 @@ import Card from '@/shared/components/ui/Card';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import StatusDot from '@/shared/components/ui/StatusDot';
+import { rutaPermitida } from '@/shared/components/layout/Sidebar';
 import {
   GRUPOS, campusDelTipo, crearPedidor, enlaceDeFila, ordenarFilas, tiposVisibles,
   type Campus, type FilaWebhook, type TipoWebhook,
@@ -72,7 +73,7 @@ export default function WebhooksResumenPage() {
     const ambito = ponerAmbito(new URLSearchParams(), { activeIssuerId, activeProject });
     setEstados(Object.fromEntries(tipos.map((t) => [t.id, { cargando: true, filas: [] }])));
     for (const t of tipos) {
-      t.cargar({ campus: campusDelTipo(t, campus), ambito, pedir, llevaEquipo })
+      t.cargar({ campus: campusDelTipo(t, campus), ambito, pedir, llevaEquipo, can })
         .then((filas) => { if (vivo) setEstados((e) => ({ ...e, [t.id]: { cargando: false, filas } })); })
         .catch((err: any) => {
           if (vivo) setEstados((e) => ({ ...e, [t.id]: { cargando: false, filas: [], error: err?.data?.error || 'No se pudo leer' } }));
@@ -117,6 +118,15 @@ export default function WebhooksResumenPage() {
       />
     );
   }
+
+  // Las pantallas relacionadas del pie, solo las que se pueden abrir. «Sus
+  // avisos están arriba» solo si su tarjeta sale de verdad.
+  const veAsignacion = tipos.some((t) => t.id === 'asignacion');
+  const relacionados = [
+    { to: '/conexion/conectores', label: 'Conectores', detalle: 'mapeo de campos' },
+    { to: '/prospectos/revision-duplicados', label: 'Revisión de duplicados', detalle: 'repetidos por webhook' },
+    { to: '/conexion/asignacion-leads', label: 'Asignación de leads', detalle: veAsignacion ? 'sus avisos están arriba; se configura en su pantalla' : 'a quién va cada formulario' },
+  ].filter((r) => rutaPermitida(r.to, can));
 
   // Lo que falla y lo que no se pudo leer, por separado: un campus que no
   // contesta no es un webhook que falla.
@@ -173,12 +183,20 @@ export default function WebhooksResumenPage() {
         );
       })}
 
-      <p className="text-xs text-muted-foreground">
-        Relacionado:{' '}
-        <Link to="/conexion/conectores" className="text-primary hover:underline">Conectores</Link> (mapeo de campos) ·{' '}
-        <Link to="/prospectos/revision-duplicados" className="text-primary hover:underline">Revisión de duplicados</Link> (repetidos por webhook) ·{' '}
-        <Link to="/conexion/asignacion-leads" className="text-primary hover:underline">Asignación de leads</Link> (sus avisos están arriba; se configura en su pantalla).
-      </p>
+      {/* Solo los que esa persona puede abrir (la misma regla que el menú): a
+          soporte se le enseñaba «Asignación de leads (sus avisos están arriba)»
+          sin poder abrirla ni ver su tarjeta (prueba por perfiles, 11/11). */}
+      {relacionados.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Relacionado:{' '}
+          {relacionados.map((r, i) => (
+            <span key={r.to}>
+              {i > 0 && ' · '}
+              <Link to={r.to} className="text-primary hover:underline">{r.label}</Link> ({r.detalle})
+            </span>
+          ))}.
+        </p>
+      )}
     </div>
   );
 }
