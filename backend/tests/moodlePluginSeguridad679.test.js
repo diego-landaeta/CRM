@@ -1,11 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { ipInterna, sitioPermitido } from '../src/modules/consultas/consultas.conexion.js';
 import { firmar, firmaValida, mismaDireccion } from '../src/modules/consultas/consultas.plugin.js';
+import { porCorregir } from '../src/shared/services/moodle.client.js';
 
 /*
-  Lo que salió en la auditoría de #679 (05/11): la conexión con código y la firma
-  de los avisos del plugin. (El proxy de archivos y «por corregir» son del #681 y
-  van con su parte.)
+  Lo que salió en la auditoría de #679 (05/11): la conexión con código, la firma
+  de los avisos del plugin y cuándo una entrega está «por corregir» (la ficha de la
+  consulta). (El proxy de archivos es del #681 y va con su parte.)
 */
 
 describe('#679 · conectar con código: a dónde llama el CRM', () => {
@@ -53,5 +54,21 @@ describe('#679 · la firma de los avisos', () => {
     expect(firmaValida(firma, cuerpo, clave, ahora + 6 * 60_000)).toBe(false);
     expect(firmaValida('t=1,v1=zz', cuerpo, clave, ahora)).toBe(false);
     expect(firmaValida(null, cuerpo, clave, ahora)).toBe(false);
+  });
+});
+
+// La ficha de la consulta (#679) enseña las entregas sin corregir del alumno.
+describe('#679/#681 · cuándo una entrega está por corregir', () => {
+  const dia = (d) => new Date(`2026-11-0${d}T10:00:00Z`);
+  it('entregada sin nota: sí; sin entregar: no', () => {
+    expect(porCorregir({ estado: 'submitted', gradingstatus: 'notgraded', entregadaAt: dia(2) }, undefined)).toBe(true);
+    expect(porCorregir({ estado: 'new', gradingstatus: 'notgraded', entregadaAt: null }, undefined)).toBe(false);
+  });
+  it('calificada: no; con flujo de calificación, «released» también es corregida', () => {
+    expect(porCorregir({ estado: 'submitted', gradingstatus: 'graded', entregadaAt: dia(2) }, { nota: 8, at: dia(3) })).toBe(false);
+    expect(porCorregir({ estado: 'submitted', gradingstatus: 'released', entregadaAt: dia(2) }, { nota: 8, at: dia(3) })).toBe(false);
+  });
+  it('vuelta a entregar DESPUÉS de la nota: otra vez por corregir', () => {
+    expect(porCorregir({ estado: 'submitted', gradingstatus: 'graded', entregadaAt: dia(4) }, { nota: 8, at: dia(3) })).toBe(true);
   });
 });

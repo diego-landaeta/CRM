@@ -124,6 +124,7 @@ const AlumnosSinMensajesPage = lazy(() => import('./modules/consultas/pages/Alum
 const MiCargaPage = lazy(() => import('./modules/consultas/pages/MiCargaPage'));
 const TutoresConsultasPage = lazy(() => import('./modules/consultas/pages/TutoresConsultasPage'));
 const MetricasConsultasPage = lazy(() => import('./modules/consultas/pages/MetricasConsultasPage'));
+const RespuestasCampusPage = lazy(() => import('./modules/consultas/pages/RespuestasCampusPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -282,6 +283,7 @@ function App() {
           <Route path="/consultas/carga" element={<MiCargaPage />} />
           <Route path="/consultas/tutores" element={<TutoresConsultasPage />} />
           <Route path="/consultas/metricas" element={<MetricasConsultasPage />} />
+          <Route path="/consultas/respuestas" element={<RespuestasCampusPage />} />
           <Route path="/consultas/:id" element={<ConsultaPage />} />
 
           {/* Captación — tabs */}

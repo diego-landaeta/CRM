@@ -12,12 +12,20 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 const api = vi.hoisted(() => ({
   ver: vi.fn(), responder: vi.fn(), reintentar: vi.fn(), cerrar: vi.fn(), tutoresPosibles: vi.fn(),
   reasignar: vi.fn(), abrirAdjunto: vi.fn(), toast: vi.fn(),
+  // La bandeja, la ficha del alumno y las respuestas guardadas (#679): vacías aquí.
+  mias: vi.fn(async () => ({ success: true, data: { consultas: [], plazoHoras: 24 } })),
+  panel: vi.fn(async () => ({ success: true, data: { consultas: [], plazoHoras: 24 } })),
+  contexto: vi.fn(async () => ({ success: true, data: null })),
+  respuestas: vi.fn(async () => ({ success: true, data: [] })),
+  importarRespuestas: vi.fn(async () => ({ success: true, data: { importadas: 0, respuestas: [] } })),
+  user: { userId: 7, role: 'tutor' },
 }));
 vi.mock('@/modules/consultas/api/consultas.api', async (original) => {
   const real = await original();
   return { ...real, consultasApi: api };
 });
 vi.mock('@/shared/hooks/useToast', () => ({ toast: api.toast }));
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: api.user }) }));
 
 import ConsultaPage from '@/modules/consultas/pages/ConsultaPage';
 

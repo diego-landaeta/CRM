@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-821 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+828 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -203,10 +203,17 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | estadoDelPlugin | `GET /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | codigoDeConexion | `POST /api/consultas/campus/:projectId/plugin/codigo` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | desactivarPlugin | `DELETE /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| respuestas | `GET /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| crearRespuesta | `POST /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| importarRespuestas | `POST /api/consultas/respuestas/importar` | (no existía) | (ruta nueva) | lo de cada uno |
+| cambiarRespuesta | `PUT /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
+| borrarRespuesta | `DELETE /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
 | panel | `GET /api/consultas/` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.view` |
 | ver | `GET /api/consultas/:id` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
+| contexto | `GET /api/consultas/:id/contexto` | (no existía) | (ruta nueva) | lo de cada uno |
 | responder | `POST /api/consultas/:id/responder` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
 | cerrar | `POST /api/consultas/:id/cerrar` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
+| anotar | `POST /api/consultas/:id/notas` | (no existía) | (ruta nueva) | lo de cada uno |
 | tutoresPosibles | `GET /api/consultas/:id/tutores` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.gestionar` |
 | reasignar | `POST /api/consultas/:id/reasignar` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.gestionar` |
 | adjuntoPublico | `GET /api/adjunto-consulta/:token` | nada (pública) | cualquiera, sin sesión | — |
