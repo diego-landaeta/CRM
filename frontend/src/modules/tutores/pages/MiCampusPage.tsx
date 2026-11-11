@@ -68,7 +68,7 @@ function PorHacer({ tono, icono, titulo, detalle, children }: {
   return (
     <li className="flex items-center gap-3 py-2.5">
       <span aria-hidden className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-md',
-        tono === 'corregir' ? 'bg-warning-soft text-warning-soft-foreground' : 'bg-info-soft text-info-soft-foreground')}>
+        tono === 'corregir' ? 'bg-warning-soft dark:bg-warning/15 text-warning-soft-foreground' : 'bg-info-soft dark:bg-info/15 text-info-soft-foreground')}>
         {icono}
       </span>
       <div className="min-w-0 flex-1">
@@ -114,7 +114,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
       {abierto && (
         <div id={panel} className="border-t border-border bg-muted/20 px-4 pb-3 pt-1 sm:pl-[3.75rem]">
           {curso.error && (
-            <p role="alert" className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+            <p role="alert" className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-warning/15 px-3 py-2 text-secundario text-warning-soft-foreground">
               <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {curso.error}
             </p>
           )}
@@ -358,7 +358,7 @@ export default function MiCampusPage() {
       />
 
       {error && !datos && (
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft px-4 py-4">
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 px-4 py-4">
           <p className="text-normal font-semibold text-foreground">No se ha podido leer tu campus</p>
           <p className="mt-1 text-secundario text-muted-foreground">{error}</p>
           <Button size="sm" className="mt-3 h-8" onClick={() => cargar(true)}>Volver a intentarlo</Button>
@@ -381,7 +381,7 @@ export default function MiCampusPage() {
           {datos.campus.length > 0 && <Resumen porCorregir={totales.porCorregir} dudas={totales.dudas} cursos={totales.cursosConAlgo} />}
 
           {(datos.sinConectar?.length ?? 0) > 0 && (
-            <section aria-labelledby="sin-conectar" className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3">
+            <section aria-labelledby="sin-conectar" className="rounded-lg border border-warning/40 bg-warning-soft dark:bg-warning/15 px-4 py-3">
               <h2 id="sin-conectar" className="flex items-center gap-2 text-normal font-semibold text-warning-soft-foreground">
                 <Warning size={15} weight="bold" aria-hidden /> Campus en los que tu cuenta de Moodle no está conectada
               </h2>
@@ -423,7 +423,7 @@ export default function MiCampusPage() {
                     )}
                   </div>
                   {c.error && (
-                    <p role="alert" className="m-4 flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+                    <p role="alert" className="m-4 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-warning/15 px-3 py-2 text-secundario text-warning-soft-foreground">
                       <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {c.error}
                     </p>
                   )}

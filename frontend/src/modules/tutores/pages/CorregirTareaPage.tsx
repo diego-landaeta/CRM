@@ -38,14 +38,14 @@ const ORDEN: Record<EstadoEntrega, number> = { sin_corregir: 0, calificada: 1, s
 function EstadoFila({ e, max, corto = false }: { e: EntregaDeTarea; max: number; corto?: boolean }) {
   if (e.estado === 'calificada') {
     return (
-      <span className={cn('inline-flex items-center gap-1 text-secundario font-medium tabular-nums text-success', corto && 'rounded bg-success-soft px-1.5 py-0.5 text-success-soft-foreground')}>
+      <span className={cn('inline-flex items-center gap-1 text-secundario font-medium tabular-nums text-success', corto && 'rounded bg-success-soft dark:bg-success/15 px-1.5 py-0.5 text-success-soft-foreground')}>
         {!corto && <CheckCircle size={12} weight="fill" aria-hidden />}
         {e.nota != null ? `${numero(e.nota)}${max ? ` / ${numero(max)}` : ''}` : 'Calificada'}
       </span>
     );
   }
   if (e.estado === 'sin_corregir') {
-    return <span className={cn('text-secundario font-medium text-warning', corto && 'rounded bg-warning-soft px-1.5 py-0.5 text-warning-soft-foreground')}>Por corregir</span>;
+    return <span className={cn('text-secundario font-medium text-warning', corto && 'rounded bg-warning-soft dark:bg-warning/15 px-1.5 py-0.5 text-warning-soft-foreground')}>Por corregir</span>;
   }
   return <span className="text-secundario text-muted-foreground">{corto ? 'Sin entregar' : 'Todavía no ha entregado'}</span>;
 }
@@ -142,7 +142,7 @@ export default function CorregirTareaPage() {
     return (
       <div className="mx-auto max-w-xl space-y-3 py-6">
         <Link to="/mis-cursos/campus" className="inline-flex items-center gap-1 text-normal font-medium text-primary hover:underline"><ArrowLeft size={14} aria-hidden /> Mi campus</Link>
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft p-4">
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 p-4">
           <p className="text-normal font-semibold text-foreground">No se ha podido abrir la tarea</p>
           <p className="mt-1 text-secundario text-muted-foreground">{error}</p>
         </div>

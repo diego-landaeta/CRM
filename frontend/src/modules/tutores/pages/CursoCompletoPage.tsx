@@ -59,7 +59,7 @@ function Actividad({ a, projectId, cursoId }: { a: ActividadDelCurso; projectId:
   return (
     <li className="flex items-center gap-3 py-2.5">
       <span aria-hidden className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-md',
-        porCorregir > 0 ? 'bg-warning-soft text-warning-soft-foreground' : 'bg-muted text-muted-foreground')}>
+        porCorregir > 0 ? 'bg-warning-soft dark:bg-warning/15 text-warning-soft-foreground' : 'bg-muted text-muted-foreground')}>
         <Icono size={16} weight={porCorregir > 0 ? 'bold' : 'regular'} />
       </span>
       <span className="min-w-0 flex-1">
@@ -146,7 +146,7 @@ export default function CursoCompletoPage() {
       </div>
 
       {error && (
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft p-4">
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 p-4">
           <p className="text-normal font-semibold text-foreground">No se ha podido abrir el curso</p>
           <p className="mt-1 text-secundario text-muted-foreground">{error}</p>
           <Button size="sm" className="mt-3 h-8" onClick={cargar}>Volver a intentarlo</Button>
@@ -177,7 +177,7 @@ export default function CursoCompletoPage() {
               </span>
             </span>
             {s.actividades.some((a) => (a.tarea?.porCorregir ?? 0) > 0) && (
-              <span className="shrink-0 rounded-full bg-warning-soft px-2 py-0.5 text-tabla font-medium text-warning-soft-foreground">Por corregir</span>
+              <span className="shrink-0 rounded-full bg-warning-soft dark:bg-warning/15 px-2 py-0.5 text-tabla font-medium text-warning-soft-foreground">Por corregir</span>
             )}
           </summary>
           {s.actividades.length > 0 ? (
