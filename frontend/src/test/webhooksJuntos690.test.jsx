@@ -28,12 +28,12 @@ vi.mock('@/shared/hooks/usePermission', () => ({
 }));
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch: vi.fn(), delete: vi.fn() }, API_BASE_URL: '/crm/api' }));
 
-import { TIPOS, GRUPOS, tiposVisibles, porCampus, ordenarFilas, crearPedidor, campusDelTipo, delAmbitoDeArriba } from '@/modules/webhooks/lib/resumen';
+import { TIPOS, GRUPOS, tiposVisibles, porCampus, ordenarFilas, crearPedidor, campusDelTipo, delAmbitoDeArriba, enlaceDeFila } from '@/modules/webhooks/lib/resumen';
 import { pestanasDe } from '@/modules/webhooks/pages/WebhooksLayout';
 import { TRASLADOS_DE_MENU, aplicarTraslados } from '@/shared/components/layout/trasladosDeMenu';
 import { NAV_SECTIONS, PERMISOS_WEBHOOKS, rutaPermitida } from '@/shared/components/layout/Sidebar';
 import { pathAllowsAll, rutaAceptaSociedad } from '@/shared/components/layout/AppLayout';
-import WebhooksResumenPage, { enlaceDeFila } from '@/modules/webhooks/pages/WebhooksResumenPage';
+import WebhooksResumenPage from '@/modules/webhooks/pages/WebhooksResumenPage';
 import RedirigirAWebhooks from '@/modules/webhooks/components/RedirigirAWebhooks';
 import { formatDateTime } from '@/shared/lib/format';
 
@@ -142,9 +142,19 @@ describe('cada tipo, en su grupo y por su permiso', () => {
   it('están todas las entradas y salidas del servidor (inventario de la auditoría del 09/11)', () => {
     // Cada punto por el que entra un aviso de fuera o sale uno a una URL configurable.
     expect(TIPOS.map((t) => t.id).sort()).toEqual([
-      'admision', 'asignacion', 'certifex', 'clave-campus', 'formularios', 'make',
+      'admision', 'asignacion', 'certifex', 'clave-campus', 'consultas', 'formularios', 'make',
       'prospectos', 'stripe', 'tokens', 'transferencias', 'whatsapp', 'widget', 'woocommerce',
     ]);
+  });
+
+  it('cada uno en el grupo que pide Diego en la #690', () => {
+    const grupo = (id) => TIPOS.find((t) => t.id === id).grupo;
+    // «Pagos y ventas (Stripe, WooCommerce, transferencias)».
+    expect(['stripe', 'woocommerce', 'transferencias'].map(grupo)).toEqual(['pagos', 'pagos', 'pagos']);
+    // «Mensajería (WhatsApp, widget, consultas)».
+    expect(['whatsapp', 'widget', 'consultas'].map(grupo)).toEqual(['mensajeria', 'mensajeria', 'mensajeria']);
+    // Las transferencias siguen diciendo que salen del CRM.
+    expect(TIPOS.find((t) => t.id === 'transferencias').direccion).toBe('sale');
   });
 
   it('Certifex solo existe con su panel en el entorno, y para administración o soporte', () => {
@@ -665,6 +675,32 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(get.mock.calls.some((c) => c[0].includes('/deliveries'))).toBe(false);
   });
 
+  it('asignación con equipo comercial: la lista viene recortada, así que no se da nada por completo', async () => {
+    const ahora = new Date().toISOString();
+    const asignacion = TIPOS.find((t) => t.id === 'asignacion');
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/asignacion' ? [{ id: 9, nombre: 'Reparto', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultima_decision_at: ahora, fallidos_30_dias: 12 }]
+        // Solo 3 de su equipo (el servidor quitó las demás después del tope).
+        : url.startsWith('/asignacion/decisiones?destino_id=9') ? [
+          { estado: 'enviado', created_at: ahora },
+          { estado: 'fallido', created_at: ahora },
+          { estado: 'fallido', created_at: ahora },
+        ] : RESPUESTAS(url),
+    }));
+    const ctx = { campus: [{ id: 1, nombre: 'A' }], ambito: new URLSearchParams(), llevaEquipo: true };
+    const [fila] = await asignacion.cargar(ctx);
+    // Pide su lista entera aunque sea «Todos», y no usa los 12 de todo el CRM.
+    expect(get.mock.calls.map((c) => c[0])).toContain('/asignacion/decisiones?destino_id=9&limit=200');
+    expect(fila.aviso).toBe('2 o más envíos fallidos en 30 días de tu equipo');
+    expect(fila.ultimo).toBe(ahora);
+    // Sin ninguna decisión de su equipo, no se dice «sin avisos todavía».
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/asignacion' ? [{ id: 9, nombre: 'Reparto', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultima_decision_at: ahora, fallidos_30_dias: 0 }] : [],
+    }));
+    const [vacia] = await asignacion.cargar(ctx);
+    expect(vacia.ultimo).toBeUndefined();
+  });
+
   it('asignación de leads: entra y sale, con sus fallos, y sin los campus de pruebas con «Todos»', async () => {
     get.mockImplementation((url) => Promise.resolve({
       data: url === '/asignacion' ? [
@@ -721,14 +757,45 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(switchProject).not.toHaveBeenCalled();
   });
 
-  it('WooCommerce dice que es la conexión de la tienda, no el aviso de pedidos', async () => {
+  it('WooCommerce: si tiene la firma del aviso de pedidos; sin ella, aviso (llegan con la sincronización)', async () => {
     get.mockImplementation((url) => Promise.resolve({
-      data: url.startsWith('/woocommerce/estado') ? [{ id: 1, nombre: 'ISEIH', conectado: true, activo: true }] : RESPUESTAS(url),
+      data: url.startsWith('/woocommerce/estado') ? [
+        { id: 1, nombre: 'ISEIH', conectado: true, activo: true },
+        { id: 2, nombre: 'Psiko Aprende', conectado: true, activo: true },
+        { id: 5, nombre: 'Otro campus', conectado: true, activo: false },
+      ]
+        : url === '/woocommerce/credentials?projectId=1' ? { webhook_secret: '****' }
+          : url === '/woocommerce/credentials?projectId=2' ? { webhook_secret: null }
+            : url === '/woocommerce/credentials?projectId=5' ? { webhook_secret: '****' }
+              : RESPUESTAS(url),
     }));
     abrir();
     const wc = await screen.findByTestId('tipo-woocommerce');
-    expect(await within(wc).findByText('Conexión de la tienda')).toBeTruthy();
-    expect(within(wc).getByText(/no el aviso de pedidos/)).toBeTruthy();
+    // Con firma: ISEIH y el campus apagado; sin ella, Psiko.
+    expect(await within(wc).findAllByText('Con la firma del aviso de pedidos')).toHaveLength(2);
+    expect(within(wc).getAllByText('Sin la firma del aviso de pedidos')).toHaveLength(1);
+    expect(within(wc).getByText(/los pedidos llegan con la sincronización periódica, no al momento/)).toBeTruthy();
+    expect(within(wc).getByText('Conexión apagada: no llegan pedidos de esta tienda')).toBeTruthy();
+    expect(within(wc).queryByText(/Falló:/)).toBeNull();
+  });
+
+  it('Consultas de alumnos en Mensajería, diciendo que el CRM las lee del Moodle', async () => {
+    abrir();
+    const c = await screen.findByTestId('tipo-consultas');
+    expect(within(c).getByText(/No llegan como aviso: el CRM las lee del Moodle/)).toBeTruthy();
+    expect(within(c).getByRole('link', { name: /Configurar/ }).getAttribute('href')).toBe('/consultas');
+    expect(c.closest('section').querySelector('h2').textContent).toBe('Mensajería');
+  });
+
+  it('un aviso largo va en su propia línea y no aplasta el nombre de la fila', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url === '/integrations/stripe?projectId=1' ? { active: true, has_secret: true, config_public: {} }
+        : url.startsWith('/integrations/stripe') ? null : RESPUESTAS(url),
+    }));
+    abrir();
+    const stripe = await screen.findByTestId('tipo-stripe');
+    const aviso = await within(stripe).findByText(/las devoluciones no se apuntan/);
+    expect(aviso.parentElement.className).toContain('basis-full');
   });
 
   it('con «Todos», «Configurar» de una pantalla de un campus dice que se elija uno', async () => {

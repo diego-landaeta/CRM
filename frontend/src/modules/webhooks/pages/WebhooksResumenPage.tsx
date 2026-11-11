@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, ArrowsLeftRight, ArrowSquareOut, WebhooksLogo } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import usePermission from '@/shared/hooks/usePermission';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { ponerAmbito, TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { moduloEncendido } from '@/shared/lib/modulos';
@@ -12,7 +13,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import StatusDot from '@/shared/components/ui/StatusDot';
 import {
-  GRUPOS, campusDelTipo, crearPedidor, ordenarFilas, tiposVisibles,
+  GRUPOS, campusDelTipo, crearPedidor, enlaceDeFila, ordenarFilas, tiposVisibles,
   type Campus, type FilaWebhook, type TipoWebhook,
 } from '../lib/resumen';
 
@@ -37,6 +38,8 @@ export default function WebhooksResumenPage() {
     switchProject?: (id: number) => void;
   };
   const { can, tieneRol } = usePermission();
+  // Quien lleva un equipo comercial ve las decisiones de asignación recortadas (#704).
+  const llevaEquipo = Boolean((useAuth() as { user?: { lleva_equipo?: boolean } | null })?.user?.lleva_equipo);
   const delAmbito = useProyectosDelAmbito<Campus & { sociedad_emisora_id?: number | null }>();
 
   const campusFijo = !activeIssuerId && activeProject?.id && activeProject.id !== TODOS_LOS_PROYECTOS
@@ -70,14 +73,14 @@ export default function WebhooksResumenPage() {
     const ambito = ponerAmbito(new URLSearchParams(), { activeIssuerId, activeProject });
     setEstados(Object.fromEntries(tipos.map((t) => [t.id, { cargando: true, filas: [] }])));
     for (const t of tipos) {
-      t.cargar({ campus: campusDelTipo(t, campus), ambito, pedir })
+      t.cargar({ campus: campusDelTipo(t, campus), ambito, pedir, llevaEquipo })
         .then((filas) => { if (vivo) setEstados((e) => ({ ...e, [t.id]: { cargando: false, filas } })); })
         .catch((err: any) => {
           if (vivo) setEstados((e) => ({ ...e, [t.id]: { cargando: false, filas: [], error: err?.data?.error || 'No se pudo leer' } }));
         });
     }
     return () => { vivo = false; corte.abort(); };
-  }, [claveCampus, activeIssuerId, activeProject?.id, tipos.map((t) => t.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [claveCampus, activeIssuerId, activeProject?.id, llevaEquipo, tipos.map((t) => t.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // La ficha de un webhook es de un campus: con «Todos» o una empresa, el muro
   // pararía el enlace. Se elige arriba ese campus y se entra.
@@ -174,8 +177,8 @@ export default function WebhooksResumenPage() {
       <p className="text-xs text-muted-foreground">
         Relacionado:{' '}
         <Link to="/conexion/conectores" className="text-primary hover:underline">Conectores</Link> (mapeo de campos) ·{' '}
-        <Link to="/prospectos/revision-duplicados" className="text-primary hover:underline">Revisión de duplicados</Link> (repetidos por webhook).
-        Las consultas que se leen del Moodle de cada campus no son un webhook: el CRM las pide, no le llegan.
+        <Link to="/prospectos/revision-duplicados" className="text-primary hover:underline">Revisión de duplicados</Link> (repetidos por webhook) ·{' '}
+        <Link to="/conexion/asignacion-leads" className="text-primary hover:underline">Asignación de leads</Link> (sus avisos están arriba; se configura en su pantalla).
       </p>
     </div>
   );
@@ -254,23 +257,6 @@ function TarjetaTipo({ tipo, estado, alAbrir, conCampus }: {
   );
 }
 
-/**
- * El enlace de una fila. Con «Todos» o una empresa arriba, lleva el campus en la
- * dirección (`?projectId=`): así, abierto en otra pestaña (Ctrl/Cmd + clic o el
- * botón central), esa pestaña arranca con el campus y no se queda en el muro.
- * El CRM lo lee al cargar (AuthContext, `proyectoDeLaUrl`).
- *
- * Ojo, entre pestañas: el campus y la empresa elegidos se guardan en
- * `localStorage`, que es de todas las pestañas. La pestaña nueva guarda ese
- * campus y QUITA la empresa guardada; la original sigue como estaba hasta que
- * se recarga, y entonces abre con ese campus. Antes quedaba peor: campus y
- * empresa a la vez. El clic normal no lleva el parámetro (navega a la dirección
- * limpia), así que solo pasa al abrir en otra pestaña.
- */
-export function enlaceDeFila(fila: FilaWebhook, conCampus: boolean): string {
-  if (conCampus || !fila.campusId || !fila.enlace) return fila.enlace;
-  return `${fila.enlace}${fila.enlace.includes('?') ? '&' : '?'}projectId=${fila.campusId}`;
-}
 
 function FilaDeWebhook({ fila, alAbrir, conCampus }: { fila: FilaWebhook; alAbrir: (f: FilaWebhook) => void; conCampus: boolean }) {
   const navigate = useNavigate();
@@ -309,18 +295,25 @@ function FilaDeWebhook({ fila, alAbrir, conCampus }: { fila: FilaWebhook; alAbri
       </span>
       {estado}
       {ultimo && <span className="text-xs text-muted-foreground">{ultimo}</span>}
-      {fila.detalle && <span className="text-xs text-muted-foreground">{fila.detalle}</span>}
-      {fila.sinLeer && <span className="text-xs text-warning">{fila.sinLeer}</span>}
-      {fila.aviso && <span className="text-xs text-warning">{fila.aviso}</span>}
-      {/* El texto entero, para el lector de pantalla; el recortado, a la vista. */}
-      {fila.fallo && (corto === fila.fallo ? (
-        <StatusDot tono="danger" title={fila.fallo}>Falló: {fila.fallo}</StatusDot>
-      ) : (
-        <StatusDot tono="danger" title={fila.fallo}>
-          <span aria-hidden>Falló: {corto}</span>
-          <span className="sr-only">Falló: {fila.fallo}</span>
-        </StatusDot>
-      ))}
+      {/* Lo que explica la fila (aclaraciones, avisos, fallos) va en su propia
+          línea, debajo: en la misma, un texto largo dejaba el nombre en una
+          columna de una palabra (Stripe sin firma, prueba manual del 10/11). */}
+      {(fila.detalle || fila.sinLeer || fila.aviso || fila.fallo) && (
+        <div className="flex basis-full flex-col gap-0.5 text-xs">
+          {fila.detalle && <span className="text-muted-foreground">{fila.detalle}</span>}
+          {fila.sinLeer && <span className="text-warning">{fila.sinLeer}</span>}
+          {fila.aviso && <span className="text-warning">{fila.aviso}</span>}
+          {/* El texto entero, para el lector de pantalla; el recortado, a la vista. */}
+          {fila.fallo && (corto === fila.fallo ? (
+            <StatusDot tono="danger" title={fila.fallo}>Falló: {fila.fallo}</StatusDot>
+          ) : (
+            <StatusDot tono="danger" title={fila.fallo}>
+              <span aria-hidden>Falló: {corto}</span>
+              <span className="sr-only">Falló: {fila.fallo}</span>
+            </StatusDot>
+          ))}
+        </div>
+      )}
     </li>
   );
 }

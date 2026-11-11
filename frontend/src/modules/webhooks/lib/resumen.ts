@@ -11,9 +11,10 @@
   importación de WooCommerce, por ejemplo, es otra cosa). El botón de la web
   apunta cada pulsación, pero eso se mira en su pantalla, no aquí.
 
-  Las «consultas de alumnos» de Moodle no están: no son un webhook, el CRM las
-  LEE del Moodle de cada campus (Conexión › Moodle). Las de CERTIFEX sí, porque
-  Certifex avisa al CRM (consultas, solicitudes de diploma y completados).
+  Las «consultas de alumnos» de Moodle están en Mensajería porque Diego las pone
+  ahí (#690), pero dicen la verdad: no llegan como aviso, el CRM las LEE del
+  Moodle de cada campus. Las de CERTIFEX sí son avisos (consultas, solicitudes
+  de diploma y completados), en Admisión y matrículas.
 
   EL ÁMBITO. Los que se piden de un campus por llamada (prospectos, Make,
   formularios, admisión, Stripe, el widget) se piden campus a campus, unos pocos
@@ -33,7 +34,7 @@ export const GRUPOS: ReadonlyArray<{ id: GrupoId; titulo: string; detalle: strin
   { id: 'captacion', titulo: 'Captación de prospectos', detalle: 'Lo que mete prospectos en el CRM' },
   { id: 'admision', titulo: 'Admisión y matrículas', detalle: 'Solicitudes de admisión con sus documentos' },
   { id: 'pagos', titulo: 'Pagos y ventas', detalle: 'Cobros y pedidos que avisan al CRM' },
-  { id: 'mensajeria', titulo: 'Mensajería', detalle: 'Mensajes que entran por WhatsApp y la web' },
+  { id: 'mensajeria', titulo: 'Mensajería', detalle: 'Mensajes que entran por WhatsApp, la web y el Moodle' },
   { id: 'salida', titulo: 'Avisos que salen del CRM', detalle: 'El CRM avisa a otro sistema' },
 ];
 
@@ -102,6 +103,12 @@ export interface Contexto {
   ambito: URLSearchParams;
   /** Cómo se pide. El resumen pasa uno con tope y que se cancela (`crearPedidor`). */
   pedir?: Pedir;
+  /**
+   * La persona lleva un equipo comercial (`/auth/me` → `lleva_equipo`): el
+   * servidor le recorta las decisiones de asignación a las de su equipo
+   * DESPUÉS del tope, así que una lista de menos de 200 puede no ser toda.
+   */
+  llevaEquipo?: boolean;
 }
 
 export interface TipoWebhook {
@@ -494,24 +501,37 @@ export const TIPOS: TipoWebhook[] = [
     enlace: '/productos/woocommerce',
     permisos: ['woocommerce.view'],
     moduloCampus: 'woocommerce',
-    // Lo que se lee es la CONEXIÓN de la tienda (`wc_credentials`, la de la
-    // importación). El aviso de pedidos lleva su propia firma
-    // (`POST /woocommerce/webhook-secret`), que no tiene pantalla en el CRM ni
-    // sale en este estado: una tienda conectada puede tener los avisos rechazados.
-    nota: 'Se ve la conexión de la tienda, no el aviso de pedidos: su firma no se configura en el CRM. No guarda cuándo llegó el último pedido por aviso ni si falló.',
+    // El aviso de pedidos (`POST /api/woocommerce/webhook`) se acepta solo con
+    // la conexión ENCENDIDA y su FIRMA (`wc_credentials.webhook_secret`,
+    // `wc.orders.recibirAviso`). La firma se pone con `POST
+    // /woocommerce/webhook-secret`, que no tiene pantalla; si está puesta se
+    // lee en `GET /woocommerce/credentials` (enmascarada). Sin ella los
+    // pedidos no se pierden: llegan con la sincronización periódica
+    // (jobs/wooCommerceSyncScheduler), no al momento.
+    nota: 'La firma del aviso de pedidos no se pone desde ninguna pantalla del CRM. No guarda cuándo llegó el último pedido por aviso ni si falló.',
     cargar: async (ctx) => {
-      const filas = await (ctx.pedir || datos)<Array<{ id: number; nombre: string; conectado: boolean; activo: boolean }>>(`/woocommerce/estado?${ctx.ambito.toString()}`);
+      const pedir = ctx.pedir || datos;
+      const filas = await pedir<Array<{ id: number; nombre: string; conectado: boolean; activo: boolean }>>(`/woocommerce/estado?${ctx.ambito.toString()}`);
       // Se pide del ámbito, pero solo salen los campus que se están mirando (los
       // de WooCommerce apagado ya los quitó `campusDelTipo`).
       const ids = new Set(ctx.campus.map((c) => c.id));
-      return filas.filter((c) => c.conectado && ids.has(c.id)).map((c) => ({
-        clave: `wc-${c.id}`,
-        nombre: 'Conexión de la tienda',
-        campus: c.nombre,
-        activo: !!c.activo,
-        enlace: '/productos/woocommerce',
-        campusId: c.id,
-      }));
+      const conectados = ctx.campus.filter((c) => filas.some((f) => f.id === c.id && f.conectado && ids.has(f.id)));
+      return porCampus(conectados, async (c) => {
+        const f = filas.find((x) => x.id === c.id)!;
+        const cred = await pedir<{ webhook_secret?: string | null } | null>(`/woocommerce/credentials?projectId=${c.id}`);
+        const conFirma = Boolean(cred && !Array.isArray(cred) && cred.webhook_secret);
+        return [{
+          clave: `wc-${c.id}`,
+          nombre: conFirma ? 'Con la firma del aviso de pedidos' : 'Sin la firma del aviso de pedidos',
+          campus: c.nombre,
+          activo: !!f.activo,
+          aviso: !f.activo ? 'Conexión apagada: no llegan pedidos de esta tienda'
+            : conFirma ? undefined
+              : 'Sin la firma el aviso se rechaza: los pedidos llegan con la sincronización periódica, no al momento',
+          enlace: '/productos/woocommerce',
+          campusId: c.id,
+        }];
+      });
     },
   },
   {
@@ -526,6 +546,23 @@ export const TIPOS: TipoWebhook[] = [
     modulo: 'whatsapp',
     nota: 'Es uno para todo el CRM: no va por campus.',
     cargar: async () => [{ clave: 'whatsapp', nombre: 'Aviso de WhatsApp', campus: null, activo: null, enlace: '/whatsapp/conexion' }],
+  },
+  {
+    id: 'consultas',
+    grupo: 'mensajeria',
+    titulo: 'Consultas de alumnos (Moodle)',
+    queHace: 'Las dudas que los alumnos escriben en el Moodle de cada campus llegan al CRM para que las atienda su tutora.',
+    direccion: 'entra',
+    enlace: '/consultas',
+    // Diego las pone en Mensajería (#690). No son un aviso que llegue: el CRM
+    // las LEE del Moodle de cada campus cada pocos minutos
+    // (jobs/consultasCampusScheduler). Por eso no hay «último aviso» ni
+    // «falló» que enseñar aquí: un campus que no responde se ve en
+    // Conexión › Moodle. Los permisos y el módulo, los de su entrada del menú.
+    permisos: ['consultas.view', 'consultas.atender'],
+    moduloCampus: 'tutores',
+    nota: 'No llegan como aviso: el CRM las lee del Moodle de cada campus. Si un campus no responde, se ve en Conexión › Moodle.',
+    cargar: async () => [{ clave: 'consultas', nombre: 'Lectura del Moodle de cada campus', campus: null, activo: null, enlace: '/consultas' }],
   },
   {
     id: 'widget',
@@ -543,7 +580,9 @@ export const TIPOS: TipoWebhook[] = [
   },
   {
     id: 'transferencias',
-    grupo: 'salida',
+    // En «Pagos y ventas», como lo pide Diego en la #690 («Stripe,
+    // WooCommerce, transferencias»); su etiqueta sigue diciendo «Sale del CRM».
+    grupo: 'pagos',
     titulo: 'Transferencias y depósitos',
     queHace: 'Cuando se registra un cobro por transferencia o depósito, el CRM avisa a la dirección que se ponga (Make).',
     direccion: 'sale',
@@ -591,7 +630,7 @@ export const TIPOS: TipoWebhook[] = [
         campus: dondeVa(d),
         activo: !!d.activo,
         ...(await comoFueElUltimo(pedir, `/asignacion/decisiones?destino_id=${d.id}`, conAmbito(ctx.ambito, 'project_id', 'issuer_id'),
-          { ultimo: d.ultima_decision_at, fallidos30: d.fallidos_30_dias }, (e) => e.created_at)),
+          { ultimo: d.ultima_decision_at, fallidos30: d.fallidos_30_dias }, (e) => e.created_at, Boolean(ctx.llevaEquipo))),
         enlace: '/conexion/asignacion-leads',
       })));
     },
@@ -668,14 +707,21 @@ async function comoFueElUltimo(
   // = MAX(enviado_at), la última entrega BUENA. Asignación:
   // `ultima_decision_at` = MAX(created_at), la última decisión.
   fechaDe: (e: Envio) => string | null | undefined,
+  // El servidor recorta la lista DESPUÉS del tope (las decisiones de quien
+  // lleva un equipo comercial, #704): menos de 200 no quiere decir «todas».
+  // Entonces no hay un dato de todo el CRM que valga para ella (el de
+  // `/asignacion` no va recortado) y todo sale de su lista, sin dar nada por
+  // completo.
+  recortada = false,
 ): Promise<Pick<FilaWebhook, 'ultimo' | 'fallo' | 'aviso' | 'sinLeer'>> {
   const falloDe = (e?: Envio) => (e?.estado === 'fallido'
     ? `El último envío falló: ${e.error || (e.http_status ? `respondió ${e.http_status}` : 'no se pudo entregar')}`
     : null);
+  const donde = recortada ? 'de tu equipo' : 'aquí';
 
   // «Todos»: la fecha y los fallidos de 30 días los da el servidor, de todo el
   // CRM, que es lo que se mira. Basta con los últimos envíos para el fallo.
-  if (!ambito) {
+  if (!ambito && !recortada) {
     const aviso = fallidos(delServidor.fallidos30) || undefined;
     try {
       const envios = await pedir<Envio[]>(`${base}&limit=5`);
@@ -698,16 +744,23 @@ async function comoFueElUltimo(
     const hace30 = Date.now() - 30 * 864e5;
     const reciente = (e: Envio) => Boolean(e.created_at && new Date(e.created_at).getTime() >= hace30);
     const n = envios.filter((e) => reciente(e) && e.estado === 'fallido').length;
-    // Llegaron 200 y el más antiguo aún es de estos 30 días: puede haber más.
-    const masDe = crudos.length >= TOPE && reciente(crudos[crudos.length - 1]);
+    // Puede haber más de los que llegaron: llegaron 200 y el más antiguo aún es
+    // de estos 30 días, o el servidor recorta después del tope.
+    const enElTope = crudos.length >= TOPE;
+    const masDe = recortada || (enElTope && reciente(crudos[crudos.length - 1]));
     const aviso = n
-      ? `${n}${masDe ? ' o más' : ''} ${n === 1 && !masDe ? 'envío fallido' : 'envíos fallidos'} en 30 días aquí`
-      : masDe ? '200 o más envíos en 30 días aquí: los fallidos se ven en su pantalla' : undefined;
+      ? `${n}${masDe ? ' o más' : ''} ${n === 1 && !masDe ? 'envío fallido' : 'envíos fallidos'} en 30 días ${donde}`
+      : enElTope && masDe ? `200 o más envíos en 30 días ${donde}: los fallidos se ven en su pantalla` : undefined;
     const fechas = envios.map(fechaDe).filter((f): f is string => Boolean(f)).sort();
-    // Sin fecha entre los que llegaron: si se llegó al tope, la última entrega
-    // puede ser anterior (o un reenvío antiguo): no se sabe, y no se dice «sin
-    // avisos todavía», que sería falso. Solo sin tope es seguro que no hay.
-    const ultimo = fechas.length ? fechas[fechas.length - 1] : crudos.length >= TOPE ? undefined : null;
+    // Sin fecha entre los que llegaron: si se llegó al tope (o la lista viene
+    // recortada), la última puede ser anterior: no se sabe, y no se dice «sin
+    // avisos todavía», que sería falso. Solo con la lista entera es seguro.
+    //
+    // Límite conocido, sin arreglo desde el frontal: un REENVÍO de un envío más
+    // antiguo que estos 200 pone su `enviado_at` al día y aquí no se ve; con
+    // «Todos» sí, porque lo calcula el servidor. Haría falta que la ruta
+    // ordenara por `enviado_at` o devolviera el último por ámbito.
+    const ultimo = fechas.length ? fechas[fechas.length - 1] : (enElTope || recortada) ? undefined : null;
     return { ultimo, fallo: falloDe(envios[0]), aviso };
   } catch {
     return { ultimo: undefined, sinLeer: 'No se pudo leer sus envíos de este ámbito' };
@@ -735,6 +788,27 @@ export function tiposVisibles(
 export function campusDelTipo(tipo: TipoWebhook, campus: Campus[]): Campus[] {
   const m = tipo.moduloCampus;
   return m ? campus.filter((c) => c.modules?.[m] !== false) : campus;
+}
+
+/**
+ * El enlace de una fila. Con «Todos» o una empresa arriba, lleva el campus en la
+ * dirección (`?projectId=`): así, abierto en otra pestaña (Ctrl/Cmd + clic o el
+ * botón central), esa pestaña arranca con el campus y no se queda en el muro.
+ * El CRM lo lee al cargar (AuthContext, `proyectoDeLaUrl`).
+ *
+ * Ojo, entre pestañas: el campus y la empresa elegidos se guardan en
+ * `localStorage`, que es de todas las pestañas. La pestaña nueva guarda ese
+ * campus y QUITA la empresa guardada; la original sigue como estaba hasta que
+ * se recarga, y entonces abre con ese campus. Antes quedaba peor: campus y
+ * empresa a la vez. El clic normal no lleva el parámetro (navega a la dirección
+ * limpia), así que solo pasa al abrir en otra pestaña.
+ *
+ * Vive aquí y no en la página: un archivo de componentes que exporta también
+ * una función rompe la recarga en caliente de Vite («Fast Refresh»).
+ */
+export function enlaceDeFila(fila: FilaWebhook, conCampus: boolean): string {
+  if (conCampus || !fila.campusId || !fila.enlace) return fila.enlace;
+  return `${fila.enlace}${fila.enlace.includes('?') ? '&' : '?'}projectId=${fila.campusId}`;
 }
 
 /** Las de la tarjeta con algo que mirar primero: lo que falla, luego lo apagado. */
