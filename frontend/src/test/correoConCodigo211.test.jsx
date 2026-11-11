@@ -40,8 +40,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   sesion.permisos = { 'cuenta.cambiar_correo': true };
   sesion.user = { id: 9, nombre: 'Ana', email: 'ana@viejo.com', role: 'gestor', correo_propio_frenado: null };
-  // El equipo comercial de la ficha (#704) no es de esta prueba: sin acceso, no sale.
-  api.get.mockImplementation(async (url) => (String(url).includes('equipo-comercial')
+  // El equipo comercial (#704) y los permisos de la ficha (#694) no son de esta
+  // prueba: sin acceso, no salen.
+  api.get.mockImplementation(async (url) => (/equipo-comercial|\/permissions/.test(String(url))
     ? Promise.reject(new Error('sin acceso'))
     : { success: true, data: [] }));
   api.post.mockResolvedValue({ success: true, data: { email: 'ana@nuevo.com', enviado: true, minutos: 15 } });

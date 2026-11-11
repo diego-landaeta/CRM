@@ -5,6 +5,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { logActivity } from '../auth/auth.model.js';
 import { sendCodigoCambioCorreoEmail } from '../../shared/services/brevo.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
+import { ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 import * as userModel from './user.model.js';
 import { cambiarCorreo } from './user.service.js';
 
@@ -50,8 +51,8 @@ function clave() {
 }
 export const hash = (codigo) => crypto.createHmac('sha256', clave()).update(String(codigo)).digest('hex');
 
-/** ¿Es tutor, de rol principal o de más? Para el freno. */
-const esTutor = (u) => [u?.role, ...(u?.roles_extra || [])].includes('tutor');
+/** ¿Es tutor (o tutor redactor, #708), de rol principal o de más? Para el freno. */
+const esTutor = (u) => [u?.role, ...(u?.roles_extra || [])].some((r) => ROLES_DE_TUTOR.includes(r));
 
 /** Lo que se le dice a un tutor mientras siga el freno (sin error: es un estado, no un fallo). */
 export const MENSAJE_FRENADO = 'Ahora mismo el CRM no manda correos a los tutores, así que no te podemos mandar el código. Pide el cambio a administración: el superadmin te lo cambia al momento.';

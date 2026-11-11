@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import crypto from 'crypto';
 import pool from '../src/shared/config/db.js';
-import { pedirCodigo, confirmarCodigo, nuevoCodigo, INTENTOS, MENSAJE_FRENADO } from '../src/modules/users/cambio-de-correo.js';
+import { pedirCodigo, confirmarCodigo, nuevoCodigo, INTENTOS, MENSAJE_FRENADO, codigoFrenadoPara } from '../src/modules/users/cambio-de-correo.js';
 import { cambiarCorreo } from '../src/modules/users/user.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../src/shared/config/frenoTutores.js';
 
@@ -196,6 +196,20 @@ describe('#211 · el freno de correos a tutores (Diego, 06/11, #688)', () => {
     await q(`UPDATE users SET roles_extra = '{tutor}' WHERE id = $1`, [OTRA]);
     try {
       const r = await pedir({ userId: OTRA, emailNuevo: `otra.nueva@${MARCA.toLowerCase()}.test`, enviar });
+      expect(r.frenado).toBe(true);
+      expect(enviado).toBeNull();
+    } finally {
+      await q(`UPDATE users SET roles_extra = '{}' WHERE id = $1`, [OTRA]);
+    }
+  });
+
+  it('el tutor redactor (#708) cuenta como tutor: también frenado, de rol principal o de más', async () => {
+    expect(codigoFrenadoPara({ role: 'tutor_redactor', roles_extra: [] })).toBe(true);
+    expect(codigoFrenadoPara({ role: 'colaborador', roles_extra: ['tutor_redactor'] })).toBe(true);
+    expect(codigoFrenadoPara({ role: 'colaborador', roles_extra: [] })).toBe(false);
+    await q(`UPDATE users SET roles_extra = '{tutor_redactor}' WHERE id = $1`, [OTRA]);
+    try {
+      const r = await pedir({ userId: OTRA, emailNuevo: `otra.redactora@${MARCA.toLowerCase()}.test`, enviar });
       expect(r.frenado).toBe(true);
       expect(enviado).toBeNull();
     } finally {
