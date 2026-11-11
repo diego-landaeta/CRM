@@ -113,7 +113,7 @@ function ConEnlaces({ texto, claro }: { texto: string; claro: boolean }) {
       {trozos.map((t, i) => (i % 2 === 1 ? (
         <a key={i} href={t.replace(/[.,;:!?)»]+$/, '')} target="_blank" rel="noopener noreferrer"
           className={cn('break-all underline underline-offset-2',
-            claro ? 'text-primary-foreground decoration-primary-foreground/50 hover:decoration-primary-foreground' : 'text-primary decoration-primary/40 hover:decoration-primary')}>
+            claro ? 'text-primary-foreground decoration-primary-foreground/50 hover:decoration-primary-foreground dark:text-primary dark:decoration-primary/40 dark:hover:decoration-primary' : 'text-primary decoration-primary/40 hover:decoration-primary')}>
           {t}
         </a>
       ) : t))}
@@ -781,7 +781,7 @@ export default function ConsultaPage() {
                         )}
                         <div title={fecha(m.escrito_at)}
                           className={cn('max-w-[88%] rounded-2xl px-3.5 py-2 text-normal leading-6 sm:max-w-[75%]',
-                            delTutor ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
+                            delTutor ? 'bg-primary text-primary-foreground dark:bg-primary/15 dark:text-foreground dark:ring-1 dark:ring-inset dark:ring-primary/30' : 'bg-muted text-foreground',
                             delTutor ? (empiezaGrupo ? 'rounded-tr-md' : '') : (empiezaGrupo ? 'rounded-tl-md' : ''))}>
                           {/* Quién lo escribe, también para el lector de pantalla cuando el nombre no se repite encima. */}
                           {!empiezaGrupo && <span className="sr-only">{quien}: </span>}
@@ -791,7 +791,7 @@ export default function ConsultaPage() {
                               {m.adjuntos.map((a) => (
                                 <li key={a.id}>
                                   <button type="button" className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 text-secundario font-medium',
-                                    delTutor ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25' : 'bg-card text-foreground ring-1 ring-border hover:bg-background')}
+                                    delTutor ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25 dark:bg-card dark:text-foreground dark:ring-1 dark:ring-border dark:hover:bg-background' : 'bg-card text-foreground ring-1 ring-border hover:bg-background')}
                                     onClick={() => consultasApi.abrirAdjunto(a).catch((err) => toast({ title: 'No se ha podido abrir', description: mensajeDeError(err), variant: 'destructive' }))}>
                                     <Paperclip size={12} aria-hidden /> {a.nombre}
                                   </button>
@@ -800,10 +800,10 @@ export default function ConsultaPage() {
                             </ul>
                           )}
                           <span className={cn('-mb-0.5 mt-0.5 flex items-center justify-end gap-1 text-[11px] leading-4 tabular-nums',
-                            delTutor ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+                            delTutor ? 'text-primary-foreground/80 dark:text-muted-foreground' : 'text-muted-foreground')}>
                             <time dateTime={m.escrito_at || undefined}>{hora(m.escrito_at)}</time>
                             {delTutor && m.en_el_campus && (
-                              <span title="En el campus" className="inline-flex"><Checks size={13} weight="bold" aria-label="En el campus" /></span>
+                              <span title="En el campus" className="inline-flex dark:text-primary"><Checks size={13} weight="bold" aria-label="En el campus" /></span>
                             )}
                           </span>
                         </div>
@@ -841,7 +841,7 @@ export default function ConsultaPage() {
                     <Guardadas lista={guardadas} texto={texto} alElegir={insertar} alCrear={crearGuardada} alBorrar={borrarGuardada} alCerrar={() => setVerGuardadas(false)} />
                   )}
                   <div className={cn('mx-auto max-w-3xl rounded-lg border shadow-sm transition-shadow focus-within:ring-2',
-                    modoReal === 'nota' ? 'border-warning/50 bg-warning-soft/40 focus-within:ring-warning/20' : 'bg-background focus-within:border-ring focus-within:ring-ring/20',
+                    modoReal === 'nota' ? 'border-warning/50 bg-warning-soft/40 focus-within:ring-warning/20 dark:border-warning/30 dark:bg-warning/[0.06]' : 'bg-background focus-within:border-ring focus-within:ring-ring/20',
                     faltaTexto ? 'border-destructive' : (modoReal === 'nota' ? '' : 'border-input'))}>
                     <label htmlFor="consulta-respuesta" className="sr-only">{modoReal === 'nota' ? 'Tu nota interna' : 'Tu respuesta'}</label>
                     <textarea id="consulta-respuesta" ref={caja} value={texto}
