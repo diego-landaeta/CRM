@@ -147,7 +147,8 @@ export const SECCIONES = [
           // El tutor, para mover las suyas (04/11): mover y comentar siguen siendo solo de quien la lleva o la supervisa.
           a('edit', 'Editar tareas', 'Cambiar, mover y completar las tareas que puede ver.', ['admin', 'colaborador', 'tutor'], { requiere: ['tasks.view_own'] }),
           a('delete', 'Archivar tareas', 'Archivar cualquier tarea y borrar comentarios ajenos.', ADMIN, { requiere: ['tasks.view_own'] }),
-          a('close', 'Aprobar y cerrar', 'Aprobar, devolver, cerrar y reabrir tareas en «Por revisar».', ADMIN, { requiere: ['tasks.view_own'] }),
+          // CRM#707: cada uno cierra lo suyo (y la programación, su supervisor); esta clave es la del admin para devolverla.
+          a('close', 'Devolver tareas', 'Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver.', ADMIN, { requiere: ['tasks.view_own'] }),
           a('manage', 'Configurar el tablero', 'Columnas, áreas y proyectos del tablero.', ADMIN, { requiere: ['tasks.view_own'] }),
           // Diego, 26/10/2026: «Admin y superadmin pueden crear, renombrar y archivar
           // equipos y gestionar sus miembros y encargados».
@@ -574,6 +575,14 @@ export const SECCIONES = [
         ],
       },
       {
+        // Carlos, 09/11/2026: una administradora puede llevar a unas gestoras
+        // concretas y ver solo lo de ellas (migración 246, `alcanceComercial`).
+        // Decidir quiénes son es cosa del superadmin; a otro, por excepción.
+        clave: 'equipos', nombre: 'Equipos comerciales', acciones: [
+          a('gestionar', 'Equipo de una administradora', 'Decidir qué gestoras tiene a su cargo una administradora', NADIE, { requiere: ['users.view'] }),
+        ],
+      },
+      {
         clave: 'roles', nombre: 'Roles y permisos', acciones: [
           a('view', 'Ver roles', 'Qué trae cada rol y los roles a medida.', yPM(ADMIN)),
           // Diego, 26/10: el admin SIGUE cambiando lo que trae cada rol y los
@@ -610,7 +619,9 @@ export const SECCIONES = [
       },
       {
         clave: 'cuenta', nombre: 'Su cuenta', acciones: [
-          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra (el de su factura).', ['tutor'], { propia: true }),
+          // #211: con un código a la dirección nueva y su contraseña actual. Antes
+          // solo el tutor, y sin código (#246). El project manager no: solo ve.
+          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor'], { propia: true }),
         ],
       },
     ],

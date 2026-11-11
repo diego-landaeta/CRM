@@ -6,7 +6,7 @@ import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -153,17 +153,22 @@ export async function actividad(req, res, next) {
     const desde = fecha(req.query.from) || hasta;
     const ambito = await proyectosDelAmbito(req);
     const projectIds = comoLista(ambito.projectId, ambito.projectIds);
-    res.json({ success: true, data: await actividadEnWhatsapp({ projectIds, desde, hasta }) });
+    const datos = await actividadEnWhatsapp({ projectIds, desde, hasta });
+    // Quien lleva un equipo comercial (QA del 09/11/2026): ella y su equipo.
+    const lider = await alcanceDeLider(req.user);
+    if (lider) datos.filas = datos.filas.filter((f) => enElAlcance(lider, f.id));
+    res.json({ success: true, data: datos });
   } catch (e) { next(e); }
 }
 
 export async function cola(req, res, next) {
   try {
     // Una gestora ve SU cola, ignorando lo que pida por query. Un admin puede
-    // mirar la de quien quiera, o la de todos si no pide a nadie.
-    const responsableId = soloLoSuyo(req.user)
-      ? req.user.userId
-      : (req.query.responsableId ? parseInt(req.query.responsableId) : null);
+    // mirar la de quien quiera, o la de todos si no pide a nadie. Quien lleva un
+    // equipo comercial (09/11/2026), la de su equipo o la de una de ellas.
+    const responsableId = acotarAlAlcance(
+      req.query.responsableId ? parseInt(req.query.responsableId) : null,
+      await alcanceComercial(req.user));
 
     res.json({ success: true, data: await model.cola({
       projectId: proyecto(req),

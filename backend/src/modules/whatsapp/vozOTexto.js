@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { personaDelInforme, comoIds } from '../../shared/utils/roles.js';
 
 /**
  * Cuánto se manda por voz y cuánto escrito (#128, punto 4).
@@ -38,8 +39,9 @@ export async function vozOTexto({ projectIds = null, desde = null, hasta = null,
   if (hasta) par.push(hasta);
   // Una gestora solo ve lo SUYO: el recuento por persona es como trabaja cada
   // una, y eso lo ve quien la coordina, no el resto del equipo.
-  const pUsuario = usuarioId ? `AND m.enviado_por = $${i++}::int` : '';
-  if (usuarioId) par.push(Number(usuarioId));
+  // Una persona o varias (un equipo comercial, 09/11/2026).
+  const pUsuario = usuarioId ? `AND m.enviado_por = ANY($${i++}::int[])` : '';
+  if (usuarioId) par.push(comoIds(usuarioId));
 
   const { rows } = await query(
     `SELECT u.id AS user_id,
@@ -82,18 +84,18 @@ export async function vozOTexto({ projectIds = null, desde = null, hasta = null,
  * números —y los nombres— de las gestoras de otra empresa.
  *
  * Admin, superadmin y soporte ven a todas las gestoras de su ámbito. Una
- * gestora, solo su propia fila.
+ * gestora, solo su propia fila. Quien lleva un equipo comercial (09/11/2026),
+ * las de su equipo.
  */
 export async function vozOTextoDeLaPeticion(req) {
   const { projectId, projectIds } = await proyectosDelAmbito(req);
   const ids = projectIds || (projectId ? [projectId] : null);
   const fecha = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
-  const veATodas = ['admin', 'superadmin', 'soporte'].includes(req.user?.role);
 
   return vozOTexto({
     projectIds: ids,
     desde: fecha(req.query?.desde),
     hasta: fecha(req.query?.hasta),
-    usuarioId: veATodas ? null : req.user?.userId,
+    usuarioId: await personaDelInforme(req.user, null, { jefes: ['admin', 'superadmin', 'soporte'] }),
   });
 }

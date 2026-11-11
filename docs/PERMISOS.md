@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-816 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+819 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -78,6 +78,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | me | `GET /api/auth/me` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | changePassword | `POST /api/auth/change-password` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | updateMyProfile | `PATCH /api/auth/me` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
+| pedirCodigoMiCorreo | `POST /api/auth/me/email/codigo` | (no existía) | (ruta nueva) | `cuenta.cambiar_correo` |
 | updateMyEmail | `PATCH /api/auth/me/email` | sesión · a mano: auth.controller.js · updateMyEmail | tutor | `cuenta.cambiar_correo` |
 
 ## certifex
@@ -947,8 +948,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | (anónima) | `GET /api/tasks/metrics/areas` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/assignees` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/tags` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
-| (anónima) | `GET /api/tasks/review` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
-| (anónima) | `GET /api/tasks/review/count` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `GET /api/tasks/historial` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/teams` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/teams/mine` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/teams/empresas` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
@@ -1057,12 +1057,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | getById | `GET /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | create | `POST /api/users/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.create` |
 | update | `PATCH /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
+| confirmarCorreo | `POST /api/users/:id/email/confirmar` | (no existía) | (ruta nueva) | `users.edit` |
 | deactivate | `DELETE /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.delete` |
 | reactivate | `PATCH /api/users/:id/reactivate` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | setPassword | `PATCH /api/users/:id/password` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · a mano: user.controller.js · setPassword | superadmin, admin | `users.contrasena` |
 | avisoCorreo | `GET /api/users/:id/aviso-correo` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · soloRoles(superadmin) | superadmin | `users.aviso_correo` |
 | setAvailability | `PATCH /api/users/:id/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | listBlocks | `GET /api/users/:id/availability-blocks` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
+| ver | `GET /api/users/:id/equipo-comercial` | (no existía) | (ruta nueva) | `users.view` |
+| guardar | `PUT /api/users/:id/equipo-comercial` | (no existía) | (ruta nueva) | `equipos.gestionar` |
 | createBlock | `POST /api/users/:id/availability-blocks` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | create · dar empresas enteras a un admin, o cambiar el correo de alguien | `POST /api/users/` | cuando dar empresas enteras a un admin, o cambiar el correo de alguien: a mano, user.controller.js · create/update | superadmin | `users.empresas` |
 | update · dar empresas enteras a un admin, o cambiar el correo de alguien | `PATCH /api/users/:id` | cuando dar empresas enteras a un admin, o cambiar el correo de alguien: a mano, user.controller.js · create/update | superadmin | `users.empresas` |
@@ -1256,7 +1259,7 @@ lo que pide para tener sentido (editar pide ver).
 | Asignar tareas | `tasks.assign` | Asignar o reasignar tareas a otras personas. | Admin | `tasks.view_own` |
 | Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor | `tasks.view_own` |
 | Archivar tareas | `tasks.delete` | Archivar cualquier tarea y borrar comentarios ajenos. | Admin | `tasks.view_own` |
-| Aprobar y cerrar | `tasks.close` | Aprobar, devolver, cerrar y reabrir tareas en «Por revisar». | Admin | `tasks.view_own` |
+| Devolver tareas | `tasks.close` | Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver. | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
 | Gestionar equipos | `tasks.manage_teams` | Crear, renombrar y archivar equipos del tablero, sus cargos y quién está en cada uno. | Admin | `tasks.view_own` |
 
@@ -1682,6 +1685,12 @@ lo que pide para tener sentido (editar pide ver).
 | Empresas enteras y correos | `users.empresas` | Dar empresas enteras a un admin y cambiar el correo de alguien. | solo superadmin | `users.view` |
 | Aviso de cambio de correo | `users.aviso_correo` | Ver el aviso que recibe quien cambia de correo. | solo superadmin | `users.view` |
 
+### Equipos comerciales
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Equipo de una administradora | `equipos.gestionar` | Decidir qué gestoras tiene a su cargo una administradora | solo superadmin | `users.view` |
+
 ### Roles y permisos
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
@@ -1723,7 +1732,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Cambiar su correo | `cuenta.cambiar_correo` | Cambiar el correo con el que entra (el de su factura). | Tutor |  |
+| Cambiar su correo | `cuenta.cambiar_correo` | Cambiar el correo con el que entra, con un código que le llega a la dirección nueva. | Admin, Gestora, Soporte, Tutor |  |
 
 ## Dentro del código, que ya preguntan a un permiso
 

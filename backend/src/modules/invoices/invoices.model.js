@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
+import { comoIds, alcanceComercial } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 
 /**
@@ -534,11 +535,13 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
   gestora, debo de verlas»; y que tambien las gestione (con su permiso de
   facturacion). Ya corre asi en las dos producciones desde el 06/10.
 */
-const FACTURA_DE = (param) => `(i.created_by = ${param}
-    OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param}
+// El parámetro es una LISTA de personas: la gestora sola o, si lleva un equipo
+// comercial (09/11/2026), ella y las de su equipo.
+export const FACTURA_DE = (param) => `(i.created_by = ANY(${param}::int[])
+    OR COALESCE(cv.vendedora_id, l.responsable_id) = ANY(${param}::int[])
     OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
         AND EXISTS (SELECT 1 FROM user_projects up
-                     WHERE up.user_id = ${param} AND up.project_id = i.project_id AND up.active)))`;
+                     WHERE up.user_id = ANY(${param}::int[]) AND up.project_id = i.project_id AND up.active)))`;
 
 export async function list({ projectId, projectIds, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
@@ -549,7 +552,7 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
   // Los campus de quien mira (#591): null es «todos» (superadmin y soporte).
   if (Array.isArray(projectIds)) { conds.push(`i.project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
   // Gestor: solo ve las SUYAS (ver FACTURA_DE). Admin/superadmin ven todas.
-  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(responsableId); }
+  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(comoIds(responsableId)); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
   // correlativo que las facturas normales, asi que si se ocultan parece que
   // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
@@ -616,7 +619,10 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
 //
 // Y con LOS MISMOS FILTROS que la lista (#233, Manuel 03/10: «poner una fecha y que
 // no agarre»): con septiembre puesto, las tarjetas decían el acumulado de siempre.
-export async function getStats({ projectId, projectIds, issuerId, from, to, estado } = {}) {
+// `personas` (QA del 09/11/2026): los mismos recortes que la lista. Una gestora,
+// las suyas; quien lleva un equipo comercial, las de su equipo (FACTURA_DE). Sin
+// esto las tarjetas de arriba sumaban todo el campus y la lista de abajo no.
+export async function getStats({ projectId, projectIds, issuerId, from, to, estado, personas = null } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
@@ -626,6 +632,13 @@ export async function getStats({ projectId, projectIds, issuerId, from, to, esta
   if (from)      { conds.push(`fecha_emision >= $${idx++}`); params.push(from); }
   if (to)        { conds.push(`fecha_emision <= $${idx++}`); params.push(to); }
   if (estado)    { conds.push(`estado = $${idx++}`); params.push(estado); }
+  if (Array.isArray(personas) && personas.length) {
+    conds.push(`id IN (SELECT i.id FROM invoices i
+                         LEFT JOIN conversions cv ON cv.id = i.conversion_id
+                         LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+                        WHERE ${FACTURA_DE(`$${idx++}`)})`);
+    params.push(personas.map(Number));
+  }
   const { rows } = await query(
     `SELECT
        COUNT(*) FILTER (WHERE estado <> 'borrador')::int AS total,
@@ -812,14 +825,21 @@ export async function puedeEmitirFactura(userId) {
 // ¿Es una factura que esta persona gestiona? El permiso («Corregir y abonar»)
 // lo pide la ruta; esto es el ALCANCE (#423): admin y superadmin, cualquiera;
 // el resto, solo las de sus prospectos.
+//
+// Diego, 09/11/2026: corregir y abonar, solo las administradoras SIN equipo
+// comercial (y el super admin). Quien lleva un equipo (`equipo_comercial`) no
+// corrige, abona, asocia ni borra NINGUNA factura, ni las de su equipo.
 export async function esFacturaQueGestiona(userId, role, invoiceId) {
-  if (role === 'admin' || role === 'superadmin') return true;
+  const esJefe = role === 'admin' || role === 'superadmin';
+  const alcance = await alcanceComercial({ userId, role });
+  if (alcance && alcance.length > 1) return false;
+  if (esJefe) return true;
   const { rows } = await query(
     `SELECT 1 FROM invoices i
        LEFT JOIN conversions cv ON cv.id = i.conversion_id
        LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.id = $1 AND ${FACTURA_DE('$2')}`,
-    [invoiceId, userId]
+    [invoiceId, comoIds(userId)]
   );
   return rows.length > 0;
 }
@@ -1061,7 +1081,8 @@ export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
 }
 
 // ¿Es de esta gestora? La hizo ella, o es de su venta o de su cliente: lo mismo
-// que le deja verla en el listado, mas la que escribio.
+// que le deja verla en el listado, mas la que escribio. `userId` puede ser una
+// lista (una líder y su equipo comercial).
 export async function esProformaDe(userId, invoiceId) {
   const { rows } = await query(
     `SELECT 1 FROM invoices i
@@ -1069,7 +1090,7 @@ export async function esProformaDe(userId, invoiceId) {
        LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.id = $1
         AND ${FACTURA_DE('$2')}`,
-    [invoiceId, userId]);
+    [invoiceId, comoIds(userId)]);
   return rows.length > 0;
 }
 
@@ -1820,7 +1841,7 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null } = {}) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null, personas = null } = {}) {
   /*
     Un proyecto O UNA SOCIEDAD ENTERA.
 
@@ -1848,8 +1869,14 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
         -- El periodo de arriba (#233): con septiembre puesto salían ventas de junio.
         AND ($2::date IS NULL OR c.fecha_conversion::date >= $2::date)
         AND ($3::date IS NULL OR c.fecha_conversion::date <= $3::date)
+        -- Una gestora o un equipo comercial (QA del 09/11/2026): solo las
+        -- suyas, con la regla de Ventas (conversion_reparto).
+        AND ($4::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM conversion_reparto r
+               WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($4::int[])))
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [lista, from || null, to || null]
+    [lista, from || null, to || null,
+      Array.isArray(personas) && personas.length ? personas.map(Number) : null]
   );
   return rows;
 }
@@ -1960,16 +1987,22 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 }
 
 // Proformas que una gestora dejo esperando el visto bueno.
-export async function listProformasPendientes(projectId) {
+// `personas` (QA del 09/11/2026): con equipo comercial, solo las que ve en
+// Facturas (FACTURA_DE). null = todas las del campus, como siempre.
+export async function listProformasPendientes(projectId, { personas = null } = {}) {
+  const equipo = Array.isArray(personas) && personas.length ? personas.map(Number) : null;
   const { rows } = await query(
     `SELECT i.id, i.total, i.fecha_emision, i.created_at, i.conversion_id,
             i.cliente_nombre, u.nombre AS creada_por
        FROM invoices i
        LEFT JOIN users u ON u.id = i.created_by
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.project_id = $1 AND i.tipo = 'proforma'
         AND i.estado = 'borrador' AND i.numero IS NULL
+        ${equipo ? `AND ${FACTURA_DE('$2')}` : ''}
       ORDER BY i.created_at ASC`,
-    [projectId]
+    equipo ? [projectId, equipo] : [projectId]
   );
   return rows;
 }
@@ -2070,6 +2103,9 @@ export async function listPagosSinFactura(projectId, hasta = null) {
             cp.notas,
             l.nombre AS cliente, c.producto_contratado,
             COALESCE(uv.nombre, u.nombre) AS gestora,
+            -- De quién es el cobro (la misma regla que FACTURA_DE): para recortar
+            -- la cola a una líder de equipo comercial.
+            COALESCE(c.vendedora_id, l.responsable_id) AS gestora_id,
             EXISTS (SELECT 1 FROM stripe_payments sp
                      WHERE sp.conversion_payment_id = cp.id) AS de_stripe
        FROM conversion_payments cp

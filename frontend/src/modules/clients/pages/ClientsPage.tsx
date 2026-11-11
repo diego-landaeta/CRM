@@ -214,7 +214,8 @@ export default function ClientsPage() {
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
     const projectFilter = !isAllProjects && activeProject?.id ? `&projectId=${activeProject.id}` : '';
-    client.get(`/users?active=true&role=gestor&limit=100${projectFilter}`).then((r) => {
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?active=true&role=gestor&limit=100&alcance=comercial${projectFilter}`).then((r) => {
       if (r.success) setGestores(((r.data as Array<{ id: number; nombre: string }>) || []));
     }).catch(() => setGestores([]));
   }, [user?.role, activeProject?.id, isAllProjects]);

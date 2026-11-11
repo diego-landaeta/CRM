@@ -6,6 +6,7 @@ import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 import { logger } from '../../shared/utils/logger.js';
 import { infoDelCampus, urlDelCampus } from '../../shared/services/moodle.client.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
+import { proyectosIAActivos } from '../../shared/config/soloEnPruebas.js';
 
 /*
   SUPABASE, EL TERCERO (#44).
@@ -28,6 +29,16 @@ import { urlDeStripe } from '../../shared/config/stripeApi.js';
 // moodle: el campus del proyecto, para las consultas de alumnos (#187). La
 // dirección va en config_public.url y el token, cifrado, como api_key.
 const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle'];
+
+/**
+ * ¿Se acepta este proveedor? `supabase` es solo de los proyectos IA (#44) y aún
+ * no está aprobado: en producción, sin PROYECTOS_IA_EN_PRODUCCION=1, se contesta
+ * como a un proveedor desconocido (400 BAD_PROVIDER). Se mira en cada petición.
+ */
+export function proveedorSoportado(provider, env = process.env) {
+  if (!SUPPORTED.includes(provider)) return false;
+  return provider !== 'supabase' || proyectosIAActivos(env);
+}
 
 // Sólo aceptamos los providers conocidos. Cada provider tiene su shape de
 // config_public propia, pero validamos lo mínimo aquí (el detalle de cada
@@ -111,7 +122,7 @@ export async function estado(req, res, next) {
 export async function getOne(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!SUPPORTED.includes(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const row = await model.get(projectId(req), provider);
     res.json({ success: true, data: sanitize(row) });
   } catch (err) { next(err); }
@@ -123,6 +134,7 @@ export async function upsert(req, res, next) {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const { provider, active, api_key, webhook_secret, config_public } = parsed.data;
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
     let encryptedFields = {};
     if (api_key && api_key.trim()) {
@@ -177,7 +189,7 @@ export async function upsert(req, res, next) {
 export async function test(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!SUPPORTED.includes(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
     const row = await model.get(pid, provider);
     if (!row || !row.encrypted_value) {
@@ -215,7 +227,7 @@ export async function test(req, res, next) {
 export async function remove(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!SUPPORTED.includes(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     await model.remove(projectId(req), provider);
     res.json({ success: true });
   } catch (err) { next(err); }

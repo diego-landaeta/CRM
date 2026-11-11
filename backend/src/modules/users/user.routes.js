@@ -5,6 +5,7 @@ import { uploadImage } from '../../shared/middleware/upload.js';
 import * as userController from './user.controller.js';
 import * as viewsController from './user.views.controller.js';
 import * as availabilityController from './availability.controller.js';
+import * as equipoController from './equipo.controller.js';
 
 const router = Router();
 
@@ -40,6 +41,8 @@ router.delete('/availability-blocks/:blockId', puede('users.edit'), availability
 router.get('/:id', puede('users.view'), userController.getById);
 router.post('/', puede('users.create'), userController.create);
 router.patch('/:id', puede('users.edit'), userController.update);
+// El código que le llegó a la dirección nueva (#211): solo el superadmin, como el correo (#248).
+router.post('/:id/email/confirmar', puede('users.edit'), userController.confirmarCorreo);
 router.delete('/:id', puede('users.delete'), userController.deactivate);
 router.patch('/:id/reactivate', puede('users.edit'), userController.reactivate);
 router.patch('/:id/password', puede('users.contrasena'), userController.setPassword);
@@ -47,6 +50,10 @@ router.patch('/:id/password', puede('users.contrasena'), userController.setPassw
 router.get('/:id/aviso-correo', puede('users.aviso_correo'), userController.avisoCorreo);
 router.patch('/:id/availability', puede('users.edit'), availabilityController.setAvailability);
 router.get('/:id/availability-blocks', puede('users.view'), availabilityController.listBlocks);
+// El equipo comercial de una administradora (Carlos, 09/11/2026): verlo, quien ve
+// usuarios; cambiarlo, quien tenga «Equipo de una administradora».
+router.get('/:id/equipo-comercial', puede('users.view'), equipoController.ver);
+router.put('/:id/equipo-comercial', puede('equipos.gestionar'), equipoController.guardar);
 router.post('/:id/availability-blocks', puede('users.edit'), availabilityController.createBlock);
 
 export default router;
