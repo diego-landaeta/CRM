@@ -438,15 +438,12 @@ export const TIPOS: TipoWebhook[] = [
     permisos: ['webhooks.view'],
     ocultarSiVacio: true,
     nota: 'No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
+    // Esta tarjeta es la que dice «No se pudo leer» de un campus cuando falla
+    // `/webhook-tokens` (la de admisión, que lee lo mismo, se lo calla): la ve
+    // todo el que ve la de admisión, y no al revés (un project manager ve esta
+    // pero no la de admisión, que pide rol de administración).
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
-      let filas: Array<{ id: number; kind: string; notas?: string | null; active: boolean; last_used_at: string | null }>;
-      try {
-        filas = await (ctx.pedir || datos)(`/webhook-tokens?projectId=${c.id}`);
-      } catch {
-        // La misma petición que la tarjeta de admisión: el «No se pudo leer» de
-        // ese campus ya lo dice ella; aquí, nada (si no, se contaba dos veces).
-        return [];
-      }
+      const filas = await (ctx.pedir || datos)<Array<{ id: number; kind: string; notas?: string | null; active: boolean; last_used_at: string | null }>>(`/webhook-tokens?projectId=${c.id}`);
       return filas.filter((t) => t.kind !== 'matriculas').map((t) => ({
         clave: `token-${t.id}`,
         nombre: `${t.notas || `Token n.º ${t.id}`} (${t.kind === 'leads' ? 'prospectos' : 'a medida'})`,
@@ -475,8 +472,15 @@ export const TIPOS: TipoWebhook[] = [
     nota: 'Guarda cuándo se usó por última vez, pero no si falló.',
     cargar: (ctx) => porCampus(ctx.campus, async (c) => {
       // Sin `kind`: la misma petición que la de los tokens antiguos, que el
-      // pedidor hace una sola vez por campus. Aquí, solo los de admisión.
-      const filas = await (ctx.pedir || datos)<Array<{ id: number; kind?: string; notas?: string | null; active: boolean; last_used_at: string | null; created_at?: string | null }>>(`/webhook-tokens?projectId=${c.id}`);
+      // pedidor hace una sola vez por campus. Aquí, solo los de admisión. Si
+      // falla, lo dice la tarjeta de los tokens (la ve todo el que ve esta);
+      // aquí no, para no contarlo dos veces.
+      let filas: Array<{ id: number; kind?: string; notas?: string | null; active: boolean; last_used_at: string | null; created_at?: string | null }>;
+      try {
+        filas = await (ctx.pedir || datos)(`/webhook-tokens?projectId=${c.id}`);
+      } catch {
+        return [];
+      }
       return filas.filter((t) => t.kind === 'matriculas').map((t) => ({
         clave: `admision-${t.id}`,
         // Sin nota, cinco webhooks del mismo campus salían iguales («Webhook de
@@ -616,21 +620,30 @@ export const TIPOS: TipoWebhook[] = [
       const w = await (ctx.pedir || datos)<{ configurado?: boolean; conectado?: boolean; numero?: string | null; motivo?: string; estado?: string | null } | null>('/whatsapp/conexion');
       if (!w || Array.isArray(w) || w.configurado === false) {
         // Sin WhatsApp montado: en pruebas (local, /testeo) es lo normal; en
-        // producción es una caída de verdad y cuenta como fallo. El texto, el
-        // del servidor (`motivo`), que ya distingue los dos casos.
+        // producción es una caída de verdad y cuenta como fallo. El texto de
+        // pruebas es propio: el `motivo` del servidor depende de su NODE_ENV, y
+        // /testeo corre con `production` (ecosystem.config.js), así que allí
+        // diría «avisa a quien lleva el CRM» en un entorno donde es lo normal.
         const motivo = w && !Array.isArray(w) && w.motivo ? w.motivo : undefined;
         return [{
           clave: 'whatsapp', nombre: 'WhatsApp no está disponible', campus: null, activo: null,
-          ...(SOLO_EN_PRUEBAS ? { aviso: motivo } : { fallo: motivo || 'WhatsApp no está disponible: avisa a quien lleva el CRM' }),
+          ...(SOLO_EN_PRUEBAS
+            ? { aviso: 'En este entorno de pruebas no hay WhatsApp montado; en producción funciona.' }
+            : { fallo: motivo || 'WhatsApp no está disponible: avisa a quien lleva el CRM' }),
           enlace: '/whatsapp/conexion',
         }];
       }
-      // Sin `estado`, el servidor de WhatsApp (Evolution) no contestó: no se sabe
-      // si el número está enlazado, y decir que no lo está sería inventarlo.
+      // Sin `estado` no se sabe si tu número está enlazado, y hay dos causas que
+      // desde aquí no se distinguen (llegan igual: `estado` y `numero` nulos):
+      // que nunca lo has enlazado (tu sesión aún no existe y Evolution da 404) o
+      // que el servidor de WhatsApp no contesta. Ni «no está enlazado» ni «el
+      // servidor no contesta»: un texto que vale para los dos, sin contarlo
+      // como «sin poder leer».
       if (!w.estado) {
         return [{
           clave: 'whatsapp', nombre: w.numero ? `Tu número (+${w.numero})` : 'Tu número', campus: null, activo: null,
-          sinLeer: 'No se pudo saber su estado: el servidor de WhatsApp no contesta', enlace: '/whatsapp/conexion',
+          detalle: 'No se sabe si está enlazado: si aún no lo has enlazado, hazlo en su pantalla',
+          enlace: '/whatsapp/conexion',
         }];
       }
       return [{

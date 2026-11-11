@@ -829,14 +829,17 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(w).getByText(/Tu número no está enlazado/)).toBeTruthy();
   });
 
-  it('WhatsApp con su servidor sin contestar: no dice que tu número no esté enlazado', async () => {
+  it('WhatsApp sin estado (nunca enlazado, o su servidor sin contestar): texto neutro, sin contar como «sin poder leer»', async () => {
     get.mockImplementation((url) => Promise.resolve({
       data: url === '/whatsapp/conexion' ? { configurado: true, conectado: false, estado: null, numero: null } : RESPUESTAS(url),
     }));
     abrir();
     const w = await screen.findByTestId('tipo-whatsapp');
-    expect(await within(w).findByText(/No se pudo saber su estado: el servidor de WhatsApp no contesta/)).toBeTruthy();
-    expect(within(w).queryByText(/no está enlazado/)).toBeNull();
+    expect(await within(w).findByText('No se sabe si está enlazado: si aún no lo has enlazado, hazlo en su pantalla')).toBeTruthy();
+    // Ni culpa al servidor ni afirma que no está enlazado: no se sabe cuál de las dos.
+    expect(within(w).queryByText(/el servidor de WhatsApp no contesta/)).toBeNull();
+    expect(within(w).queryByText(/Tu número no está enlazado/)).toBeNull();
+    expect(screen.queryByText(/sin poder leer/)).toBeNull();
   });
 
   it('WhatsApp sin montar: en pruebas, aviso con el motivo del servidor', async () => {
@@ -846,9 +849,32 @@ describe('el resumen sigue al selector de arriba', () => {
     abrir();
     const w = await screen.findByTestId('tipo-whatsapp');
     expect(await within(w).findByText('WhatsApp no está disponible')).toBeTruthy();
-    expect(within(w).getByText(/todavia no esta disponible/)).toBeTruthy();
+    // Texto propio de pruebas: el del servidor depende de su NODE_ENV (/testeo corre en production).
+    expect(within(w).getByText('En este entorno de pruebas no hay WhatsApp montado; en producción funciona.')).toBeTruthy();
     // Las pruebas corren como entorno de pruebas (SOLO_EN_PRUEBAS): aviso, no fallo.
     expect(within(w).queryByText(/Falló:/)).toBeNull();
+  });
+
+  it('un campus que no contesta a /webhook-tokens lo dice la tarjeta de tokens, también para quien no ve la de admisión', async () => {
+    // Un project manager: ve los tokens (webhooks.view) pero no la tarjeta de admisión (rol de administración).
+    permisos.value = ['webhooks.view', 'make.view', 'webhooks_salientes.view'];
+    get.mockImplementation((url) => (url === '/webhook-tokens?projectId=5'
+      ? Promise.reject(new Error('500'))
+      : Promise.resolve({ success: true, data: RESPUESTAS(url) })));
+    abrir();
+    const tokens = await screen.findByTestId('tipo-tokens');
+    expect(await within(tokens).findByText('No se pudo leer')).toBeTruthy();
+    expect(screen.queryByTestId('tipo-admision')).toBeNull();
+    expect(await screen.findByText('1 sin poder leer')).toBeTruthy();
+  });
+
+  it('y con la tarjeta de admisión a la vista, el mismo error se cuenta una sola vez', async () => {
+    get.mockImplementation((url) => (url === '/webhook-tokens?projectId=5'
+      ? Promise.reject(new Error('500'))
+      : Promise.resolve({ success: true, data: RESPUESTAS(url) })));
+    abrir();
+    await screen.findByTestId('tipo-admision');
+    expect(await screen.findByText('1 sin poder leer')).toBeTruthy();
   });
 
   it('un campus que no contesta a /forms cuenta UNA vez en «sin poder leer», aunque dos tarjetas lo lean', async () => {
