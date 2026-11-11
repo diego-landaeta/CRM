@@ -119,6 +119,25 @@ export async function infoDelCampus(conexion, opciones) {
 }
 
 /**
+ * La cuenta del token: el usuario con el que el CRM habla con el campus
+ * (`crm_servicio` desde el plugin; en conexiones antiguas, el administrador que
+ * creó el token). Nunca es la cuenta de una tutora.
+ */
+export async function cuentaDelToken(conexion, opciones) {
+  const info = await llamar(conexion, 'core_webservice_get_site_info', {}, opciones);
+  return { id: Number(info?.userid) || null, esAdministrador: Boolean(info?.userissiteadmin) };
+}
+
+/** Un usuario del campus por un campo exacto (`id`, `username`, `email`), o null. */
+export async function usuarioPor(conexion, campo, valor, opciones) {
+  const v = String(valor ?? '').trim();
+  if (!v) return null;
+  const lista = await llamar(conexion, 'core_user_get_users_by_field', { field: campo, 'values[0]': v }, opciones);
+  const u = Array.isArray(lista) ? lista[0] : null;
+  return u ? { id: Number(u.id), suspendido: Boolean(u.suspended), nombre: u.fullname || null, email: u.email || null } : null;
+}
+
+/**
  * El usuario del campus con ese correo, o null si no hay ninguno.
  *
  * Moodle busca el correo tal cual se guardó: se pregunta en minúsculas, que es
@@ -129,10 +148,8 @@ export async function usuarioPorCorreo(conexion, correo, opciones) {
   if (!email) return null;
   const variantes = [...new Set([email.toLowerCase(), email])];
   for (const v of variantes) {
-    const lista = await llamar(conexion, 'core_user_get_users_by_field',
-      { field: 'email', 'values[0]': v }, opciones);
-    const u = Array.isArray(lista) ? lista[0] : null;
-    if (u) return { id: Number(u.id), suspendido: Boolean(u.suspended), nombre: u.fullname || null };
+    const u = await usuarioPor(conexion, 'email', v, opciones);
+    if (u) return u;
   }
   return null;
 }
