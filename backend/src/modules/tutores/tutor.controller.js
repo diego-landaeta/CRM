@@ -24,6 +24,8 @@ import {
 } from './tutor.acceso.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+// El tutor redactor (CRM#708) ve lo suyo como un tutor.
+import { ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 
 // Quien manda aqui.
 //
@@ -246,7 +248,7 @@ export async function guardarPerfil(req, res, next) {
 export async function colaboraciones(req, res, next) {
   try {
     // Un tutor solo ve las suyas, ignorando lo que pida por query.
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     res.json({ success: true, data: await model.colaboraciones({
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
@@ -417,7 +419,7 @@ export async function guardarAjustes(req, res, next) {
 // revisar las colaboraciones antes de que generen dinero de verdad.
 export async function simulacion(req, res, next) {
   try {
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     const hoy = new Date().toISOString().slice(0, 10);
     res.json({ success: true, data: await model.simular({
@@ -464,7 +466,7 @@ export async function listarComisiones(req, res, next) {
   try {
     // Un tutor ve las SUYAS y nada mas: se le fuerza su identificador y se
     // ignora lo que pida por la URL.
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
@@ -480,7 +482,7 @@ export async function listarComisiones(req, res, next) {
 // GET /api/tutores/comisiones/resumen — una fila por tutor y mes.
 export async function resumenComisiones(req, res, next) {
   try {
-    const esTutor = req.user.role === 'tutor';
+    const esTutor = ROLES_DE_TUTOR.includes(req.user.role);
     if (!esTutor) await exigirGestion(req);
     res.json({ success: true, data: await model.resumenComisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
@@ -606,7 +608,7 @@ export async function cursoDetalle(req, res, next) {
     const productId = parseInt(req.params.productId);
     // Un profesor solo ve la ficha de lo que IMPARTE. Estar en la marca no
     // basta: el temario de un curso que no da no es asunto suyo.
-    if (req.user.role === 'tutor') {
+    if (ROLES_DE_TUTOR.includes(req.user.role)) {
       if (!(await model.imparteEsteCurso(req.user.userId, productId))) {
         throw new AppError('Ese curso no es tuyo', 403, 'FORBIDDEN');
       }
@@ -630,7 +632,7 @@ export async function cursoDetalle(req, res, next) {
 export async function brochureDelCurso(req, res, next) {
   try {
     const productId = parseInt(req.params.productId);
-    if (req.user.role === 'tutor') {
+    if (ROLES_DE_TUTOR.includes(req.user.role)) {
       if (!(await model.imparteEsteCurso(req.user.userId, productId))) {
         throw new AppError('Ese curso no es tuyo', 403, 'FORBIDDEN');
       }

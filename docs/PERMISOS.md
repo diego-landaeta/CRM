@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-841 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+846 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -575,6 +575,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | reassignPending | `POST /api/leads/reassign-pending` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `leads.assign` |
 | softDelete · borrar por cualquier motivo, aunque no sea suyo o tenga ventas | `DELETE /api/leads/:id` | cuando borrar por cualquier motivo, aunque no sea suyo o tenga ventas: a mano, lead.controller.js · softDelete | superadmin, admin, soporte | `leads.delete_cualquiera` |
 
+## links-pago
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| verConfig | `GET /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` o `links_pago.crear` |
+| guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
+| detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
+
 ## make
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
@@ -734,6 +743,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarRolAMedida | `PATCH /api/permissions/roles/a-medida/:id` | (no existía) | (ruta nueva) | `roles.edit` |
 | registro | `GET /api/permissions/registro` | (no existía) | (ruta nueva) | `roles.edit` |
 | ficha | `GET /api/permissions/personas/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| vistaPreviaDeAlta | `POST /api/permissions/vista-previa-alta` | (no existía) | (ruta nueva) | `users.create` |
 | guardarExcepciones | `PUT /api/permissions/personas/:id/excepciones` | (no existía) | (ruta nueva) | `users.excepciones` |
 | cambiarRolAMedida | `PUT /api/permissions/personas/:id/rol-a-medida` | (no existía) | (ruta nueva) | `users.excepciones` |
 | listCustomRoles | `GET /api/permissions/custom-roles` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `roles.view` |
@@ -1252,9 +1262,9 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar su WhatsApp | `whatsapp.usar` | Enlazar su número y atender sus chats desde el CRM. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador, Project manager | Admin, Gestora, Soporte |  |
-| Supervisar el WhatsApp de otros | `whatsapp.supervisar` | Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas. · nunca: Tutor, Colaborador | Admin |  |
-| Ver el banco de mensajes | `whatsapp.banco` | Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador | Project manager |  |
+| Usar su WhatsApp | `whatsapp.usar` | Enlazar su número y atender sus chats desde el CRM. · nunca: Tutor, Colaborador, Tutor redactor · nunca si su rol principal es: Tutor, Colaborador, Tutor redactor, Project manager | Admin, Gestora, Soporte |  |
+| Supervisar el WhatsApp de otros | `whatsapp.supervisar` | Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas. · nunca: Tutor, Colaborador, Tutor redactor | Admin |  |
+| Ver el banco de mensajes | `whatsapp.banco` | Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura. · nunca: Tutor, Colaborador, Tutor redactor · nunca si su rol principal es: Tutor, Colaborador, Tutor redactor | Project manager |  |
 | Ver la cola de WhatsApp | `whatsapp.cola` | Los prospectos que esperan respuesta por WhatsApp. | Admin, Gestora, Soporte, Project manager |  |
 | Sus plantillas | `whatsapp.plantillas` | Crear y usar sus propias plantillas de mensaje. | Admin, Gestora, Soporte, Project manager |  |
 | Plantillas compartidas | `whatsapp.plantillas_compartidas` | Crear y cambiar las plantillas de todo el equipo, y las de otras personas. | Admin, Soporte | `whatsapp.plantillas` |
@@ -1275,11 +1285,11 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador, Tutor |  |
+| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador, Tutor, Tutor redactor |  |
 | Ver todo el equipo | `tasks.view_all` | El tablero de cualquiera, «Todo el equipo» y las métricas. | Admin |  |
-| Crear tareas | `tasks.create` | Crearse tareas. | Admin, Colaborador | `tasks.view_own` |
+| Crear tareas | `tasks.create` | Crearse tareas. | Admin, Colaborador, Tutor redactor | `tasks.view_own` |
 | Asignar tareas | `tasks.assign` | Asignar o reasignar tareas a otras personas. | Admin | `tasks.view_own` |
-| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor | `tasks.view_own` |
+| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor, Tutor redactor | `tasks.view_own` |
 | Archivar tareas | `tasks.delete` | Archivar cualquier tarea y borrar comentarios ajenos. | Admin | `tasks.view_own` |
 | Devolver tareas | `tasks.close` | Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver. | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
@@ -1392,7 +1402,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor |  |
+| Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor, Tutor redactor |  |
 | Gestionar colaboraciones | `tutores.gestionar` | Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus. | Admin |  |
 | Avisar de comisiones | `tutores.avisar` | Ver el aviso de comisiones y mandarlo al tutor. | Admin, Gestora, Soporte, Project manager |  |
 | Liquidar comisiones | `tutores.liquidar` | Pagar o revertir las comisiones de un tutor (mueve dinero). | Admin | `tutores.gestionar` |
@@ -1406,7 +1416,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver el panel de consultas | `consultas.view` | Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos. | Admin, Soporte, Project manager |  |
 | Gestionar consultas | `consultas.gestionar` | Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor. | Admin, Soporte | `consultas.view` |
-| Atender sus consultas | `consultas.atender` | Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas. | Tutor |  |
+| Atender sus consultas | `consultas.atender` | Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas. | Tutor, Tutor redactor |  |
 
 ## Finanzas
 
@@ -1491,11 +1501,19 @@ lo que pide para tener sentido (editar pide ver).
 | Ver pagos de Stripe | `stripe.view` | Los cobros por Stripe, y traer los nuevos. | Admin, Gestora, Soporte, Project manager |  |
 | Asociar pagos de Stripe | `stripe.edit` | Enlazar un pago con su venta y llevar las disputas. | Admin, Soporte | `stripe.view` |
 
+### Links de pago
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Crear links de pago | `links_pago.crear` | Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos. | Admin, Gestora, Soporte |  |
+| Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno). | Admin |  |
+| Configurar los links de pago | `links_pago.configurar` | El descuento máximo de cada campus sobre el precio del catálogo. | Admin |  |
+
 ### Facturas de colaboradores
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador |  |
+| Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador, Tutor redactor |  |
 | Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin, Project manager |  |
 | Gestionar colaboradores | `facturas_colaborador.gestionar` | Dar de alta colaboradores y reenviarles el enlace. | Admin |  |
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
@@ -1595,7 +1613,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor · nunca si su rol principal es: Tutor | Admin |  |
+| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor, Tutor redactor · nunca si su rol principal es: Tutor, Tutor redactor | Admin |  |
 | Administrar el MCP | `mcp.administrar` | Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado. | Admin |  |
 | Apagar el MCP | `mcp.supervisar` | El interruptor de emergencia y rechazar conexiones ajenas. | solo superadmin |  |
 
