@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-836 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+837 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -734,6 +734,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarRolAMedida | `PATCH /api/permissions/roles/a-medida/:id` | (no existía) | (ruta nueva) | `roles.edit` |
 | registro | `GET /api/permissions/registro` | (no existía) | (ruta nueva) | `roles.edit` |
 | ficha | `GET /api/permissions/personas/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| vistaPreviaDeAlta | `POST /api/permissions/vista-previa-alta` | (no existía) | (ruta nueva) | `users.create` |
 | guardarExcepciones | `PUT /api/permissions/personas/:id/excepciones` | (no existía) | (ruta nueva) | `users.excepciones` |
 | cambiarRolAMedida | `PUT /api/permissions/personas/:id/rol-a-medida` | (no existía) | (ruta nueva) | `users.excepciones` |
 | listCustomRoles | `GET /api/permissions/custom-roles` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `roles.view` |
