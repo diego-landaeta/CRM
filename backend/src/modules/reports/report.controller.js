@@ -336,7 +336,7 @@ export async function resumenDia(req, res, next) {
 // A) y el mismo ámbito: sale de la persona (sus campus de `user_projects`; el
 // superadmin, todos), y el campus o la empresa que pida la pantalla solo lo
 // estrechan. Quien no es admin ni superadmin se ve solo a sí misma.
-async function ambitoDeActividad(req) {
+export async function ambitoDeActividad(req) {
   const user = { id: req.user.userId, role: req.user.role };
   // Un campus de pruebas solo se ve si se elige él o su empresa (migración
   // 148); con «Todos», no. Claude no los ve nunca.
@@ -357,7 +357,7 @@ const esFecha = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s)
   && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
 
 // Sin fechas, ayer (lo primero que se mira por la mañana).
-function periodoDeActividad(req) {
+export function periodoDeActividad(req) {
   for (const k of ['desde', 'hasta']) {
     if (req.query[k] && !esFecha(req.query[k])) {
       throw new AppError(`Fecha no válida en «${k}»: ${req.query[k]}.`, 400, 'FECHA_NO_VALIDA');

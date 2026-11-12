@@ -18200,6 +18200,148 @@
   "puertas": []
  },
  {
+  "id": "GET /api/zadarma/webhook",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "GET",
+  "ruta": "/api/zadarma/webhook",
+  "relativa": "GET /webhook",
+  "controlador": "eco",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/zadarma/webhook",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "POST",
+  "ruta": "/api/zadarma/webhook",
+  "relativa": "POST /webhook",
+  "controlador": "aviso",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/zadarma/llamar",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "POST",
+  "ruta": "/api/zadarma/llamar",
+  "relativa": "POST /llamar",
+  "controlador": "llamar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "zadarma.llamar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/zadarma/estado",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "GET",
+  "ruta": "/api/zadarma/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "zadarma.llamar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/zadarma/reporte",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "GET",
+  "ruta": "/api/zadarma/reporte",
+  "relativa": "GET /reporte",
+  "controlador": "reporte",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/zadarma/extensiones",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "GET",
+  "ruta": "/api/zadarma/extensiones",
+  "relativa": "GET /extensiones",
+  "controlador": "extensiones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/zadarma/extensiones",
+  "tipo": "ruta",
+  "modulo": "zadarma",
+  "metodo": "PUT",
+  "ruta": "/api/zadarma/extensiones",
+  "relativa": "PUT /extensiones",
+  "controlador": "guardarExtensiones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/invoices/ · invoices.rectificativa",
   "tipo": "condicion",
   "modulo": "invoices",
