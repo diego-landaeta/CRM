@@ -183,12 +183,12 @@ export const SECCIONES = [
       },
       {
         clave: 'webhooks', nombre: 'Webhooks de entrada', acciones: [
-          // Producción (sin la #198 de staging): la lista, cualquiera con sesión;
-          // crearlos y cambiarlos, admin y soporte (y el superadmin), como hasta hoy.
-          a('view', 'Ver webhooks', 'Los webhooks que reciben prospectos y su estado (de sus campus).', TODOS),
-          a('create', 'Crear webhooks', 'Un webhook nuevo.', ADMIN_SOPORTE),
-          a('edit', 'Editar webhooks', 'Cambiarlo o ponerlo a escuchar.', ADMIN_SOPORTE),
-          a('delete', 'Borrar webhooks', 'Quitar un webhook.', ADMIN_SOPORTE),
+          // Con la admisión (#198, ya en producción): admin y super admin, cada uno sus campus.
+          // Un webhook de admisión recibe DNI y documentos: no lo administra cualquiera.
+          a('view', 'Ver webhooks', 'Los webhooks que reciben prospectos y su estado (de sus campus).', ADMIN),
+          a('create', 'Crear webhooks', 'Un webhook nuevo.', ADMIN),
+          a('edit', 'Editar webhooks', 'Cambiarlo o ponerlo a escuchar.', ADMIN),
+          a('delete', 'Borrar webhooks', 'Quitar un webhook.', ADMIN),
         ],
       },
       {

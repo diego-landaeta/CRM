@@ -1185,10 +1185,10 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver webhooks | `webhooks.view` | Los webhooks que reciben prospectos y su estado (de sus campus). | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Crear webhooks | `webhooks.create` | Un webhook nuevo. | Admin, Soporte | `webhooks.view` |
-| Editar webhooks | `webhooks.edit` | Cambiarlo o ponerlo a escuchar. | Admin, Soporte | `webhooks.view` |
-| Borrar webhooks | `webhooks.delete` | Quitar un webhook. | Admin, Soporte | `webhooks.view` |
+| Ver webhooks | `webhooks.view` | Los webhooks que reciben prospectos y su estado (de sus campus). | Admin |  |
+| Crear webhooks | `webhooks.create` | Un webhook nuevo. | Admin | `webhooks.view` |
+| Editar webhooks | `webhooks.edit` | Cambiarlo o ponerlo a escuchar. | Admin | `webhooks.view` |
+| Borrar webhooks | `webhooks.delete` | Quitar un webhook. | Admin | `webhooks.view` |
 
 ### Widget web
 
