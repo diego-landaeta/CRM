@@ -16,6 +16,7 @@ import {
   rutaPermitida,
 } from '@/shared/components/layout/Sidebar';
 import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
+import { TRASLADOS_DE_MENU } from '@/shared/components/layout/trasladosDeMenu';
 import { isBetaAllowed } from '@/shared/config/betaConfig';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
@@ -48,27 +49,28 @@ const RECENT_KEY = 'crm.palette.recents';
 const MAX_RECENTS = 5;
 
 /**
- * Las direcciones que cambiaron de sitio (#690: los webhooks, juntos en
- * Conexión › Webhooks). Un reciente guardado con la de antes lleva a la nueva,
- * con su `:id`, en vez de desaparecer.
+ * Las direcciones que cambiaron de sitio: las de `TRASLADOS_DE_MENU` (#690,
+ * los webhooks juntos en Conexión › Webhooks), sin copiarlas aquí. Un reciente
+ * guardado con la de antes lleva a la nueva en vez de desaparecer.
  */
-const MOVIDAS = [
-  ['/captacion/webhooks', '/conexion/webhooks/prospectos'],
-  ['/captacion/make', '/conexion/webhooks/make'],
-  ['/conexion/webhook-transferencias', '/conexion/webhooks/transferencias'],
-];
+const MOVIDAS = TRASLADOS_DE_MENU.flatMap((t) => t.de.map((d) => ({ antes: d.ruta, ahora: d.a, seccion: t.a })));
+const movidaDe = (to) => MOVIDAS.find(({ antes }) => to === antes || to?.startsWith(`${antes}/`) || to?.startsWith(`${antes}?`));
 export function rutaDeHoy(to) {
-  for (const [antes, ahora] of MOVIDAS) {
-    if (to === antes || to?.startsWith(`${antes}/`) || to?.startsWith(`${antes}?`)) return `${ahora}${to.slice(antes.length)}`;
-  }
-  return to;
+  const m = movidaDe(to);
+  return m ? `${m.ahora}${to.slice(m.antes.length)}` : to;
+}
+/** El reciente con su dirección de hoy y, si se movió, con su sección de hoy («Conexión › Webhooks»). */
+export function recienteDeHoy(e) {
+  if (!e?.to) return e;
+  const m = movidaDe(e.to);
+  return m ? { ...e, to: rutaDeHoy(e.to), sublabel: m.seccion } : e;
 }
 
 function getRecents() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
     const lista = raw ? JSON.parse(raw) : [];
-    return Array.isArray(lista) ? lista.map((e) => (e?.to ? { ...e, to: rutaDeHoy(e.to) } : e)) : [];
+    return Array.isArray(lista) ? lista.map(recienteDeHoy) : [];
   } catch { return []; }
 }
 function pushRecent(entry) {
@@ -230,18 +232,20 @@ export const terminoDeFactura = (q) => q.trim().replace(/^f\s*-?\s*(?=\d)/i, '')
  * Un reciente solo se enseña si hoy se podría volver a encontrar: si a alguien
  * le quitan un permiso, el reciente de esa pantalla desaparece con él.
  */
-export function recienteSigueValiendo(to, { pages, busca, can, modules }) {
+export function recienteSigueValiendo(to, { pages, busca, can, modules, projectType }) {
   if (pages.some((p) => p.to === to)) return true;
   // Una pestaña de Conexión › Webhooks o la ficha de un webhook (#690; los
   // recientes de las direcciones de antes llegan aquí traducidos, `rutaDeHoy`).
   // El buscador no las lista (enseña lo mismo que el menú), pero un reciente
-  // vale si hoy se puede abrir: con las reglas de su barra de pestañas
-  // (`SubNav`): el permiso de su ruta y el módulo del campus.
-  const pestana = /^(\/conexion\/webhooks\/(?:prospectos|make|transferencias))(?:\/\d+)?$/.exec(to);
+  // vale si hoy se puede abrir, con las reglas de su barra de pestañas
+  // (`SubNav`): el permiso de su ruta, el módulo y el tipo del campus. Solo las
+  // que existen: la de transferencias no tiene ficha (App.jsx).
+  const pestana = /^(\/conexion\/webhooks\/(?:prospectos|make|transferencias))(?:\?.*)?$/.exec(to)
+    || /^(\/conexion\/webhooks\/(?:prospectos|make))\/\d+(?:\?.*)?$/.exec(to);
   if (pestana) {
     return pages.some((p) => p.to === '/conexion/webhooks')
       && typeof can === 'function' && rutaPermitida(pestana[1], can)
-      && pestanasDe(modules).some((t) => t.to === pestana[1]);
+      && pestanasDe(modules, projectType).some((t) => t.to === pestana[1]);
   }
   if (/^\/prospectos\/\d+$/.test(to)) return busca.personas;
   if (/^\/clientes\/\d+$/.test(to)) return busca.clientes;
@@ -518,7 +522,7 @@ export default function CommandPalette() {
 
     if (!q) {
       // Estado inicial: recientes + acciones rápidas
-      const vigentes = recents.filter((r) => recienteSigueValiendo(r.to, { pages, busca, can, modules: activeProject?.modules }));
+      const vigentes = recents.filter((r) => recienteSigueValiendo(r.to, { pages, busca, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type) }));
       if (vigentes.length > 0) {
         out.push({
           label: 'Recientes',
@@ -634,7 +638,7 @@ export default function CommandPalette() {
       sublabel: [c.nombre_corto, c.categoria, legible(c.estado)].filter(Boolean).join(' · '),
     }));
     return out;
-  }, [query, recents, quickActions, projectActions, pages, busca, can, activeProject?.modules, leadResults, productResults, otros]);
+  }, [query, recents, quickActions, projectActions, pages, busca, can, activeProject?.modules, activeProject?.type, leadResults, productResults, otros]);
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 

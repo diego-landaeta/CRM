@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { WebhooksLogo } from '@phosphor-icons/react';
 import SubNav from '@/shared/components/ui/SubNav';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { pestanasDe } from '../lib/pestanas';
 
 /*
@@ -13,10 +14,10 @@ import { pestanasDe } from '../lib/pestanas';
   su módulo, en ../lib/pestanas.
 */
 export default function WebhooksLayout() {
-  const { activeProject } = useProjectContext() as { activeProject: { modules?: Record<string, boolean> | null } | null };
+  const { activeProject } = useProjectContext() as { activeProject: { modules?: Record<string, boolean> | null; type?: string | null } | null };
   return (
     <div className="flex flex-col h-full">
-      <SubNav tabs={pestanasDe(activeProject?.modules)} sectionLabel="Webhooks" sectionIcon={WebhooksLogo} />
+      <SubNav tabs={pestanasDe(activeProject?.modules, tipoDelMenu(activeProject?.type))} sectionLabel="Webhooks" sectionIcon={WebhooksLogo} />
       <div className="flex-1 overflow-y-auto">
         <Outlet />
       </div>

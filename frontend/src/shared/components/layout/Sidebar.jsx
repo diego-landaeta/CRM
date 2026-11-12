@@ -397,9 +397,10 @@ export const NAV_SECTIONS = [
       // (Diego, 15/10). Se ve con el permiso de alguna de las tres entradas que
       // sustituye (PERMISOS_WEBHOOKS, arriba); dentro, cada tarjeta pide el suyo.
       { label: 'Webhooks', to: '/conexion/webhooks', detail: 'Todos, por su función', icon: WebhooksLogo, roles: ['superadmin', 'admin'], permiso: PERMISOS_WEBHOOKS,
-        // Cada entrada de antes con su permiso y su módulo (Captación › Webhooks
-        // llevaba `module: 'webhooks'`; Captación › Make, `module: 'make'`).
-        partes: [{ permiso: 'webhooks.view', module: 'webhooks' }, { permiso: 'make.view', module: 'make' }, { permiso: 'webhooks_salientes.view' }],
+        // Cada entrada de antes con su permiso, su módulo y su sección (Captación ›
+        // Webhooks llevaba `module: 'webhooks'`; Captación › Make, `module: 'make'`;
+        // y Captación no sale en un proyecto IA, `salvoTipo: ['ia']`).
+        partes: [{ permiso: 'webhooks.view', module: 'webhooks', salvoTipo: ['ia'] }, { permiso: 'make.view', module: 'make', salvoTipo: ['ia'] }, { permiso: 'webhooks_salientes.view' }],
         // Para que el buscador (Ctrl K) los siga encontrando por su nombre de antes,
         // también escrito entero («Webhook de transferencias»: `fuzzyScore` busca
         // la frase seguida). El buscador enseña lo mismo que el menú, así que no
@@ -613,11 +614,13 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   const tienePermisoDeLaPantalla = !item.permiso || (typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true));
   if (!tienePermisoDeLaPantalla) return false;
   // Una entrada que junta varias (Conexión › Webhooks, #690): sale si alguna de
-  // sus `partes` se puede abrir, cada una con su permiso Y su módulo, como
-  // salían las entradas que sustituye. Con Make y Webhooks apagados en el
-  // campus, quien solo tenía esas dos no la ve.
+  // sus `partes` se puede abrir, cada una con su permiso, su módulo y el tipo
+  // de proyecto en que no salía (`salvoTipo`: Make y Webhooks estaban en
+  // Captación, que un proyecto IA no tiene), como salían las entradas que
+  // sustituye. Con Make y Webhooks apagados, quien solo tenía esas dos no la ve.
   if (Array.isArray(item.partes) && !item.partes.some((p) => (!p.permiso || (typeof can === 'function' && can(p.permiso) === true))
-    && !(p.module && modules && modules[p.module] === false))) return false;
+    && !(p.module && modules && modules[p.module] === false)
+    && !(Array.isArray(p.salvoTipo) && p.salvoTipo.includes(projectType)))) return false;
   // Y al reves: lo que en un tipo de proyecto NO EXISTE.
   //
   // Un proyecto IA no tiene tutores, ni comisiones, ni nominas, ni campañas

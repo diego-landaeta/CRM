@@ -10,7 +10,9 @@
 */
 import { describe, it, expect } from 'vitest';
 import { NAV_SECTIONS, canSeeItem } from '@/shared/components/layout/Sidebar';
-import { fuzzyScore, rutaDeHoy, recienteSigueValiendo } from '@/shared/components/layout/CommandPalette';
+import { fuzzyScore, rutaDeHoy, recienteDeHoy, recienteSigueValiendo } from '@/shared/components/layout/CommandPalette';
+import { TRASLADOS_DE_MENU } from '@/shared/components/layout/trasladosDeMenu';
+import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
 
 const entrada = NAV_SECTIONS.flatMap((s) => s.items.flatMap((i) => [i, ...(i.children || [])]))
   .find((i) => i.to === '/conexion/webhooks');
@@ -40,10 +42,31 @@ describe('la entrada del menú, con el permiso y el módulo de cada parte', () =
   it('sin ninguno de los tres permisos, no sale', () => {
     expect(ve({}, 'integrations.view')).toBe(false);
   });
+
+  it('en un proyecto IA, Make y Webhooks no cuentan (estaban en Captación, que no sale allí); transferencias sí', () => {
+    const veIA = (...p) => canSeeItem(entrada, ['admin'], {}, 'ia', false, null, conPermisos(...p));
+    expect(veIA('make.view')).toBe(false);
+    expect(veIA('webhooks.view')).toBe(false);
+    expect(veIA('make.view', 'webhooks_salientes.view')).toBe(true);
+    // Fuera de un proyecto IA, como siempre.
+    expect(canSeeItem(entrada, ['admin'], {}, 'educacion', false, null, conPermisos('make.view'))).toBe(true);
+  });
+
+  it.each([['superadmin'], ['soporte'], ['project_manager']])('%s: las mismas reglas (permiso y módulo de cada parte)', (rol) => {
+    const como = (modules, ...p) => canSeeItem(entrada, [rol], modules, null, false, null, conPermisos(...p));
+    expect(como({ make: true }, 'make.view')).toBe(true);
+    expect(como({ make: false }, 'make.view')).toBe(false);
+    expect(como({ make: false }, 'make.view', 'webhooks_salientes.view')).toBe(true);
+  });
+
+  it('un tutor no la ve: no es de su rol', () => {
+    expect(canSeeItem(entrada, ['tutor'], {}, null, false, null, conPermisos('make.view', 'webhooks.view', 'webhooks_salientes.view'))).toBe(false);
+  });
 });
 
-describe('el buscador la encuentra por el nombre de antes', () => {
-  it.each(['Webhook de transferencias', 'webhooks de captacion', 'Escenarios de Make', 'make', 'transferencias'])('«%s»', (q) => {
+describe('el buscador la encuentra por el nombre de antes, escrito entero', () => {
+  // «make» o «transferencias» sueltas ya se encontraban; lo nuevo son las frases.
+  it.each(['Webhook de transferencias', 'webhooks de captacion', 'Webhooks de prospectos', 'Escenarios de Make'])('«%s»', (q) => {
     expect(fuzzyScore(entrada.label, entrada.keywords, q)).toBeGreaterThan(0);
   });
 });
@@ -72,5 +95,45 @@ describe('los recientes de las direcciones de antes', () => {
     expect(recienteSigueValiendo('/conexion/webhooks/make', { pages, busca, can, modules: { make: false } })).toBe(false);
     // Sin la entrada de Webhooks en el menú, tampoco.
     expect(recienteSigueValiendo('/conexion/webhooks/make', { pages: [], busca, can, modules: {} })).toBe(false);
+  });
+
+  it('con «Todos» (sin módulos) valen; con lo de detrás (`?new=1`) también', () => {
+    const can = conPermisos('webhooks.view');
+    expect(recienteSigueValiendo('/conexion/webhooks/prospectos', { pages, busca, can, modules: undefined })).toBe(true);
+    expect(recienteSigueValiendo('/conexion/webhooks/prospectos?new=1', { pages, busca, can, modules: undefined })).toBe(true);
+  });
+
+  it('una ficha de transferencias no existe (App.jsx): no vale', () => {
+    const can = conPermisos('webhooks_salientes.view');
+    expect(recienteSigueValiendo('/conexion/webhooks/transferencias', { pages, busca, can, modules: {} })).toBe(true);
+    expect(recienteSigueValiendo('/conexion/webhooks/transferencias/3', { pages, busca, can, modules: {} })).toBe(false);
+  });
+
+  it('en un proyecto IA, las pestañas de Make y Prospectos no; la de transferencias sí', () => {
+    const can = conPermisos('make.view', 'webhooks.view', 'webhooks_salientes.view');
+    const enIA = { pages, busca, can, modules: {}, projectType: 'ia' };
+    expect(recienteSigueValiendo('/conexion/webhooks/make', enIA)).toBe(false);
+    expect(recienteSigueValiendo('/conexion/webhooks/prospectos', enIA)).toBe(false);
+    expect(recienteSigueValiendo('/conexion/webhooks/transferencias', enIA)).toBe(true);
+  });
+
+  it('el reciente traducido lleva la sección de hoy, no «Captación»', () => {
+    expect(recienteDeHoy({ label: 'Make', sublabel: 'Captación', to: '/captacion/make' }))
+      .toEqual({ label: 'Make', sublabel: 'Conexión › Webhooks', to: '/conexion/webhooks/make' });
+    // El que no se movió, tal cual.
+    const otro = { label: 'Prospectos', sublabel: 'Captación', to: '/prospectos' };
+    expect(recienteDeHoy(otro)).toBe(otro);
+  });
+
+  it('las direcciones movidas son las de TRASLADOS_DE_MENU: una sola lista', () => {
+    for (const d of TRASLADOS_DE_MENU.flatMap((t) => t.de)) expect(rutaDeHoy(d.ruta)).toBe(d.a);
+  });
+});
+
+describe('las pestañas de Conexión › Webhooks', () => {
+  it('en un proyecto IA no salen Prospectos ni Make', () => {
+    expect(pestanasDe({}, 'ia').map((t) => t.label)).toEqual(['Resumen', 'Transferencias']);
+    expect(pestanasDe({}, 'educacion').map((t) => t.label)).toEqual(['Resumen', 'Prospectos', 'Make', 'Transferencias']);
+    expect(pestanasDe(undefined).map((t) => t.label)).toEqual(['Resumen', 'Prospectos', 'Make', 'Transferencias']);
   });
 });

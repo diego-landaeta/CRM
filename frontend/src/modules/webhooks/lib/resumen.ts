@@ -452,9 +452,12 @@ export const TIPOS: TipoWebhook[] = [
     // lee la pestaña de admisión. Los de admisión van en su tarjeta.
     permisos: ['webhooks.view'],
     ocultarSiVacio: true,
-    // `token.controller.js` apunta el uso (`recordUse`) ANTES de validar el
-    // envío: un aviso rechazado también pone la fecha, y el rechazo no se guarda.
-    nota: 'El último aviso es el último que llegó, entrara o no: los rechazados no se guardan, así que aquí no sale si falló. No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
+    // `token.controller.js` apunta el uso (`recordUse`) cuando el aviso pasa la
+    // entrada y ANTES de validar sus datos: uno con datos que no valen también
+    // pone la fecha. Lo que se corta antes no la pone: un token apagado (404,
+    // `portero.js`/`token.model.js`), el límite por minuto (429), el tamaño
+    // (413), los archivos mal enviados (400) y el modo escucha. Nada se guarda.
+    nota: 'El último aviso es el último que pasó la entrada, aunque luego sus datos no valieran. Los que se rechazan (con el token apagado, por exceso de envíos o de tamaño, o con datos que no valen) no se guardan, así que aquí no sale si falló. No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
     // Esta tarjeta es la que dice «No se pudo leer» de un campus cuando falla
     // `/webhook-tokens` (la de admisión, que lee lo mismo, se lo calla): la ve
     // todo el que ve la de admisión, y no al revés (un project manager ve esta
