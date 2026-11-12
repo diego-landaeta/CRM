@@ -12,6 +12,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import StatusDot from '@/shared/components/ui/StatusDot';
 import { rutaPermitida } from '@/shared/components/layout/Sidebar';
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import {
   GRUPOS, campusDelTipo, crearPedidor, enlaceDeFila, ordenarFilas, tiposVisibles,
   type Campus, type FilaWebhook, type TipoWebhook,
@@ -32,7 +33,7 @@ type Estado = { cargando: boolean; filas: FilaWebhook[]; error?: string };
 
 export default function WebhooksResumenPage() {
   const { activeProject, activeIssuerId, activeIssuer, switchProject } = useProjectContext() as {
-    activeProject: { id?: number | null; nombre?: string; modules?: Campus['modules']; sociedad_emisora_id?: number | null } | null;
+    activeProject: { id?: number | null; nombre?: string; modules?: Campus['modules']; sociedad_emisora_id?: number | null; type?: string | null } | null;
     activeIssuerId: number | null;
     activeIssuer: { nombre?: string } | null;
     switchProject?: (id: number) => void;
@@ -41,24 +42,25 @@ export default function WebhooksResumenPage() {
   // asignación recortadas a su equipo (#704).
   const { can, tieneRol, llevaEquipo } = usePermission();
   const gestionaConsultas = can('consultas.gestionar');
-  const delAmbito = useProyectosDelAmbito<Campus & { sociedad_emisora_id?: number | null }>();
+  const delAmbito = useProyectosDelAmbito<Campus & { sociedad_emisora_id?: number | null; type?: string | null }>();
 
   const campusFijo = !activeIssuerId && activeProject?.id && activeProject.id !== TODOS_LOS_PROYECTOS
-    ? { id: activeProject.id, nombre: activeProject.nombre || '', modules: activeProject.modules, empresaId: activeProject.sociedad_emisora_id ?? null }
+    ? { id: activeProject.id, nombre: activeProject.nombre || '', modules: activeProject.modules, empresaId: activeProject.sociedad_emisora_id ?? null, tipo: tipoDelMenu(activeProject.type) }
     : null;
   const campus = useMemo<Campus[]>(
     () => (campusFijo ? [campusFijo] : delAmbito.map((c) => ({
-      id: c.id, nombre: c.nombre, modules: c.modules, empresaId: c.sociedad_emisora_id ?? null,
+      id: c.id, nombre: c.nombre, modules: c.modules, empresaId: c.sociedad_emisora_id ?? null, tipo: tipoDelMenu(c.type),
     }))),
-    [campusFijo?.id, campusFijo?.nombre, campusFijo?.modules, campusFijo?.empresaId, delAmbito], // eslint-disable-line react-hooks/exhaustive-deps
+    [campusFijo?.id, campusFijo?.nombre, campusFijo?.modules, campusFijo?.empresaId, campusFijo?.tipo, delAmbito], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const nombreAmbito = activeIssuerId ? (activeIssuer?.nombre || 'esta empresa')
     : campusFijo ? (campusFijo.nombre || 'este campus') : 'todos los campus';
 
-  // Un tipo cuyo módulo está apagado en todos los campus del ámbito no sale.
+  // Un tipo cuyo módulo está apagado en todos los campus del ámbito (o que no
+  // sale en su tipo de proyecto, `salvoTipo`) no sale.
   const porPermiso = useMemo(() => tiposVisibles(can, moduloEncendido, undefined, tieneRol), [can, tieneRol]);
   const tipos = useMemo(
-    () => porPermiso.filter((t) => !t.moduloCampus || campusDelTipo(t, campus).length > 0),
+    () => porPermiso.filter((t) => (!t.moduloCampus && !t.salvoTipo) || campusDelTipo(t, campus).length > 0),
     [porPermiso, campus],
   );
   const [estados, setEstados] = useState<Record<string, Estado>>({});

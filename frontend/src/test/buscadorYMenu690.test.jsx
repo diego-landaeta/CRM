@@ -117,16 +117,27 @@ describe('los recientes de las direcciones de antes', () => {
     expect(recienteSigueValiendo('/conexion/webhooks/transferencias', enIA)).toBe(true);
   });
 
-  it('el reciente traducido lleva la sección de hoy, no «Captación»', () => {
+  it('el reciente traducido lleva su nombre y su sección de hoy, no «Captación»', () => {
     expect(recienteDeHoy({ label: 'Make', sublabel: 'Captación', to: '/captacion/make' }))
-      .toEqual({ label: 'Make', sublabel: 'Conexión › Webhooks', to: '/conexion/webhooks/make' });
+      .toEqual({ label: 'Webhooks › Make', sublabel: 'Conexión', to: '/conexion/webhooks/make', movido: true });
+    expect(recienteDeHoy({ label: 'Webhooks', sublabel: 'Captación', to: '/captacion/webhooks' }).label).toBe('Webhooks › Prospectos');
     // El que no se movió, tal cual.
     const otro = { label: 'Prospectos', sublabel: 'Captación', to: '/prospectos' };
     expect(recienteDeHoy(otro)).toBe(otro);
   });
 
-  it('las direcciones movidas son las de TRASLADOS_DE_MENU: una sola lista', () => {
-    for (const d of TRASLADOS_DE_MENU.flatMap((t) => t.de)) expect(rutaDeHoy(d.ruta)).toBe(d.a);
+  it('cada dirección movida lleva a una pestaña que existe', () => {
+    const pestanas = pestanasDe(undefined).map((t) => t.to);
+    for (const d of TRASLADOS_DE_MENU.flatMap((t) => t.de)) {
+      expect(rutaDeHoy(d.ruta)).toBe(d.a);
+      expect(pestanas).toContain(d.a);
+    }
+  });
+
+  it('con un «#» detrás, también', () => {
+    expect(rutaDeHoy('/captacion/make#ayuda')).toBe('/conexion/webhooks/make#ayuda');
+    const can = conPermisos('make.view');
+    expect(recienteSigueValiendo('/conexion/webhooks/make#ayuda', { pages, busca, can, modules: {} })).toBe(true);
   });
 });
 

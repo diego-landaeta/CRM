@@ -47,6 +47,8 @@ export interface Campus {
   modules?: Record<string, boolean> | null;
   /** Su empresa (`sociedad_emisora_id`): para lo que se configura por empresa. */
   empresaId?: number | null;
+  /** Su tipo para el menú (`tipoDelMenu`): un campus IA no tiene Captación. */
+  tipo?: string;
 }
 
 /**
@@ -137,6 +139,12 @@ export interface TipoWebhook {
    * un campus con él apagado no se pide ni sale.
    */
   moduloCampus?: string;
+  /**
+   * Los tipos de campus en los que no sale, como su sección del menú: lo de
+   * Captación (`salvoTipo: ['ia']` en el Sidebar) no sale en un campus IA, ni
+   * sus pestañas (`pestanasDe`). Un campus así no se pide ni sale.
+   */
+  salvoTipo?: string[];
   /** Además del permiso, uno de estos roles: lo que pide hoy su pantalla. */
   roles?: string[];
   /**
@@ -346,6 +354,8 @@ export const TIPOS: TipoWebhook[] = [
     permisos: ['webhooks.view'],
     requiere: ['forms.view'],
     moduloCampus: 'webhooks',
+    // Captación no sale en un campus IA (ni sus pestañas): este tampoco.
+    salvoTipo: ['ia'],
     deUnCampus: true,
     cargar: formulariosDe('webhook', (f) => `/conexion/webhooks/prospectos/${f.id}`, true, (f) => f.destination !== 'matricula'),
   },
@@ -362,6 +372,8 @@ export const TIPOS: TipoWebhook[] = [
     permisos: ['webhooks.view'],
     requiere: ['forms.view'],
     moduloCampus: 'webhooks',
+    // Captación no sale en un campus IA (ni sus pestañas): este tampoco.
+    salvoTipo: ['ia'],
     deUnCampus: true,
     ocultarSiVacio: true,
     // Un campus que no contesta ya lo dice la tarjeta de prospectos (misma petición).
@@ -376,6 +388,8 @@ export const TIPOS: TipoWebhook[] = [
     enlace: '/conexion/webhooks/make',
     permisos: ['make.view'],
     moduloCampus: 'make',
+    // Captación no sale en un campus IA (ni sus pestañas): este tampoco.
+    salvoTipo: ['ia'],
     deUnCampus: true,
     // `make.service.handleIncoming` rechaza el secreto mal puesto y el escenario
     // apagado ANTES de apuntar nada (ni entrega ni `last_error`).
@@ -410,6 +424,8 @@ export const TIPOS: TipoWebhook[] = [
     enlace: '/captacion',
     permisos: ['forms.view'],
     moduloCampus: 'forms',
+    // Captación no sale en un campus IA (ni sus pestañas): este tampoco.
+    salvoTipo: ['ia'],
     deUnCampus: true,
     nota: 'Sus envíos se ven en su pantalla.',
     cargar: formulariosDe('form', () => '/captacion', false),
@@ -1012,10 +1028,14 @@ export function tiposVisibles(
     && (!t.enEsteEntorno || t.enEsteEntorno()));
 }
 
-/** Los campus de un tipo: sin los que tienen apagado su módulo (`modules[x] === false`). */
+/**
+ * Los campus de un tipo: sin los que tienen apagado su módulo (`modules[x] ===
+ * false`) ni los de un tipo de proyecto en que no sale (`salvoTipo`).
+ */
 export function campusDelTipo(tipo: TipoWebhook, campus: Campus[]): Campus[] {
   const m = tipo.moduloCampus;
-  return m ? campus.filter((c) => c.modules?.[m] !== false) : campus;
+  const salvo = tipo.salvoTipo;
+  return campus.filter((c) => (!m || c.modules?.[m] !== false) && !(salvo && c.tipo && salvo.includes(c.tipo)));
 }
 
 /**

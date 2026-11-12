@@ -15,7 +15,7 @@ import {
   esSoloColaboraciones,
   rutaPermitida,
 } from '@/shared/components/layout/Sidebar';
-import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
+import { pestanasDe, TABS } from '@/modules/webhooks/lib/pestanas';
 import { TRASLADOS_DE_MENU } from '@/shared/components/layout/trasladosDeMenu';
 import { isBetaAllowed } from '@/shared/config/betaConfig';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
@@ -53,17 +53,28 @@ const MAX_RECENTS = 5;
  * los webhooks juntos en Conexión › Webhooks), sin copiarlas aquí. Un reciente
  * guardado con la de antes lleva a la nueva en vez de desaparecer.
  */
-const MOVIDAS = TRASLADOS_DE_MENU.flatMap((t) => t.de.map((d) => ({ antes: d.ruta, ahora: d.a, seccion: t.a })));
-const movidaDe = (to) => MOVIDAS.find(({ antes }) => to === antes || to?.startsWith(`${antes}/`) || to?.startsWith(`${antes}?`));
+const MOVIDAS = TRASLADOS_DE_MENU.flatMap((t) => t.de.map((d) => {
+  // «Conexión › Webhooks» → sección «Conexión», entrada «Webhooks»; y la pestaña
+  // a la que lleva («Prospectos», «Make»…), para que el nombre diga adónde va.
+  const [seccion, entrada] = t.a.split(' › ');
+  const pestana = TABS.find((x) => x.to === d.a)?.label;
+  return { antes: d.ruta, ahora: d.a, seccion, nombre: pestana ? `${entrada} › ${pestana}` : entrada };
+}));
+const movidaDe = (to) => MOVIDAS.find(({ antes }) => to === antes
+  || ['/', '?', '#'].some((sep) => to?.startsWith(`${antes}${sep}`)));
 export function rutaDeHoy(to) {
   const m = movidaDe(to);
   return m ? `${m.ahora}${to.slice(m.antes.length)}` : to;
 }
-/** El reciente con su dirección de hoy y, si se movió, con su sección de hoy («Conexión › Webhooks»). */
+/**
+ * El reciente con su dirección de hoy y, si se movió, con su nombre y su sección
+ * de hoy («Webhooks › Prospectos» · «Conexión»). `movido`: su sección es la de
+ * serie, y al pintarlo se le pone el nombre que le dé el campus (`applyLabel`).
+ */
 export function recienteDeHoy(e) {
   if (!e?.to) return e;
   const m = movidaDe(e.to);
-  return m ? { ...e, to: rutaDeHoy(e.to), sublabel: m.seccion } : e;
+  return m ? { ...e, to: rutaDeHoy(e.to), label: m.nombre, sublabel: m.seccion, movido: true } : e;
 }
 
 function getRecents() {
@@ -240,8 +251,8 @@ export function recienteSigueValiendo(to, { pages, busca, can, modules, projectT
   // vale si hoy se puede abrir, con las reglas de su barra de pestañas
   // (`SubNav`): el permiso de su ruta, el módulo y el tipo del campus. Solo las
   // que existen: la de transferencias no tiene ficha (App.jsx).
-  const pestana = /^(\/conexion\/webhooks\/(?:prospectos|make|transferencias))(?:\?.*)?$/.exec(to)
-    || /^(\/conexion\/webhooks\/(?:prospectos|make))\/\d+(?:\?.*)?$/.exec(to);
+  const pestana = /^(\/conexion\/webhooks\/(?:prospectos|make|transferencias))(?:[?#].*)?$/.exec(to)
+    || /^(\/conexion\/webhooks\/(?:prospectos|make))\/\d+(?:[?#].*)?$/.exec(to);
   if (pestana) {
     return pages.some((p) => p.to === '/conexion/webhooks')
       && typeof can === 'function' && rutaPermitida(pestana[1], can)
@@ -529,7 +540,7 @@ export default function CommandPalette() {
           items: vigentes.map((r) => ({
             type: 'recent',
             label: r.label,
-            sublabel: r.sublabel,
+            sublabel: r.movido ? applyLabel(r.sublabel, activeProject?.sidebar_labels) : r.sublabel,
             to: r.to,
             tipo: r.tipo,
             projectId: r.projectId,
@@ -638,7 +649,7 @@ export default function CommandPalette() {
       sublabel: [c.nombre_corto, c.categoria, legible(c.estado)].filter(Boolean).join(' · '),
     }));
     return out;
-  }, [query, recents, quickActions, projectActions, pages, busca, can, activeProject?.modules, activeProject?.type, leadResults, productResults, otros]);
+  }, [query, recents, quickActions, projectActions, pages, busca, can, activeProject?.modules, activeProject?.type, activeProject?.sidebar_labels, leadResults, productResults, otros]);
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 

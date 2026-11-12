@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, act, within, fireEvent } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 /**
  * #690 · El buscador montado de verdad, con recientes guardados ANTES de juntar
@@ -32,15 +32,26 @@ beforeEach(() => {
 });
 
 describe('recientes de antes de juntar los webhooks', () => {
-  it('salen con su dirección y su sección de hoy; el de una pestaña que no se puede abrir, no', async () => {
+  it('salen con su nombre y su sección de hoy; el de una pestaña que no se puede abrir, no', async () => {
     render(<MemoryRouter><CommandPalette /></MemoryRouter>);
     act(() => { window.dispatchEvent(new Event('crm:open-palette')); });
     const lista = await screen.findByRole('listbox');
     const opciones = within(lista).getAllByRole('option').map((o) => o.textContent);
-    const prospectos = opciones.find((t) => t.startsWith('Webhooks'));
-    expect(prospectos).toContain('Conexión › Webhooks');
+    const prospectos = opciones.find((t) => t.startsWith('Webhooks › Prospectos'));
+    expect(prospectos).toContain('Conexión');
     expect(prospectos).not.toContain('Captación');
-    expect(opciones.some((t) => t.startsWith('Webhook de transferencias') && t.includes('Conexión › Webhooks'))).toBe(true);
-    expect(opciones.some((t) => t.startsWith('Make'))).toBe(false);
+    expect(opciones.some((t) => t.startsWith('Webhooks › Transferencias'))).toBe(true);
+    expect(opciones.some((t) => t.includes('Make'))).toBe(false);
+  });
+
+  it('y al pulsarlo lleva a la dirección nueva', async () => {
+    let donde;
+    const Donde = () => { donde = useLocation(); return null; };
+    render(<MemoryRouter initialEntries={['/']}><CommandPalette /><Donde /></MemoryRouter>);
+    act(() => { window.dispatchEvent(new Event('crm:open-palette')); });
+    const lista = await screen.findByRole('listbox');
+    const opcion = within(lista).getAllByRole('option').find((o) => o.textContent.startsWith('Webhooks › Prospectos'));
+    fireEvent.click(opcion);
+    expect(donde.pathname).toBe('/conexion/webhooks/prospectos');
   });
 });
