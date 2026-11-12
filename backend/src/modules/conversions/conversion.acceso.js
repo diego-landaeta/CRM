@@ -1,6 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
+import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 /**
  * Quién puede tocar UNA venta (y sus cuotas, pagos, devoluciones y reparto).
@@ -27,7 +28,8 @@ async function puede(user, { project_id, responsable_id = null, vendedora_id = n
   if (veTodoElCrm(user)) return true;
   const mios = await campusDeLaPersona(user?.userId);
   if (!mios.includes(Number(project_id))) return false;
-  if (user?.role !== 'gestor') return true;
+  // Quien solo ve lo suyo (#423: por permiso, no por el rol principal), solo las suyas.
+  if (!soloLoSuyo(user)) return true;
   return [responsable_id, vendedora_id].some((x) => x != null && Number(x) === Number(user.userId)) || en_reparto;
 }
 
