@@ -37,6 +37,8 @@ $PAGE->set_heading(get_string('conectar_titulo', 'local_crm'));
 
 $accion = optional_param('accion', '', PARAM_ALPHA);
 $error = null;
+// Un código de OTRO CRM: se para y se pregunta antes de cambiar (#689). ['actual', 'nuevo', 'codigo'].
+$cambio = null;
 
 if ($accion !== '') {
     // confirm_sesskey() no lanza: devuelve false. Con la sesión caducada se dice, en vez de
@@ -44,11 +46,20 @@ if ($accion !== '') {
     if (!confirm_sesskey()) {
         $error = get_string('conectar_sesskey', 'local_crm');
     } else if ($accion === 'conectar') {
-        $r = \local_crm\conexion::conectar(required_param('codigo', PARAM_RAW_TRIMMED), $contexto, (int) $USER->id);
+        $pegado = required_param('codigo', PARAM_RAW_TRIMMED);
+        // La confirmación lleva el CRM de ahora tal como se vio en el aviso: si entretanto ha
+        // cambiado, conexion::conectar() no la da por buena y el aviso sale otra vez.
+        $confirmado = optional_param('confirmar_cambio', 0, PARAM_BOOL)
+            ? optional_param('crm_actual', '', PARAM_RAW_TRIMMED) : null;
+        $r = \local_crm\conexion::conectar($pegado, $contexto, (int) $USER->id, $confirmado);
         if ($r['ok']) {
             redirect($PAGE->url, get_string('conectar_ok', 'local_crm', s($r['campus'])), null, \core\output\notification::NOTIFY_SUCCESS);
         }
-        $error = get_string('conectar_error', 'local_crm', s($r['error']));
+        if (!empty($r['cambio'])) {
+            $cambio = $r['cambio'] + ['codigo' => $pegado];
+        } else {
+            $error = get_string('conectar_error', 'local_crm', s($r['error']));
+        }
     } else if ($accion === 'actualizar') {
         // Por el cron, no aquí: instalar código desde la página que se está sirviendo no es seguro.
         \core\task\manager::queue_adhoc_task(new \local_crm\task\buscar_actualizacion(), true);
@@ -78,6 +89,41 @@ if ($error) {
     echo $OUTPUT->notification($error, \core\output\notification::NOTIFY_ERROR);
 }
 
+if ($cambio) {
+    // El código es de otro CRM. El plugin habla con UN solo CRM: si se cambia, el de ahora deja
+    // de recibir los mensajes. Se dice cuál es cuál y se pide una confirmación expresa (#689).
+    $actual = \local_crm\conexion::describir_crm($cambio['actual']);
+    $nuevo = \local_crm\conexion::describir_crm($cambio['nuevo']);
+    $filas = html_writer::tag('dt', get_string('cambio_ahora', 'local_crm'), ['class' => 'col-sm-4 fw-normal text-muted']) .
+        html_writer::tag('dd', html_writer::tag('strong', s($actual)), ['class' => 'col-sm-8 mb-2']) .
+        html_writer::tag('dt', get_string('cambio_pasa_a', 'local_crm'), ['class' => 'col-sm-4 fw-normal text-muted']) .
+        html_writer::tag('dd', html_writer::tag('strong', s($nuevo)), ['class' => 'col-sm-8 mb-2']);
+    $f = html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+    $f .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'accion', 'value' => 'conectar']);
+    $f .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'codigo', 'value' => $cambio['codigo']]);
+    $f .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'crm_actual', 'value' => $cambio['actual']]);
+    $f .= html_writer::div(
+        html_writer::empty_tag('input', ['type' => 'checkbox', 'class' => 'form-check-input', 'id' => 'local-crm-confirmar',
+            'name' => 'confirmar_cambio', 'value' => 1, 'required' => 'required']) .
+        html_writer::tag('label', get_string('cambio_entiendo', 'local_crm', s($actual)), ['class' => 'form-check-label', 'for' => 'local-crm-confirmar']),
+        'form-check mb-3');
+    $f .= html_writer::div(
+        html_writer::tag('button', get_string('cambio_boton', 'local_crm', s($nuevo)), ['type' => 'submit', 'class' => 'btn btn-danger']) .
+        html_writer::link($PAGE->url, get_string('cambio_cancelar', 'local_crm'), ['class' => 'btn btn-outline-secondary']),
+        'd-flex flex-wrap gap-2');
+    echo html_writer::div(
+        html_writer::div(
+            html_writer::tag('h3', get_string('cambio_titulo', 'local_crm'), ['class' => 'h5 card-title mb-3']) .
+            html_writer::tag('dl', $filas, ['class' => 'row mb-2']) .
+            html_writer::tag('p', get_string('cambio_que_pasa', 'local_crm', (object) ['actual' => s($actual), 'nuevo' => s($nuevo)]),
+                ['class' => 'card-text mb-3']) .
+            html_writer::tag('form', $f, ['method' => 'post', 'action' => $PAGE->url->out(false)]),
+            'card-body p-4'),
+        'card border-warning shadow-sm', ['style' => 'max-width: 46rem']);
+    echo $OUTPUT->footer();
+    exit;
+}
+
 $conectado = \local_crm\conexion::conectado();
 echo html_writer::start_div('', ['style' => 'max-width: 46rem']);
 
@@ -98,7 +144,9 @@ if (!$conectado) {
     $filas = [
         get_string('dato_campus', 'local_crm') => s((string) get_config('local_crm', 'campus')),
         get_string('dato_desde', 'local_crm') => $desde ? userdate($desde, get_string('strftimedatetimeshort', 'langconfig')) : '—',
-        get_string('dato_crm', 'local_crm') => s(parse_url((string) get_config('local_crm', 'url'), PHP_URL_HOST) ?: '—'),
+        // Con la ruta: solo el dominio no distingue producción (360crm.tech/crm) de pruebas (/testeo).
+        get_string('dato_crm', 'local_crm') => s(\local_crm\conexion::describir_crm(
+            (string) (\local_crm\actualizar::base_api() ?? get_config('local_crm', 'url')))),
     ];
     $dl = '';
     foreach ($filas as $k => $v) {

@@ -72,6 +72,16 @@ Al pulsar Conectar, el plugin:
   `360crm.tech` y `crm.iseie.com`; se cambia en los ajustes del plugin);
 - se presenta al CRM.
 
+**Cambiar de CRM pide confirmación (1.10.4).** El plugin habla con UN solo CRM: guarda una
+dirección y una clave. Si el campus ya está conectado y el código pegado es de otro CRM
+(otra dirección de la API: por ejemplo, producción `360crm.tech/crm` y pruebas
+`360crm.tech/testeo`, que comparten dominio y por eso la lista de CRM permitidos no las
+separa), «Conectar» no cambia nada: enseña a qué CRM está conectado ahora, de cuál es el
+código, y que el de ahora dejará de recibir los mensajes. Solo cambia marcando «Entiendo
+que…» y pulsando «Cambiar a…». Con un código del mismo CRM, reconecta sin preguntar, como
+siempre. La ficha «Conexión con el CRM» enseña el CRM con su ruta (`360crm.tech/crm
+(producción)`), no solo el dominio.
+
 El CRM, por su parte:
 - comprueba que es un Moodle de verdad con el plugin;
 - guarda la dirección y el token del campus;
@@ -235,6 +245,8 @@ Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que p
   Moodle. Desconectar lo revoca.
 - **Solo CRM de confianza.** Un código lo puede fabricar cualquiera: el plugin solo se
   conecta a los CRM de su lista, así que un código falso no se lleva el token.
+- **Cambiar de CRM, solo confirmado** (1.10.4). Un código de otro CRM no desconecta el
+  campus del de ahora sin una confirmación expresa en la página del plugin.
 - **Enviar y calificar en nombre de la tutora.** `local_crm_enviar_mensaje` y
   `local_crm_calificar` exigen `local/crm:enviarcomo`, que solo tiene el rol del servicio.
   Al calificar se comprueba que la tutora puede calificar esa tarea y, con grupos
