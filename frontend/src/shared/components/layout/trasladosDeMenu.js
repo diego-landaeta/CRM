@@ -29,7 +29,9 @@ export const TRASLADOS_DE_MENU = [
       { entrada: 'Conexión › Webhook de transferencias', ruta: '/conexion/webhook-transferencias', a: '/conexion/webhooks/transferencias', permiso: 'webhooks_salientes.view' },
     ],
     a: 'Conexión › Webhooks',
-    aprobadoPor: null,
+    // Lo pide Diego en la #690 (05/11), punto 4: estas tres entradas «se quitan
+    // del menú y quedan dentro del apartado; sus rutas siguen funcionando».
+    aprobadoPor: 'Diego, 05/11',
   },
 ];
 
