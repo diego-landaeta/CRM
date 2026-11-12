@@ -69,4 +69,28 @@ describe('recientes de antes de juntar los webhooks', () => {
     fireEvent.click(opcion);
     expect(donde.pathname).toBe('/conexion/webhooks/prospectos');
   });
+
+  it('pulsado en un campus con otros nombres, en otro sale con los suyos (se guarda con los de serie)', async () => {
+    PROYECTO.activeProject.sidebar_labels = { Conexión: 'Integraciones', Webhooks: 'Avisos' };
+    let vista;
+    try {
+      vista = render(<MemoryRouter><CommandPalette /></MemoryRouter>);
+      act(() => { window.dispatchEvent(new Event('crm:open-palette')); });
+      const lista = await screen.findByRole('listbox');
+      fireEvent.click(within(lista).getAllByRole('option').find((o) => o.textContent.startsWith('Avisos › Prospectos')));
+      const guardado = JSON.parse(localStorage.getItem('crm.palette.recents'))[0];
+      expect(guardado).toMatchObject({ label: 'Webhooks › Prospectos', sublabel: 'Conexión', to: '/conexion/webhooks/prospectos' });
+      expect(guardado.movido).toEqual({ entrada: 'Webhooks', pestana: 'Prospectos', seccion: 'Conexión' });
+    } finally {
+      delete PROYECTO.activeProject.sidebar_labels;
+      vista?.unmount();
+    }
+    render(<MemoryRouter><CommandPalette /></MemoryRouter>);
+    act(() => { window.dispatchEvent(new Event('crm:open-palette')); });
+    const lista = await screen.findByRole('listbox');
+    const primero = within(lista).getAllByRole('option')[0].textContent;
+    expect(primero).toContain('Webhooks › Prospectos');
+    expect(primero).toContain('Conexión');
+    expect(primero).not.toContain('Integraciones');
+  });
 });

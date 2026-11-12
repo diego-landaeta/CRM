@@ -108,17 +108,23 @@ export default function WebhooksResumenPage() {
     );
   }
 
-  // Por qué no sale nada de lo que se puede ver: que venía de Captación y estos
-  // campus son IA (`salvoTipo`), o que su módulo está apagado (o no hay ninguno).
-  const porSerIA = porPermiso.some((t) => t.salvoTipo && campusDelTipo(t, campus).length === 0
-    && campusDelTipo({ ...t, salvoTipo: undefined }, campus).length > 0);
+  // Por qué no sale nada de lo que se puede ver, con TODAS sus causas: que venía
+  // de Captación y hay campus IA (`salvoTipo`), que su módulo está apagado en
+  // algún campus, o que sencillamente no hay ninguno.
+  const sinModulo = (t: TipoWebhook) => !!t.moduloCampus && campus.some((c) => c.modules?.[t.moduloCampus!] === false);
+  const enIA = (t: TipoWebhook) => !!t.salvoTipo && campus.some((c) => !!c.tipo && t.salvoTipo!.includes(c.tipo));
+  const causas = [
+    porPermiso.some(enIA) && 'lo que venía de Captación (webhooks de prospectos, Make, formularios) no existe en los proyectos IA',
+    porPermiso.some(sinModulo) && 'algunos tienen su módulo apagado en estos campus',
+  ].filter(Boolean) as string[];
+  const porque = causas.length
+    ? `${causas.join(', y ')}, o no hay ninguno.`.replace(/^./, (l) => l.toUpperCase())
+    : 'No hay ninguno en estos campus.';
   const sinNadaQueVer = (
     <EmptyState
       icon={WebhooksLogo}
       title="Sin webhooks en estos campus"
-      description={porSerIA
-        ? 'Lo que puedes ver aquí venía de Captación (webhooks de prospectos, Make, formularios), que un proyecto IA no tiene. Prueba con otro campus o empresa.'
-        : 'Los webhooks que puedes ver tienen su módulo apagado en los campus elegidos arriba, o no tienen ninguno. Prueba con otro campus o empresa.'}
+      description={`${porque} Prueba con otro campus o empresa.`}
     />
   );
 

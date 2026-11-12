@@ -53,13 +53,19 @@ const MAX_RECENTS = 5;
  * los webhooks juntos en Conexión › Webhooks), sin copiarlas aquí. Un reciente
  * guardado con la de antes lleva a la nueva en vez de desaparecer.
  */
-const MOVIDAS = TRASLADOS_DE_MENU.flatMap((t) => t.de.map((d) => {
-  // «Conexión › Webhooks» → sección «Conexión», entrada «Webhooks»; y la pestaña
-  // a la que lleva («Prospectos», «Make»…), para que el nombre diga adónde va.
-  const [seccion, entrada = seccion] = t.a.includes(' › ') ? t.a.split(' › ') : [t.a];
-  const pestana = TABS.find((x) => x.to === d.a)?.label;
-  return { antes: d.ruta, ahora: d.a, seccion, entrada, pestana };
-}));
+/**
+ * Cada dirección movida: de dónde a dónde, y su sección, entrada y pestaña de
+ * serie («Conexión › Webhooks» → «Conexión» y «Webhooks»; la pestaña,
+ * «Prospectos», «Make»…), para que el nombre diga adónde va.
+ */
+export function movidasDe(traslados = TRASLADOS_DE_MENU, pestanas = TABS) {
+  return traslados.flatMap((t) => t.de.map((d) => {
+    const [seccion, entrada = seccion] = t.a.includes(' › ') ? t.a.split(' › ') : [t.a];
+    const pestana = pestanas.find((x) => x.to === d.a)?.label;
+    return { antes: d.ruta, ahora: d.a, seccion, entrada, pestana };
+  }));
+}
+const MOVIDAS = movidasDe();
 const movidaDe = (to) => MOVIDAS.find(({ antes }) => to === antes
   || ['/', '?', '#'].some((sep) => to?.startsWith(`${antes}${sep}`)));
 export function rutaDeHoy(to) {
@@ -76,8 +82,13 @@ const nombreMovido = (entrada, pestana) => (pestana ? `${entrada} › ${pestana}
 export function recienteDeHoy(e) {
   if (!e?.to) return e;
   const m = movidaDe(e.to);
-  if (!m) return e;
-  return { ...e, to: rutaDeHoy(e.to), label: nombreMovido(m.entrada, m.pestana), sublabel: m.seccion, movido: { entrada: m.entrada, pestana: m.pestana } };
+  // Guardado ya con la dirección nueva (al pulsarlo, o por una versión anterior
+  // que marcaba `movido: true`): se recompone desde su destino.
+  const ya = !m && MOVIDAS.find(({ ahora }) => e.to === ahora || ['/', '?', '#'].some((sep) => e.to.startsWith(`${ahora}${sep}`)));
+  const de = m || (e.movido ? ya : null);
+  if (!de) return e;
+  const movido = { entrada: de.entrada, pestana: de.pestana, seccion: de.seccion };
+  return { ...e, to: rutaDeHoy(e.to), label: nombreMovido(de.entrada, de.pestana), sublabel: de.seccion, movido };
 }
 
 function getRecents() {
@@ -542,8 +553,10 @@ export default function CommandPalette() {
           label: 'Recientes',
           items: vigentes.map((r) => ({
             type: 'recent',
+            // Movido: con los nombres que este campus da a su menú, desde los de serie.
             label: r.movido ? nombreMovido(applyLabel(r.movido.entrada, activeProject?.sidebar_labels), r.movido.pestana) : r.label,
-            sublabel: r.movido ? applyLabel(r.sublabel, activeProject?.sidebar_labels) : r.sublabel,
+            sublabel: r.movido ? applyLabel(r.movido.seccion, activeProject?.sidebar_labels) : r.sublabel,
+            movido: r.movido,
             to: r.to,
             tipo: r.tipo,
             projectId: r.projectId,
@@ -672,7 +685,11 @@ export default function CommandPalette() {
       return;
     }
     if (item.to) {
-      pushRecent({ label: item.label, sublabel: item.sublabel, to: item.to, tipo: item.tipo || item.type, projectId: item.projectId });
+      // Un reciente movido se guarda con sus nombres de serie y `movido`: así, en
+      // otro campus, sale con los nombres de ese campus.
+      pushRecent(item.movido
+        ? { label: nombreMovido(item.movido.entrada, item.movido.pestana), sublabel: item.movido.seccion, to: item.to, tipo: item.tipo || item.type, projectId: item.projectId, movido: item.movido }
+        : { label: item.label, sublabel: item.sublabel, to: item.to, tipo: item.tipo || item.type, projectId: item.projectId });
       const pid = campusAlAbrir(item, { unCampus: activeProject?.id > 0, todos: isAllProjects });
       if (pid) switchProject(pid);
       navigate(item.to);

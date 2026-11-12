@@ -10,7 +10,7 @@
 */
 import { describe, it, expect } from 'vitest';
 import { NAV_SECTIONS, canSeeItem } from '@/shared/components/layout/Sidebar';
-import { fuzzyScore, rutaDeHoy, recienteDeHoy, recienteSigueValiendo } from '@/shared/components/layout/CommandPalette';
+import { fuzzyScore, rutaDeHoy, recienteDeHoy, recienteSigueValiendo, movidasDe } from '@/shared/components/layout/CommandPalette';
 import { TRASLADOS_DE_MENU } from '@/shared/components/layout/trasladosDeMenu';
 import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
 
@@ -119,7 +119,7 @@ describe('los recientes de las direcciones de antes', () => {
 
   it('el reciente traducido lleva su nombre y su sección de hoy, no «Captación»', () => {
     expect(recienteDeHoy({ label: 'Make', sublabel: 'Captación', to: '/captacion/make' }))
-      .toEqual({ label: 'Webhooks › Make', sublabel: 'Conexión', to: '/conexion/webhooks/make', movido: { entrada: 'Webhooks', pestana: 'Make' } });
+      .toEqual({ label: 'Webhooks › Make', sublabel: 'Conexión', to: '/conexion/webhooks/make', movido: { entrada: 'Webhooks', pestana: 'Make', seccion: 'Conexión' } });
     expect(recienteDeHoy({ label: 'Webhooks', sublabel: 'Captación', to: '/captacion/webhooks' }).label).toBe('Webhooks › Prospectos');
     // El que no se movió, tal cual.
     const otro = { label: 'Prospectos', sublabel: 'Captación', to: '/prospectos' };
@@ -132,6 +132,19 @@ describe('los recientes de las direcciones de antes', () => {
       expect(rutaDeHoy(d.ruta)).toBe(d.a);
       expect(pestanas).toContain(d.a);
     }
+  });
+
+  it('un reciente guardado ya con la dirección nueva (o con `movido: true` de antes) recupera su nombre', () => {
+    const viejo = { label: 'Webhooks › Make', sublabel: 'Conexión', to: '/conexion/webhooks/make', movido: true };
+    expect(recienteDeHoy(viejo).movido).toEqual({ entrada: 'Webhooks', pestana: 'Make', seccion: 'Conexión' });
+    // Uno normal con esa misma dirección (que no se movió) se queda como está.
+    const normal = { label: 'Make', sublabel: 'X', to: '/conexion/webhooks/make' };
+    expect(recienteDeHoy(normal)).toBe(normal);
+  });
+
+  it('un traslado sin « › » no da «undefined»', () => {
+    const [m] = movidasDe([{ de: [{ ruta: '/a', a: '/conexion/webhooks/make' }], a: 'Webhooks' }]);
+    expect(m).toEqual({ antes: '/a', ahora: '/conexion/webhooks/make', seccion: 'Webhooks', entrada: 'Webhooks', pestana: 'Make' });
   });
 
   it('con un «#» detrás, también', () => {
