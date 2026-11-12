@@ -477,8 +477,7 @@ export const SECCIONES = [
         clave: 'mcp', nombre: 'MCP (Claude)', acciones: [
           // Antes lo decidía el rol principal (mcp.acceso.js · puedeUsarMcp): admin de serie, el
           // resto con la casilla, y un tutor nunca, aunque tuviera otro rol de más (QA, punto 6).
-          // Diego, 11/11/2026 (#694): el colaborador, como el tutor y el tutor redactor, nunca.
-          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor', 'colaborador'], nuncaPrincipal: ['tutor', 'tutor_redactor', 'colaborador'], soloPrincipal: true }),
+          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'tutor_redactor'], soloPrincipal: true }),
           a('administrar', 'Administrar el MCP', 'Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado.', ADMIN),
           a('supervisar', 'Apagar el MCP', 'El interruptor de emergencia y rechazar conexiones ajenas.', NADIE),
         ],

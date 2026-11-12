@@ -534,12 +534,4 @@ export const CAMBIOS_DE_REGLA = [
     sentido: 'gana',
     aprobadoPor: 'Diego, 10/11',
   },
-  {
-    id: 'colaborador-sin-mcp',
-    que: 'El colaborador no puede tener «Usar el MCP», ni con excepción ni con un rol de más (`nunca` y `nuncaPrincipal`), como el tutor y el tutor redactor. En su ficha sale la casilla bloqueada, con el motivo.',
-    motivo: 'Diego, 11/11 (#694): «Nunca para ese rol: WhatsApp y el MCP para tutor, tutor redactor y colaborador». De serie no lo traía y el corte del colaborador no le abre el MCP; lo único que se cierra es dárselo por excepción.',
-    roles: ['colaborador'],
-    sentido: 'pierde',
-    aprobadoPor: 'Diego, 11/11',
-  },
 ];
