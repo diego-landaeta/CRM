@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 import { comprobarEntornoDeProduccion } from './scripts/entornoDeProduccion.js';
+import { versionDeLaApp } from './scripts/versionDeLaApp.js';
 
 const modeIndex = process.argv.findIndex((arg) => arg === '--mode' || arg === '-m');
 const mode = modeIndex >= 0 ? process.argv[modeIndex + 1] : process.env.NODE_ENV || 'development';
@@ -42,7 +43,13 @@ export default defineConfig(({ command, mode: modoVite }) => {
   return CONFIG;
 });
 
+// La versión que enseña el menú, de la etiqueta de Git (ver scripts/versionDeLaApp.js).
+const APP_VERSION = versionDeLaApp({ cwd: __dirname });
+
 const CONFIG = {
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [
     react(),
     VitePWA({
