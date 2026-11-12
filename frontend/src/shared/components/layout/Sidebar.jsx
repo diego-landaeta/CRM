@@ -71,7 +71,7 @@ import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
-import { ProjectAvatar } from '@/shared/components/ui/ProjectAvatar';
+import { ProjectAvatar, EmpresaAvatar } from '@/shared/components/ui/ProjectAvatar';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
@@ -1145,7 +1145,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           entero. */}
       <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
         <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
-          {activeProject && activeProject.id !== -1 ? (
+          {/* Con una EMPRESA elegida, la marca de la empresa (11/11): su logo o
+              su nombre corto. Antes caía en el primer campus (Fono Aprende). */}
+          {activeIssuer ? (
+            <EmpresaAvatar empresa={activeIssuer} size={collapsed ? 'md' : 'lg'} />
+          ) : activeProject && activeProject.id !== -1 ? (
             <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
           ) : (
             <div className={cn(
@@ -1174,7 +1178,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
               <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
               {BETA_MODE && (
                 <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
-                  BETA {BETA_VERSION}
+                  BETA{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
                 </span>
               )}
             </div>

@@ -113,7 +113,9 @@ export const SECCIONES = [
           a('view', 'Ver sus ventas', 'Sus cifras: por cliente, por producto, facturado y su evolución.', TODOS),
           a('registrar', 'Registrar una venta', 'Apuntar una venta nueva desde Ventas.', COMERCIAL),
           a('view_equipo', 'Ver las ventas del equipo', 'El resumen y las ventas por asesora de todo el equipo.', ADMIN_SOPORTE, { requiere: ['ventas.view'] }),
-          a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya).', TODOS),
+          // Solo admin y gestora (IDOR de las metas): antes la ruta no pedía rol y un tutor, soporte o project
+          // manager podía fijar o borrar la meta de cualquiera. Cambio pendiente de aprobar: `metas-sin-soporte-ni-pm`.
+          a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente).', ['admin', 'gestor'], { nunca: ['tutor', 'soporte', 'project_manager', 'colaborador'] }),
         ],
       },
     ],
@@ -486,7 +488,11 @@ export const SECCIONES = [
       },
       {
         clave: 'registro', nombre: 'Registro', acciones: [
-          a('view', 'Ver el registro', 'Quién cambió qué y cuándo.', ADMIN_SOPORTE),
+          a('view', 'Ver el registro', 'Quién cambió qué y cuándo (lo de sus campus).', ADMIN_SOPORTE),
+          // Diego, 03/11 (#620): lo que no es de ningún campus —errores del servidor,
+          // tareas programadas— solo para soporte (y super admin). Los inicios de sesión
+          // de la gente de sus campus los ve quien ve el registro (Diego, 04/11).
+          a('sistema', 'Ver lo del sistema en el registro', 'Lo que no es de ningún campus: errores y tareas programadas.', SOPORTE, { requiere: ['registro.view'] }),
         ],
       },
       {

@@ -30,14 +30,15 @@ function DocumentTitle() {
     // entonces el pseudo-proyecto -1, que se llama «Todos los proyectos», y la
     // pestaña decía eso con CEDIA puesta. La cabecera del Dashboard ya ponía
     // la empresa: la pestaña dice lo mismo que la cabecera.
-    const proj = activeIssuer?.nombre
+    // Con su nombre corto («CEDIA»), el mismo que el menú (11/11).
+    const proj = activeIssuer?.nombreCorto || activeIssuer?.nombre
       || (project?.id ? project.nombre : null);
     // Formato: "Prospectos · Psiko Aprende — MultiCRM"
     if (route && proj) document.title = `${route} · ${proj} — ${base}`;
     else if (route) document.title = `${route} — ${base}`;
     else if (proj) document.title = `${proj} — ${base}`;
     else document.title = base;
-  }, [pathname, project?.id, project?.nombre, activeIssuer?.nombre]);
+  }, [pathname, project?.id, project?.nombre, activeIssuer?.nombre, activeIssuer?.nombreCorto]);
   return null;
 }
 

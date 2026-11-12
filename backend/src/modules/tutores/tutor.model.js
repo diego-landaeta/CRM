@@ -215,9 +215,11 @@ export async function guardarPerfil(tutorId, datos = {}) {
 
 // ── Colaboraciones ──────────────────────────────────────────────────────────
 
-export async function colaboraciones({ tutorId, productId, soloActivas = false }) {
+export async function colaboraciones({ tutorId, productId, soloActivas = false, projectIds = null }) {
   const cond = [];
   const params = [];
+  // Solo las de esos campus (la formación manda): quien no lo ve todo no ve las de otra empresa.
+  if (Array.isArray(projectIds)) { params.push(projectIds.map(Number)); cond.push(`p.project_id = ANY($${params.length}::int[])`); }
   if (tutorId) { params.push(tutorId); cond.push(`c.tutor_id = $${params.length}`); }
   if (productId) { params.push(productId); cond.push(`c.product_id = $${params.length}`); }
   if (soloActivas) cond.push('c.activa');
@@ -738,7 +740,7 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
 //
 // Solo pasan de 'pendiente' a 'pagada'. Una revertida no se paga por descuido, y
 // una ya pagada no se paga dos veces aunque se pulse el boton dos veces.
-export async function liquidar({ ids = null, periodo = null, tutorId = null, userId }) {
+export async function liquidar({ ids = null, periodo = null, tutorId = null, userId, projectIds = null }) {
   const { rows } = await query(
     `UPDATE tutor_commissions
         SET estado = 'pagada',
@@ -752,8 +754,16 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
         AND ($4::int IS NULL OR tutor_id = $4)
+        -- Solo las de mis campus: un tutor que da clase en varias empresas no se paga entero
+        -- por quien lleva solo una de ellas.
+        AND ($5::int[] IS NULL OR id IN (
+          SELECT tc.id FROM tutor_commissions tc
+            LEFT JOIN products p ON p.id = tc.product_id
+            LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
+            LEFT JOIN conversions cv ON cv.id = cp.conversion_id
+           WHERE COALESCE(p.project_id, cv.project_id) = ANY($5::int[])))
       RETURNING id, importe, tutor_id`,
-    [userId, ids && ids.length ? ids : null, periodo, tutorId]
+    [userId, ids && ids.length ? ids : null, periodo, tutorId, Array.isArray(projectIds) ? projectIds.map(Number) : null]
   );
   return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
 }

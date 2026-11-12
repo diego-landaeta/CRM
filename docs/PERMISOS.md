@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-732 rutas en 57 módulos, y 25 acciones con condición dentro de una ruta.
+732 rutas en 57 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -753,6 +753,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/registro/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | fuentes | `GET /api/registro/fuentes` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | csv | `GET /api/registro/csv` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
+| listar · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/` | (no existía) | (ruta nueva) | `registro.sistema` |
+| fuentes · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/fuentes` | (no existía) | (ruta nueva) | `registro.sistema` |
+| csv · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/csv` | (no existía) | (ruta nueva) | `registro.sistema` |
 
 ## reports
 
@@ -1121,7 +1124,7 @@ lo que pide para tener sentido (editar pide ver).
 | Ver sus ventas | `ventas.view` | Sus cifras: por cliente, por producto, facturado y su evolución. | Admin, Gestora, Soporte, Project manager, Tutor |  |
 | Registrar una venta | `ventas.registrar` | Apuntar una venta nueva desde Ventas. | Admin, Gestora, Soporte | `ventas.view` |
 | Ver las ventas del equipo | `ventas.view_equipo` | El resumen y las ventas por asesora de todo el equipo. | Admin, Soporte | `ventas.view` |
-| Metas de venta | `ventas.metas` | Poner y quitar metas (una gestora, solo la suya). | Admin, Gestora, Soporte, Project manager, Tutor | `ventas.view` |
+| Metas de venta | `ventas.metas` | Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente). · nunca: Tutor, Soporte, Project manager, Colaborador | Admin, Gestora | `ventas.view` |
 
 ## Tareas
 
@@ -1491,7 +1494,8 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el registro | `registro.view` | Quién cambió qué y cuándo. | Admin, Soporte |  |
+| Ver el registro | `registro.view` | Quién cambió qué y cuándo (lo de sus campus). | Admin, Soporte |  |
+| Ver lo del sistema en el registro | `registro.sistema` | Lo que no es de ningún campus: errores y tareas programadas. | Soporte | `registro.view` |
 
 ### Correos
 

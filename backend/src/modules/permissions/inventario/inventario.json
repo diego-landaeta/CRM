@@ -3362,6 +3362,10 @@
     "claves": [
      "email_sequences.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -4847,6 +4851,10 @@
     "claves": [
      "forms.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5133,6 +5141,10 @@
     "claves": [
      "integrations.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5155,6 +5167,10 @@
     "claves": [
      "integrations.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5177,6 +5193,10 @@
     "claves": [
      "integrations.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5199,6 +5219,10 @@
     "claves": [
      "integrations.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5221,6 +5245,10 @@
     "claves": [
      "integrations.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5255,6 +5283,10 @@
     "claves": [
      "facturas.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5277,6 +5309,10 @@
     "claves": [
      "facturas.cola"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": [
@@ -6587,6 +6623,10 @@
     "claves": [
      "leads.duplicados"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -7181,6 +7221,10 @@
     "claves": [
      "make.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -9915,6 +9959,10 @@
     "claves": [
      "products.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -11351,6 +11399,10 @@
     "claves": [
      "reports_ia.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -11947,6 +11999,10 @@
     "claves": [
      "stripe.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15593,6 +15649,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15615,6 +15675,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15637,6 +15701,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15659,6 +15727,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15681,6 +15753,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15703,6 +15779,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15725,6 +15805,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15747,6 +15831,10 @@
     "claves": [
      "woocommerce.sync"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15769,6 +15857,10 @@
     "claves": [
      "woocommerce.sync"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15791,6 +15883,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15813,6 +15909,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15835,6 +15935,10 @@
     "claves": [
      "woocommerce.sync"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -16126,6 +16230,42 @@
   "condicion": "webhooks para todas las empresas",
   "regla": "soloSuperadmin",
   "puerta": "webhooks-salientes.todas"
+ },
+ {
+  "id": "GET /api/registro/ · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/",
+  "controlador": "listar",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
+ },
+ {
+  "id": "GET /api/registro/fuentes · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/fuentes",
+  "controlador": "fuentes",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
+ },
+ {
+  "id": "GET /api/registro/csv · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/csv",
+  "controlador": "csv",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
  },
  {
   "id": "GET /api/informes/mi-puesto · reports.puesto_ajeno",

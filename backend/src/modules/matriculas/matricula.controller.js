@@ -4,11 +4,20 @@ import { createSchema, updateSchema, setEstadoSchema } from './matricula.validat
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { urlFirmada, firmaValida } from '../../shared/utils/firmaDeDocumento.js';
+import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+
+/** ¿Es este campus de quien hace la petición? Super admin y soporte, todos (`veTodoElCrm`). */
+async function esDeMiAmbito(req, projectId) {
+  if (veTodoElCrm(req.user)) return true;
+  return (await campusDeLaPersona(req.user?.userId)).includes(Number(projectId));
+}
 
 export async function list(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+    // La lista, solo de tus campus (#416), como abrir, cambiar o borrar una.
+    if (!(await esDeMiAmbito(req, projectId))) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
     const data = await model.findAll({
       projectId,
       estado: req.query.estado,
@@ -33,6 +42,8 @@ export async function create(req, res, next) {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
+    // Crear, también solo en tus campus (#416).
+    if (!(await esDeMiAmbito(req, parsed.data.project_id))) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
     if (parsed.data.conversion_id) {
       const exists = await model.findByConversion(parsed.data.conversion_id);
       if (exists) throw new AppError('Ya existe matricula para esta conversion', 409, 'DUPLICATE');
