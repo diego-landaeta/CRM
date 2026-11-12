@@ -61,6 +61,7 @@ import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import moodleAvisos from './modules/consultas/consultas.webhook.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
@@ -70,10 +71,13 @@ import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
 import clientErrorsModule from './modules/client-errors/index.js';
+import copiaDiariaModule from './modules/copia-diaria/index.js';
 import mcpModule from './modules/mcp/index.js';
 import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
+// Links de pago (#680). Fase 1: solo lectura y el tope de descuento; no llama a Stripe.
+import linksPagoModule from './modules/links-pago/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -86,6 +90,7 @@ import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startMoodleSincronizacionScheduler } from './jobs/moodleSincronizacionScheduler.js';
 import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
@@ -108,7 +113,8 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
-import { tareasActivas, facturasColaboradorActivas, proyectosIAActivos } from './shared/config/soloEnPruebas.js';
+import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
@@ -149,6 +155,18 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
+// El aviso del plugin del CRM en cada Moodle (#679): cada mensaje privado del campus, firmado.
+// Solo en pruebas hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION): sin montar, responde 404 y
+// ningún campus puede conectarse ni avisar al CRM de producción.
+if (pluginMoodleActivo()) app.use('/api/moodle-avisos', moodleAvisos);
+else logger.info('Rutas SKIP (solo en pruebas): /api/moodle-avisos (plugin del CRM en Moodle)');
+
+// El aviso de Stripe (#680), igual: en bruto y ANTES del express.json general. La firma
+// se calcula sobre el cuerpo tal cual llega; el express.json de abajo lo convertía en
+// objeto antes de llegar al módulo, el raw() de su ruta ya no hacía nada y la firma se
+// comprobaba contra «[object Object]»: se rechazaban todos los avisos (los cobros solo
+// entraban por el sondeo de cada 5 minutos).
+app.use('/api/stripe-webhook', express.raw({ type: 'application/json', limit: '2mb' }));
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
@@ -323,7 +341,10 @@ const ALL_MODULES = [
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
   { name: 'soporte', mod: soporteModule },
+  // Links de pago (#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+  ...(linksPagoActivos() ? [{ name: 'links-pago', mod: linksPagoModule }] : []),
 ];
+if (!linksPagoActivos()) logger.info('Modulo SKIP (solo en pruebas): /api/links-pago');
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
 // Lo del #44 de los proyectos IA no es un modulo aparte: el router de `ia-monitor`
@@ -340,6 +361,9 @@ app.use(changeRequestsModule.prefix, changeRequestsModule.router);
 logger.info(`Modulo registrado: ${changeRequestsModule.prefix} (siempre activo)`);
 app.use(clientErrorsModule.prefix, clientErrorsModule.router);
 logger.info(`Modulo registrado: ${clientErrorsModule.prefix} (siempre activo, sin sesion)`);
+// La descarga de la copia diaria de la base (enlace firmado; con la copia apagada, 404).
+app.use(copiaDiariaModule.prefix, copiaDiariaModule.router);
+logger.info(`Modulo registrado: ${copiaDiariaModule.prefix} (siempre activo, enlace firmado)`);
 
 async function loadActiveBundles() {
   try {
@@ -465,6 +489,8 @@ if (process.env.NODE_ENV !== 'test') {
     startTutorCommissionsScheduler();
     startTutoresCampusScheduler();
     startConsultasCampusScheduler();
+    // El repaso de los campus con el plugin: solo con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION).
+    if (pluginMoodleActivo()) startMoodleSincronizacionScheduler();
     startConsultasAlumnosScheduler();
     startConsultasResumenScheduler();
     startConsultasPlazoScheduler();
@@ -489,6 +515,8 @@ if (process.env.NODE_ENV !== 'test') {
     if (facturasColaboradorActivas()) startFacturasColaboradorScheduler();
     // Los avisos a la empresa: «Han llegado N facturas» y «Faltan por pagar» (Diego, 04/11).
     if (facturasColaboradorActivas()) startFacturasColaboradorAvisosScheduler();
+    // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
+    startCopiaDiariaScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }

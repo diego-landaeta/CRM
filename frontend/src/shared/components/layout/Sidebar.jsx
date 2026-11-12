@@ -57,7 +57,7 @@ import {
   CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning, Key, ListChecks, Kanban, CheckSquare, SlidersHorizontal, Code, Certificate,
+  UsersThree, QrCode, Warning, Key, ListChecks, Kanban, ClockCounterClockwise, SlidersHorizontal, Code, Certificate,
   // Los de los encabezados de seccion (#105). Ninguno repite el de una
   // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
   // que una de sus filas, deja de ordenar y pasa a confundir.
@@ -72,13 +72,14 @@ import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
-import { ProjectAvatar } from '@/shared/components/ui/ProjectAvatar';
+import { ProjectAvatar, EmpresaAvatar } from '@/shared/components/ui/ProjectAvatar';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 // Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { MARCA } from '@/shared/config/marca';
@@ -92,7 +93,8 @@ const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
 // Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend.
-const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+// El tutor redactor (CRM#708) tiene su tablero como un colaborador.
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 // Ninguna entrada puede llevar a «Página no encontrada» (#226). Diego, 10/10:
 // lo que no existe se marca «Próximamente» (sin enlace, `comingSoon: true`); lo
@@ -196,9 +198,10 @@ export const NAV_SECTIONS = [
     ],
   },
   // El tablero del equipo (#210 y mejoras del 07/10). Es lo único que ve quien
-  // es solo colaborador. «Por revisar» y «Configurar tablero» se enseñan por
-  // permiso (`permiso`), no por rol: lo que se cambie en Configuración › Roles
-  // manda también aquí.
+  // es solo colaborador. «Configurar tablero» se enseña por permiso (`permiso`),
+  // no por rol: lo que se cambie en Configuración › Roles manda también aquí.
+  // «Por revisar» pasó a «Historial de tareas» (CRM#707): quien hace la tarea la
+  // cierra él mismo y nadie tiene una bandeja de «por aprobar» (tampoco Carlos).
   // Aprobada para producción en la 2.2.0 (Diego, 16/10).
   {
     label: 'Equipo de Desarrollo',
@@ -206,10 +209,10 @@ export const NAV_SECTIONS = [
     items: [
       // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
       { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
-      { label: 'Por revisar', to: '/tareas/revisar', detail: 'Aprobar o devolver', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close', oPermiso: 'tasks.close' },
+      { label: 'Historial de tareas', to: '/tareas/historial', detail: 'Lo hecho: quién y cuándo', icon: ClockCounterClockwise, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
-      { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador'], permiso: 'facturas_colaborador.subir' },
+      { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
     ],
   },
   {
@@ -264,10 +267,12 @@ export const NAV_SECTIONS = [
     icon: ChalkboardTeacher,
     items: [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
-      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { label: 'Mis cursos', to: '/mis-cursos', detail: 'Tus cursos y tu parte', icon: GraduationCap, roles: ['tutor'], permiso: 'tutores.mis_cursos' },
+      // «Mis cursos» (sus cursos y su parte) ya no va en el menú (05/11): la tutora trabaja
+      // desde «Mi campus». La pantalla sigue en /mis-cursos para los enlaces de los correos.
+      // #681: sus cursos en Moodle, con lo que tiene por corregir y contestar.
+      { label: 'Mi campus', to: '/mis-cursos/campus', detail: 'Por corregir, dudas y alumnos', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188): el tutor, su bandeja; administración, todas.
-      { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor'], module: 'tutores', statusTag: 'Pruebas', permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
+      { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor', 'tutor_redactor'], module: 'tutores', statusTag: 'Pruebas', permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { label: 'Sin tutor', to: '/tutores/sin-tutor', detail: 'Formaciones sin asignar', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       { label: 'Comisiones', to: '/tutores/comisiones', detail: 'Lo que se les debe', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
     ],
@@ -328,18 +333,20 @@ export const NAV_SECTIONS = [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports.view' },
       // Por que no compran: enviados, respondidos y motivos (#170).
       { label: 'Feedback', to: '/informes/feedback', detail: 'Por qué no compran', icon: ChatCircleText, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'feedback.view' },
-      // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
-      { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
-      // Preguntarle a los datos (#30): solo en pruebas hasta que haya clave y tope (#22).
-      ...(SOLO_EN_PRUEBAS
-        ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+      // Las pantallas de IA del CRM (#30) —Análisis IA, Pregunta a tus datos y
+      // Chat IA— están APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP).
+      // Se encienden las tres juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
+      ...(PANTALLAS_IA
+        ? [
+          // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
+          { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
+          // Preguntarle a los datos (#30): además, solo en pruebas hasta que haya clave y tope (#22).
+          ...(SOLO_EN_PRUEBAS
+            ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+            : []),
+          { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+        ]
         : []),
-      // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
-      // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
-      // probado—, pero no se ofrece en el menu: enseñar una puerta que no
-      // lleva a ningun sitio es peor que no tenerla.
-      // Para devolverla, quitar el comentario de la linea de abajo.
-      // { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
@@ -393,7 +400,7 @@ export const NAV_SECTIONS = [
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge, permiso: 'change_requests.view' },
       { label: 'Notificaciones', to: '/notificaciones', detail: 'Lo que ha pasado', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador'] },
+      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
       // Claves y variables (#80). Desde CRM#632 (03/11) también el admin, que
       // ve las de sus campus; guardar y revelar siguen siendo de soporte.
@@ -605,6 +612,11 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
     // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
     if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
+  }
+  // Y para quien es SOLO tutor redactor (CRM#708): su tablero, su factura, sus
+  // consultas y sus cursos. El servidor le responde 403 en todo lo demas.
+  if (suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor')) {
+    return Array.isArray(item.roles) && item.roles.includes('tutor_redactor');
   }
   // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
   // Va ANTES del atajo de soporte: «roles únicamente», dijo Diego.
@@ -1025,7 +1037,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const idsDelAmbitoCsv = idsDelAmbito.join(',');
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
   const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
-  const [tasksReviewBadge, setTasksReviewBadge] = useState(0);
   const { can } = usePermission();
   // Para los contadores: un sí o un no, no la función `can`, que es nueva en
   // cada render y, en las dependencias de un efecto, lo relanzaría sin parar.
@@ -1227,22 +1238,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     return () => { cancelled = true; clearInterval(interval); };
   }, [user, usaMensajes]);
 
-  // «Por revisar (n)» en el menú: solo a quien puede cerrar tareas.
-  const puedeRevisar = can('tasks.close');
-  useEffect(() => {
-    if (!puedeRevisar) return;
-    let cancelled = false;
-    async function fetchReviewCount() {
-      try {
-        const res = await client.get('/tasks/review/count');
-        if (!cancelled && res.success) setTasksReviewBadge(res.data?.count || 0);
-      } catch {}
-    }
-    fetchReviewCount();
-    const interval = setInterval(fetchReviewCount, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [puedeRevisar]);
-
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   // Vanessa y quien lleve las colaboraciones: solo tutores, nada mas.
   // Un admin con la casilla NO se recorta: ya lo ve todo por su rol.
@@ -1252,7 +1247,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // que es dar de alta profesores y ajustarles el porcentaje.
   const rolLabel = user?.gestor_colaboraciones
     ? 'Colaboraciones'
-    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' }[user?.role] || '');
+    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' }[user?.role] || '');
 
   async function handleLogout() {
     await logout();
@@ -1275,7 +1270,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           entero. */}
       <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
         <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
-          {activeProject && activeProject.id !== -1 ? (
+          {/* Con una EMPRESA elegida, la marca de la empresa (11/11): su logo o
+              su nombre corto. Antes caía en el primer campus (Fono Aprende). */}
+          {activeIssuer ? (
+            <EmpresaAvatar empresa={activeIssuer} size={collapsed ? 'md' : 'lg'} />
+          ) : activeProject && activeProject.id !== -1 ? (
             <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
           ) : (
             <div className={cn(
@@ -1304,7 +1303,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
               <span className="font-semibold text-sm text-foreground truncate">{MARCA}</span>
               {BETA_MODE && (
                 <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
-                  BETA {BETA_VERSION}
+                  BETA{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
                 </span>
               )}
             </div>
@@ -1408,7 +1407,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
                   : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
                   : item.to === '/mensajes' && msgUnreadBadge > 0 ? msgUnreadBadge
-                  : item.to === '/tareas/revisar' && tasksReviewBadge > 0 ? tasksReviewBadge
                   : undefined
                 }
                 labelOverrides={activeProject?.sidebar_labels}

@@ -1,8 +1,8 @@
-import { ChatCircleText, UserCircleMinus, Gauge, UsersThree, ChartBar } from '@phosphor-icons/react';
+import { ChatCircleText, UserCircleMinus, Gauge, UsersThree, ChartBar, BookmarkSimple } from '@phosphor-icons/react';
 import { useCallback, useRef } from 'react';
 import SubNav from '@/shared/components/ui/SubNav';
 import { useAuth } from '@/contexts/AuthContext';
-import { tieneRol } from '@/shared/lib/roles';
+import { tieneRol, ROLES_DE_TUTOR } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
 
 /*
@@ -16,20 +16,23 @@ export function useQuienSoy() {
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
   const { can } = usePermission();
   return {
-    esTutor: tieneRol(user as never, 'tutor') && can('consultas.atender'),
+    esTutor: tieneRol(user as never, ...ROLES_DE_TUTOR) && can('consultas.atender'),
     // Como el servidor (`veTodoElCrm`): superadmin y soporte solo como rol principal.
     esAdmin: (['superadmin', 'soporte'].includes(user?.role || '') || tieneRol(user as never, 'admin')) && can('consultas.view'),
+    // Coordinación: prepara las respuestas del campus (#679).
+    coordina: can('consultas.gestionar'),
   };
 }
 
 export default function ConsultasNav() {
-  const { esTutor, esAdmin } = useQuienSoy();
+  const { esTutor, esAdmin, coordina } = useQuienSoy();
   const tabs = [
     { label: 'Consultas', to: '/consultas', icon: ChatCircleText },
     { label: 'Alumnos sin mensajes', to: '/consultas/alumnos', icon: UserCircleMinus },
     ...(esTutor ? [{ label: 'Mi carga', to: '/consultas/carga', icon: Gauge }] : []),
     ...(esAdmin ? [{ label: 'Tutores', to: '/consultas/tutores', icon: UsersThree }] : []),
     { label: 'Métricas', to: '/consultas/metricas', icon: ChartBar },
+    ...(coordina ? [{ label: 'Respuestas del campus', to: '/consultas/respuestas', icon: BookmarkSimple }] : []),
   ];
   return <SubNav tabs={tabs} sectionLabel="Consultas" sectionIcon={ChatCircleText} />;
 }
