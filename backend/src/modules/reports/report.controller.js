@@ -2,6 +2,7 @@ import * as model from './report.model.js';
 import { resumenDelDia } from './resumenDelDia.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 // A que proyectos se acota el informe.
 //
