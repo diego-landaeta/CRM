@@ -39,6 +39,8 @@ import formsModule from './modules/forms/index.js';
 import payrollModule from './modules/payroll/index.js';
 import woocommerceModule from './modules/woocommerce/index.js';
 import webhookTokensModule from './modules/webhook-tokens/index.js';
+import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
+import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 import audiencesModule from './modules/audiences/index.js';
 import procesoModule from './modules/proceso/index.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
@@ -120,6 +122,16 @@ app.use(cors({
 // los mismos que deja pasar Nginx, para que no se rechace en dos sitios
 // distintos con dos mensajes distintos.
 app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+
+// El webhook de admisión (#198): el formulario puede mandar los documentos como
+// imagen en texto (DNI por las dos caras, foto, título, firma), y con 5 MB se
+// perdía la solicitud entera. Solo esta ruta, con 19 MB: por debajo del tope de
+// Nginx, para que lo que no quepa lo rechace la aplicación con su motivo y no
+// Nginx con un 413 sin explicación. Antes de leerlo, el portero: el token tiene
+// que existir (si no, se leían 19 MB para nada con cualquier token inventado), y
+// el envío no pasar del tope.
+app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
+  express.json({ limit: MAX_ENVIO_BYTES }), express.urlencoded({ extended: true, limit: MAX_ENVIO_BYTES }), traducirTope);
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded

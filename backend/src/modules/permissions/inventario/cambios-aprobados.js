@@ -30,6 +30,16 @@ const DIEGO = 'Diego, 26/10';
 
 export const CAMBIOS = [
   {
+    id: 'webhooks-solo-admin',
+    que: 'Los webhooks de entrada (los de admisión incluidos): verlos, crearlos, cambiarlos y borrarlos, solo admin y super admin, cada uno en sus campus.',
+    motivo: 'Con la admisión en producción (#198), un webhook recibe DNI, fotos y firma. Hasta hoy la lista la veía cualquiera con sesión y soporte los creaba y cambiaba; en staging ya era solo de admin desde el 20/10.',
+    filas: ['GET /api/webhook-tokens/', 'GET /api/webhook-tokens/:id/status', 'POST /api/webhook-tokens/', 'PATCH /api/webhook-tokens/:id',
+      'DELETE /api/webhook-tokens/:id', 'POST /api/webhook-tokens/:id/listen', 'POST /api/webhook-tokens/:id/listen/stop'],
+    roles: ['gestor', 'soporte', 'project_manager', 'tutor'],
+    sentido: 'pierde',
+    aprobadoPor: 'Diego, 20/10 (#198); a producción el 12/11',
+  },
+  {
     id: 'roles-sin-soporte',
     que: 'Cambiar lo que trae un rol fijo, crear o cambiar roles a medida y la vista de cada rol: el admin y el superadmin, como hasta hoy. Soporte, no.',
     motivo: 'Soporte lo hacía por el atajo de roleGuard, sin que nadie se lo diera. Hugo lo dejaba solo al superadmin; Diego (26/10): «los admin siguen pudiendo», sin poner a un rol lo que ellos no tienen.',
