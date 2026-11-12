@@ -82,6 +82,49 @@ export async function estado(projectId) {
   };
 }
 
+/** Cada cuánto repasa el CRM los campus con el plugin (moodleSincronizacionScheduler.js). */
+const REPASO_POR_DEFECTO_MS = 15 * 60 * 1000;
+
+/**
+ * Cuánto puede tardar el último repaso bueno para dar el campus por al día: dos repasos
+ * y cinco minutos de margen (35 min con el de serie). Un repaso que falla una vez no
+ * basta para volver a leerlo cada 5 minutos; dos seguidos, sí.
+ */
+export function minutosPluginAlDia(env = process.env) {
+  const tick = parseInt(env.MOODLE_SINCRONIZACION_TICK_MS || '', 10);
+  const ms = Number.isFinite(tick) && tick > 0 ? tick : REPASO_POR_DEFECTO_MS;
+  return Math.ceil((2 * ms) / 60000) + 5;
+}
+
+/**
+ * Los campus que el plugin tiene al día (#689, 8b): la lectura de cada 5 minutos se los
+ * salta, porque ya entran por el plugin dos veces (el aviso al momento y el repaso de
+ * cada 15 minutos, que recoge lo que se pierda). Sin esto, cada campus se leía tres veces.
+ *
+ * Al día = plugin activo en el CRM, sin error en el repaso y con un repaso bueno reciente
+ * (`minutosPluginAlDia`). Vuelve a la lectura de 5 minutos, sola, en cuanto deja de estarlo:
+ * plugin desconectado, repaso con error (token revocado, plugin desinstalado o viejo) o sin
+ * repaso bueno reciente (Moodle caído). Y ninguno se salta si el plugin está apagado en este
+ * CRM (PLUGIN_MOODLE_EN_PRODUCCION) o el repaso lo está (MOODLE_SINCRONIZACION_DISABLED=1):
+ * sin repaso, un aviso perdido no lo recogería nadie.
+ *
+ * @returns {Promise<Set<number>>} ids de proyecto.
+ */
+export async function campusConPluginAlDia(env = process.env) {
+  if (!pluginMoodleActivo(env) || env.MOODLE_SINCRONIZACION_DISABLED === '1') return new Set();
+  try {
+    const { rows } = await query(
+      `SELECT project_id FROM moodle_plugin_campus
+        WHERE activo AND sincronizacion_error IS NULL
+          AND sincronizado_at > NOW() - make_interval(mins => $1::int)`, [minutosPluginAlDia(env)]);
+    return new Set(rows.map((r) => Number(r.project_id)));
+  } catch (err) {
+    // Sin la tabla (falta la 245) o con la base tropezando: se leen todos, como antes.
+    logger.warn({ err: err.message }, 'consultas/plugin: no se sabe qué campus tienen el plugin al día; se leen todos');
+    return new Set();
+  }
+}
+
 /** ¿Responde este campus por el plugin? */
 export async function pluginActivo(projectId) {
   const { rows } = await query(

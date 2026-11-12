@@ -71,6 +71,7 @@ import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
 import clientErrorsModule from './modules/client-errors/index.js';
+import copiaDiariaModule from './modules/copia-diaria/index.js';
 import mcpModule from './modules/mcp/index.js';
 import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
@@ -112,6 +113,7 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
+import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
@@ -359,6 +361,9 @@ app.use(changeRequestsModule.prefix, changeRequestsModule.router);
 logger.info(`Modulo registrado: ${changeRequestsModule.prefix} (siempre activo)`);
 app.use(clientErrorsModule.prefix, clientErrorsModule.router);
 logger.info(`Modulo registrado: ${clientErrorsModule.prefix} (siempre activo, sin sesion)`);
+// La descarga de la copia diaria de la base (enlace firmado; con la copia apagada, 404).
+app.use(copiaDiariaModule.prefix, copiaDiariaModule.router);
+logger.info(`Modulo registrado: ${copiaDiariaModule.prefix} (siempre activo, enlace firmado)`);
 
 async function loadActiveBundles() {
   try {
@@ -510,6 +515,8 @@ if (process.env.NODE_ENV !== 'test') {
     if (facturasColaboradorActivas()) startFacturasColaboradorScheduler();
     // Los avisos a la empresa: «Han llegado N facturas» y «Faltan por pagar» (Diego, 04/11).
     if (facturasColaboradorActivas()) startFacturasColaboradorAvisosScheduler();
+    // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
+    startCopiaDiariaScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }

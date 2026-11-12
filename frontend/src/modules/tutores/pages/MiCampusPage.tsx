@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, GraduationCap, ListBullets, Warning,
 } from '@phosphor-icons/react';
@@ -12,6 +12,7 @@ import { cn } from '@/shared/lib/utils';
 import {
   tutoresApi, type MiCampus, type MiCampusCurso, type MiCampusPendiente,
 } from '../api/tutores.api';
+import MisCursosPage from './MisCursosPage';
 
 /*
   «Mi campus» (#681): lo que la tutora tiene que hacer hoy en Moodle.
@@ -296,7 +297,16 @@ function Resumen({ porCorregir, dudas, cursos }: { porCorregir: number; dudas: n
   );
 }
 
+/** Las dos pestañas de «Mi campus» (Diego, 11/11: «Mis cursos», complemento dentro de Mi campus). */
+const PESTANAS = [
+  { id: 'campus', label: 'Por hacer en Moodle', icono: <ClipboardText size={15} aria-hidden /> },
+  { id: 'cursos', label: 'Mis cursos y comisiones', icono: <Coins size={15} aria-hidden /> },
+] as const;
+
 export default function MiCampusPage() {
+  const [params, setParams] = useSearchParams();
+  const vista: 'campus' | 'cursos' = params.get('vista') === 'cursos' ? 'cursos' : 'campus';
+  const irA = (v: 'campus' | 'cursos') => setParams(v === 'cursos' ? { vista: 'cursos' } : {}, { replace: true });
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -320,7 +330,8 @@ export default function MiCampusPage() {
       if (refrescar) toast({ title: 'No se ha podido actualizar', variant: 'destructive' });
     } finally { setCargando(false); }
   }, []);
-  useEffect(() => { cargar(); }, [cargar]);
+  // Moodle se lee solo en su pestaña: «Mis cursos» no lo necesita.
+  useEffect(() => { if (vista === 'campus') cargar(); }, [cargar, vista]);
 
   const totales = useMemo(() => {
     const cursos = datos?.campus.flatMap((c) => c.cursos) || [];
@@ -343,20 +354,30 @@ export default function MiCampusPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader
         title={<span className="inline-flex flex-wrap items-center gap-2">Mi campus <EtiquetaEnPruebas /></span>}
-        subtitle={leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle'}
+        subtitle={vista === 'cursos' ? 'Tus cursos y lo que te corresponde' : (leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle')}
         actions={(
           <>
-          <Link to="/mis-cursos" className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-secundario font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-            <Coins size={14} aria-hidden /> Tu parte <span className="hidden sm:inline">· comisiones</span>
-          </Link>
+          {vista === 'campus' && (
           <Button variant="outline" size="sm" disabled={cargando} onClick={() => cargar(true)} className="h-8 text-secundario">
             <ArrowsClockwise size={14} className={cn('mr-1.5', cargando && 'animate-spin')} aria-hidden />
             {cargando ? 'Leyendo…' : 'Actualizar'}
           </Button>
+          )}
           </>
         )}
       />
 
+      <div role="tablist" aria-label="Mi campus" className="inline-flex rounded-md bg-muted p-0.5">
+        {PESTANAS.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={vista === t.id} onClick={() => irA(t.id)}
+            className={cn('inline-flex h-8 items-center gap-1.5 rounded px-3 text-secundario font-medium transition-colors',
+              vista === t.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+            {t.icono} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {vista === 'cursos' ? <MisCursosPage incrustada /> : (<>
       {error && !datos && (
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 px-4 py-4">
           <p className="text-normal font-semibold text-foreground">No se ha podido leer tu campus</p>
@@ -453,6 +474,7 @@ export default function MiCampusPage() {
           </div>
         </>
       )}
+      </>)}
     </div>
   );
 }
