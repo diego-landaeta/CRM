@@ -28,7 +28,7 @@ vi.mock('@/shared/hooks/usePermission', () => ({
 }));
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch: vi.fn(), delete: vi.fn() }, API_BASE_URL: '/crm/api' }));
 
-import { TIPOS, GRUPOS, tiposVisibles, porCampus, ordenarFilas, crearPedidor, campusDelTipo, delAmbitoDeArriba, enlaceDeFila } from '@/modules/webhooks/lib/resumen';
+import { TIPOS, GRUPOS, tiposVisibles, porCampus, ordenarFilas, crearPedidor, campusDelTipo, delAmbitoDeArriba, enlaceDeFila, conUltimaBuena } from '@/modules/webhooks/lib/resumen';
 import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
 import { TRASLADOS_DE_MENU, aplicarTraslados } from '@/shared/components/layout/trasladosDeMenu';
 import { NAV_SECTIONS, PERMISOS_WEBHOOKS, rutaPermitida } from '@/shared/components/layout/Sidebar';
@@ -569,7 +569,7 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(salida).getByText(/Último aviso:/).textContent).toBe(`Último aviso: ${formatDateTime(elBueno)}`);
   });
 
-  it('transferencias con una empresa: «Último aviso» es la última entrega BUENA, igual que con «Todos»', async () => {
+  it('transferencias con una empresa: si el último envío falló, se dice cuál fue la última entrega BUENA, sin llamarla «último aviso»', async () => {
     cabecera.value = { activeProject: { id: -1 }, activeIssuerId: 7, activeIssuer: { nombre: 'CEDIA' }, projects: PROYECTOS };
     const hace = (dias) => new Date(Date.now() - dias * 864e5).toISOString();
     const entregado = hace(10);
@@ -586,8 +586,47 @@ describe('el resumen sigue al selector de arriba', () => {
     const salida = await screen.findByTestId('tipo-transferencias');
     await within(salida).findByText('Falla últimamente');
     // No «hoy» (el último intento): hace 10 días, la última entrega que llegó.
-    expect((await within(salida).findByText(/Último aviso:/)).textContent).toBe(`Último aviso: ${formatDateTime(entregado)}`);
+    // Y no como «Último aviso», que junto a «Falló» se contradecía.
+    expect(await within(salida).findByText(`Última entrega buena: ${formatDateTime(entregado)}`)).toBeTruthy();
+    expect(within(salida).queryByText(/Último aviso:/)).toBeNull();
     expect(within(salida).getByText(/El último envío falló/)).toBeTruthy();
+  });
+
+  it('transferencias que solo han fallado: «Ninguna entrega buena todavía», no «Sin avisos todavía»', async () => {
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/webhooks-salientes?') ? [{ id: 62, nombre: 'URL mal puesta', activo: true, ambito: 'todas', project_id: null, issuer_id: null, proyecto: null, empresa: null, ultimo_envio_at: null, fallidos_30_dias: 4 }]
+        : url.startsWith('/webhooks-salientes/envios?webhookId=62') ? [{ estado: 'fallido', http_status: 404, created_at: new Date().toISOString() }]
+          : RESPUESTAS(url),
+    }));
+    abrir();
+    const salida = await screen.findByTestId('tipo-transferencias');
+    expect(await within(salida).findByText('Ninguna entrega buena todavía')).toBeTruthy();
+    expect(within(salida).queryByText('Sin avisos todavía')).toBeNull();
+    expect(within(salida).getByText(/El último envío falló: respondió 404/)).toBeTruthy();
+  });
+
+  it('transferencias sin fallo: la fecha sigue siendo «Último aviso»', () => {
+    const r = conUltimaBuena({ ultimo: '2026-11-01T10:00:00Z', fallo: null });
+    expect(r.ultimo).toBe('2026-11-01T10:00:00Z');
+    expect(r.detalle).toBeUndefined();
+    // Sin fecha que se pueda saber (más de 200), no se inventa nada.
+    expect(conUltimaBuena({ ultimo: undefined, fallo: 'x' })).toEqual({ ultimo: undefined, fallo: 'x' });
+  });
+
+  it('Make apagado con un error de antes: no cuenta como fallo y se dice como dato', async () => {
+    permisos.value = ['make.view'];
+    cabecera.value = { activeProject: { id: 2, nombre: 'Campus Dos', modules: {} }, activeIssuerId: null, projects: PROYECTOS };
+    get.mockImplementation((url) => Promise.resolve({
+      data: url.startsWith('/make-webhooks?') ? [{ id: 22, label: 'Meta viejo', slug: 'mk_2', active: false, mode: 'active', last_received_at: '2026-09-01T10:00:00Z', last_error: 'Falta el email' }]
+        : RESPUESTAS(url),
+    }));
+    abrir();
+    const make = await screen.findByTestId('tipo-make');
+    expect(await within(make).findByText('Último error, de antes de apagarlo: Falta el email')).toBeTruthy();
+    expect(within(make).queryByText(/^Falló/)).toBeNull();
+    expect(screen.queryByText(/con fallos/)).toBeNull();
+    // Apagado: no se pide su última entrega.
+    expect(get.mock.calls.some(([u]) => u.includes('/deliveries'))).toBe(false);
   });
 
   it('el tope de 200 se mira con lo que llega, antes de quitar las pruebas', async () => {

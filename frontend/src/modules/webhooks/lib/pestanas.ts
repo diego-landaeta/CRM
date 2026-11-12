@@ -8,7 +8,10 @@ import { Bank, Lightning, ListBullets, UserPlus } from '@phosphor-icons/react';
   `module`: el módulo del campus que tenían sus entradas del menú. Con él
   apagado en el campus de arriba, la pestaña no sale, como no salía la entrada.
 */
-export const TABS = [
+type Pestana = {
+  label: string; to: string; icon: typeof ListBullets; end?: boolean; module?: string;
+};
+export const TABS: Pestana[] = [
   { label: 'Resumen', to: '/conexion/webhooks', icon: ListBullets },
   { label: 'Prospectos', to: '/conexion/webhooks/prospectos', icon: UserPlus, end: false, module: 'webhooks' },
   { label: 'Make', to: '/conexion/webhooks/make', icon: Lightning, end: false, module: 'make' },

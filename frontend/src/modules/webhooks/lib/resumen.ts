@@ -315,8 +315,14 @@ const formulariosDe = (
 async function falloDeMake(
   pedir: Pedir,
   m: { id: number; active: boolean; last_received_at: string | null; last_error: string | null },
-): Promise<Pick<FilaWebhook, 'fallo' | 'sinLeer'>> {
-  if (!m.active || !m.last_received_at) return { fallo: m.last_error };
+): Promise<Pick<FilaWebhook, 'fallo' | 'sinLeer' | 'detalle'>> {
+  // Sin avisos no hay error: `last_received_at` se apunta antes de procesar
+  // (`make.service.handleIncoming` → `saveSample`).
+  if (!m.last_received_at) return { fallo: null };
+  // Apagado no recibe nada (403 sin apuntar), y `last_error` solo se limpia con
+  // una entrega buena (`make.model.bumpCounter`): el error que quede es de
+  // antes de apagarlo. No es un fallo de ahora; se dice como dato.
+  if (!m.active) return { fallo: null, ...(m.last_error ? { detalle: `Último error, de antes de apagarlo: ${m.last_error}` } : {}) };
   try {
     const [d] = await pedir<Array<{ result: string; error_message?: string | null }>>(`/make-webhooks/${m.id}/deliveries?limit=1`);
     if (d?.result === 'rejected') return { fallo: d.error_message || 'El último aviso se rechazó' };
@@ -371,6 +377,9 @@ export const TIPOS: TipoWebhook[] = [
     permisos: ['make.view'],
     moduloCampus: 'make',
     deUnCampus: true,
+    // `make.service.handleIncoming` rechaza el secreto mal puesto y el escenario
+    // apagado ANTES de apuntar nada (ni entrega ni `last_error`).
+    nota: 'Un aviso con el secreto mal puesto, o que llega con el escenario apagado, se rechaza sin quedar apuntado: no sale aquí como fallo.',
     // `last_error` NO basta: el rechazo por falta de mapeo (sin correo ni nombre,
     // #627) se apunta como entrega `rejected` sin tocar `last_error`, y la
     // tarjeta diría «Activo · Último aviso: hoy» sin avisar. Se mira además la
@@ -443,7 +452,9 @@ export const TIPOS: TipoWebhook[] = [
     // lee la pestaña de admisión. Los de admisión van en su tarjeta.
     permisos: ['webhooks.view'],
     ocultarSiVacio: true,
-    nota: 'No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
+    // `token.controller.js` apunta el uso (`recordUse`) ANTES de validar el
+    // envío: un aviso rechazado también pone la fecha, y el rechazo no se guarda.
+    nota: 'El último aviso es el último que llegó, entrara o no: los rechazados no se guardan, así que aquí no sale si falló. No tienen pantalla de configuración: si alguno no debería estar activo, hay que darlo de baja desde el servidor.',
     // Esta tarjeta es la que dice «No se pudo leer» de un campus cuando falla
     // `/webhook-tokens` (la de admisión, que lee lo mismo, se lo calla): la ve
     // todo el que ve la de admisión, y no al revés (un project manager ve esta
@@ -618,7 +629,7 @@ export const TIPOS: TipoWebhook[] = [
     // El de su pantalla, `/whatsapp/conexion`: supervisar sin usar no la abre.
     permisos: ['whatsapp.usar'],
     modulo: 'whatsapp',
-    nota: 'El aviso es uno para todo el CRM; el estado es el de tu número. No guarda cuándo llegó el último mensaje ni si falló.',
+    nota: 'El aviso es uno para todo el CRM; el estado es el de tu número. Cada mensaje se guarda con su hora en su conversación, pero el aviso no apunta cuándo llegó el último ni si falló.',
     // El estado del número de quien mira (`GET /whatsapp/conexion`): lo mismo
     // que pide la pantalla de WhatsApp cada 30 segundos. Sin WhatsApp montado en
     // este entorno, `configurado: false`.
@@ -800,7 +811,7 @@ export const TIPOS: TipoWebhook[] = [
         activo: !!w.activo,
         // Con el ámbito de arriba: con una empresa, el último envío de un
         // webhook «de todas las empresas» es el de un cobro de esa empresa.
-        ...(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}`, conAmbito(ctx.ambito, 'projectId', 'issuerId'),
+        ...conUltimaBuena(await comoFueElUltimo(pedir, `/webhooks-salientes/envios?webhookId=${w.id}`, conAmbito(ctx.ambito, 'projectId', 'issuerId'),
           { ultimo: w.ultimo_envio_at ?? null, fallidos30: w.fallidos_30_dias }, (e) => e.enviado_at)),
         enlace: '/conexion/webhooks/transferencias',
       })));
@@ -893,6 +904,18 @@ type Envio = {
   estado: string; prueba?: boolean; error?: string | null; http_status?: number | null;
   created_at?: string | null; enviado_at?: string | null;
 };
+
+/**
+ * Transferencias: su «último» es la última entrega BUENA (`enviado_at`; un
+ * envío fallido no la pone, `webhooks-salientes.model.js`). Si el último envío
+ * falló, «Último aviso: 01/10» o «Sin avisos todavía» junto a «Falló» se
+ * contradicen: se dice qué es esa fecha, sin llamarla «último aviso».
+ */
+export function conUltimaBuena<T extends Pick<FilaWebhook, 'ultimo' | 'fallo' | 'detalle'>>(r: T): T {
+  if (!r.fallo || r.ultimo === undefined) return r;
+  const buena = r.ultimo ? `Última entrega buena: ${formatDateTime(r.ultimo)}` : 'Ninguna entrega buena todavía';
+  return { ...r, ultimo: undefined, detalle: r.detalle ? `${buena} · ${r.detalle}` : buena };
+}
 
 async function comoFueElUltimo(
   pedir: Pedir,

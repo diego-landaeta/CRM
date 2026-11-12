@@ -13,7 +13,9 @@ import {
   canSeeItem,
   applyLabel,
   esSoloColaboraciones,
+  rutaPermitida,
 } from '@/shared/components/layout/Sidebar';
+import { pestanasDe } from '@/modules/webhooks/lib/pestanas';
 import { isBetaAllowed } from '@/shared/config/betaConfig';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
@@ -45,10 +47,28 @@ import {
 const RECENT_KEY = 'crm.palette.recents';
 const MAX_RECENTS = 5;
 
+/**
+ * Las direcciones que cambiaron de sitio (#690: los webhooks, juntos en
+ * Conexión › Webhooks). Un reciente guardado con la de antes lleva a la nueva,
+ * con su `:id`, en vez de desaparecer.
+ */
+const MOVIDAS = [
+  ['/captacion/webhooks', '/conexion/webhooks/prospectos'],
+  ['/captacion/make', '/conexion/webhooks/make'],
+  ['/conexion/webhook-transferencias', '/conexion/webhooks/transferencias'],
+];
+export function rutaDeHoy(to) {
+  for (const [antes, ahora] of MOVIDAS) {
+    if (to === antes || to?.startsWith(`${antes}/`) || to?.startsWith(`${antes}?`)) return `${ahora}${to.slice(antes.length)}`;
+  }
+  return to;
+}
+
 function getRecents() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const lista = raw ? JSON.parse(raw) : [];
+    return Array.isArray(lista) ? lista.map((e) => (e?.to ? { ...e, to: rutaDeHoy(e.to) } : e)) : [];
   } catch { return []; }
 }
 function pushRecent(entry) {
@@ -210,8 +230,19 @@ export const terminoDeFactura = (q) => q.trim().replace(/^f\s*-?\s*(?=\d)/i, '')
  * Un reciente solo se enseña si hoy se podría volver a encontrar: si a alguien
  * le quitan un permiso, el reciente de esa pantalla desaparece con él.
  */
-export function recienteSigueValiendo(to, { pages, busca }) {
+export function recienteSigueValiendo(to, { pages, busca, can, modules }) {
   if (pages.some((p) => p.to === to)) return true;
+  // Una pestaña de Conexión › Webhooks o la ficha de un webhook (#690; los
+  // recientes de las direcciones de antes llegan aquí traducidos, `rutaDeHoy`).
+  // El buscador no las lista (enseña lo mismo que el menú), pero un reciente
+  // vale si hoy se puede abrir: con las reglas de su barra de pestañas
+  // (`SubNav`): el permiso de su ruta y el módulo del campus.
+  const pestana = /^(\/conexion\/webhooks\/(?:prospectos|make|transferencias))(?:\/\d+)?$/.exec(to);
+  if (pestana) {
+    return pages.some((p) => p.to === '/conexion/webhooks')
+      && typeof can === 'function' && rutaPermitida(pestana[1], can)
+      && pestanasDe(modules).some((t) => t.to === pestana[1]);
+  }
   if (/^\/prospectos\/\d+$/.test(to)) return busca.personas;
   if (/^\/clientes\/\d+$/.test(to)) return busca.clientes;
   if (/^\/productos\/\d+$/.test(to)) return busca.productos;
@@ -487,7 +518,7 @@ export default function CommandPalette() {
 
     if (!q) {
       // Estado inicial: recientes + acciones rápidas
-      const vigentes = recents.filter((r) => recienteSigueValiendo(r.to, { pages, busca }));
+      const vigentes = recents.filter((r) => recienteSigueValiendo(r.to, { pages, busca, can, modules: activeProject?.modules }));
       if (vigentes.length > 0) {
         out.push({
           label: 'Recientes',
@@ -603,7 +634,7 @@ export default function CommandPalette() {
       sublabel: [c.nombre_corto, c.categoria, legible(c.estado)].filter(Boolean).join(' · '),
     }));
     return out;
-  }, [query, recents, quickActions, projectActions, pages, busca, leadResults, productResults, otros]);
+  }, [query, recents, quickActions, projectActions, pages, busca, can, activeProject?.modules, leadResults, productResults, otros]);
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 

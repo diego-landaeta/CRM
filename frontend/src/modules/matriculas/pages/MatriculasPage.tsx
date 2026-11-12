@@ -250,8 +250,10 @@ export default function MatriculasPage() {
       <div className="flex overflow-x-auto border-b border-border [&>button]:shrink-0">
         <button
           onClick={() => { setTab('list'); if (enCertifex) navigate('/clientes/matriculas'); }}
-          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && tab === 'list' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && (tab === 'list' || (tab === 'webhooks' && !verEmisiones)) ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
         >
+          {/* Con `?pestana=webhooks` y sin permiso para esa pestaña se enseña el
+              listado (más abajo): se marca el listado, no ninguna. */}
           <GraduationCap size={14} /> Listado
         </button>
         {/* Los webhooks, como en la API: solo admin y super admin (#198). */}

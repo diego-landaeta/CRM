@@ -212,6 +212,20 @@ describe('el listado sigue a la cabecera', () => {
     fireEvent.click(screen.getByRole('button', { name: /Listado/ }));
     await waitFor(() => expect(donde.search).toBe('?x=1'));
   });
+
+  it('`?pestana=webhooks` sin poder ver esa pestaña: se ve el listado y es el listado el que sale marcado', async () => {
+    roles.value = ['gestor'];
+    cabecera.value = { activeIssuerId: null, activeIssuer: null, activeProject: { id: -1 } };
+    render(
+      <MemoryRouter initialEntries={['/clientes/matriculas?pestana=webhooks']}>
+        <MatriculasPage />
+      </MemoryRouter>,
+    );
+    const listado = await screen.findByRole('button', { name: /Listado/ });
+    expect(screen.queryByRole('button', { name: /Webhooks/ })).toBeNull();
+    expect(listado.className).toContain('border-primary');
+    expect(screen.queryByText('Elige un campus')).toBeNull();
+  });
 });
 
 // Revisión independiente del 15/10.
