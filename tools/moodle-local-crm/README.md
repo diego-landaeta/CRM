@@ -72,6 +72,16 @@ Al pulsar Conectar, el plugin:
   `360crm.tech` y `crm.iseie.com`; se cambia en los ajustes del plugin);
 - se presenta al CRM.
 
+**Cambiar de CRM pide confirmación (1.10.4).** El plugin habla con UN solo CRM: guarda una
+dirección y una clave. Si el campus ya está conectado y el código pegado es de otro CRM
+(otra dirección de la API: por ejemplo, producción `360crm.tech/crm` y pruebas
+`360crm.tech/testeo`, que comparten dominio y por eso la lista de CRM permitidos no las
+separa), «Conectar» no cambia nada: enseña a qué CRM está conectado ahora, de cuál es el
+código, y que el de ahora dejará de recibir los mensajes. Solo cambia marcando «Entiendo
+que…» y pulsando «Cambiar a…». Con un código del mismo CRM, reconecta sin preguntar, como
+siempre. La ficha «Conexión con el CRM» enseña el CRM con su ruta (`360crm.tech/crm
+(producción)`), no solo el dominio.
+
 El CRM, por su parte:
 - comprueba que es un Moodle de verdad con el plugin;
 - guarda la dirección y el token del campus;
@@ -194,6 +204,15 @@ En el mismo repaso le vuelve a mandar la lista de tutoras «No disponible».
 En el CRM, en Integraciones, el bloque del plugin dice «Al día · repasado a las … · plugin 1.8.0»,
 o el error y cuándo fue el último repaso bueno.
 
+Con el plugin al día, la **lectura de cada 5 minutos** del CRM (la de antes del plugin, con
+los tokens) **se salta ese campus** (#689): ya entra por el aviso y por el repaso, y leerlo
+además era leerlo tres veces. «Al día» es plugin activo, sin error en el repaso y con un
+repaso bueno en los últimos 35 minutos (dos repasos y cinco de margen). Si deja de estarlo
+(plugin desconectado, token revocado, Moodle caído), la lectura de 5 minutos vuelve a
+leerlo sola. Con el plugin apagado en el CRM (`PLUGIN_MOODLE_EN_PRODUCCION`) o el repaso
+apagado (`MOODLE_SINCRONIZACION_DISABLED=1`) se leen todos, como antes. «Leer ahora», en
+Consultas, lee siempre.
+
 ## Probar en local con Docker
 
 Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que probar en
@@ -235,6 +254,8 @@ Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que p
   Moodle. Desconectar lo revoca.
 - **Solo CRM de confianza.** Un código lo puede fabricar cualquiera: el plugin solo se
   conecta a los CRM de su lista, así que un código falso no se lleva el token.
+- **Cambiar de CRM, solo confirmado** (1.10.4). Un código de otro CRM no desconecta el
+  campus del de ahora sin una confirmación expresa en la página del plugin.
 - **Enviar y calificar en nombre de la tutora.** `local_crm_enviar_mensaje` y
   `local_crm_calificar` exigen `local/crm:enviarcomo`, que solo tiene el rol del servicio.
   Al calificar se comprueba que la tutora puede calificar esa tarea y, con grupos
