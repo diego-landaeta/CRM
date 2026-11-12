@@ -11,6 +11,13 @@ const ALL_PROJECTS_PSEUDO = { id: ALL_PROJECTS_ID, nombre: 'Todos los proyectos'
 // cada F5 devolveria a Carlos a «todos los proyectos» sin decirle nada.
 const CLAVE_SOCIEDAD = 'crm_active_issuer_id';
 
+/** El nombre corto de una empresa: su alias («Solvenic») o la primera palabra («CEDIA»). */
+export function nombreCortoDeEmpresa({ alias = null, razon_social: razonSocial = '' } = {}) {
+  const a = String(alias || '').trim();
+  if (a) return a;
+  return String(razonSocial || '').trim().split(/[\s,]+/)[0] || 'Empresa';
+}
+
 // Dev-only bypass: fake superadmin user + proyectos seed para validar UI sin backend.
 const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
 const FAKE_USER = { id: 1, userId: 1, nombre: 'Dev Bypass', email: 'dev@local', role: 'superadmin' };
@@ -44,6 +51,43 @@ function proyectoDeLaUrl(proyectos) {
   }
 }
 
+/**
+ * La empresa guardada, si la persona tiene algún campus de ella (#120). Si no,
+ * null: una empresa que ya no le toca no se restaura.
+ */
+function sociedadGuardadaDe(proyectos) {
+  try {
+    const guardada = localStorage.getItem(CLAVE_SOCIEDAD);
+    if (guardada === null) return null;
+    const id = Number(guardada);
+    return proyectos?.some((p) => Number(p.sociedad_emisora_id) === id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * LA EMPRESA Y EL CAMPUS NO VAN A LA VEZ (11/11).
+ *
+ * Con una empresa elegida el proyecto activo es «todos» (-1). Al entrar, el
+ * login cogía el proyecto guardado —y si era -1, que no está en la lista, el
+ * primero: en CEDIA, por orden alfabético, Fono Aprende— pero dejaba la empresa
+ * guardada. El selector decía «CEDIA · 8 campus» y el menú, el logo y el color
+ * de Fono Aprende. Ahora: si la dirección pide un campus, manda el campus y se
+ * olvida la empresa; si no y hay empresa guardada que siga siendo suya, se
+ * entra en la empresa; si no, como siempre.
+ */
+export function eleccionAlEntrar({ proyectos, deLaUrl = null, guardado = null, delServidor = null }) {
+  const sociedad = sociedadGuardadaDe(proyectos);
+  if (deLaUrl) return { projectId: deLaUrl, issuerId: null };
+  if (sociedad !== null && proyectos?.length > 1) return { projectId: ALL_PROJECTS_ID, issuerId: sociedad };
+  const num = Number(guardado);
+  const valido = num === ALL_PROJECTS_ID
+    ? ALL_PROJECTS_ID
+    : proyectos?.find((p) => p.id === num)?.id;
+  return { projectId: valido || delServidor || proyectos?.[0]?.id || null, issuerId: null };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(BYPASS ? FAKE_USER : null);
   const [projects, setProjects] = useState(BYPASS ? FAKE_PROJECTS : []);
@@ -55,6 +99,17 @@ export function AuthProvider({ children }) {
     return guardada === null ? null : Number(guardada);
   });
   const [loading, setLoading] = useState(!BYPASS); // bypass salta el loader
+
+  // Deja puesto lo que dice `eleccionAlEntrar`, en el estado y en lo guardado.
+  const aplicarEleccion = useCallback(({ projectId, issuerId }) => {
+    setActiveProjectId(projectId);
+    setActiveIssuerId(issuerId);
+    try {
+      if (projectId) localStorage.setItem('crm_active_project_id', String(projectId));
+      if (issuerId === null) localStorage.removeItem(CLAVE_SOCIEDAD);
+      else localStorage.setItem(CLAVE_SOCIEDAD, String(issuerId));
+    } catch { /* sin almacenamiento, solo en memoria */ }
+  }, []);
 
   // LOS PERMISOS DE CADA UNO, los que calcula el backend.
   //
@@ -95,17 +150,15 @@ export function AuthProvider({ children }) {
             setUser(meRes.data.user);
             setPermissions(meRes.data.permissions || null);
             setProjects(meRes.data.projects || []);
-            // Restaurar proyecto activo de localStorage o usar el primero
-            const savedProjectId = localStorage.getItem('crm_active_project_id');
-            const savedNum = Number(savedProjectId);
-            const validProjectId = savedNum === ALL_PROJECTS_ID
-              ? ALL_PROJECTS_ID
-              : meRes.data.projects?.find((p) => p.id === savedNum)?.id;
+            // Restaurar proyecto activo de localStorage o usar el primero.
             // La direccion manda sobre lo guardado: si vienes de un enlace del
             // correo, tiene que abrirse el proyecto de ese enlace (#132).
             const deLaUrl = proyectoDeLaUrl(meRes.data.projects);
-            setActiveProjectId(deLaUrl || validProjectId || meRes.data.projects?.[0]?.id || null);
-            if (deLaUrl) localStorage.setItem('crm_active_project_id', String(deLaUrl));
+            aplicarEleccion(eleccionAlEntrar({
+              proyectos: meRes.data.projects,
+              deLaUrl,
+              guardado: localStorage.getItem('crm_active_project_id'),
+            }));
           }
         }
       } catch {
@@ -116,7 +169,7 @@ export function AuthProvider({ children }) {
     }
 
     restoreSession();
-  }, []);
+  }, [aplicarEleccion]);
 
   // Configurar callback de fallo de auth para limpiar estado
   useEffect(() => {
@@ -144,15 +197,14 @@ export function AuthProvider({ children }) {
     setUser(userData);
     setProjects(userProjects || []);
 
-    // Usar proyecto activo del login o el primero disponible
-    const savedProjectId = localStorage.getItem('crm_active_project_id');
-    const projectId = proyectoDeLaUrl(userProjects)
-      || userProjects?.find((p) => p.id === Number(savedProjectId))?.id
-      || apiProjectId
-      || userProjects?.[0]?.id
-      || null;
-    setActiveProjectId(projectId);
-    if (projectId) localStorage.setItem('crm_active_project_id', String(projectId));
+    // El proyecto (o la empresa) con el que se entra: el de la dirección, la
+    // empresa guardada, el proyecto guardado, el del login o el primero.
+    aplicarEleccion(eleccionAlEntrar({
+      proyectos: userProjects,
+      deLaUrl: proyectoDeLaUrl(userProjects),
+      guardado: localStorage.getItem('crm_active_project_id'),
+      delServidor: apiProjectId,
+    }));
 
     // Y /auth/me, que trae lo mismo y lo que se haya cambiado desde entonces.
     client.get('/auth/me')
@@ -160,7 +212,7 @@ export function AuthProvider({ children }) {
       .catch(() => {});
 
     return userData;
-  }, []);
+  }, [aplicarEleccion]);
 
   const logout = useCallback(async () => {
     try {
@@ -173,7 +225,11 @@ export function AuthProvider({ children }) {
     setPermissions(null);
     setProjects([]);
     setActiveProjectId(null);
+    // La empresa también: si no, quien entra después en este navegador se
+    // encontraba la empresa de antes con el primer campus de la lista (11/11).
+    setActiveIssuerId(null);
     localStorage.removeItem('crm_active_project_id');
+    localStorage.removeItem(CLAVE_SOCIEDAD);
   }, []);
 
   const switchProject = useCallback((projectId) => {
@@ -228,7 +284,10 @@ export function AuthProvider({ children }) {
       ? ALL_PROJECTS_PSEUDO
       : projects.find((p) => p.id === activeProjectId) || projects[0] || null;
   const isAllProjects = !unSoloCampus && activeProjectId === ALL_PROJECTS_ID;
-  const issuerEfectivo = unSoloCampus ? null : activeIssuerId;
+  // La empresa solo cuenta con «todos» puesto: con un campus elegido, manda el
+  // campus. Así no puede volver a verse una empresa en el selector y un campus
+  // en el menú (11/11).
+  const issuerEfectivo = unSoloCampus || activeProjectId !== ALL_PROJECTS_ID ? null : activeIssuerId;
 
   // La sociedad elegida, con sus campus. Si se queda sin ninguno —porque
   // cambiaron las asignaciones— sigue siendo la elegida y con la lista vacia:
@@ -236,9 +295,15 @@ export function AuthProvider({ children }) {
   // pintar una tabla vacia.
   const activeIssuer = issuerEfectivo === null ? null : (() => {
     const campus = projects.filter((p) => Number(p.sociedad_emisora_id) === issuerEfectivo);
+    const s = campus[0] || {};
     return {
       id: issuerEfectivo,
-      nombre: campus[0]?.sociedad_nombre || 'Sociedad',
+      nombre: s.sociedad_nombre || 'Sociedad',
+      // La marca de la empresa, para el menú (11/11): su nombre corto y su logo
+      // si lo tiene. Nunca el de uno de sus campus.
+      nombreCorto: nombreCortoDeEmpresa({ alias: s.sociedad_alias, razon_social: s.sociedad_nombre }),
+      logo_url: s.sociedad_logo_url || null,
+      logo_subido: !!s.sociedad_logo_subido,
       campus,
     };
   })();
