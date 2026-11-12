@@ -137,10 +137,9 @@ describe('#694 · las formas que dependen de la persona', () => {
   });
 
   it('una excepción no salta el bloqueo: sigue bloqueada', () => {
-    const { fila } = pintar({ role: 'colaborador', excepciones: { 'whatsapp.usar': true } });
+    const { fila } = pintar({ role: 'colaborador', excepciones: { 'whatsapp.usar': true, 'mcp.usar': true } });
     expect(fila('whatsapp.usar').dataset.origen).toBe('nunca');
-    const tutor = pintar({ role: 'tutor_redactor', excepciones: { 'mcp.usar': true } });
-    expect(tutor.fila('mcp.usar').dataset.origen).toBe('nunca');
+    expect(fila('mcp.usar').dataset.origen).toBe('nunca');
   });
 });
 
@@ -156,14 +155,11 @@ describe('#694 · lo nuevo de la semana sale sin tocar la pantalla', () => {
     for (const k of ['whatsapp.usar', 'mcp.usar']) expect(fila(k).dataset.origen, k).toBe('nunca');
   });
 
-  it('WhatsApp bloqueado para tutor, tutor redactor y colaborador; el MCP, para tutor y tutor redactor', () => {
+  it('WhatsApp y MCP, bloqueados para tutor, tutor redactor y colaborador (Diego, 12/11)', () => {
     for (const role of ['tutor', 'tutor_redactor', 'colaborador']) {
       const { fila } = pintar({ role });
-      expect(fila('whatsapp.usar').dataset.origen, role).toBe('nunca');
+      for (const k of ['whatsapp.usar', 'mcp.usar']) expect(fila(k).dataset.origen, `${role} · ${k}`).toBe('nunca');
     }
-    // El colaborador con la casilla del MCP lo usaba: bloquearlo quita acceso y lo decide Diego (#752).
-    for (const role of ['tutor', 'tutor_redactor']) expect(pintar({ role }).fila('mcp.usar').dataset.origen, role).toBe('nunca');
-    expect(pintar({ role: 'colaborador' }).fila('mcp.usar').dataset.origen).toBe('ninguno');
   });
 
   it('consultas, Mi campus, Moodle, tablero, links de pago y facturas de colaboradores están en la ficha', () => {
