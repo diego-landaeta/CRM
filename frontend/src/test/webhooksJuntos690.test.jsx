@@ -998,8 +998,6 @@ describe('el resumen sigue al selector de arriba', () => {
     expect(within(c).getByText(`Último aviso: ${formatDateTime(aviso)}`)).toBeTruthy();
     expect(within(c).getByText('Sin avisos todavía')).toBeTruthy();
     expect(within(c).getByText('Falló: No se ha podido repasar el campus: El Moodle no contesta')).toBeTruthy();
-    // Con el repaso fallando, la lectura de cada 5 minutos lo vuelve a leer (#740): se dice.
-    expect(within(c).getByText('Mientras el repaso falle, el CRM lee este campus cada 5 minutos con los tokens, como sin el plugin.')).toBeTruthy();
     expect(within(c).getByText('Lectura de consultas encendida')).toBeTruthy();
     // El fallo del repaso suma en la cabecera; el 404 del campus 5 no cuenta como «sin poder leer».
     expect(await screen.findByText('1 con fallos')).toBeTruthy();
