@@ -774,7 +774,13 @@ export const TIPOS: TipoWebhook[] = [
           aviso: !lee
             ? (ultimo ? `Los avisos llegan, pero no entran al CRM: ${porQueNoLee}` : `Si el campus avisa, no entrará al CRM: ${porQueNoLee}`)
             : pluginViejo ? error! : undefined,
-          detalle: !lee && error ? `Último repaso guardado, de cuando leía: ${error}` : undefined,
+          // Con la lectura encendida y el repaso con error, el campus deja de estar
+          // «al día» y la lectura de cada 5 minutos lo vuelve a leer con los
+          // tokens (#740, `consultas.plugin.campusConPluginAlDia`): las consultas
+          // siguen entrando, y se dice para que «Falló» no parezca que no entra nada.
+          detalle: !lee && error ? `Último repaso guardado, de cuando leía: ${error}`
+            : lee && error ? 'Mientras el repaso falle, el CRM lee este campus cada 5 minutos con los tokens, como sin el plugin.'
+              : undefined,
           enlace: '/finanzas/integraciones',
           campusId: c.id,
         }];
