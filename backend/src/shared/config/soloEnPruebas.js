@@ -40,6 +40,15 @@ export function facturasColaboradorActivas(env = process.env) {
 }
 
 /**
+ * Links de pago (#680): ni `/api/links-pago` ni el hueco `stripe_links` de
+ * Integraciones en el servidor de producción mientras Diego no lo apruebe (revisión
+ * de la fase 1). Se aprueba con LINKS_PAGO_EN_PRODUCCION=1.
+ */
+export function linksPagoActivos(env = process.env) {
+  return enPruebasOAprobado('LINKS_PAGO_EN_PRODUCCION', env);
+}
+
+/**
  * Lo que el #44 añade para los proyectos IA (PR #386 y #387): sus cobros
  * (`/api/ia/cobros`) y la conexión con su Supabase (`/api/ia/supabase/*` y el
  * proveedor `supabase` de Integraciones). Está en /testeo y aún no aprobado:

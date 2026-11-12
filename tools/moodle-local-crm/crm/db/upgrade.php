@@ -91,14 +91,14 @@ function xmldb_local_crm_upgrade($oldversion) {
         set_config('chat_grupo', 0, 'local_crm');
         upgrade_plugin_savepoint(true, 2026111000, 'local', 'crm');
     }
-    if ($oldversion < 2026111200) {
-        // 1.10.3 (#681): el rol del servicio puede ver el avance de los alumnos
+    if ($oldversion < 2026111400) {
+        // 1.10.5 (#681): el rol del servicio puede ver el avance de los alumnos
         // (report/completion:view), para el % hecho de «Mi campus». Solo si el campus ya
         // está conectado; si no, se le da al conectarlo.
         if ($DB->record_exists('user', ['username' => \local_crm\conexion::USUARIO_SERVICIO, 'deleted' => 0])) {
             \local_crm\conexion::usuario_servicio();
         }
-        upgrade_plugin_savepoint(true, 2026111200, 'local', 'crm');
+        upgrade_plugin_savepoint(true, 2026111400, 'local', 'crm');
     }
     return true;
 }

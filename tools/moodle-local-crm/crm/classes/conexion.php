@@ -105,6 +105,50 @@ class conexion {
         return in_array($host, $hosts, true);
     }
 
+    /** Una dirección de la API del CRM, comparable: sin protocolo, sin barra final y en minúsculas. */
+    public static function clave_crm(string $url): string {
+        return strtolower(rtrim((string) preg_replace('~^https?://~i', '', trim($url)), '/'));
+    }
+
+    /**
+     * ¿Este código cambia el campus de CRM? (#689) El plugin guarda UNA sola dirección y UNA
+     * sola clave: conectar con otro CRM deja al de ahora sin los mensajes del campus. Y entre
+     * producción (360crm.tech/crm) y pruebas (360crm.tech/testeo) el dominio es el mismo, así
+     * que la lista de CRM permitidos no lo frena: antes de cambiar, se avisa y se confirma.
+     *
+     * @param string $nuevo la dirección de la API que trae el código.
+     * @return array|null ['actual' => API del CRM de ahora ('' si no se sabe), 'nuevo' => la del código];
+     *         null si el campus no está conectado o el código es del mismo CRM.
+     */
+    public static function cambio_de_crm(string $nuevo): ?array {
+        if (!self::conectado()) {
+            return null;
+        }
+        $actual = (string) actualizar::base_api();
+        if ($actual !== '' && self::clave_crm($actual) === self::clave_crm($nuevo)) {
+            return null;
+        }
+        return ['actual' => $actual, 'nuevo' => rtrim($nuevo, '/')];
+    }
+
+    /**
+     * El CRM, dicho para una persona: «360crm.tech/crm (producción)», «360crm.tech/testeo
+     * (pruebas)», «host.docker.internal:3002 (local, en esta máquina)». Sin el «/api» final.
+     */
+    public static function describir_crm(string $url): string {
+        $partes = parse_url(trim($url));
+        $host = strtolower((string) ($partes['host'] ?? ''));
+        if ($host === '') {
+            return get_string('crm_desconocido', 'local_crm');
+        }
+        $ruta = (string) preg_replace('~/api$~', '', rtrim((string) ($partes['path'] ?? ''), '/'));
+        $donde = $host . (isset($partes['port']) ? ':' . $partes['port'] : '') . $ruta;
+        if (in_array($host, ['localhost', '127.0.0.1', 'host.docker.internal'], true)) {
+            return get_string('crm_tipo_local', 'local_crm', $donde);
+        }
+        return get_string(preg_match('~/testeo(/|$)~', $ruta) ? 'crm_tipo_pruebas' : 'crm_tipo_produccion', 'local_crm', $donde);
+    }
+
     /** El usuario del servicio: el token del CRM es suyo, no del administrador que conecta. */
     const USUARIO_SERVICIO = 'crm_servicio';
 
@@ -214,9 +258,14 @@ class conexion {
      * Conecta: prepara el token, se presenta al CRM con el código y guarda lo que
      * devuelve.
      *
-     * @return array ['ok' => bool, 'campus' => string, 'error' => string]
+     * Si el código es de OTRO CRM (#689), no conecta sin `$cambio_confirmado`: la dirección
+     * del CRM de ahora que la persona vio en el aviso y confirmó. Si no viene, o ya no es la
+     * de ahora, devuelve 'cambio' => ['actual', 'nuevo'] para enseñar el aviso, y no toca nada.
+     *
+     * @param string|null $cambio_confirmado la API del CRM actual, tal como se confirmó; null = sin confirmar.
+     * @return array ['ok' => bool, 'campus' => string, 'error' => string] (+ 'cambio' si falta confirmar)
      */
-    public static function conectar(string $pegado, \context $contexto, int $userid): array {
+    public static function conectar(string $pegado, \context $contexto, int $userid, ?string $cambio_confirmado = null): array {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
 
@@ -230,6 +279,12 @@ class conexion {
         if (!self::crm_permitido($codigo['crm'])) {
             return ['ok' => false, 'campus' => '',
                 'error' => get_string('conectar_no_permitido', 'local_crm', s((string) parse_url($codigo['crm'], PHP_URL_HOST)))];
+        }
+        // Cambiar de CRM, solo confirmado: antes de revocar ni guardar nada.
+        $cambio = self::cambio_de_crm($codigo['crm']);
+        if ($cambio !== null
+                && ($cambio_confirmado === null || self::clave_crm($cambio_confirmado) !== self::clave_crm($cambio['actual']))) {
+            return ['ok' => false, 'campus' => '', 'error' => get_string('cambio_sin_confirmar', 'local_crm'), 'cambio' => $cambio];
         }
 
         // El token, del usuario del servicio (no de quien conecta): si se filtra, no administra el sitio.

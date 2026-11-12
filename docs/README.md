@@ -94,7 +94,7 @@ Las dudas que los alumnos escriben en el campus (mensajería privada de Moodle) 
 | Trabajo | Cada cuánto | Interruptor |
 |---|---|---|
 | Matrícula de los tutores en cada campus (#187); además, al abrir la ficha del tutor si la última tiene más de 30 s | cada hora | `TUTORES_CAMPUS_DISABLED=1` |
-| Leer las consultas de los campus (#188) | 5 min | `CONSULTAS_CAMPUS_DISABLED=1` |
+| Leer las consultas de los campus (#188). Se salta los campus con el plugin del CRM al día (#689): esos entran por el aviso y por el repaso de 15 min, y vuelven aquí solos si el plugin falla o se desconecta | 5 min | `CONSULTAS_CAMPUS_DISABLED=1` |
 | Alumnos matriculados de cada tutor (#189) | 1 vez al día | `CONSULTAS_ALUMNOS_DISABLED=1` |
 | Resumen semanal al tutor (#189) | lunes, 9:00 | `CONSULTAS_RESUMEN_DISABLED=1` |
 | Recordatorio de plazo al tutor y aviso de fuera de plazo a administración (#190) | 15 min | `CONSULTAS_PLAZO_DISABLED=1` |

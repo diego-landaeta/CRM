@@ -43,7 +43,7 @@ import {
   conversacionesDe, mensajesDeConversacion, usuarioPorId, enviarMensaje, enviarComoTutor, matriculadosDe, cursosDe, MoodleError,
 } from '../../shared/services/moodle.client.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
-import { pluginActivo } from './consultas.plugin.js';
+import { pluginActivo, campusConPluginAlDia } from './consultas.plugin.js';
 import { tutoresQueRecibenConsultas, conexionDelCampus } from '../tutores/tutor.campus.js';
 import * as model from './consultas.model.js';
 import { marcarContactado } from './consultas.alumnos.js';
@@ -364,10 +364,22 @@ export async function leerCampus(projectId, { desde = new Date(0), ...opciones }
   return resumen;
 }
 
-/** Una vuelta por todos los campus con consultas. La llama el trabajo programado. */
-export async function leerTodosLosCampus(opciones = {}) {
+/**
+ * Una vuelta por todos los campus con consultas. La llama el trabajo programado (cada 5 min).
+ *
+ * Se salta los campus que el plugin del CRM tiene al día (#689, 8b): ya entran por el aviso
+ * al momento y por el repaso de cada 15 minutos (`campusConPluginAlDia`). Si el plugin deja
+ * de estar al día, el campus vuelve a leerse aquí solo. «Leer ahora» (consultas.controller)
+ * no pasa por aquí: lee siempre, también los campus con plugin.
+ */
+export async function leerTodosLosCampus({ env = process.env, ...opciones } = {}) {
   const resultados = [];
+  const conPlugin = await campusConPluginAlDia(env);
   for (const c of await campusConConsultas()) {
+    if (conPlugin.has(c.projectId)) {
+      resultados.push({ projectId: c.projectId, omitido: 'plugin' });
+      continue;
+    }
     try {
       resultados.push(await leerCampus(c.projectId, { desde: c.desde, ...opciones }));
     } catch (err) {

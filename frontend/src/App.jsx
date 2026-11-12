@@ -34,14 +34,15 @@ function DocumentTitle() {
     // entonces el pseudo-proyecto -1, que se llama «Todos los proyectos», y la
     // pestaña decía eso con CEDIA puesta. La cabecera del Dashboard ya ponía
     // la empresa: la pestaña dice lo mismo que la cabecera.
-    const proj = activeIssuer?.nombre
+    // Con su nombre corto («CEDIA»), el mismo que el menú (11/11).
+    const proj = activeIssuer?.nombreCorto || activeIssuer?.nombre
       || (project?.id ? project.nombre : null);
     // Formato: "Prospectos · Psiko Aprende — MultiCRM"
     if (route && proj) document.title = `${route} · ${proj} — ${base}`;
     else if (route) document.title = `${route} — ${base}`;
     else if (proj) document.title = `${proj} — ${base}`;
     else document.title = base;
-  }, [pathname, project?.id, project?.nombre, activeIssuer?.nombre]);
+  }, [pathname, project?.id, project?.nombre, activeIssuer?.nombre, activeIssuer?.nombreCorto]);
   return null;
 }
 
@@ -115,7 +116,6 @@ const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
-const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 const MiCampusPage = lazy(() => import('./modules/tutores/pages/MiCampusPage'));
 const CorregirTareaPage = lazy(() => import('./modules/tutores/pages/CorregirTareaPage'));
 const CursoCompletoPage = lazy(() => import('./modules/tutores/pages/CursoCompletoPage'));
@@ -280,7 +280,8 @@ function App() {
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
-          <Route path="/mis-cursos" element={<MisCursosPage />} />
+          {/* «Mis cursos» va dentro de «Mi campus» como pestaña (Diego, 11/11); los enlaces de los correos siguen sirviendo. */}
+          <Route path="/mis-cursos" element={<Navigate to="/mis-cursos/campus?vista=cursos" replace />} />
           <Route path="/mis-cursos/campus" element={<MiCampusPage />} />
           <Route path="/mis-cursos/campus/tarea/:projectId/:cursoId/:tareaId" element={<CorregirTareaPage />} />
           <Route path="/mis-cursos/campus/curso/:projectId/:cursoId" element={<CursoCompletoPage />} />
