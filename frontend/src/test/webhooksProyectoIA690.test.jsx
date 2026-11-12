@@ -12,11 +12,12 @@ import { MemoryRouter } from 'react-router-dom';
 
 const get = vi.fn();
 const cabecera = { value: null };
+const permisos = { value: null };
 vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => get(...a) }, API_BASE_URL: '/crm/api' }));
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => cabecera.value }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { role: 'admin' }, projects: [], permissions: null }) }));
 vi.mock('@/shared/hooks/usePermission', () => ({
-  default: () => ({ can: () => true, tieneRol: () => true, llevaEquipo: false }),
+  default: () => ({ can: (p) => (permisos.value ? permisos.value.includes(p) : true), tieneRol: () => true, llevaEquipo: false }),
 }));
 
 const { default: WebhooksLayout } = await import('@/modules/webhooks/pages/WebhooksLayout');
@@ -25,9 +26,15 @@ const { PROYECTOS_IA } = await import('@/shared/lib/proyectosIA');
 
 const campus = (type) => ({ id: 4, nombre: 'Tarot IA', type, modules: {}, sociedad_emisora_id: 7 });
 
+const IA = { id: 4, nombre: 'Tarot IA', type: 'ia', modules: {}, sociedad_emisora_id: 7 };
+const CURSOS = { id: 5, nombre: 'Psiko', type: 'educacion', modules: {}, sociedad_emisora_id: 7 };
+const OTRA_IA = { id: 6, nombre: 'Nutri IA', type: 'ia', modules: {}, sociedad_emisora_id: 8 };
+const TODOS = { id: -1, nombre: 'Todos los proyectos', type: 'multi' };
+
 beforeEach(() => {
   get.mockReset();
   get.mockResolvedValue({ success: true, data: [] });
+  permisos.value = null;
 });
 
 describe('Conexión › Webhooks en un campus IA', () => {
@@ -69,5 +76,40 @@ describe('Conexión › Webhooks en un campus IA', () => {
     render(<MemoryRouter><WebhooksResumenPage /></MemoryRouter>);
     expect(await screen.findByTestId('tipo-make')).toBeTruthy();
     expect(get.mock.calls.some(([u]) => u.startsWith('/make-webhooks'))).toBe(true);
+  });
+
+  it('con «Todos» y campus IA y de formación mezclados, lo de Captación solo se pide de los de formación', async () => {
+    cabecera.value = { activeProject: TODOS, activeIssuerId: null, projects: [IA, CURSOS] };
+    render(<MemoryRouter><WebhooksResumenPage /></MemoryRouter>);
+    expect(await screen.findByTestId('tipo-make')).toBeTruthy();
+    const make = get.mock.calls.map(([u]) => u).filter((u) => u.startsWith('/make-webhooks?'));
+    expect(make).toEqual(['/make-webhooks?projectId=5']);
+  });
+
+  it('con una empresa cuyos campus son todos IA, sin las pestañas de Captación; con alguno de formación, con ellas', () => {
+    cabecera.value = { activeProject: TODOS, activeIssuerId: 8, projects: [IA, CURSOS, OTRA_IA] };
+    const { unmount } = render(<MemoryRouter><WebhooksLayout /></MemoryRouter>);
+    expect(within(screen.getByRole('navigation')).queryByRole('link', { name: /Make/ })).toBeNull();
+    unmount();
+    cabecera.value = { activeProject: TODOS, activeIssuerId: 7, projects: [IA, CURSOS, OTRA_IA] };
+    render(<MemoryRouter><WebhooksLayout /></MemoryRouter>);
+    expect(within(screen.getByRole('navigation')).getByRole('link', { name: /Make/ })).toBeTruthy();
+  });
+
+  it('si solo se puede ver lo de Captación y el campus es IA, se dice por qué no hay nada', async () => {
+    permisos.value = ['make.view', 'forms.view'];
+    cabecera.value = { activeProject: campus('ia'), activeIssuerId: null, projects: [] };
+    render(<MemoryRouter><WebhooksResumenPage /></MemoryRouter>);
+    expect(await screen.findByText('Sin webhooks en estos campus')).toBeTruthy();
+    expect(screen.getByText(/venía de Captación .*que un proyecto IA no tiene/)).toBeTruthy();
+    expect(screen.queryByText(/módulo apagado/)).toBeNull();
+  });
+
+  it('si solo quedan los tokens antiguos y no hay ninguno, no se queda la página en blanco', async () => {
+    permisos.value = ['webhooks.view', 'forms.view'];
+    cabecera.value = { activeProject: campus('ia'), activeIssuerId: null, projects: [] };
+    render(<MemoryRouter><WebhooksResumenPage /></MemoryRouter>);
+    expect(await screen.findByText('Sin webhooks en estos campus')).toBeTruthy();
+    expect(screen.getByText(/venía de Captación/)).toBeTruthy();
   });
 });

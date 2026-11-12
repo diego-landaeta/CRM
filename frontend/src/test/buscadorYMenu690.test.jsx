@@ -119,7 +119,7 @@ describe('los recientes de las direcciones de antes', () => {
 
   it('el reciente traducido lleva su nombre y su sección de hoy, no «Captación»', () => {
     expect(recienteDeHoy({ label: 'Make', sublabel: 'Captación', to: '/captacion/make' }))
-      .toEqual({ label: 'Webhooks › Make', sublabel: 'Conexión', to: '/conexion/webhooks/make', movido: true });
+      .toEqual({ label: 'Webhooks › Make', sublabel: 'Conexión', to: '/conexion/webhooks/make', movido: { entrada: 'Webhooks', pestana: 'Make' } });
     expect(recienteDeHoy({ label: 'Webhooks', sublabel: 'Captación', to: '/captacion/webhooks' }).label).toBe('Webhooks › Prospectos');
     // El que no se movió, tal cual.
     const otro = { label: 'Prospectos', sublabel: 'Captación', to: '/prospectos' };

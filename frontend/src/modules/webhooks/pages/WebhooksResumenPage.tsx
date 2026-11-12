@@ -66,7 +66,8 @@ export default function WebhooksResumenPage() {
   const [estados, setEstados] = useState<Record<string, Estado>>({});
 
   // Los campus y sus módulos: si cambia cualquiera, se vuelve a pedir.
-  const claveCampus = campus.map((c) => `${c.id}:${JSON.stringify(c.modules || {})}`).join(',');
+  // También su tipo: un campus que pasa a IA deja de pedir lo de Captación.
+  const claveCampus = campus.map((c) => `${c.id}:${c.tipo || ''}:${JSON.stringify(c.modules || {})}`).join(',');
   useEffect(() => {
     let vivo = true;
     // Al cambiar de ámbito (o salir), lo pendiente se cancela: no se sigue
@@ -107,15 +108,23 @@ export default function WebhooksResumenPage() {
     );
   }
 
+  // Por qué no sale nada de lo que se puede ver: que venía de Captación y estos
+  // campus son IA (`salvoTipo`), o que su módulo está apagado (o no hay ninguno).
+  const porSerIA = porPermiso.some((t) => t.salvoTipo && campusDelTipo(t, campus).length === 0
+    && campusDelTipo({ ...t, salvoTipo: undefined }, campus).length > 0);
+  const sinNadaQueVer = (
+    <EmptyState
+      icon={WebhooksLogo}
+      title="Sin webhooks en estos campus"
+      description={porSerIA
+        ? 'Lo que puedes ver aquí venía de Captación (webhooks de prospectos, Make, formularios), que un proyecto IA no tiene. Prueba con otro campus o empresa.'
+        : 'Los webhooks que puedes ver tienen su módulo apagado en los campus elegidos arriba, o no tienen ninguno. Prueba con otro campus o empresa.'}
+    />
+  );
+
   if (!tipos.length) {
-    // Por qué no hay nada: los permisos, o que en estos campus su módulo está apagado.
-    return porPermiso.length ? (
-      <EmptyState
-        icon={WebhooksLogo}
-        title="Sin webhooks en estos campus"
-        description="Los webhooks que puedes ver tienen su módulo apagado en los campus elegidos arriba. Prueba con otro campus o empresa."
-      />
-    ) : (
+    // Por qué no hay nada: los permisos, o lo de arriba.
+    return porPermiso.length ? sinNadaQueVer : (
       <EmptyState
         icon={WebhooksLogo}
         title="No tienes webhooks que ver"
@@ -137,6 +146,12 @@ export default function WebhooksResumenPage() {
   // Lo que falla y lo que no se pudo leer, por separado: un campus que no
   // contesta no es un webhook que falla.
   const fallan = Object.values(estados).reduce((n, e) => n + e.filas.filter((f) => f.fallo).length, 0);
+
+  // Lo que solo sale si tiene algo (los tokens antiguos) no ocupa sitio vacío; si
+  // no queda ninguna otra tarjeta, se dice por qué en vez de dejar la página en blanco.
+  const seVe = (t: TipoWebhook) => !(t.ocultarSiVacio && estados[t.id] && !estados[t.id].cargando
+    && !estados[t.id].error && !estados[t.id].filas.length);
+  if (!tipos.some(seVe)) return sinNadaQueVer;
   const sinLeer = Object.values(estados).reduce((n, e) => n + (e.error ? 1 : 0) + e.filas.filter((f) => f.sinLeer && !f.fallo).length, 0);
 
   return (
@@ -162,9 +177,7 @@ export default function WebhooksResumenPage() {
       <p className="text-xs text-muted-foreground">Cada uno se configura en su pantalla: el enlace de su tarjeta.</p>
 
       {GRUPOS.map((g) => {
-        // Lo que solo sale si tiene algo (los tokens antiguos) no ocupa sitio vacío.
-        const suyos = tipos.filter((t) => t.grupo === g.id
-          && !(t.ocultarSiVacio && estados[t.id] && !estados[t.id].cargando && !estados[t.id].error && !estados[t.id].filas.length));
+        const suyos = tipos.filter((t) => t.grupo === g.id && seVe(t));
         if (!suyos.length) return null;
         return (
           <section key={g.id} aria-labelledby={`grupo-${g.id}`} className="space-y-3">

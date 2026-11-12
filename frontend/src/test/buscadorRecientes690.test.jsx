@@ -44,6 +44,21 @@ describe('recientes de antes de juntar los webhooks', () => {
     expect(opciones.some((t) => t.includes('Make'))).toBe(false);
   });
 
+  it('con los nombres que el campus da a su menú (`sidebar_labels`)', async () => {
+    PROYECTO.activeProject.sidebar_labels = { Conexión: 'Integraciones', Webhooks: 'Avisos' };
+    try {
+      render(<MemoryRouter><CommandPalette /></MemoryRouter>);
+      act(() => { window.dispatchEvent(new Event('crm:open-palette')); });
+      const lista = await screen.findByRole('listbox');
+      const opciones = within(lista).getAllByRole('option').map((o) => o.textContent);
+      const prospectos = opciones.find((t) => t.startsWith('Avisos › Prospectos'));
+      expect(prospectos).toContain('Integraciones');
+      expect(prospectos).not.toContain('Conexión');
+    } finally {
+      delete PROYECTO.activeProject.sidebar_labels;
+    }
+  });
+
   it('y al pulsarlo lleva a la dirección nueva', async () => {
     let donde;
     const Donde = () => { donde = useLocation(); return null; };

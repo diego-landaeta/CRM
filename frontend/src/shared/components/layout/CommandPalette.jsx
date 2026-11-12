@@ -56,9 +56,9 @@ const MAX_RECENTS = 5;
 const MOVIDAS = TRASLADOS_DE_MENU.flatMap((t) => t.de.map((d) => {
   // «Conexión › Webhooks» → sección «Conexión», entrada «Webhooks»; y la pestaña
   // a la que lleva («Prospectos», «Make»…), para que el nombre diga adónde va.
-  const [seccion, entrada] = t.a.split(' › ');
+  const [seccion, entrada = seccion] = t.a.includes(' › ') ? t.a.split(' › ') : [t.a];
   const pestana = TABS.find((x) => x.to === d.a)?.label;
-  return { antes: d.ruta, ahora: d.a, seccion, nombre: pestana ? `${entrada} › ${pestana}` : entrada };
+  return { antes: d.ruta, ahora: d.a, seccion, entrada, pestana };
 }));
 const movidaDe = (to) => MOVIDAS.find(({ antes }) => to === antes
   || ['/', '?', '#'].some((sep) => to?.startsWith(`${antes}${sep}`)));
@@ -66,6 +66,8 @@ export function rutaDeHoy(to) {
   const m = movidaDe(to);
   return m ? `${m.ahora}${to.slice(m.antes.length)}` : to;
 }
+const nombreMovido = (entrada, pestana) => (pestana ? `${entrada} › ${pestana}` : entrada);
+
 /**
  * El reciente con su dirección de hoy y, si se movió, con su nombre y su sección
  * de hoy («Webhooks › Prospectos» · «Conexión»). `movido`: su sección es la de
@@ -74,7 +76,8 @@ export function rutaDeHoy(to) {
 export function recienteDeHoy(e) {
   if (!e?.to) return e;
   const m = movidaDe(e.to);
-  return m ? { ...e, to: rutaDeHoy(e.to), label: m.nombre, sublabel: m.seccion, movido: true } : e;
+  if (!m) return e;
+  return { ...e, to: rutaDeHoy(e.to), label: nombreMovido(m.entrada, m.pestana), sublabel: m.seccion, movido: { entrada: m.entrada, pestana: m.pestana } };
 }
 
 function getRecents() {
@@ -539,7 +542,7 @@ export default function CommandPalette() {
           label: 'Recientes',
           items: vigentes.map((r) => ({
             type: 'recent',
-            label: r.label,
+            label: r.movido ? nombreMovido(applyLabel(r.movido.entrada, activeProject?.sidebar_labels), r.movido.pestana) : r.label,
             sublabel: r.movido ? applyLabel(r.sublabel, activeProject?.sidebar_labels) : r.sublabel,
             to: r.to,
             tipo: r.tipo,
