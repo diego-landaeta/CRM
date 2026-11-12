@@ -204,6 +204,15 @@ En el mismo repaso le vuelve a mandar la lista de tutoras «No disponible».
 En el CRM, en Integraciones, el bloque del plugin dice «Al día · repasado a las … · plugin 1.8.0»,
 o el error y cuándo fue el último repaso bueno.
 
+Con el plugin al día, la **lectura de cada 5 minutos** del CRM (la de antes del plugin, con
+los tokens) **se salta ese campus** (#689): ya entra por el aviso y por el repaso, y leerlo
+además era leerlo tres veces. «Al día» es plugin activo, sin error en el repaso y con un
+repaso bueno en los últimos 35 minutos (dos repasos y cinco de margen). Si deja de estarlo
+(plugin desconectado, token revocado, Moodle caído), la lectura de 5 minutos vuelve a
+leerlo sola. Con el plugin apagado en el CRM (`PLUGIN_MOODLE_EN_PRODUCCION`) o el repaso
+apagado (`MOODLE_SINCRONIZACION_DISABLED=1`) se leen todos, como antes. «Leer ahora», en
+Consultas, lee siempre.
+
 ## Probar en local con Docker
 
 Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que probar en
