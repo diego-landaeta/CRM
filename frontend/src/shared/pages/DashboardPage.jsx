@@ -232,8 +232,12 @@ export default function DashboardPage() {
       <AvisoHuecosFacturas projectId={proyectoReal} />
 
       {/* Como voy este mes: el puesto en ventas y la tasa de conversion.
-          Diego, 22/09: «eres la gestora numero X de ventas». */}
-      <ComoVoy medida="facturado" />
+          Diego, 22/09: «eres la gestora numero X de ventas».
+          12/11/2026, Diego: «los montos de los rankings de todas las vistas
+          son del monto cobrado». El ranking de aquí vuelve a lo cobrado,
+          como en Prospectos, Clientes, Ventas y Reportes (iba por lo
+          facturado desde el #224). */}
+      <ComoVoy />
 
       {/* Lo que toca, de la cola del proceso (#130). Va ANTES del resumen: lo
           primero de la mañana es que hay que hacer, no que paso ayer. */}
@@ -422,9 +426,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos.
-          EL DASHBOARD CUENTA LO FACTURADO (#224, Diego 10/10), aquí y en el
-          bloque del equipo de arriba: las dos tarjetas y el bloque salen de
-          `/ventas/facturado`, así que con el mismo mes dan la misma cifra. */}
+          Las dos tarjetas de productos cuentan lo FACTURADO (#224, Diego
+          10/10) y salen de `/ventas/facturado`. El ranking de gestoras de
+          arriba, no: desde el 12/11/2026 va por lo cobrado. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
           <CursosVendidosCard projectId={proyectoReal} issuerId={activeIssuerId} medida="facturado" />
