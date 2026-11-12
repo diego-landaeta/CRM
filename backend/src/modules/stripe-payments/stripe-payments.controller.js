@@ -1,4 +1,4 @@
-import { proyectosDelAmbito, campusDeTodos, exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import * as model from './stripe-payments.model.js';
 import * as service from './stripe-payments.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
