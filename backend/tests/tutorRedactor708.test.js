@@ -35,6 +35,8 @@ const LO_SUYO = [
   'tasks.view_own', 'tasks.create', 'tasks.edit',
   'facturas_colaborador.subir',
   'tutores.mis_cursos', 'consultas.atender',
+  // #211 (Diego, 06/11): su propio correo, con código, como todos los roles.
+  'cuenta.cambiar_correo',
 ];
 
 describe('#708 · el rol en el catálogo', () => {

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-842 rutas en 65 módulos, y 31 acciones con condición dentro de una ruta.
+841 rutas en 65 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1090,7 +1090,6 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | getById | `GET /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | create | `POST /api/users/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.create` |
 | update | `PATCH /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
-| confirmarCorreo | `POST /api/users/:id/email/confirmar` | (no existía) | (ruta nueva) | `users.edit` |
 | deactivate | `DELETE /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.delete` |
 | reactivate | `PATCH /api/users/:id/reactivate` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | setPassword | `PATCH /api/users/:id/password` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · a mano: user.controller.js · setPassword | superadmin, admin | `users.contrasena` |
@@ -1773,7 +1772,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Cambiar su correo | `cuenta.cambiar_correo` | Cambiar el correo con el que entra, con un código que le llega a la dirección nueva. | Admin, Gestora, Soporte, Tutor |  |
+| Cambiar su correo | `cuenta.cambiar_correo` | Cambiar el correo con el que entra, con un código que le llega a la dirección nueva. | Admin, Gestora, Soporte, Tutor, Project manager, Colaborador, Tutor redactor |  |
 
 ## Dentro del código, que ya preguntan a un permiso
 

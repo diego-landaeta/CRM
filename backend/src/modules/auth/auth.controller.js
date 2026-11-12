@@ -2,7 +2,7 @@ import * as authService from './auth.service.js';
 import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import bcrypt from 'bcrypt';
-import { pedirCodigo, confirmarCodigo, MINUTOS as MINUTOS_CODIGO } from '../users/cambio-de-correo.js';
+import { pedirCodigo, confirmarCodigo, codigoFrenadoPara, MENSAJE_FRENADO, MINUTOS as MINUTOS_CODIGO } from '../users/cambio-de-correo.js';
 import { query } from '../../shared/config/db.js';
 import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema, pedirCodigoCorreoSchema, olvidoSchema } from './auth.validation.js';
 import * as userService from '../users/user.service.js';
@@ -162,6 +162,10 @@ export async function me(req, res, next) {
           // La pantalla lo usa para no enseñar lo que el servidor le negaría
           // (corregir o abonar facturas, egresos y balance).
           lleva_equipo: Boolean(equipo),
+          // Mientras siga el freno de tutores, a un tutor no le sale el código
+          // para cambiar su correo (Diego, 06/11, #688): la pantalla lo explica
+          // de entrada en vez de pedirle la contraseña para nada.
+          correo_propio_frenado: codigoFrenadoPara(user) ? MENSAJE_FRENADO : null,
         },
         permissions,
         // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].
@@ -223,8 +227,8 @@ export async function updateMyProfile(req, res, next) {
 /**
  * POST /api/auth/me/email/codigo — paso 1 del correo propio (#211): con la
  * contraseña actual, manda un código de 6 cifras a la dirección NUEVA. Todavía
- * no cambia nada. A un tutor también le llega aunque siga el freno de tutores:
- * lo pide él mismo y va a su dirección nueva (propuesta 2 de la #211).
+ * no cambia nada. A un tutor, mientras siga el freno, no le sale: 200 con
+ * `frenado` y el motivo, sin error (Diego, 06/11, #688).
  */
 export async function pedirCodigoMiCorreo(req, res, next) {
   try {
@@ -237,7 +241,10 @@ export async function pedirCodigoMiCorreo(req, res, next) {
     // 400 y no 401, como en el cambio de contraseña: un 401 haría renovar la sesión.
     if (!ok) throw new AppError('La contraseña actual no es correcta', 400, 'INVALID_CURRENT_PASSWORD');
     const r = await pedirCodigo({ userId, emailNuevo: parsed.data.email, porUserId: userId, ip: getClientIp(req) });
-    res.json({ success: true, data: { email: r.email, expira_at: r.expira_at, enviado: r.enviado, minutos: MINUTOS_CODIGO } });
+    res.json({ success: true, data: {
+      email: r.email, expira_at: r.expira_at, enviado: r.enviado, minutos: MINUTOS_CODIGO,
+      ...(r.frenado ? { frenado: true, motivo: r.motivo } : {}),
+    } });
   } catch (err) { next(err); }
 }
 

@@ -61,6 +61,11 @@ export default function ProfilePage() {
   const [codigo, setCodigo] = useState('');
   // null hasta que se manda el código; luego, a qué dirección fue.
   const [codigoEnviadoA, setCodigoEnviadoA] = useState(null);
+  // A un tutor, mientras siga el freno de correos a tutores, no le sale el código
+  // (Diego, 06/11, #688): se le explica en vez del formulario. Lo dice /auth/me
+  // de entrada, y por si acaso también la respuesta al pedirlo.
+  const [frenadoAlPedir, setFrenado] = useState(null);
+  const frenado = frenadoAlPedir || user?.correo_propio_frenado || null;
   const [cambiandoCorreo, setCambiandoCorreo] = useState(false);
   const mismoCorreo = correoNuevo.trim().toLowerCase() === String(user?.email || '').toLowerCase();
   async function onPedirCodigo(e) {
@@ -71,6 +76,7 @@ export default function ProfilePage() {
     try {
       const r = await client.post('/auth/me/email/codigo', { email: nuevo, password: claveActual });
       setClaveActual('');
+      if (r?.data?.frenado) { setFrenado(r.data.motivo); return; }
       setCodigoEnviadoA(nuevo);
       toast({ title: 'Te hemos mandado un código', description: `Míralo en ${nuevo}. Caduca en ${r?.data?.minutos || 15} minutos.` });
     } catch (err) {
@@ -278,7 +284,7 @@ export default function ProfilePage() {
             </Field>
             <Field label="Email" error={errProfile.email?.message}>
               <input {...regProfile('email')} type="email" readOnly aria-readonly="true"
-                title={puedeCambiarCorreo ? "Es con lo que entras. Cámbialo abajo." : "Es con lo que entras. Para cambiarlo, pídeselo a un administrador."}
+                title={puedeCambiarCorreo && !frenado ? "Es con lo que entras. Cámbialo abajo." : "Es con lo que entras. Para cambiarlo, pídeselo a un administrador."}
                 className={inputClass + ' bg-muted/40 text-muted-foreground cursor-not-allowed'} />
             </Field>
           </div>
@@ -288,7 +294,12 @@ export default function ProfilePage() {
             </button>
           </div>
         </form>
-        {puedeCambiarCorreo && !codigoEnviadoA && (
+        {puedeCambiarCorreo && frenado && (
+          <p role="status" className="mt-5 pt-4 border-t border-border text-sm text-muted-foreground">
+            {frenado}
+          </p>
+        )}
+        {puedeCambiarCorreo && !frenado && !codigoEnviadoA && (
           <form onSubmit={onPedirCodigo} aria-label="Cambiar mi correo" className="mt-5 pt-4 border-t border-border space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Mi correo nuevo" htmlFor="correo-nuevo">
@@ -311,7 +322,7 @@ export default function ProfilePage() {
             </div>
           </form>
         )}
-        {puedeCambiarCorreo && codigoEnviadoA && (
+        {puedeCambiarCorreo && !frenado && codigoEnviadoA && (
           <form onSubmit={onConfirmarCodigo} aria-label="Confirmar mi correo nuevo" className="mt-5 pt-4 border-t border-border space-y-2">
             <Field label={`El código que te ha llegado a ${codigoEnviadoA}`} htmlFor="correo-codigo">
               <input id="correo-codigo" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
