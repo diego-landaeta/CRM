@@ -339,6 +339,16 @@ export async function cursosDe(conexion, moodleUserId, opciones) {
   }));
 }
 
+/** Roles (nombre corto) del equipo del curso: quien tiene uno de estos no es alumno. */
+export const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 'coursecreator']);
+
+/**
+ * ¿Es alumno del curso? Quien tiene algún rol y ninguno del equipo, aunque su rol no se
+ * llame «student» (un campus puede tener «alumno» u otro rol propio). Lo usan «Mi campus»
+ * y «Alumnos sin mensajes»: los dos tienen que contar a los mismos.
+ */
+export const esAlumno = (g) => (g.roles || []).length > 0 && !g.roles.some((r) => ROLES_DE_EQUIPO.has(r));
+
 /**
  * Los matriculados ACTIVOS de un curso, con su rol y su último acceso. Solo
  * activos (decisión 8: fuera bajas): `onlyactive`.
