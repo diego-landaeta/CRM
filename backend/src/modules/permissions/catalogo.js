@@ -632,8 +632,10 @@ export const SECCIONES = [
       {
         clave: 'cuenta', nombre: 'Su cuenta', acciones: [
           // #211: con un código a la dirección nueva y su contraseña actual. Antes
-          // solo el tutor, y sin código (#246). El project manager no: solo ve.
-          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor'], { propia: true }),
+          // solo el tutor, y sin código (#246). Diego, 06/11 (#688): TODOS los
+          // roles, también project manager y colaborador. A un tutor no le sale
+          // el código mientras siga el freno (cambio-de-correo.js).
+          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor', 'project_manager', 'colaborador', 'tutor_redactor'], { propia: true }),
         ],
       },
     ],

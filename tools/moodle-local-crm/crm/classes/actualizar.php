@@ -44,12 +44,13 @@ defined('MOODLE_INTERNAL') || die();
 class actualizar {
 
     /**
-     * ¿Está encendida? De serie, NO (revisión de la #689): instalar código en el campus
-     * sin que nadie lo vea solo se enciende a mano, en los ajustes del plugin. Sin ajuste
-     * guardado (false) cuenta como apagada.
+     * ¿Está encendida? De serie, SÍ (1.10.6; de la 1.10.0 a la 1.10.5 venía apagada): lo que
+     * instala tiene que traer la firma del CRM ({@see claves}), y el campus la apaga en los
+     * ajustes del plugin. Sin ajuste guardado (false) cuenta como el valor de serie.
      */
     public static function activa(): bool {
-        return (bool) get_config('local_crm', 'autoactualizar');
+        $v = get_config('local_crm', 'autoactualizar');
+        return $v === false ? true : (bool) $v;
     }
 
     /** La dirección de la API del CRM, sacada de la de los avisos (…/api/moodle-avisos/<campus>). */

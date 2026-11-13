@@ -114,9 +114,9 @@ y asígnales el campus en su ficha (Tutores › la tutora › Campus › Comprob
    El bloque «Plugin del CRM» sale en local y en /testeo; en producción solo con
    `PLUGIN_MOODLE_EN_PRODUCCION=1`.
 4. En Moodle: Extensiones locales › **Conectar con el CRM** → pega el código.
-5. En Moodle: Extensiones locales › **CRM**, enciende **«Chat de grupo con las tutoras del curso»**
-   (y **«Actualizar el plugin solo»** si vas a probar la actualización). Desde la 1.10.0 vienen
-   **apagados de serie**, también al actualizar un campus que ya los tenía encendidos.
+5. En Moodle: Extensiones locales › **CRM**, enciende **«Chat de grupo con las tutoras del curso»**.
+   Desde la 1.10.0 viene **apagado de serie**, también al actualizar un campus que lo tenía
+   encendido. **«Actualizar el plugin solo»** viene encendido desde la 1.10.6.
 
 ## 5. Qué probar
 
@@ -124,6 +124,10 @@ y asígnales el campus en su ficha (Tutores › la tutora › Campus › Comprob
   al chat» y la tarea `sincronizar_miembros` no hace nada; al encender «Chat de grupo», sí.
   Actualizando desde la 1.9.0 con los dos ajustes encendidos, después de la actualización
   quedan apagados.
+- **Actualización automática encendida de serie (1.10.6):** recién instalada, o actualizando
+  desde la 1.10.4 (donde estaba apagada), `php admin/cli/cfg.php --component=local_crm --name=autoactualizar`
+  da 1. Si antes se apagó a mano en la página de ajustes (encender, guardar, apagar, guardar),
+  se queda en 0.
 - **Privados entre alumnos (1.10.0):** `mensaje-cli.php alumno679 alumna679b "hola"` → no llega
   al CRM (ni al momento ni en el repaso). El mismo mensaje a la tutora (`tutora679`), sí.
 - **Chat de grupo (1.9.0):** con `segunda-tutora.php` (Laura y Carmen en el curso), como alumno,

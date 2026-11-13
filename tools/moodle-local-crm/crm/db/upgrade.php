@@ -91,14 +91,34 @@ function xmldb_local_crm_upgrade($oldversion) {
         set_config('chat_grupo', 0, 'local_crm');
         upgrade_plugin_savepoint(true, 2026111000, 'local', 'crm');
     }
-    if ($oldversion < 2026111400) {
-        // 1.10.5 (#681): el rol del servicio puede ver el avance de los alumnos
+    if ($oldversion < 2026111500) {
+        // 1.10.6: la actualización automática vuelve a venir ENCENDIDA. Es segura sin que nadie
+        // la mire: solo instala lo que trae la firma del CRM, nada si el sitio tiene
+        // $CFG->disableupdateautodeploy, y el campus la puede apagar en los ajustes.
+        // Se enciende también en los campus que ya tenían el plugin, donde el paso de la
+        // 1.10.0 (justo encima) la dejó apagada. Este paso va DESPUÉS de aquel, así que un
+        // campus que salte de una versión anterior a la 1.10.0 a esta también acaba encendido.
+        // Solo se respeta a quien la apagó a mano: el último cambio del ajuste guardado desde
+        // la página de ajustes (config_log; set_config, como el de la 1.10.0, no deja rastro)
+        // fue de encendido a apagado.
+        $ultimo = $DB->get_records('config_log', ['plugin' => 'local_crm', 'name' => 'autoactualizar'],
+            'timemodified DESC, id DESC', 'id, value, oldvalue', 0, 1);
+        $ultimo = reset($ultimo);
+        $apagadaamano = $ultimo && (string) $ultimo->value === '0' && (string) $ultimo->oldvalue === '1';
+        if (!$apagadaamano) {
+            set_config('autoactualizar', 1, 'local_crm');
+        }
+        upgrade_plugin_savepoint(true, 2026111500, 'local', 'crm');
+    }
+    if ($oldversion < 2026111501) {
+        // 1.10.7 (#681): el rol del servicio puede ver el avance de los alumnos
         // (report/completion:view), para el % hecho de «Mi campus». Solo si el campus ya
-        // está conectado; si no, se le da al conectarlo.
+        // está conectado; si no, se le da al conectarlo. Va DESPUÉS de la 1.10.6: con un
+        // número menor, los campus que ya tenían la 1.10.6 se lo saltarían.
         if ($DB->record_exists('user', ['username' => \local_crm\conexion::USUARIO_SERVICIO, 'deleted' => 0])) {
             \local_crm\conexion::usuario_servicio();
         }
-        upgrade_plugin_savepoint(true, 2026111400, 'local', 'crm');
+        upgrade_plugin_savepoint(true, 2026111501, 'local', 'crm');
     }
     return true;
 }
