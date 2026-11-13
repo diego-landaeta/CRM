@@ -536,6 +536,18 @@
   "puertas": []
  },
  {
+  "id": "POST /api/auth/forgot-password",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/forgot-password",
+  "relativa": "POST /forgot-password",
+  "controlador": "forgotPassword",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "POST /api/auth/set-password",
   "tipo": "ruta",
   "modulo": "auth",
