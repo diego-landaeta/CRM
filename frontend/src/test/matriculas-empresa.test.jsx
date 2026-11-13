@@ -81,21 +81,24 @@ describe('el listado sigue a la cabecera', () => {
     expect(await etiqueta('Rechazada')).toContain('bg-destructive-soft');
   });
 
-  it('las columnas de Diego: Persona · Curso · Campus · Recibida · Estado · Documentos · Venta', async () => {
+  it('las columnas de Diego: Persona · Curso · Empresa · campus · Recibida · Estado · Documentos · Venta', async () => {
     cabecera.value = { activeIssuerId: null, activeIssuer: null, activeProject: { id: -1 } };
     get.mockResolvedValue({ ...VACIA, data: [
       { id: 1, estado: 'solicitud_admision', lead_nombre: 'María López', lead_email: 'maria@x.es', curso: 'Máster en Psicología',
-        campus_nombre: 'Psiko Aprende', recibida_at: '2026-10-01T09:12:00Z', conversion_id: null,
+        campus_nombre: 'Psiko Aprende', empresa_nombre: 'CEDIA', recibida_at: '2026-10-01T09:12:00Z', conversion_id: null,
         documentos: { dni_frente: true, dni_dorso: false, foto: false, titulo: false, firma: false } },
-      { id: 2, estado: 'validada', lead_nombre: 'Hugo Pascual', curso: 'Máster en Logopedia', campus_nombre: 'Fono Aprende',
+      { id: 2, estado: 'validada', lead_nombre: 'Hugo Pascual', curso: 'Máster en Logopedia', campus_nombre: 'Fono Aprende', empresa_nombre: 'Solvenic',
         recibida_at: '2026-09-28T10:00:00Z', conversion_id: 44, documentos: { dni_frente: true, titulo: true, firma: true } },
     ] });
     abrir();
     await screen.findAllByText('María López');
     const cabeceras = screen.getAllByRole('columnheader').map((th) => th.textContent);
-    expect(cabeceras.slice(0, 7)).toEqual(['Persona', 'Curso', 'Campus', 'Recibida (hora de Madrid)', 'Estado', 'Documentos', 'Venta']);
+    expect(cabeceras.slice(0, 7)).toEqual(['Persona', 'Curso', 'Empresa · campus', 'Recibida (hora de Madrid)', 'Estado', 'Documentos', 'Venta']);
     expect(screen.getAllByText('Máster en Psicología').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Psiko Aprende').length).toBeGreaterThan(0);
+    // A quién pertenece cada una (13/11/2026): su empresa, junto al campus.
+    expect(screen.getAllByText('CEDIA').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Solvenic').length).toBeGreaterThan(0);
     // Documentos: los cinco de Diego, con su nombre al pasar el ratón; una marca
     // en el que llegó y un hueco en los que faltan.
     const recibido = screen.getAllByLabelText('DNI (delante): recibido')[0];

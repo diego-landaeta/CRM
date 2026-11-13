@@ -13676,6 +13676,10 @@
     "claves": [
      "stripe.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -16196,28 +16200,6 @@
   "ruta": "/api/users/:id",
   "relativa": "PATCH /:id",
   "controlador": "update",
-  "publica": false,
-  "guardias": [
-   {
-    "tipo": "token"
-   },
-   {
-    "tipo": "puede",
-    "claves": [
-     "users.edit"
-    ]
-   }
-  ],
-  "puertas": []
- },
- {
-  "id": "POST /api/users/:id/email/confirmar",
-  "tipo": "ruta",
-  "modulo": "users",
-  "metodo": "POST",
-  "ruta": "/api/users/:id/email/confirmar",
-  "relativa": "POST /:id/email/confirmar",
-  "controlador": "confirmarCorreo",
   "publica": false,
   "guardias": [
    {

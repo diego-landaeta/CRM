@@ -97,6 +97,7 @@ import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js'
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
@@ -497,6 +498,8 @@ if (process.env.NODE_ENV !== 'test') {
     startConsultasCargaScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
+    // Ventas a plazos: cerrar la suscripción de Stripe al completar el pago (#747).
+    startSuscripcionesPlazosScheduler();
     startCursosPendientesScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();

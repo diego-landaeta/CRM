@@ -117,8 +117,13 @@ export function huellaDelEnvio(body, archivos = []) {
  * solicitud sale igualmente en Matrículas, y se le puede asignar gestora a mano.
  */
 async function prospectoDe(projectId, persona, huella) {
-  if (!persona.email && !persona.telefono) return { leadId: null, creado: false };
-  const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, persona.telefono, projectId);
+  // SOLO POR EL CORREO (13/11/2026). Por el teléfono, una solicitud con el teléfono de
+  // otra persona (mal escrito, o compartido en una familia o una centralita) quedaba en
+  // la ficha de esa otra persona, con el DNI y la firma a la vista de su gestora. Pasó
+  // en las pruebas del 13/11 con dos fichas reales. Carlos pidió «que se sincronicen
+  // con el mail». Sin correo, la solicitud queda sin ficha y se vincula a mano.
+  if (!persona.email) return { leadId: null, creado: false };
+  const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, null, projectId);
   if (existente) return { leadId: existente.id, creado: false };
   if (!persona.nombre || !persona.email) return { leadId: null, creado: false };
   const lead = await leadModel.createLeadWithRoundRobin({
@@ -244,6 +249,21 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   const obtenidos = await Promise.all(pendientes.map(([destino, tipo]) => obtenerArchivo(mapeado[destino], archivos, opcionesArchivo)
     .then((archivo) => (archivo ? prepararDocumento(tipo, archivo) : null))
     .then((archivo) => ({ archivo }), (error) => ({ error }))));
+
+  // UN ENVÍO VACÍO NO ES UNA SOLICITUD (13/11/2026). En Psiko entró una con un único
+  // campo, `_cors`: una petición previa del formulario, sin nada de la persona. Se
+  // guardaba como solicitud vacía y sin ficha. Sin nombre, correo, teléfono, documento
+  // de identidad ni ningún archivo, se contesta 400 y no se guarda nada. No delata a
+  // nadie: no depende de si la persona existe.
+  const hayPersona = ['nombre', 'email', 'telefono', 'dni'].some((c) => persona[c]);
+  const hayDocumento = obtenidos.some((o) => o.archivo);
+  if (!hayPersona && !hayDocumento) {
+    return {
+      status: 400,
+      data: { recibido: false, error: 'Solicitud vacía: falta el nombre, el correo o algún documento.' },
+      interno: { accion: 'vacia' },
+    };
+  }
 
   const salida = Date.now() + (opcionesArchivo.respuestaMs ?? RESPUESTA_FIJA_MS);
   const responder = async (interno) => { await esperarHasta(salida); return respuesta(huella, interno); };
