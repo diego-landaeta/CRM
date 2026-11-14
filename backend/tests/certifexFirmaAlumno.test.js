@@ -6,9 +6,8 @@ import sharp from 'sharp';
 // el fondo transparente. Aquí, sin base: el procesado de la imagen y que la firma viaje a
 // Certifex al emitir.
 //
-// Desde el 20/10/2026 la firma NO va en el diploma (Diego: «las firmas no van en los
-// diplomas, solo el DNI»): con FIRMA_EN_DIPLOMA apagado no se manda nunca a Certifex, aunque
-// quien emite la traiga. La subida y el procesado siguen, por si se vuelve a encender.
+// Del 20/10 al 05/11/2026 estuvo apagada (Diego: «las firmas no van en los diplomas, solo el
+// DNI»). Ángel, 05/11/2026: vuelve; los diplomas llevan otra vez la línea donde firma el alumno.
 
 const llamadas = [];
 vi.mock('../src/modules/certifex/certifex.cliente.js', () => ({
@@ -93,21 +92,21 @@ describe('la firma con el fondo transparente', () => {
   });
 });
 
-describe('la firma NO viaja a Certifex al emitir (Diego, 20/10: «solo el DNI»)', () => {
+describe('la firma viaja a Certifex al emitir (encendida otra vez el 05/11/2026)', () => {
   const sinBloqueos = { bloqueadas: new Map(), programas: new Map([[1, { programa: { horas: 750, modulos: [{ titulo: 'Uno' }] }, formacion: { nombre: 'Diplomado X' } }]]) };
 
-  it('está apagada', () => {
-    expect(FIRMA_EN_DIPLOMA).toBe(false);
+  it('está encendida', () => {
+    expect(FIRMA_EN_DIPLOMA).toBe(true);
   });
 
-  it('aunque quien emite traiga la firma, el item va sin `firmaAlumno` y el resultado dice que no la lleva', async () => {
+  it('la firma de cada matrícula va en su item como `firmaAlumno`, y el resultado dice que la lleva', async () => {
     const firma = 'data:image/png;base64,iVBORw0KGgo=';
-    const { porId } = await emitirConPrograma('ana@crm', [1, 2], { ...sinBloqueos, firmas: new Map([[1, firma], [2, firma]]) });
+    const { porId } = await emitirConPrograma('ana@crm', [1, 2], { ...sinBloqueos, firmas: new Map([[1, firma]]) });
     const items = llamadas.find((l) => l.ruta === '/emitir').cuerpo.items;
-    expect(items[0]).toEqual({ matriculaId: 1, programa: { horas: 750, modulos: [{ titulo: 'Uno' }] } });
+    expect(items[0]).toEqual({ matriculaId: 1, programa: { horas: 750, modulos: [{ titulo: 'Uno' }] }, firmaAlumno: firma });
+    // Sin firma, el item va sin el campo (y en el diploma la línea queda libre).
     expect(items[1]).toEqual({ matriculaId: 2 });
-    expect(JSON.stringify(items)).not.toContain('firmaAlumno');
-    expect(porId.get(1)).toMatchObject({ ok: true, firmaAlumno: false, programa: { horas: 750 } });
+    expect(porId.get(1)).toMatchObject({ ok: true, firmaAlumno: true, programa: { horas: 750 } });
     expect(porId.get(2)).toMatchObject({ ok: true, firmaAlumno: false });
   });
 
