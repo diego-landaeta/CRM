@@ -180,11 +180,18 @@ export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nom
 // La factura de un colaborador: el Historial, con su colaborador y su mes.
 export const destinoDeFacturaColaborador = (f) => `/finanzas/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
 // Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
-// #624: un número revertido (anulado) no está en Emitidos: su matrícula está en Pendientes ›
-// «Aprobados sin diploma», que es la pestaña por defecto (sin `pestana`).
-export const destinoDeDiploma = (d) => d.anulada
-  ? `/clientes/matriculas/diplomas?buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`
-  : `/clientes/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+// #624: un número revertido (anulado) no está en Emitidos. Si ya se reemitió, lleva al número
+// NUEVO en Emitidos; si no, su matrícula está en Pendientes › «Aprobados sin diploma», que es
+// la pestaña por defecto (sin `pestana`).
+export const destinoDeDiploma = (d) => {
+  if (d.anulada && d.anulacion?.sustituidaPor) {
+    return `/clientes/matriculas/diplomas?pestana=enviados&buscar=${encodeURIComponent(d.anulacion.sustituidaPor)}`;
+  }
+  if (d.anulada) return `/clientes/matriculas/diplomas?buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+  return `/clientes/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+};
+// Lo que dice la fila de un diploma anulado: si ya tiene sustituto, cuál.
+const rotuloAnulado = (d) => (d.anulacion?.sustituidaPor ? `Anulado (revertido) · reemitido como ${d.anulacion.sustituidaPor}` : 'Anulado (revertido)');
 // Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
 export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;
 
@@ -600,7 +607,7 @@ export default function CommandPalette() {
     }));
     grupo('Diplomas', otros.diplomas, (d) => ({
       type: 'diploma', label: d.alumno || d.nexpediente, icon: Certificate, to: destinoDeDiploma(d),
-      sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : d.anulada ? 'Anulado (revertido)' : ''].filter(Boolean).join(' · '),
+      sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : d.anulada ? rotuloAnulado(d) : ''].filter(Boolean).join(' · '),
     }));
     grupo('Cursos de Moodle', otros.cursosMoodle, (c) => ({
       type: 'curso_moodle', label: c.nombre, icon: GraduationCap, to: destinoDeCursoMoodle(c, c.campus),
