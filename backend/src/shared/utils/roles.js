@@ -126,6 +126,9 @@ export const RUTAS_DEL_TUTOR_REDACTOR = [
   /^\/api\/facturas-colaborador\/mias(?:\/|$)/,
   /^\/api\/tutores(?:\/|$)/,
   /^\/api\/consultas(?:\/|$)/,
+  // Los cursos que tiene que desarrollar (#770): el servicio le deja solo los
+  // que tiene asignados, como a un tutor.
+  /^\/api\/cursos-pendientes(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
   /^\/api\/permissions\/system-defaults\/?$/,
   /^\/api\/users\/mis-avisos\/?$/,
