@@ -92,6 +92,8 @@ const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPag
 const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
+// El formulario de datos fiscales de la factura automática (#764): sin sesión, desde el correo.
+const DatosFiscalesPage = lazy(() => import('./modules/factura-automatica/pages/DatosFiscalesPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
 const AIChatPage = lazy(() => import('./modules/ai-chat/pages/AIChatPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
@@ -102,6 +104,8 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
+// Cobros de PayPal y extractos del banco (#766).
+const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -228,6 +232,8 @@ function App() {
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         {/* Sin sesion: la abre desde el correo quien no compro. */}
         <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
+        {/* Sin sesion: el alumno da sus datos para la factura (#764). El enlace es la llave. */}
+        <Route path="/datos-fiscales/:token" element={<DatosFiscalesPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave. */}
@@ -346,6 +352,7 @@ function App() {
             <Route path="integraciones" element={<IntegrationsPage />} />
             <Route path="pendiente-facturar" element={<PendienteFacturarPage />} />
             <Route path="pagos-stripe" element={<StripePaymentsPage />} />
+            <Route path="cobros-externos" element={<CobrosExternosPage />} />
             <Route path="facturas" element={<InvoicesPage />} />
             <Route path="facturas/nueva" element={<InvoiceCreatePage />} />
             <Route path="facturas/configuracion" element={<InvoicingConfigPage />} />
