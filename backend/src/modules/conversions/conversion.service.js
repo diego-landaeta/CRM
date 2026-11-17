@@ -1,5 +1,6 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { nombreDeLasLineas } from './nombre-de-las-lineas.js';
+import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
@@ -200,6 +201,25 @@ export async function create(data, userId) {
 // - Sin paymentInfo (legacy) → factura por el total de la conversión.
 export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
   /*
+    FACTURA AUTOMATICA CON FORMULARIO (#764). Solo con FACTURA_AUTOMATICA_ACTIVA
+    encendido y en los campus de FACTURA_AUTOMATICA_CAMPUS. No revive el camino
+    frenado de abajo: pide los datos fiscales al alumno y emite con ellos (ver
+    modules/factura-automatica). Apagado, o si la venta no le toca (ya se
+    facturaba a mano, tiene proforma), el cobro va a la cola como hasta ahora.
+  */
+  if (paymentInfo?.paymentId && facturaAutomaticaActiva()) {
+    import('../factura-automatica/factura-automatica.service.js')
+      .then((fa) => fa.alCobrar({ conversionId, paymentId: paymentInfo.paymentId }))
+      .then((tomado) => {
+        if (!tomado) {
+          logger.info({ conversionId, userId, paymentId: paymentInfo.paymentId },
+            'cobro a la cola de facturacion: la emision es manual (freno del 14/09)');
+        }
+      })
+      .catch((err) => logger.warn({ err: err.message, conversionId }, 'factura automatica: fallo (no bloqueante)'));
+    return;
+  }
+  /*
     FRENADO A PROPOSITO. Ya no emite nada: el cobro se queda en la cola de
     facturacion y alguien la emite a mano, poniendo el numero.
 
@@ -261,6 +281,13 @@ export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
       logger.info({ conversionId, userId, paymentId: paymentInfo?.paymentId },
         'factura no emitida: quien registro la venta no pone numeros; el cobro queda en la cola');
       return;
+    }
+
+    // Facturacion pausada por la auditoria (#765): el cobro espera en la cola
+    // de la pausa y se factura, en orden de cobro, al reanudar.
+    if (paymentInfo?.paymentId) {
+      const auditoria = await import('../facturacion-auditoria/facturacion-auditoria.service.js');
+      if (await auditoria.encolarSiPausada({ paymentId: paymentInfo.paymentId, conversionId, userId })) return;
     }
 
     const inv = paymentInfo?.paymentId
