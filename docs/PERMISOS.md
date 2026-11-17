@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-863 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+875 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -380,6 +380,24 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateExpense | `PATCH /api/expenses/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.edit` |
 | deleteExpense | `DELETE /api/expenses/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.delete` |
 
+## factura-automatica
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/factura-automatica/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
+| reenviar | `POST /api/factura-automatica/venta/:conversionId/reenviar` | (no existía) | (ruta nueva) | `facturas.cola` |
+| formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |
+| responder | `POST /api/fd/:token` | (no existía) | (ruta nueva) | — |
+
+## facturacion-auditoria
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/facturacion-auditoria/estado` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| historial | `GET /api/facturacion-auditoria/historial` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| auditar | `POST /api/facturacion-auditoria/auditar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| reanudar | `POST /api/facturacion-auditoria/reanudar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+
 ## facturas-colaborador
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
@@ -477,6 +495,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | previoSupabase | `GET /api/ia/supabase/previo/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
 | importarSupabase | `POST /api/ia/supabase/importar/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
 | quitarPruebasSupabase | `POST /api/ia/supabase/quitar-pruebas/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
+
+## informe-mensual
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| descargarConEnlace | `GET /api/informe-mensual/descarga/:issuerId/:periodo` | (no existía) | (ruta nueva) | — |
+| informe | `GET /api/informe-mensual/` | (no existía) | (ruta nueva) | `reports.informe_mensual` |
+| excel | `GET /api/informe-mensual/excel` | (no existía) | (ruta nueva) | `reports.informe_mensual` |
+| zip | `GET /api/informe-mensual/zip` | (no existía) | (ruta nueva) | `reports.informe_mensual` |
 
 ## installation
 
@@ -1485,6 +1512,7 @@ lo que pide para tener sentido (editar pide ver).
 | Poner número al cobrar | `facturas.emitir` | Que el cobro salga facturado y la proforma sin esperar visto bueno. | Admin | `facturas.view` |
 | Corregir y abonar | `facturas.gestionar` | Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas). | Admin | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
+| Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin | `facturas.view` |
 | Editar facturas | `facturas.edit` | Cambiar cualquier dato de una factura. | Admin, Soporte | `facturas.view` |
 | Configurar la facturación | `facturas.configurar` | Empresas emisoras, regímenes, plantillas, series y ajustes. | Admin, Soporte | `facturas.view` |
@@ -1582,6 +1610,7 @@ lo que pide para tener sentido (editar pide ver).
 | Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin, Project manager | `reports.view` |
 | Cambiar el baremo de la tasa de cierre | `reports.editar_baremo` | Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin. | Admin | `reports.view` |
 | El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte, Project manager | `reports.mis_informes` |
+| Informe mensual para la gestoría | `reports.informe_mensual` | Ver y bajar el informe de ventas del mes por equipo y por comercial, y el ZIP con las facturas emitidas de una empresa. | Admin, Project manager | `reports.view` |
 
 ### Feedback
 

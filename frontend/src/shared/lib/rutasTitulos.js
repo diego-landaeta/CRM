@@ -60,6 +60,7 @@ export const ROUTE_TITLES = {
   '/equipo/actividad': 'Actividad del equipo',
   '/factura-colaborador/pago': 'Confirmar el pago',
   '/factura-colaborador': 'Tu factura del mes',
+  '/datos-fiscales': 'Tus datos para la factura',
   '/stripe': 'Stripe',
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
