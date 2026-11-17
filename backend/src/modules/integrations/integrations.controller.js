@@ -6,6 +6,7 @@ import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 import { logger } from '../../shared/utils/logger.js';
 import { infoDelCampus, urlDelCampus } from '../../shared/services/moodle.client.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
+import { saldo as saldoDeZadarma } from '../zadarma/zadarma.client.js';
 import { linksPagoActivos, proyectosIAActivos } from '../../shared/config/soloEnPruebas.js';
 
 /*
@@ -28,11 +29,13 @@ import { linksPagoActivos, proyectosIAActivos } from '../../shared/config/soloEn
 
 // moodle: el campus del proyecto, para las consultas de alumnos (#187). La
 // dirección va en config_public.url y el token, cifrado, como api_key.
+// zadarma: la centralita (#137). La CLAVE va como api_key (columnas de la fila) y
+// el SECRETO, cifrado aparte dentro de config_public, como el whsec_ de Stripe.
 //
 // stripe_links: la clave de ESCRITURA de Stripe para crear links de pago (#680).
 // Va aparte de `stripe`, que es la de solo lectura del sondeo y no se toca: si
 // esta se filtra o se borra, los cobros siguen entrando. Se cifra igual.
-const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle', 'stripe_links'];
+const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle', 'stripe_links', 'zadarma'];
 
 // Una clave secreta (`sk_`) o restringida (`rk_`) de Stripe, de test o de live.
 // La publicable (`pk_`) no sirve para nada en el servidor y se rechaza al guardar.
@@ -76,6 +79,8 @@ const upsertSchema = z.object({
   // Secreto de firma del webhook (el whsec_... que da Stripe). Igual que la
   // api_key: si no viene, no se toca el que hubiera.
   webhook_secret: z.string().min(8).max(500).optional().nullable(),
+  // El secreto de la API de Zadarma (#137). Mismo trato: si no viene, no se toca.
+  api_secret: z.string().min(8).max(500).optional().nullable(),
   config_public: z.record(z.string(), z.any()).optional(),
 });
 
@@ -159,7 +164,7 @@ export async function upsert(req, res, next) {
   try {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const { provider, active, api_key, webhook_secret, config_public } = parsed.data;
+    const { provider, active, api_key, webhook_secret, api_secret, config_public } = parsed.data;
     if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
     if (provider === 'stripe_links') {
@@ -211,6 +216,36 @@ export async function upsert(req, res, next) {
       if (config.consultas && !anterior?.config_public?.consultas) config.consultas_desde = new Date().toISOString();
       if (!config.consultas) delete config.consultas_desde;
     }
+    if (provider === 'zadarma') {
+      // Clave y secreto van juntos: con uno solo, ni se llama ni se comprueba un aviso.
+      const tendraClave = Boolean(api_key?.trim()) || Boolean(anterior?.encrypted_value);
+      const tendraSecreto = Boolean(api_secret?.trim()) || Boolean(anterior?.config_public?.zadarma_secret_encrypted);
+      if (!tendraClave || !tendraSecreto) {
+        throw new AppError('Zadarma necesita la clave (Key) y el secreto (Secret) de la API.', 400, 'VALIDATION_ERROR');
+      }
+      // La zona horaria de la cuenta: Zadarma manda la hora de cada llamada sin
+      // zona, en la que tenga puesta la cuenta. Por defecto, Madrid.
+      // Que EXISTA, no solo que tenga forma: «Europe/Madird» pasaba la
+      // expresión y luego Postgres fallaba en cada aviso de ese campus (500 y
+      // llamadas perdidas). La base de datos de zonas de Node (ICU) es la IANA,
+      // la misma que usa Postgres.
+      const zona = String(config.zona_horaria || 'Europe/Madrid').trim();
+      if (!zonaHorariaValida(zona)) {
+        throw new AppError(`Zona horaria no válida: «${zona.slice(0, 60)}» (por ejemplo, Europe/Madrid).`, 400, 'VALIDATION_ERROR');
+      }
+      config = { ...config, zona_horaria: zona };
+      if (api_secret && api_secret.trim()) {
+        const s = encrypt(api_secret.trim());
+        config = {
+          ...config,
+          zadarma_secret_encrypted: s.encrypted,
+          zadarma_secret_iv: s.iv,
+          zadarma_secret_auth_tag: s.authTag,
+          zadarma_secret_preview: maskSecret(api_secret.trim()),
+        };
+      }
+      delete config.api_secret;  // nunca en claro
+    }
     if (webhook_secret && webhook_secret.trim()) {
       const w = encrypt(webhook_secret.trim());
       config = {
@@ -257,6 +292,7 @@ export async function test(req, res, next) {
       else if (provider === 'stripe_links') testResult = await testStripeLinks(apiKey);
       else if (provider === 'brevo') testResult = await testBrevo(apiKey);
       else if (provider === 'supabase') testResult = await testSupabase(apiKey, row.config_public?.project_ref);
+      else if (provider === 'zadarma') testResult = await testZadarma(apiKey, row.config_public);
       else if (provider === 'moodle') testResult = await testMoodle(apiKey, row.config_public?.url, undefined, { consultas: row.config_public?.consultas === true });
     } catch (e) {
       testResult = { ok: false, message: e.message };
@@ -448,6 +484,40 @@ async function testSupabase(accessToken, projectRef) {
   }
   return { ok: true, message: `Conexion OK con «${suyo.name}» (${suyo.region}).`, projectRef };
 }
+
+/** ¿Es una zona horaria IANA que existe? (`Europe/Madrid` sí; `Europe/Madird`, no). */
+function zonaHorariaValida(zona) {
+  if (!/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(zona)) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: zona });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Probar la clave y el secreto de Zadarma (#137) con el saldo, que es de solo
+ * lectura (/v1/info/balance/). Con un 401 la firma no casa: la clave o el
+ * secreto están mal (o cambiados entre sí).
+ */
+async function testZadarma(clave, config) {
+  const c = config || {};
+  if (!c.zadarma_secret_encrypted) return { ok: false, message: 'Falta el secreto (Secret) de la API.' };
+  let secreto;
+  try {
+    secreto = decrypt(c.zadarma_secret_encrypted, c.zadarma_secret_iv, c.zadarma_secret_auth_tag);
+  } catch {
+    return { ok: false, message: 'El secreto guardado no se puede descifrar (¿cambió ENCRYPTION_KEY?).' };
+  }
+  try {
+    const r = await saldoDeZadarma({ clave, secreto });
+    return { ok: true, message: `Conexión OK. Saldo: ${r.balance}${r.currency ? ` ${r.currency}` : ''}.` };
+  } catch (err) {
+    return { ok: false, message: err.status === 401 ? 'Clave o secreto no válidos (401).' : err.message };
+  }
+}
+export { testZadarma as testZadarmaParaPruebas };
 
 async function testBrevo(apiKey) {
   // /v3/account es read-only. Devuelve 401 si la key es mala.

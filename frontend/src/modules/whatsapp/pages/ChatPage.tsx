@@ -15,6 +15,8 @@ import {
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
 import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
+import { getEstado as estadoDeZadarma } from '@/modules/zadarma/api/zadarma.api';
+import client from '@/shared/api/client';
 import NotaDeVoz from '../components/NotaDeVoz';
 import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
 import ElegirChat from '../components/ElegirChat';
@@ -507,7 +509,7 @@ export default function ChatPage() {
   const [plantillasArriba, setPlantillasArriba] = useState(false);
   // A quien se va a llamar, y si el intento quedo apuntado.
   const [llamando, setLlamando] = useState<
-    { telefono: string; nombre: string | null; apuntada: boolean } | null
+    { telefono: string; nombre: string | null; apuntada: boolean; zadarma?: { leadId: number; projectId: number; telefonoFicha: string | null } } | null
   >(null);
   // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
   // elegir el fichero y no habia forma de ver que era hasta despues — y en
@@ -937,6 +939,26 @@ export default function ChatPage() {
    * viene a resolver.
    */
   async function llamar(c: ChatWhatsapp) {
+    // Con Zadarma en el campus del prospecto (#137), la llamada sale por la
+    // centralita y se apunta SOLA al colgar, con su duración: no se apunta aquí
+    // el intento, o la ficha tendría dos llamadas por cada una.
+    if (c.lead_id && c.project_id) {
+      const campus = (await estadoDeZadarma()).find((z) => z.project_id === c.project_id);
+      if (campus) {
+        // Zadarma llama al teléfono de la FICHA, no al del chat: se lee para
+        // enseñarlo en el diálogo (y avisar si no es el mismo).
+        let telefonoFicha: string | null = null;
+        try {
+          const r = await client.get<{ telefono?: string | null }>(`/leads/${c.lead_id}`);
+          telefonoFicha = r.data?.telefono || null;
+        } catch { telefonoFicha = null; }
+        setLlamando({
+          telefono: String(c.telefono || ''), nombre: c.lead_nombre || c.nombre_push || null,
+          apuntada: false, zadarma: { leadId: c.lead_id, projectId: c.project_id, telefonoFicha },
+        });
+        return;
+      }
+    }
     let apuntada = false;
     try {
       // `deQuien` NO es opcional: sin el, con la sesion de otra persona elegida
@@ -2380,6 +2402,7 @@ export default function ChatPage() {
           telefono={llamando.telefono}
           nombre={llamando.nombre}
           apuntada={llamando.apuntada}
+          zadarma={llamando.zadarma}
           onCerrar={() => setLlamando(null)}
         />
       )}

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { telefonoParaWhatsapp, telefonoImposible } from '@/shared/lib/telefono';
 import { toast } from '@/shared/hooks/useToast';
+import LlamarConZadarma from '@/modules/zadarma/components/LlamarConZadarma';
 import InfoField, { inputClass } from './InfoField';
 import Field from '@/shared/components/ui/Field';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
@@ -175,7 +176,7 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
           <InfoField label="Email">{lead.email}</InfoField>
           <InfoField label="Teléfono">
             {lead.telefono ? (
-              <span className="inline-flex items-center gap-2">
+              <span className="inline-flex flex-wrap items-center gap-2">
                 {lead.telefono}
                 {/* Llamar desde la ficha. El CRM prepara, el telefono llama:
                     por WhatsApp no hay canal de audio y por la linea normal el
@@ -189,6 +190,9 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
                   <PhoneCall size={12} />
                   {llamando ? 'Apuntando…' : 'Llamar'}
                 </button>
+                {/* Por la centralita (#137): solo si el campus tiene Zadarma. La
+                    llamada se apunta sola al colgar, con su duración. */}
+                <LlamarConZadarma leadId={lead.id} projectId={lead.project_id} />
                 {/* Con el criterio del backend: si no hay numero utilizable no
                     se ofrece el boton, en vez de ofrecerlo y que el chat falle. */}
                 {telefonoParaWhatsapp(lead.telefono) && (

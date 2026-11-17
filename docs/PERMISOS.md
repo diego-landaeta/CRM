@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-842 rutas en 65 módulos, y 31 acciones con condición dentro de una ruta.
+849 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1215,6 +1215,18 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | configurar | `PUT /api/woocommerce/orders-config` | (no existía) | (ruta nueva) | `woocommerce.pedidos` |
 | secretoDelAviso | `POST /api/woocommerce/webhook-secret` | (no existía) | (ruta nueva) | `woocommerce.pedidos` |
 
+## zadarma
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| eco | `GET /api/zadarma/webhook` | (no existía) | (ruta nueva) | — |
+| aviso | `POST /api/zadarma/webhook` | (no existía) | (ruta nueva) | — |
+| llamar | `POST /api/zadarma/llamar` | (no existía) | (ruta nueva) | `zadarma.llamar` |
+| estado | `GET /api/zadarma/estado` | (no existía) | (ruta nueva) | `zadarma.llamar` |
+| reporte | `GET /api/zadarma/reporte` | (no existía) | (ruta nueva) | `reports.mis_informes` |
+| extensiones | `GET /api/zadarma/extensiones` | (no existía) | (ruta nueva) | `integrations.view` |
+| guardarExtensiones | `PUT /api/zadarma/extensiones` | (no existía) | (ruta nueva) | `integrations.edit` |
+
 # Catálogo de permisos
 
 Cada permiso del CRM, agrupado como el menú (`backend/src/modules/permissions/catalogo.js`).
@@ -1270,6 +1282,12 @@ lo que pide para tener sentido (editar pide ver).
 | Sus plantillas | `whatsapp.plantillas` | Crear y usar sus propias plantillas de mensaje. | Admin, Gestora, Soporte, Project manager |  |
 | Plantillas compartidas | `whatsapp.plantillas_compartidas` | Crear y cambiar las plantillas de todo el equipo, y las de otras personas. | Admin, Soporte | `whatsapp.plantillas` |
 | Forma de los avisos | `whatsapp.forma_avisos` | Ver y reiniciar cómo llegan los avisos de WhatsApp (diagnóstico). | Soporte |  |
+
+### Llamadas (Zadarma)
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Llamar con Zadarma | `zadarma.llamar` | Llamar a sus prospectos por la centralita, con su extensión; la llamada se apunta sola al colgar. · nunca: Tutor, Colaborador | Admin, Gestora, Soporte, Project manager |  |
 
 ### Ventas
 
