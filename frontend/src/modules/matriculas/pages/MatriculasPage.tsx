@@ -465,12 +465,13 @@ export default function MatriculasPage() {
 
       </>}
 
-      {/* Los botones de estado, solo para quien puede usarlos: el servidor deja
-          cambiar el estado a admin y super admin (a la gestora le daba 403). La
-          clave con el estado vuelve a montar la ficha con lo nuevo tras validar. */}
+      {/* Los botones de estado, solo para quien puede usarlos: el servidor pide
+          `matriculas.cambiar_estado` (a la gestora le daba 403; soporte lo trae
+          de serie y no le salían). La clave con el estado vuelve a montar la
+          ficha con lo nuevo tras validar. */}
       {detail && (
         <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={cerrarFicha} onChange={() => load()}
-          onEstado={tieneRol('superadmin', 'admin') ? handleEstado : undefined} pausada={!!rechazoTarget}
+          onEstado={can('matriculas.cambiar_estado') ? handleEstado : undefined} pausada={!!rechazoTarget}
           puedeAsignar={can('leads.assign')} verFacturas={can('facturas.view')} />
       )}
       <PromptDialog
