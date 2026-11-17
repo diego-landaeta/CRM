@@ -161,8 +161,18 @@ describe('Resumen de ventas: solo lo de su campus', () => {
 });
 
 describe('Facturas: solo las de su campus', () => {
-  it('sin proyecto: la suya, la de ICTESS no', async () => {
+  // En main la lista de facturas todavía exige un campus (la vista «Todos» de
+  // facturas no ha llegado): sin proyecto, 400 y nada, que tampoco es fuga.
+  it('sin proyecto: nada de fuera (main exige el campus)', async () => {
     const r = await pedir(MIREIA, '/api/invoices');
+    if (r.status === 400) return;
+    expect(r.status).toBe(200);
+    expect(idsDe(r)).toContain(FACTURA_CEDIA);
+    expect(idsDe(r)).not.toContain(FACTURA_ICTESS);
+  });
+
+  it('con su campus: la suya, la de ICTESS no', async () => {
+    const r = await pedir(MIREIA, `/api/invoices?projectId=${CAMPUS_CEDIA}`);
     expect(r.status).toBe(200);
     expect(idsDe(r)).toContain(FACTURA_CEDIA);
     expect(idsDe(r)).not.toContain(FACTURA_ICTESS);
