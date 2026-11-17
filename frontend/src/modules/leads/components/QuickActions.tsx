@@ -6,6 +6,7 @@ import {
   WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash, Flag,
 } from '@phosphor-icons/react';
 import { fillTemplate } from '../hooks/useWhatsappTemplates';
+import { useUsuarioOpcional } from '@/contexts/AuthContext';
 import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 
 interface LeadLite {
@@ -59,13 +60,15 @@ export default function QuickActions({
   // chat no abria. Ahora si no hay numero utilizable no hay boton.
   const wa = telefonoParaWhatsapp(lead.telefono);
   const [waMenuOpen, setWaMenuOpen] = useState(false);
+  // {comercial} (#129): el chat se abre en el WhatsApp de quien pulsa.
+  const usuario = useUsuarioOpcional() as { nombre?: string | null } | null;
 
   // La plantilla se copia al portapapeles y la conversacion se abre DENTRO del
   // CRM. Antes se lanzaba wa.me en otra pestaña: se salia del CRM, no quedaba
   // registro, y con varias sesiones enlazadas abria la del navegador —que puede
   // ser la personal de quien pulsa— en vez de la del CRM.
   async function openWhatsappWithTemplate(tpl: WhatsappTemplate | null) {
-    const text = tpl ? fillTemplate(tpl.text, { lead, projectName }) : '';
+    const text = tpl ? fillTemplate(tpl.text, { lead, projectName, comercial: usuario?.nombre }) : '';
     if (text) { try { await navigator.clipboard?.writeText(text); } catch { /* sin portapapeles */ } }
     setWaMenuOpen(false);
     const destino = await abrirChatCrm({ leadId: lead.id, telefono: lead.telefono });

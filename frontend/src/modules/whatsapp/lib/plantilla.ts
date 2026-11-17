@@ -35,6 +35,16 @@ export interface DatosParaRellenar {
   plazas?: number | null;
   cierre?: string | null;
   inicio?: string | null;
+  /**
+   * Quien escribe (#129): «que se pongan los datos automáticos según el
+   * gestor», pidió Diego. Las plantillas del proceso firmaban con un
+   * «[tu nombre]» que cada gestora tecleaba a mano en cada mensaje.
+   *
+   * Es el nombre de la DUEÑA DEL NÚMERO desde el que sale el mensaje, no el de
+   * quien tenga la sesión del CRM: si un administrador echa una mano en el
+   * WhatsApp de una gestora, al otro lado escribe ella.
+   */
+  comercial?: string | null;
 }
 
 /** Los huecos que el CRM sabe rellenar, para enseñarlos donde se escribe. */
@@ -48,6 +58,7 @@ export const VARIABLES = [
   { clave: 'plazas', pista: 'las que quedan libres, contadas ahora' },
   { clave: 'cierre', pista: 'cuándo cierra la convocatoria' },
   { clave: 'inicio', pista: 'cuándo empieza' },
+  { clave: 'comercial', pista: 'el nombre de pila de quien escribe' },
 ] as const;
 
 /**
@@ -100,6 +111,8 @@ export function rellenar(
     plazas: plazas == null ? '' : String(plazas),
     cierre: comoFecha(prospecto.cierre),
     inicio: prospecto.inicio || '',
+    // De pila, como {nombre}: «Soy Ana, de ISEIE», no «Soy Ana García López».
+    comercial: (prospecto.comercial || '').trim().split(/\s+/)[0] || '',
   };
   // Con `\p{L}` y la bandera unicode: con `\w`, `{teléfono}` no se reconocía ni
   // como hueco.

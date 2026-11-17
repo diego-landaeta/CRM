@@ -68,9 +68,11 @@ para editar lo mismo es como se llega a dos formatos incompatibles. El
 Las `compartida` las ve todo el proyecto; las `personal`, solo quien las creó —
 ni siquiera un administrador.
 
-Variables soportadas en `text`: `{nombre}`, `{nombreCompleto}`, `{producto}`,
-`{proyecto}`, `{email}`, `{telefono}`. `fillTemplate(text, { lead, projectName })`
-hace el reemplazo case-insensitive.
+Variables soportadas en `text`: las de `VARIABLES` en
+`modules/whatsapp/lib/plantilla.ts` —`{nombre}`, `{nombreCompleto}`,
+`{producto}`, `{proyecto}`, `{email}`, `{telefono}`, `{comercial}`…—.
+`fillTemplate(text, { lead, projectName, comercial })` usa el mismo `rellenar`
+que el chat y la cola, sin distinguir mayúsculas ni tildes.
 
 `QuickActions` muestra el desplegable de plantillas + "Mensaje en blanco" +
 "Editar plantillas" (lleva a `/whatsapp/plantillas`). Abre la conversación

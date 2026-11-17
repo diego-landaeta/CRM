@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import client from '@/shared/api/client';
 import type { Lead } from '@/shared/types';
+import { rellenar } from '@/modules/whatsapp/lib/plantilla';
 
 // Las plantillas de WhatsApp, leídas de la base de datos.
 //
@@ -52,13 +53,23 @@ export function useWhatsappTemplates(projectId: number | string | null | undefin
 /** Subset de Lead que fillTemplate consume (laxo para aceptar tipos parciales). */
 export type FillTemplateLead = Pick<Partial<Lead>, 'nombre' | 'producto_nombre' | 'producto_interes' | 'email' | 'telefono'>;
 
-/** Reemplaza variables en el template con los datos del lead. */
-export function fillTemplate(text: string, { lead, projectName }: { lead?: FillTemplateLead | null; projectName?: string }): string {
-  return text
-    .replace(/\{nombre\}/gi, lead?.nombre?.split(' ')[0] || lead?.nombre || '')
-    .replace(/\{nombreCompleto\}/gi, lead?.nombre || '')
-    .replace(/\{producto\}/gi, lead?.producto_nombre || lead?.producto_interes || 'nuestros servicios')
-    .replace(/\{proyecto\}/gi, projectName || '')
-    .replace(/\{email\}/gi, lead?.email || '')
-    .replace(/\{telefono\}/gi, lead?.telefono || '');
+/**
+ * Reemplaza variables en el template con los datos del lead.
+ *
+ * Con el MISMO motor que el chat y la cola (`rellenar`), no con uno propio.
+ * Este tenía su lista de huecos a mano y se quedaba atrás cada vez que el otro
+ * aprendía uno: no rellenaba `{teléfono}` con tilde ni `{comercial}` (#129), y
+ * los copiaba tal cual al portapapeles.
+ */
+export function fillTemplate(
+  text: string,
+  { lead, projectName, comercial }: { lead?: FillTemplateLead | null; projectName?: string; comercial?: string | null },
+): string {
+  return rellenar(text, {
+    nombre: lead?.nombre,
+    email: lead?.email,
+    telefono: lead?.telefono,
+    producto: lead?.producto_nombre || lead?.producto_interes || 'nuestros servicios',
+    comercial,
+  }, projectName);
 }

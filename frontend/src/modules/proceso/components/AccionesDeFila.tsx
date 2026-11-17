@@ -38,6 +38,7 @@ import { useMemo, useState } from 'react';
 import { Copy, Check, CircleNotch } from '@phosphor-icons/react';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '@/modules/whatsapp/lib/plantilla';
 import type { PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
+import { useUsuarioOpcional } from '@/contexts/AuthContext';
 
 /** Lo que hace falta de la fila. Sirve igual para la cola y para el repaso. */
 export interface FilaAtendible {
@@ -70,6 +71,9 @@ export default function AccionesDeFila({
   const [copiando, setCopiando] = useState(false);
   const [copiado, setCopiado] = useState(false);
 
+  // {comercial} (#129): quien copia es quien lo va a mandar.
+  const usuario = useUsuarioOpcional() as { nombre?: string | null } | null;
+
   const datos: DatosParaRellenar = useMemo(() => ({
     nombre: fila.lead_nombre,
     email: fila.lead_email,
@@ -77,7 +81,8 @@ export default function AccionesDeFila({
     producto: fila.producto,
     inicio: fila.fecha_inicio_texto,
     cierre: fila.fecha_cierre_convocatoria,
-  }), [fila]);
+    comercial: usuario?.nombre ?? null,
+  }), [fila, usuario?.nombre]);
 
   /**
    * El mensaje de este paso, solo si sale entero.

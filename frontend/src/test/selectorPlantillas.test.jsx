@@ -174,3 +174,26 @@ describe('elegir por paso del proceso', () => {
     expect(screen.queryByText('Día 1 · Saludo')).toBeNull();
   });
 });
+
+describe('{comercial} en el chat (#129)', () => {
+  it('en el WhatsApp de otra persona firma ELLA, no quien tiene la sesión', async () => {
+    // Si un administrador echa una mano en el WhatsApp de una gestora, al otro
+    // lado escribe ella: el mensaje sale de su número.
+    plantillas.mockResolvedValue({ success: true, data: [
+      { id: 9, label: 'Día X · Seguimiento', body: 'Hola {nombre}, soy {comercial}.', ambito: 'compartida' },
+    ] });
+    const alElegir = vi.fn();
+    montar({ alElegir, usuarioId: 5, nombreSesion: 'Lucía Pérez' });
+    await waitFor(() => expect(screen.getByText(/Hola Marta, soy Lucía\./)).toBeTruthy());
+    fireEvent.click(screen.getByText('Día X · Seguimiento'));
+    expect(alElegir.mock.calls[0][0]).toBe('Hola Marta, soy Lucía.');
+  });
+
+  it('lo que trae quien llama manda', async () => {
+    plantillas.mockResolvedValue({ success: true, data: [
+      { id: 9, label: 'Firma', body: 'Soy {comercial}.', ambito: 'compartida' },
+    ] });
+    montar({ datos: { ...MARTA, comercial: 'Rocío' }, nombreSesion: 'Lucía Pérez' });
+    await waitFor(() => expect(screen.getByText('Soy Rocío.')).toBeTruthy());
+  });
+});

@@ -5,6 +5,7 @@ import { copyToClipboard } from '@/shared/lib/clipboard';
 import { toast } from '@/shared/hooks/useToast';
 import { whatsappApi, type PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '@/modules/whatsapp/lib/plantilla';
+import { useUsuarioOpcional } from '@/contexts/AuthContext';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
 
 /**
@@ -40,7 +41,7 @@ export default function PlantillaDelPaso({
   projectId,
   issuerId = null,
   pasoClave,
-  datos,
+  datos: datosDelProspecto,
   nombreProyecto,
   alCopiar,
   alCorreo,
@@ -75,6 +76,14 @@ export default function PlantillaDelPaso({
   // Cuál se acaba de copiar, para cambiarle el botón un momento. Sin esa
   // respuesta no se sabe si el clic ha hecho algo, y se copia dos veces.
   const [copiada, setCopiada] = useState<number | null>(null);
+
+  // {comercial} (#129): aquí copia quien tiene la sesión, y es quien lo va a
+  // mandar desde su WhatsApp. Lo que ya traiga quien llama manda.
+  const usuario = useUsuarioOpcional() as { nombre?: string | null } | null;
+  const datos: DatosParaRellenar = useMemo(() => ({
+    ...datosDelProspecto,
+    comercial: datosDelProspecto.comercial ?? usuario?.nombre ?? null,
+  }), [datosDelProspecto, usuario?.nombre]);
 
   // Sube uno al crear una plantilla: es la forma de volver a pedir la lista sin
   // duplicar la peticion ni inventarse la fila a mano.

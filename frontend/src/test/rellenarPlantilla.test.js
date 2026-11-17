@@ -90,3 +90,21 @@ describe('los datos de su formación', () => {
     expect(rellenar('{cierre}', { ...marta, cierre: '2026-01-01' })).toBe('1 de enero');
   });
 });
+
+describe('{comercial}: firma quien escribe (#129)', () => {
+  // Las plantillas del proceso firmaban con «[tu nombre]», que cada gestora
+  // tecleaba a mano en cada mensaje. La migración 281 lo cambia por {comercial}.
+  it('sale el nombre de pila de quien escribe, como {nombre}', () => {
+    expect(rellenar('Soy {comercial}, de {proyecto}.', { ...marta, comercial: 'Ana García López' }, 'ISEIE'))
+      .toBe('Soy Ana, de ISEIE.');
+  });
+
+  it('sin saber quién escribe, avisa en vez de mandar «Soy , de…»', () => {
+    expect(huecosSinRellenar('Soy {comercial}', { ...marta, comercial: null })).toEqual(['comercial']);
+    expect(huecosSinRellenar('Soy {comercial}', { ...marta, comercial: '   ' })).toEqual(['comercial']);
+  });
+
+  it('está en la lista que se ofrece para insertar: la que se enseña es la que rellena', () => {
+    expect(VARIABLES.map((v) => v.clave)).toContain('comercial');
+  });
+});

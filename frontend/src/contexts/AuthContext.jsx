@@ -352,3 +352,14 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
+
+/**
+ * Quien tiene la sesion abierta, o null si no hay proveedor.
+ *
+ * Para las piezas pequeñas que solo quieren el nombre de quien escribe —el
+ * hueco {comercial} de las plantillas (#129)— y que se montan sueltas en las
+ * pruebas: con `useAuth` reventarian fuera del proveedor.
+ */
+export function useUsuarioOpcional() {
+  return useContext(AuthContext)?.user ?? null;
+}

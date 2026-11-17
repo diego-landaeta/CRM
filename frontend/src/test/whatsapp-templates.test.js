@@ -55,3 +55,15 @@ describe('fillTemplate', () => {
     expect(r).toBe('Hola , ');
   });
 });
+
+describe('fillTemplate usa el mismo motor que el chat (#129)', () => {
+  it('rellena {comercial} con el nombre de pila de quien pulsa', () => {
+    const r = fillTemplate('Soy {comercial}', { lead: { nombre: 'Maria' }, projectName: 'X', comercial: 'Ana García' });
+    expect(r).toBe('Soy Ana');
+  });
+
+  it('y {teléfono} con tilde, que antes se copiaba tal cual', () => {
+    const r = fillTemplate('Mi número: {teléfono}', { lead: { telefono: '+34600111222' }, projectName: 'X' });
+    expect(r).toBe('Mi número: +34600111222');
+  });
+});

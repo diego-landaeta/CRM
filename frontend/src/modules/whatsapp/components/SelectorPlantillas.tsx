@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MagnifyingGlass, WarningCircle, X, ImageSquare, Plus } from '@phosphor-icons/react';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plantilla';
+import { useUsuarioOpcional } from '@/contexts/AuthContext';
 
 /**
  * Elegir una plantilla SIN salir del chat.
@@ -48,7 +49,7 @@ const plano = (s: string) =>
 export default function SelectorPlantillas({
   projectId,
   issuerId = null,
-  datos,
+  datos: datosDelProspecto,
   nombreProyecto,
   alElegir,
   alCerrar,
@@ -94,6 +95,15 @@ export default function SelectorPlantillas({
   const [nombreNueva, setNombreNueva] = useState('');
   const [cuerpoNuevo, setCuerpoNuevo] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  // {comercial} (#129): al otro lado escribe la DUEÑA DEL NÚMERO. Si es el
+  // WhatsApp de otra persona viene en `nombreSesion`; si es el mío, soy yo. Lo
+  // que ya traiga quien llama manda sobre las dos.
+  const usuario = useUsuarioOpcional() as { nombre?: string | null } | null;
+  const datos: DatosParaRellenar = useMemo(() => ({
+    ...datosDelProspecto,
+    comercial: datosDelProspecto.comercial ?? nombreSesion ?? usuario?.nombre ?? null,
+  }), [datosDelProspecto, nombreSesion, usuario?.nombre]);
 
   useEffect(() => {
     let vivo = true;
