@@ -118,6 +118,7 @@ import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
@@ -528,6 +529,8 @@ if (process.env.NODE_ENV !== 'test') {
     if (facturasColaboradorActivas()) startFacturasColaboradorAvisosScheduler();
     // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
     startCopiaDiariaScheduler();
+    // Apagada de serie (BREVO_BLOQUEADOS_ACTIVO): apagada no arranca ni pregunta a Brevo.
+    startBrevoBloqueadosScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
