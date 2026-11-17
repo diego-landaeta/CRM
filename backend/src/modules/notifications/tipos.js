@@ -212,6 +212,16 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
     descripcion: 'El Moodle de un campus no responde o su token ya no vale',
   },
+  // Matrícula automática (#767): a administración del campus (sus admins y los super admin).
+  // Una por alumno: cada una es una matrícula que hacer o que arreglar.
+  matricula_moodle_lista: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle lista', agrupa: false,
+    descripcion: 'Un alumno ya ha pagado, ha llegado su día y toca matricularle en Moodle',
+  },
+  matricula_moodle_fallo: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
+    descripcion: 'No se pudo preparar la matrícula de un alumno en Moodle (con el motivo)',
+  },
   // MCP (Diego, 22/10): tu Claude consulta con la URL sola, conectado como antes
   // de la #326, y el CRM no le da datos. Hay que conectarlo una vez. Como mucho
   // uno al día por URL (mcp.conexiones.js).
