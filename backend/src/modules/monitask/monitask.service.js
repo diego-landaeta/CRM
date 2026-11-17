@@ -55,11 +55,14 @@ export function redirectUri(env = process.env) {
   return base ? `${base}/api/monitask/oauth/callback` : null;
 }
 
+/** La pantalla de Integraciones en el frontal de este CRM. */
+export const RUTA_INTEGRACIONES = '/finanzas/integraciones';
+
 /** A dónde vuelve el navegador al terminar el OAuth: Integraciones, con el resultado. */
 export function urlDeVuelta(resultado, motivo = null, env = process.env) {
   const base = String(env.CRM_BASE_URL || '').trim().replace(/\/+$/, '');
   const qs = new URLSearchParams({ monitask: resultado, ...(motivo ? { motivo } : {}) });
-  return `${base}/finanzas/integraciones?${qs}`;
+  return `${base}${RUTA_INTEGRACIONES}?${qs}`;
 }
 
 // ─── La conexión ────────────────────────────────────────────────────────────
