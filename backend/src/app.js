@@ -70,6 +70,7 @@ import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 import soporteModule from './modules/soporte/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
@@ -116,6 +117,7 @@ import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js'
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
+import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
@@ -353,6 +355,8 @@ const ALL_MODULES = [
   { name: 'mcp', mod: mcpModule },
   { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
+  // El alumno confirma los datos de su diploma antes de emitirlo (#768). Apagado de serie.
+  { name: 'diploma-confirmacion', mod: diplomaConfirmacionModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
@@ -524,6 +528,7 @@ if (process.env.NODE_ENV !== 'test') {
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startFacturaAutomaticaScheduler();
+    startDiplomaConfirmacionScheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
