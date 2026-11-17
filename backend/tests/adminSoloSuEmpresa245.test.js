@@ -17,6 +17,7 @@ import jwt from 'jsonwebtoken';
  * tres deja de recortar —en el controlador o en su consulta— se ponga en rojo.
  *
  * El resumen de ventas cuelga de `/api/ventas` (el prefijo del módulo `sales`).
+ * Se añade la serie de Ventas, que dejaba escapar el historial (ver abajo).
  *
  *   npx vitest run tests/adminSoloSuEmpresa245.test.js
  */
@@ -178,8 +179,35 @@ describe('Facturas: solo las de su campus', () => {
   });
 });
 
-describe('un campus de la otra empresa, pedido a mano: 403 en las tres', () => {
-  it.each(['/api/tutores', '/api/ventas/resumen', '/api/invoices'])('%s', async (ruta) => {
+/*
+ * La serie de Ventas (la gráfica y su comparación) trae tres tramos: el
+ * periodo, el anterior y el historial mes a mes. El periodo se recortaba, pero
+ * el anterior y el historial se pedían sin la lista de campus: con «Todos», el
+ * historial de una admin sumaba los campus de TODAS las empresas.
+ */
+describe('Serie de ventas: también el historial, solo lo suyo', () => {
+  const ventasDelHistorial = (r) => r.body.data.meses.reduce((a, m) => a + m.ventas, 0);
+
+  it('sin proyecto: su venta y nada más, en el periodo y en el historial', async () => {
+    const r = await pedir(MIREIA, '/api/ventas/serie');
+    expect(r.status).toBe(200);
+    expect(r.body.data.totales.ventas).toBe(1);
+    expect(ventasDelHistorial(r)).toBe(1);
+  });
+
+  it('con el issuerId de la otra empresa: cero también en el historial', async () => {
+    const r = await pedir(MIREIA, `/api/ventas/serie?issuerId=${ICTESS}`);
+    expect(r.body.data.totales.ventas).toBe(0);
+    expect(ventasDelHistorial(r)).toBe(0);
+  });
+
+  it('el super admin, con esa empresa, sí la ve', async () => {
+    expect(ventasDelHistorial(await pedir(SUPER, `/api/ventas/serie?issuerId=${ICTESS}`))).toBe(1);
+  });
+});
+
+describe('un campus de la otra empresa, pedido a mano: 403', () => {
+  it.each(['/api/tutores', '/api/ventas/resumen', '/api/ventas/serie', '/api/invoices'])('%s', async (ruta) => {
     expect((await pedir(MIREIA, `${ruta}?projectId=${CAMPUS_ICTESS}`)).status).toBe(403);
   });
 });
