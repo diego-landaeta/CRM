@@ -94,6 +94,7 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
+import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
@@ -510,6 +511,8 @@ if (process.env.NODE_ENV !== 'test') {
     startPaypalCobrosSyncScheduler();
     // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
     startMonitaskSyncScheduler();
+    // Disputas de Stripe (#396): traerlas de cada cuenta y avisar a los admins.
+    startStripeDisputasScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
