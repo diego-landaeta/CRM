@@ -226,12 +226,12 @@ export default function MatriculasPage() {
   return (
     <div className="space-y-5 pb-8">
       <PageHeader
-        title="Matrículas"
+        title="Solicitud de admisión"
         subtitle={enDiplomas
           ? 'Diplomas: lo que piden los alumnos al terminar, y los diplomas emitidos, enviados y revocados'
           : enCertificaciones
           ? 'Certificaciones: quien termina la formación se aprueba aquí, y Certifex emite su título'
-          : `${stats.total || 0} matrículas en ${campusDelServidor.find((c) => String(c.id) === filtros.campusId)?.nombre || nombreAmbito}`}
+          : `${stats.total || 0} ${stats.total === 1 ? 'solicitud' : 'solicitudes'} en ${campusDelServidor.find((c) => String(c.id) === filtros.campusId)?.nombre || nombreAmbito}`}
       />
 
       <div className="flex overflow-x-auto border-b border-border [&>button]:shrink-0">
@@ -349,7 +349,7 @@ export default function MatriculasPage() {
           // Los textos de Diego (#199): sin filtros, cómo empezar; con filtros,
           // decirlo y dejar quitarlos.
           hayFiltros ? (
-            <EmptyState icon={GraduationCap} title="Ninguna matrícula con estos filtros" description={undefined}
+            <EmptyState icon={GraduationCap} title="Ninguna solicitud con estos filtros" description={undefined}
               action={(
                 <button type="button" onClick={quitarFiltros}
                   className="h-9 px-3 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40">
@@ -406,7 +406,7 @@ export default function MatriculasPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setDetail(m)}
-                          aria-label="Ver detalle de matrícula"
+                          aria-label="Ver la solicitud de admisión"
                           className="p-1.5 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
                         >
                           <Eye size={14} />
@@ -441,7 +441,7 @@ export default function MatriculasPage() {
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => setDetail(m)}
-                      aria-label="Ver detalle de matrícula"
+                      aria-label="Ver la solicitud de admisión"
                       className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
                     >
                       <Eye size={14} />
@@ -476,7 +476,7 @@ export default function MatriculasPage() {
       )}
       <PromptDialog
         open={!!rechazoTarget}
-        title="Rechazar matrícula"
+        title="Rechazar la solicitud"
         message="Indica el motivo del rechazo para que el solicitante pueda recibirlo."
         placeholder="Ej: documentación incompleta o ilegible…"
         multiline
