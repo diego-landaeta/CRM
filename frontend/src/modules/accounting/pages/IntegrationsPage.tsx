@@ -13,9 +13,10 @@ import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
 import { esProyectoIA, PROYECTOS_IA } from '@/shared/lib/proyectosIA';
-import { PLUGIN_MOODLE } from '@/shared/lib/pluginMoodle';
+import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -95,6 +96,10 @@ export default function IntegrationsPage() {
   // empresa o de un campus.
   const { can } = usePermission();
   const verSalud = can('integrations.salud');
+  // Links de pago (#680): si el servidor los tiene encendidos (`/auth/me`) y
+  // quien mira puede poner la clave o las reglas.
+  const linksPago = useLinksPagoEncendidos()
+    && (can('links_pago.configurar') || can('integrations.edit'));
 
   return (
     <div className="space-y-5 pb-8">
@@ -153,11 +158,12 @@ export default function IntegrationsPage() {
       ) : (
         <div className="space-y-5">
           <StripeCard projectId={pid} />
-          {/* Links de pago (#680, fase 1): la clave de escritura, aparte de la
-              de lectura de arriba. Solo en /testeo y local hasta que Diego lo apruebe. */}
+          {/* Links de pago (#680): la clave de escritura, aparte de la de
+              lectura de arriba. Sale si el servidor los tiene encendidos: en
+              producción, con LINKS_PAGO_EN_PRODUCCION=1. */}
           {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
               enseñaba un momento el descuento del campus anterior. */}
-          {SOLO_EN_PRUEBAS && <StripeLinksCard key={pid} projectId={pid} />}
+          {linksPago && <StripeLinksCard key={pid} projectId={pid} />}
           {/* Supabase solo en los proyectos IA: es donde vive su app. En un
               proyecto CRM la tarjeta no diría nada. */}
           {esIA && <SupabaseCard projectId={pid} />}
@@ -548,7 +554,9 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
             Links de pago
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            {SOLO_EN_PRUEBAS && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            )}
           </h3>
           <p className="text-xs text-muted-foreground">
             La clave con la que el CRM <strong>creará</strong> links de pago en la cuenta de Stripe de este campus.
@@ -1027,6 +1035,8 @@ function PaypalCard({ projectId }: { projectId: number }) {
 // config_public.url y el token, cifrado, como las demás claves. Con él, el CRM
 // comprueba que el correo de cada tutor es usuario del campus.
 function MoodleCard({ projectId }: { projectId: number }) {
+  // El plugin del CRM: en /testeo y en local, o si el servidor lo tiene aprobado (#850).
+  const pluginMoodle = usePluginMoodle();
   const [data, setData] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -1123,9 +1133,9 @@ function MoodleCard({ projectId }: { projectId: number }) {
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#679). Solo en
-            pruebas hasta aprobarlo (`shared/lib/pluginMoodle`): en /crm, como siempre. */}
-        {PLUGIN_MOODLE && (
+        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#679). En /crm,
+            solo con PLUGIN_MOODLE_EN_PRODUCCION=1 en el servidor (`shared/lib/pluginMoodle`). */}
+        {pluginMoodle && (
           <>
             <PluginDelCrm projectId={projectId} alConectar={load} />
             <p className="text-xs font-semibold text-muted-foreground">O, sin el plugin, a mano:</p>
