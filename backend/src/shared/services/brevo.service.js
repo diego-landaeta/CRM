@@ -6,6 +6,7 @@ import { yaSeEnvio, registrar } from './email-log.service.js';
 import { dejaPasar, porQueSeParo } from './email-freno.service.js';
 import { guardarEnEnviados, hayBuzon } from './copia-en-enviados.service.js';
 import { mandarDesdeBuzon, saleDelBuzon } from './correo-buzon.service.js';
+import { marcaDeLaPersona as marcaDeLaPersonaComun, remitenteDe } from './marca.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
@@ -286,23 +287,15 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 // ============================================================
 
 /**
- * La marca con la que le llega un correo a una persona del equipo: su primer
- * campus activo, mejor el que tiene remitente «no contestar» (#177). Si no tiene
- * ninguno, la del CRM. Da el logo de la cabecera y, por su id, la cuenta y el
- * remitente de esa marca en Brevo.
+ * La marca con la que le llega un correo a una persona del equipo: la de sus
+ * campus (`marca.service.js`). Un campus, el suyo; varios de una empresa, la
+ * EMPRESA («CEDIA»), y no el primero de ellos con remitente —que en CEDIA era
+ * Fono Aprende y le daba la bienvenida «al CRM de Fono Aprende» a quien trabaja
+ * para los ocho (11/11)—; empresas mezcladas o ninguna, la del CRM.
  */
 async function marcaDeLaPersona(email) {
   try {
-    const { rows } = await query(
-      `SELECT p.id, p.nombre, p.slug, p.logo_url, p.emoji
-         FROM users u
-         JOIN user_projects up ON up.user_id = u.id
-         JOIN projects p ON p.id = up.project_id AND p.active = true
-        WHERE lower(u.email) = lower($1)
-        ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1`,
-      [email],
-    );
-    return rows[0] || null;
+    return await marcaDeLaPersonaComun({ email });
   } catch {
     return null;
   }
@@ -332,7 +325,9 @@ export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, ba
     subject,
     htmlContent,
     textContent,
-    projectId: marca?.id ?? null,
+    // La cuenta y el nombre del remitente, los de la marca: con la de una
+    // empresa, la cuenta del CRM y «CEDIA» como nombre.
+    ...remitenteDe(marca),
     tags: ['welcome-user', 'crm'],
   });
 }
@@ -387,6 +382,29 @@ export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
     ],
   });
   return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
+}
+
+/**
+ * El código para cambiar el correo (#211), a la dirección NUEVA: llegar y
+ * meterlo es lo que demuestra que existe y es de esa persona. Caduca a los
+ * `minutos` minutos.
+ */
+export async function sendCodigoCambioCorreoEmail({ nombre, a, codigo, minutos = 15 }) {
+  const P = plantilla;
+  const subject = `${codigo} es tu código para cambiar el correo del CRM`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Confirma tu nuevo correo',
+    saludo: nombre,
+    resumen: `Tu código: ${codigo}`,
+    bloques: [
+      P.parrafo('Has pedido entrar al CRM con esta dirección. Para confirmarlo, escribe este código en el CRM:'),
+      P.nota(`<strong style="font-size:24px;letter-spacing:4px">${P.esc(codigo)}</strong>`),
+      P.parrafo(`Caduca en ${minutos} minutos. Hasta que lo metas, sigues entrando con tu correo de siempre.`),
+      letraPequena('Si no lo has pedido tú, no hagas nada: sin el código no cambia nada.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: a, name: nombre }], subject, htmlContent, textContent, tags: ['codigo-cambio-correo', 'crm'] });
 }
 
 // Con la plantilla común y la marca del campus del prospecto (Diego, 10/10).

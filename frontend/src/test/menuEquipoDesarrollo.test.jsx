@@ -18,7 +18,7 @@ const COLABORADOR = ['tasks.view_own', 'tasks.create', 'tasks.edit', 'facturas_c
 describe('menú · equipo de desarrollo', () => {
   it('un colaborador ve Tareas, «Mi factura» y sus preferencias; nada de prospectos, ventas ni finanzas', () => {
     const ve = loQueVe(['colaborador'], { role: 'colaborador' }, COLABORADOR);
-    expect(ve).toEqual(expect.arrayContaining(['/tareas', '/mi-factura', '/preferencias']));
+    expect(ve).toEqual(expect.arrayContaining(['/tareas', '/tareas/historial', '/mi-factura', '/preferencias']));
     for (const no of ['/prospectos', '/finanzas/ventas', '/finanzas/facturas', '/meta-ads', '/tareas/revisar', '/tareas/configurar']) {
       expect(ve, no).not.toContain(no);
     }
@@ -45,6 +45,34 @@ describe('menú · equipo de desarrollo', () => {
   it('una gestora con «Meta Ads (ver)» también la ve; sin él, no', () => {
     expect(loQueVe(['gestor'], { role: 'gestor' }, ['meta_ads.view'])).toContain('/meta-ads');
     expect(loQueVe(['gestor'], { role: 'gestor' }, [])).not.toContain('/meta-ads');
+  });
+});
+
+describe('«Historial de tareas»: cada uno con tablero lo tiene (Diego, 11/11/2026)', () => {
+  // Quien tiene «Mi tablero» tiene también su historial, sin abrir permisos nuevos:
+  // los dos piden «Ver su tablero» (tasks.view_own).
+  const PERFILES = {
+    colaborador: [['colaborador'], { role: 'colaborador' }, COLABORADOR],
+    'tutor con tablero': [['tutor'], { role: 'tutor' }, ['tasks.view_own', 'tasks.edit']],
+    'gestora + tutor': [['gestor', 'tutor'], { role: 'gestor', roles_extra: ['tutor'] }, ['tasks.view_own', 'tasks.edit']],
+    'gestora con «Ver su tablero»': [['gestor'], { role: 'gestor' }, ['tasks.view_own']],
+    'project manager con «Ver su tablero»': [['project_manager'], { role: 'project_manager' }, ['tasks.view_own']],
+    admin: [['admin'], { role: 'admin' }, ['tasks.view_own', 'tasks.view_all', 'tasks.manage']],
+  };
+  for (const [nombre, [roles, user, permisos]] of Object.entries(PERFILES)) {
+    it(`${nombre}: «Mi tablero» y «Historial de tareas»`, () => {
+      const ve = loQueVe(roles, user, permisos);
+      expect(ve).toContain('/tareas');
+      expect(ve).toContain('/tareas/historial');
+    });
+  }
+
+  it('sin «Ver su tablero», ni el tablero ni el historial', () => {
+    for (const [roles, user] of [[['gestor'], { role: 'gestor' }], [['tutor'], { role: 'tutor' }]]) {
+      const ve = loQueVe(roles, user, []);
+      expect(ve).not.toContain('/tareas');
+      expect(ve).not.toContain('/tareas/historial');
+    }
   });
 });
 

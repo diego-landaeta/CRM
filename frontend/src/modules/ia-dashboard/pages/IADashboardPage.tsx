@@ -6,6 +6,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { useStripeMonitor } from '../hooks/useStripeMonitor';
 import MetricLabel from '@/shared/components/ui/MetricLabel';
 import PorQueSeVan from '../components/PorQueSeVan';
+import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
 import useCountUp from '@/shared/hooks/useCountUp';
 import {
   CurrencyEur, Users, TrendDown, ArrowUp, ArrowDown,
@@ -198,7 +199,7 @@ export default function IADashboardPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mb-4">Ultimos 12 meses</p>
+              <p className="text-xs text-muted-foreground mb-4">Últimos 12 meses</p>
               <ResponsiveContainer width="100%" height={220} minHeight={200}>
                 <LineChart data={metrics.evolution12Months} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" />
@@ -263,11 +264,11 @@ export default function IADashboardPage() {
           </div>
 
           {/* Por que se van (#44). Va al final y no arriba: primero se mira
-              cuanto entra, y esto explica lo que se pierde. */}
-          <PorQueSeVan
+              cuanto entra, y esto explica lo que se pierde. Solo en pruebas. */}
+          {PROYECTOS_IA && <PorQueSeVan
             datos={metrics.porQueSeVan}
             comentarios={metrics.comentariosDeBaja}
-          />
+          />}
         </>
       )}
     </div>

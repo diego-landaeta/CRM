@@ -2,6 +2,7 @@ import { z } from 'zod';
 import * as model from './actividad.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { personaDelInforme } from '../../shared/utils/roles.js';
 
 const FECHA = z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Tiene que ser una fecha');
 
@@ -61,11 +62,12 @@ export async function listar(req, res, next) {
       const malos = tiposPedidos.filter((t) => !model.TIPOS.includes(t));
       if (malos.length) throw new AppError(`Tipo de actividad desconocido: ${malos.join(', ')}`, 400, 'VALIDATION_ERROR');
     }
-    const rol = req.user?.role;
-    const jefe = ['admin', 'superadmin', 'soporte'].includes(rol);
+    // Quien manda, todo; una gestora, lo suyo; quien lleva un equipo comercial
+    // (09/11/2026), lo de su equipo.
+    const asesoraId = await personaDelInforme(req.user, null, { jefes: ['admin', 'superadmin', 'soporte'] });
     const data = await model.actividadReciente({
       ...(await proyectosDelAmbito(req)),
-      asesoraId: jefe ? null : (req.user?.userId || -1),
+      asesoraId,
       desde: desde || inicioDeHoy(),
       antes: before || null,
       limite: limit,

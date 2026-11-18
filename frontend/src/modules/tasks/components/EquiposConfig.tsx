@@ -26,7 +26,7 @@ export function EquiposConfig() {
   const [equipos, setEquipos] = useState<Team[]>([]);
   const [empresas, setEmpresas] = useState<{ id: number; razon_social: string }[]>([]);
   const [abierto, setAbierto] = useState<number | null>(null);
-  const [nuevo, setNuevo] = useState({ issuer_id: 0, name: '', color: 'blue' });
+  const [nuevo, setNuevo] = useState<{ issuer_id: number; name: string; color: string; tipo: 'colaboradores' | 'tutores' }>({ issuer_id: 0, name: '', color: 'blue', tipo: 'colaboradores' });
 
   const recargar = useCallback(async () => {
     try {
@@ -42,7 +42,7 @@ export function EquiposConfig() {
     e.preventDefault();
     if (!nuevo.name.trim() || !nuevo.issuer_id) return;
     try {
-      const t = await tasksApi.createTeam({ issuer_id: nuevo.issuer_id, name: nuevo.name.trim(), color: nuevo.color });
+      const t = await tasksApi.createTeam({ issuer_id: nuevo.issuer_id, name: nuevo.name.trim(), color: nuevo.color, tipo: nuevo.tipo });
       toast({ title: `Equipo «${t.name}» creado`, description: 'Con «Encargado» (nivel 2) y «Miembro» (nivel 1).' });
       setNuevo((n) => ({ ...n, name: '' }));
       setAbierto(t.id);
@@ -73,6 +73,13 @@ export function EquiposConfig() {
           <label className="block text-xs font-semibold mb-1">Color</label>
           <Select<string> value={nuevo.color} onChange={(v) => setNuevo({ ...nuevo, color: v })} options={COLORES} ariaLabel="Color" size="sm" className="w-32" />
         </div>
+        {/* De tutores (04/11/2026): a un equipo de tutores se puede meter a tutores; se elige al crearlo. */}
+        <div>
+          <label className="block text-xs font-semibold mb-1">Tipo</label>
+          <Select<'colaboradores' | 'tutores'> value={nuevo.tipo} onChange={(v) => setNuevo({ ...nuevo, tipo: v })}
+            options={[{ value: 'colaboradores', label: 'Colaboradores' }, { value: 'tutores', label: 'Tutores' }]}
+            ariaLabel="Tipo de equipo" size="sm" className="w-36" />
+        </div>
         <Button type="submit" size="sm" className="h-9" disabled={!nuevo.name.trim() || !nuevo.issuer_id}>
           <Plus size={14} className="mr-1" /> Crear
         </Button>
@@ -90,6 +97,7 @@ export function EquiposConfig() {
                 <span className={`w-2.5 h-2.5 rounded-full ${boardColor(t.color).dot}`} aria-hidden />
                 <span className="font-semibold truncate">{t.name}</span>
                 <span className="text-xs text-muted-foreground truncate">· {t.empresa}</span>
+                {t.tipo === 'tutores' && <span className="text-[10px] uppercase font-semibold text-muted-foreground">Tutores</span>}
                 {!t.is_active && <span className="text-[10px] uppercase font-semibold text-muted-foreground">Archivado</span>}
               </span>
               <span className="text-xs text-muted-foreground flex items-center gap-1"><Users size={13} /> {t.miembros}</span>
@@ -139,6 +147,9 @@ function Detalle({ equipo, alCambiar }: { equipo: Team; alCambiar: () => void })
           {equipo.is_active ? <><Archive size={14} className="mr-1" /> Archivar</> : <><ArrowCounterClockwise size={14} className="mr-1" /> Recuperar</>}
         </Button>
       </div>
+
+      {/* La casilla «Equipo de programación» (CRM#707) ya no está (11/11/2026):
+          quién cierra una tarea no lo dice su equipo, sino si tiene supervisor. */}
 
       <div className="space-y-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cargos (de más a menos nivel)</h4>

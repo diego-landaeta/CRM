@@ -145,6 +145,8 @@ export const vistaSchema = z.object({
   colaboradorId: z.coerce.number().int().positive().max(2147483647).optional(),
   periodo: mes.optional(),
   estado: z.enum(['sin_enviar', 'enviado', 'abierto', 'recibida', 'anulada', 'no_enviado', 'caducado', 'no_cuadra']).optional(),
+  // El buscador (Ctrl K, #591): número de factura o de recepción, colaborador o su correo.
+  q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100).optional(),
 });
 
 export const costePorCampusSchema = z.object({ periodo: mes, issuerId: z.coerce.number().int().positive().max(2147483647).optional() });
@@ -179,4 +181,18 @@ export const pagarSchema = z.object({
 
 export const deshacerPagoSchema = z.object({
   motivo: z.string().trim().min(3, 'Escribe por qué se deshace el pago').max(1000, 'El motivo es demasiado largo: 1000 caracteres como mucho'),
+});
+
+// Su opinión del pago, desde el correo de «Factura pagada» (Diego, 04/11): de 1 a 5
+// y un comentario, los dos opcionales (pero al menos uno, lo mira el servicio).
+export const opinionDelPagoSchema = z.object({
+  valoracion: z.coerce.number({ invalid_type_error: 'La valoración va de 1 a 5' })
+    .int('La valoración va de 1 a 5').min(1, 'La valoración va de 1 a 5').max(5, 'La valoración va de 1 a 5')
+    .nullable().optional(),
+  comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
+});
+
+// «No lo he recibido» (Diego, 04/11): el comentario es opcional («me llegó otra cantidad»).
+export const noRecibidoSchema = z.object({
+  comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
 });

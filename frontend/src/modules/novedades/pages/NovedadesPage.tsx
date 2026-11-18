@@ -53,7 +53,12 @@ export default function NovedadesPage() {
     traerEnvios(version).then(setEnvios);
   }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const v = useMemo(() => datos?.versiones.find((x) => x.version === version) || null, [datos, version]);
+  // Una versión sin `grupos` o sin `arreglos` (la 2.2.0 no trae arreglos) se lee
+  // como vacía: antes `v.arreglos.length` tumbaba la pantalla entera («Algo se ha roto»).
+  const v = useMemo(() => {
+    const x = datos?.versiones.find((y) => y.version === version);
+    return x ? { ...x, grupos: x.grupos ?? [], arreglos: x.arreglos ?? [] } : null;
+  }, [datos, version]);
   const total = v ? v.grupos.reduce((s, g) => s + g.items.length, 0) : 0;
   const alEquipo = envios.find((e) => e.alcance === 'equipo');
 
@@ -135,7 +140,7 @@ export default function NovedadesPage() {
           <div>
             <p className="text-base leading-relaxed">{v.intro}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {total} novedades en {v.grupos.length} apartados y {v.arreglos.length} arreglos. Pulsa 1–{Math.min(v.grupos.length, 9)} para saltar a cada apartado y 0 para los arreglos.
+              {total} novedades en {v.grupos.length} apartados{v.arreglos.length > 0 ? ` y ${v.arreglos.length} arreglos` : ''}. Pulsa 1–{Math.min(v.grupos.length, 9)} para saltar a cada apartado{v.arreglos.length > 0 ? ' y 0 para los arreglos' : ''}.
             </p>
           </div>
         </div>
@@ -184,13 +189,14 @@ export default function NovedadesPage() {
                 </a>
               </li>
             ))}
-            <li>
+            {/* Una versión sin arreglos (la 2.2.0) no enseña el apartado vacío. */}
+            {v.arreglos.length > 0 && (<li>
               <a href="#arreglos" className="flex items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-2 text-sm hover:bg-muted">
                 <kbd className="rounded border border-border px-1.5 text-[11px] text-muted-foreground">0</kbd>
                 <span className="flex-1">Arreglos</span>
                 <span className="text-xs text-muted-foreground">{v.arreglos.length}</span>
               </a>
-            </li>
+            </li>)}
           </ol>
         </nav>
 
@@ -215,7 +221,7 @@ export default function NovedadesPage() {
             </section>
           ))}
 
-          <section id="arreglos" className="scroll-mt-4">
+          {v.arreglos.length > 0 && (<section id="arreglos" className="scroll-mt-4">
             <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><Wrench size={18} /> Arreglos</h2>
             <ul className="space-y-2 rounded-xl border border-border bg-card p-4">
               {v.arreglos.map((a) => (
@@ -225,7 +231,7 @@ export default function NovedadesPage() {
                 </li>
               ))}
             </ul>
-          </section>
+          </section>)}
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.s
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
 import { campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 /**
  * Cada admin, solo los webhooks de sus campus; el super admin, todos. Lo mismo que
@@ -30,17 +31,23 @@ async function elToken(req) {
   return t;
 }
 
+// A quién avisa por correo una solicitud de admisión nueva (#714): el aviso no lleva
+// datos (admision.aviso.js). Hasta 10 direcciones.
+const avisoEmails = z.array(z.string().trim().toLowerCase().email().max(200)).max(10);
+
 const createSchema = z.object({
   project_id: z.number().int().positive(),
   kind: z.enum(['matriculas', 'leads', 'custom']),
   field_mapping: z.record(z.string(), z.string()).optional(),
   notas: z.string().max(500).optional(),
+  aviso_emails: avisoEmails.optional(),
 });
 
 const updateSchema = z.object({
   active: z.boolean().optional(),
   field_mapping: z.record(z.string(), z.string()).optional(),
   notas: z.string().max(500).optional(),
+  aviso_emails: avisoEmails.optional(),
 }).refine(d => Object.keys(d).length > 0);
 
 export async function list(req, res, next) {
@@ -48,7 +55,11 @@ export async function list(req, res, next) {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
     await comprobarCampus(req, projectId);
-    res.json({ success: true, data: await model.listByProject(projectId, req.query.kind) });
+    const filas = await model.listByProject(projectId, req.query.kind);
+    // Quien solo los VE (el project manager, Diego 04/11) no se lleva el token:
+    // con él se meten prospectos en el CRM. Se le enseña el principio.
+    const verToken = await tienePermiso(req, 'webhooks.edit');
+    res.json({ success: true, data: verToken ? filas : filas.map((f) => ({ ...f, token: `${String(f.token || '').slice(0, 4)}…`, token_oculto: true })) });
   } catch (err) { next(err); }
 }
 
@@ -130,7 +141,7 @@ export async function publicReceive(req, res, next) {
     // La solicitud de admisión (#198): datos, documentos y persona. Ver admision.service.js.
     if (tok.kind === 'matriculas') {
       const r = await recibirAdmision(tok, req.body || {}, req.files || []);
-      return res.status(r.status).json({ success: true, data: r.data });
+      return res.status(r.status).json({ success: r.status < 400, data: r.data });
     }
 
     const mapped = applyMapping(req.body || {}, tok.field_mapping || {});

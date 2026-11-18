@@ -19,16 +19,20 @@ const MODULOS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.
 // Se nombran para que un guardia nuevo sin regla no se cuele entre ellos.
 export const TECNICOS = new Set([
   'multerMiddleware', 'validatePdfMagicBytes', 'rateLimit', 'limite', 'recibir',
-  'codigoConFormato', 'urlPersonal', 'metodoNoPermitido', 'jsonParser', 'urlencodedParser', 'textParser',
+  'codigoConFormato', 'pagoConFormato', 'urlPersonal', 'metodoNoPermitido', 'jsonParser', 'urlencodedParser', 'textParser',
   'comprobarInterruptor', 'verificarTokenMcp', 'metadatosServidor', 'rawParser',
   'recibirArchivoSubido', 'guardarCuerpoCrudo',
   // Guardas de ALCANCE POR CAMPUS de facturas (IDOR): no deciden quien tiene el permiso (lo dice el
   // `puede(...)` de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
-  'facturaDeSuCampus', 'campusDelCuerpo', 'prospectoDelParametro', 'ventaDelParametro',
+  'facturaDeSuCampus', 'campusDelCuerpo', 'formularioDeSuCampus', 'prospectoDelParametro', 'ventaDelParametro',
   // Subida de archivos (multer) de las consultas y del webhook de admisión.
   'conAdjuntos', 'conArchivos',
   // El projectId de Integraciones, que sea un número (QA del 22/10, punto 5).
   'projectIdConFormato',
+  // El :id de una consulta, que sea un número: si no, 404 en vez del 500 de Postgres (#188).
+  'idDeConsulta',
+  // Lo mismo con el :rid de una respuesta guardada (#679).
+  'idDeRespuesta',
   // Guardas de ALCANCE POR CAMPUS (IDOR): no deciden quien tiene el permiso (eso lo dice el `puede(...)`
   // de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
   'puedeCrearEn', 'deSuCampus',

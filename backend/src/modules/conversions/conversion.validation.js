@@ -27,6 +27,8 @@ export const createConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),
+  // Inicio del curso pactado con el alumno (#767): la matrícula en Moodle va el día anterior.
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   // Multi-item + IVA + descuento
   items: z.array(conversionItemSchema).optional(),
   iva_pct: z.number().min(0).max(100).optional(),
@@ -48,6 +50,7 @@ export const updateConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notas_pago: z.string().max(2000).nullable().optional(),
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo requerido' });
 
 export const createPaymentSchema = z.object({
@@ -95,6 +98,8 @@ export const listConversionsSchema = z.object({
   // Filtro por producto: hasta ahora se hacia en el navegador sobre las filas
   // cargadas, asi que con paginacion dejaba fuera el resto.
   producto: z.string().max(255).optional(),
+  // Todas · Solo compartidas · Solo enteras (#163).
+  compartidas: z.enum(['todas', 'solo', 'enteras']).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });

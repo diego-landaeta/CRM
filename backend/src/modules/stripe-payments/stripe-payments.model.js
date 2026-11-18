@@ -1,5 +1,6 @@
 import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
+import { recalcularCobrado } from '../conversions/cobrado.js';
 
 export async function upsertPayment(p) {
   const { rows } = await query(
@@ -74,11 +75,18 @@ export async function findPagoDuplicado(conversionId, importe, fecha, stripeId =
   // cuadre. Sin esto, reorganizar una venta o perder el enlace hacia que el
   // reintento de "cargos sin asociar" registrara el cobro por segunda vez.
   if (stripeId) {
-    const { rows: porId } = await query(
+    // El id EXACTO, no un trozo: con LIKE '%id%', «ch_x_r1» coincidía con la nota
+    // de «ch_x_r10» y el cargo se daba por duplicado (la prueba de los 30 cargos
+    // de stripeCobroUnaVez680 fallaba a ratos por eso). Delante y detrás, nada que
+    // pueda ser parte de un id (letra, número o guion bajo).
+    // Los ids de Stripe solo llevan letras, números y guion bajo: así no hay nada que escapar.
+    const idStripe = String(stripeId);
+    const idExacto = /^[A-Za-z0-9_]+$/.test(idStripe) ? `(^|[^A-Za-z0-9_])${idStripe}([^A-Za-z0-9_]|$)` : null;
+    const { rows: porId } = idExacto === null ? { rows: [] } : await query(
       `SELECT cp.id FROM conversion_payments cp
-        WHERE cp.notas LIKE '%' || $1 || '%'
+        WHERE cp.notas ~ $1
         ORDER BY cp.id LIMIT 1`,
-      [stripeId]
+      [idExacto]
     );
     if (porId[0]) return porId[0];
   }
@@ -123,11 +131,13 @@ export async function createConversionPayment(conversionId, amount, fecha, notas
   return rows[0].id;
 }
 
-export async function updateConversionPaid(conversionId, addAmount) {
-  await query(
-    `UPDATE conversions SET importe_pagado = LEAST(importe_total, importe_pagado + $1), updated_at=NOW() WHERE id=$2`,
-    [addAmount, conversionId]
-  );
+// El cobro ya está apuntado en `conversion_payments`: lo cobrado de la venta
+// pasa a ser la suma de sus pagos (#692). Antes se sumaba el cargo y se topaba
+// en el total (`LEAST`): si Stripe cobraba de más, la venta decía «pagada» con
+// menos de lo que sumaban sus pagos, y Análisis enseñaba más cobrado que
+// vendido. El importe se deja en la firma por compatibilidad.
+export async function updateConversionPaid(conversionId, _addAmount) {
+  await recalcularCobrado({ query }, conversionId);
 }
 
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments
@@ -243,6 +253,18 @@ export async function getById(id) {
     [id]
   );
   return rows[0] || null;
+}
+
+/** El campus de una venta, o null si no existe (#717: asociar solo dentro del campus del cargo). */
+export async function campusDeLaVenta(conversionId) {
+  const { rows } = await query('SELECT project_id FROM conversions WHERE id = $1', [conversionId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
+/** El campus de un prospecto, o null si no existe. */
+export async function campusDelLead(leadId) {
+  const { rows } = await query('SELECT project_id FROM leads WHERE id = $1', [leadId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
 }
 
 export async function listProjectsWithStripe() {
@@ -425,4 +447,22 @@ export async function listPendientesDeAsociar(projectId, limit = 500) {
     [projectId, limit]
   );
   return rows;
+}
+
+/**
+ * Las columnas dispute_* del cargo, al dia con la disputa guardada (#396). Las
+ * lee la pantalla de Pagos Stripe; la de Disputas lee `stripe_disputes`.
+ * `d` es la fila de `stripe_disputes` (importes ya en unidades).
+ */
+export async function marcarDisputaEnElCargo(projectId, chargeId, d) {
+  if (!chargeId || !d) return;
+  await query(
+    `UPDATE stripe_payments SET
+       disputed = true,
+       dispute_id = $1, dispute_status = $2, dispute_reason = $3,
+       dispute_amount = $4, dispute_evidence_due_by = $5,
+       updated_at = NOW()
+     WHERE project_id = $6 AND stripe_id = $7`,
+    [d.dispute_id, d.status, d.reason, d.amount, d.evidence_due_by, projectId, chargeId]
+  );
 }

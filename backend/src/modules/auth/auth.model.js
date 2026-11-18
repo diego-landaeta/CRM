@@ -47,7 +47,12 @@ export async function getUserProjects(userId, role) {
     const { rows } = await query(
       `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key, p.logo_url,
               p.modules, p.shortcuts, p.external_panels, p.sidebar_labels,
-              p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
+              p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+              -- La marca de la EMPRESA, para el menú con una empresa elegida (11/11).
+              s.alias AS sociedad_alias, s.logo_url AS sociedad_logo_url,
+              (s.logo_key IS NOT NULL) AS sociedad_logo_subido,
+              -- Los de pruebas no entran en «Todos» (148); el frontal lo necesita (#346).
+              COALESCE(p.es_prueba, false) AS es_prueba
        FROM projects p
        LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
        WHERE p.active = true
@@ -58,7 +63,11 @@ export async function getUserProjects(userId, role) {
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key, p.logo_url,
             p.modules, p.shortcuts, p.external_panels, p.sidebar_labels, p.theme_color, p.auto_email_documents,
-            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
+            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+              -- La marca de la EMPRESA, para el menú con una empresa elegida (11/11).
+              s.alias AS sociedad_alias, s.logo_url AS sociedad_logo_url,
+              (s.logo_key IS NOT NULL) AS sociedad_logo_subido,
+            COALESCE(p.es_prueba, false) AS es_prueba
      FROM user_projects up
      JOIN projects p ON p.id = up.project_id
      LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
@@ -143,10 +152,12 @@ export async function logActivity(userId, action, details, ipAddress) {
  *
  * Solo lo que hace falta para mandarle el enlace. Una baja no recupera
  * contraseña: se le cerro la puerta a proposito y esto seria una rendija.
+ * Los roles, para el freno de los tutores (NO_ESCRIBIR_A_TUTORES): a un tutor
+ * no se le manda el enlace mientras siga puesto.
  */
 export async function findActiveUserByEmail(email) {
   const { rows } = await query(
-    `SELECT id, email, nombre
+    `SELECT id, email, nombre, role, roles_extra::text[] AS roles_extra
      FROM users
      WHERE LOWER(email) = LOWER($1) AND active = true`,
     [email]

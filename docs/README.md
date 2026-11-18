@@ -2,6 +2,8 @@
 
 > **Fuente de verdad del esquema:** `backend/migrations/*.sql` — todos los SQL ejecutados, en orden.
 > Este es el **único** documento de referencia; el resto se consolidó aquí (el historial completo queda en git).
+>
+> **Para quien usa el CRM, no para quien lo programa:** [manual/README.md](manual/README.md), el manual de usuario general y uno por apartado del menú, con el guion de cada vídeo (#66). Lo que la pantalla y el servidor dicen distinto está en [manual/descuadres.md](manual/descuadres.md).
 
 ## Deploy y ramas (al día el 09/10/2026)
 
@@ -20,7 +22,7 @@ VPS `187.124.128.126`. PM2 corre como el usuario **claude** (`export PATH=~/.nvm
 **Subir el backend.** El código sale de la rama (`git archive <rama> backend/src …`), nunca de ficheros sueltos copiados a mano: así se perdió una vez una función. Antes de reiniciar se carga la app entera sin escuchar (`NODE_ENV=test node --env-file=.env -e "import('./src/app.js')"`); `node --check` no basta. Luego `pm2 restart` y `/api/health`.
 **Subir el frontal.** Comprobar en `dist/index.html` que las rutas son las del entorno (`/crm/` o `/testeo/`): un build del otro entorno deja la web en blanco con un 200. Se guarda copia de la carpeta anterior.
 **Migraciones.** Como `postgres` (`sudo -u postgres psql -v ON_ERROR_STOP=1`), con su bloque de GRANT a `crm_user`, y comprobando el catálogo después (un aviso sin «ERROR» ha dado por aplicada alguna que no lo estaba). Si la columna es un ENUM, hay que ampliar el tipo, no solo el CHECK. **Después de cada tanda, `scripts/dar-propiedad-a-crm-user.sql`** sobre la misma base (#71): lo que crea `postgres` nace suyo, y así las bases de pruebas y de producción dejan de separarse. Es idempotente; el destino es el dueño de la base.
-**Copias.** Antes de una subida grande: `pg_dump -Fc`, tar del backend y del frontal en `/var/backups/crm/`.
+**Copias.** Antes de una subida grande: `pg_dump -Fc`, tar del backend y del frontal en `/var/backups/crm/`. La copia diaria automática de la base (con copia fuera del VPS), la purga de los `.tgz` viejos y la rotación de logs: [copias-de-la-base.md](copias-de-la-base.md) (#634).
 
 **Interruptores del `.env` de producción** (09/10): `NOVEDADES_AUTO=0` desde la 2.1.0 (las Novedades se mandan a mano, primero la prueba a Diego; con `1` saldrían solas al arrancar) · `MCP_CODIGO_OBLIGATORIO=true` (Claude pide el código de verificación) · `FEEDBACK_DIA7_INICIO=2026-09-29` (el correo del 7.º día solo para primeros contactos desde ese día) · `PASO_VENCIDO_DISABLED=1` (el trabajo de las 3:00 apagado) · correos del equipo encendidos (sin `RESUMEN_DISABLED` ni `REPORTE_SEMANAL_DISABLED`) · `LEAD_SIN_TOCAR_DISABLED=1`. En pruebas, `EMAIL_LISTA_BLANCA` frena los correos a todo el que no esté en la lista.
 
@@ -94,13 +96,14 @@ Las dudas que los alumnos escriben en el campus (mensajería privada de Moodle) 
 | Trabajo | Cada cuánto | Interruptor |
 |---|---|---|
 | Matrícula de los tutores en cada campus (#187); además, al abrir la ficha del tutor si la última tiene más de 30 s | cada hora | `TUTORES_CAMPUS_DISABLED=1` |
-| Leer las consultas de los campus (#188) | 5 min | `CONSULTAS_CAMPUS_DISABLED=1` |
+| Leer las consultas de los campus (#188). Se salta los campus con el plugin del CRM al día (#689): esos entran por el aviso y por el repaso de 15 min, y vuelven aquí solos si el plugin falla o se desconecta | 5 min | `CONSULTAS_CAMPUS_DISABLED=1` |
 | Alumnos matriculados de cada tutor (#189) | 1 vez al día | `CONSULTAS_ALUMNOS_DISABLED=1` |
 | Resumen semanal al tutor (#189) | lunes, 9:00 | `CONSULTAS_RESUMEN_DISABLED=1` |
 | Recordatorio de plazo al tutor y aviso de fuera de plazo a administración (#190) | 15 min | `CONSULTAS_PLAZO_DISABLED=1` |
 | Recordatorio de carga de trabajo desactualizada (#190) | 1 vez al día (como mucho uno por semana a cada tutor) | `CONSULTAS_CARGA_RECORDATORIO_DISABLED=1` |
+| Aviso a la tutora de las entregas sin corregir de más de 48 h (#681; un correo por tutora y vuelta, cada entrega una vez; solo con `PLUGIN_MOODLE_EN_PRODUCCION=1` en producción) | 2 h | `ENTREGAS_SIN_CORREGIR_DISABLED=1` |
 
-Los **correos al tutor** respetan el freno `NO_ESCRIBIR_A_TUTORES` (`backend/src/shared/config/frenoTutores.js`): con él puesto no sale ninguno y se apunta en el registro. Los avisos de la **campana** sí llegan. El aviso de fuera de plazo va a los super admin y a los admin de ese campus; la reasignación es manual, desde la consulta.
+Los **correos al tutor** respetan el freno `NO_ESCRIBIR_A_TUTORES` (`backend/src/shared/config/frenoTutores.js`): con él puesto no sale ninguno y se apunta en el registro. Desde el 11/11 (#211, PR de seguimiento de la #688) se quita sin tocar código: **`CORREOS_A_TUTORES=1`** en el `.env` y reiniciar; sin la variable, o con otro valor, sigue puesto. Con el freno, a un tutor tampoco le llega el código para cambiar su correo en «Mi perfil»: la pantalla le dice que lo pida a administración. El código de ese cambio se guarda como HMAC con **`CODIGO_CORREO_SECRET`** (si falta, con `JWT_SECRET`). Los avisos de la **campana** sí llegan. El aviso de fuera de plazo va a los super admin y a los admin de ese campus; la reasignación es manual, desde la consulta.
 
 ## Asignación de leads por actividad (#513 · gemela CRM-ISEIE#284, 27/10/2026)
 

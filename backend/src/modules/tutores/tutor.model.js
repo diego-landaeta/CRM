@@ -71,6 +71,30 @@ export async function tieneAlgunCampus(tutorId, projectIds) {
   return rows.length > 0;
 }
 
+/**
+ * El buscador (Ctrl K, #591): un tutor por nombre o correo, sin acentos.
+ * Solo lo que sale en el resultado: ni DNI, ni IBAN, ni banco, ni notas
+ * (esos se ven en su ficha, con su guarda). `campus` null: todos.
+ */
+export async function buscar({ q, campus, limit = 5 }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.active,
+            (SELECT string_agg(DISTINCT pr.nombre, ' · ' ORDER BY pr.nombre)
+               FROM user_projects up JOIN projects pr ON pr.id = up.project_id
+              WHERE up.user_id = u.id) AS marcas
+       FROM users u
+      WHERE u.role IN ('tutor', 'tutor_redactor')
+        AND (unaccent(COALESCE(u.nombre, '')) ILIKE unaccent($1) OR u.email ILIKE $1)
+        AND ($2::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.project_id = ANY($2::int[])))
+      ORDER BY u.active DESC, u.nombre
+      LIMIT $3`,
+    [`%${q}%`, campus, limit],
+  );
+  return rows;
+}
+
 export async function listar({ projectId, projectIds = null, activos = true }) {
   // Con un proyecto elegido no se corta en seco: primero los profesores de ESE
   // proyecto y despues los de los demas proyectos de la MISMA SOCIEDAD.
@@ -123,7 +147,7 @@ export async function listar({ projectId, projectIds = null, activos = true }) {
                          WHERE tex.tutor_id = u.id AND ($1::int IS NULL OR px.id = $1))) AS es_de_este_proyecto
        FROM users u
        LEFT JOIN tutor_profiles perfil ON perfil.user_id = u.id
-      WHERE u.role = 'tutor'
+      WHERE u.role IN ('tutor', 'tutor_redactor')
         ${activos ? 'AND u.active' : ''}
         -- Por sus campus o por sus EMPRESAS (QA de Diego, 22/10, punto 7): un
         -- tutor dado de alta por empresa no tiene filas en user_projects.
@@ -144,7 +168,7 @@ export async function ficha(tutorId) {
             p.dni_nif, p.iban, p.banco, p.telefono, p.notas
        FROM users u
        LEFT JOIN tutor_profiles p ON p.user_id = u.id
-      WHERE u.id = $1 AND u.role = 'tutor'`,
+      WHERE u.id = $1 AND u.role IN ('tutor', 'tutor_redactor')`,
     [tutorId]
   );
   return t || null;
@@ -177,7 +201,7 @@ export async function ponerContrasena(userId, password) {
 export async function renombrarTutor(tutorId, nombre) {
   const { rows } = await query(
     `UPDATE users SET nombre = $2, updated_at = now()
-      WHERE id = $1 AND role = 'tutor' AND nombre IS DISTINCT FROM $2
+      WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') AND nombre IS DISTINCT FROM $2
       RETURNING id, nombre`,
     [tutorId, String(nombre).trim()]
   );
@@ -420,7 +444,7 @@ export async function crearColaboracionEnOtroCampus({
   try {
     await client.query('BEGIN');
     const { rows: [tutor] } = await client.query(
-      `SELECT id FROM users WHERE id = $1 AND role = 'tutor' FOR UPDATE`, [tutorId]);
+      `SELECT id FROM users WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') FOR UPDATE`, [tutorId]);
     if (!tutor) { await client.query('ROLLBACK'); return null; }
 
     await client.query(
@@ -1211,7 +1235,7 @@ export async function retirarTutor(tutorId) {
     await client.query('BEGIN');
     const { rows: [t] } = await client.query(
       `UPDATE users SET active = false, updated_at = NOW()
-        WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+        WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') RETURNING id, nombre, email`, [tutorId]);
     if (!t) { await client.query('ROLLBACK'); return null; }
     const { rowCount } = await client.query(
       `UPDATE tutor_collaborations
@@ -1235,6 +1259,6 @@ export async function retirarTutor(tutorId) {
 export async function reactivarTutor(tutorId) {
   const { rows: [t] } = await query(
     `UPDATE users SET active = true, updated_at = NOW()
-      WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+      WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') RETURNING id, nombre, email`, [tutorId]);
   return t || null;
 }

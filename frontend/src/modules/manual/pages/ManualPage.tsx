@@ -11,6 +11,7 @@ import {
   MagnifyingGlass as Search, Command, Lightning,
   PlugsConnected, CalendarBlank,
 } from '@phosphor-icons/react';
+import { MARCA } from '@/shared/config/marca';
 
 /* ─── Navigation ──────────────────────────────────────────── */
 const SECTIONS = [
@@ -19,7 +20,7 @@ const SECTIONS = [
   { id: 'prospectos',   label: 'Prospectos',   icon: Users },
   { id: 'clientes',     label: 'Clientes',     icon: UserCheck },
   { id: 'productos',    label: 'Productos',    icon: Package },
-  { id: 'matriculas',   label: 'Matrículas',   icon: GraduationCap },
+  { id: 'matriculas',   label: 'Solicitud de admisión',   icon: GraduationCap },
   { id: 'campanas',     label: 'Campañas',     icon: Megaphone },
   { id: 'seo',          label: 'Tráfico orgánico', icon: MagnifyingGlass },
   { id: 'ia',           label: 'IA y Reportes', icon: Robot },
@@ -264,7 +265,7 @@ export default function ManualPage() {
             Manual de usuario.
           </h2>
           <p className="text-lg text-muted-foreground mt-4 max-w-2xl leading-relaxed">
-            Guía completa de MultiCRM. Todos los módulos, flujos y atajos en un único sitio,
+            Guía completa de {MARCA}. Todos los módulos, flujos y atajos en un único sitio,
             organizados para que encuentres lo que buscas en menos de 30 segundos.
           </p>
 
@@ -304,9 +305,9 @@ export default function ManualPage() {
 
         {/* ── INTRODUCCIÓN ── */}
         <SectionHeader id="introduccion" icon={BookOpen} label="Introducción" color="blue"
-          description="¿Qué es MultiCRM y cómo está organizado?" />
+          description={`¿Qué es ${MARCA} y cómo está organizado?`} />
         <P>
-          MultiCRM es un CRM interno multi-proyecto para gestionar el ciclo completo de ventas:
+          {MARCA} es un CRM interno multi-proyecto para gestionar el ciclo completo de ventas:
           captación de prospectos, conversión, cobro y análisis de campañas. Cada usuario pertenece
           a uno o más proyectos que se seleccionan en el desplegable del menú lateral.
         </P>
@@ -504,7 +505,7 @@ export default function ManualPage() {
         </Callout>
 
         {/* ── MATRÍCULAS ── */}
-        <SectionHeader id="matriculas" icon={GraduationCap} label="Matrículas" color="indigo"
+        <SectionHeader id="matriculas" icon={GraduationCap} label="Solicitud de admisión" color="indigo"
           description="Solicitudes de admisión para proyectos educativos" />
         <P>
           Módulo específico para gestionar el proceso de admisión de alumnos, desde la solicitud inicial hasta la validación.
@@ -521,7 +522,7 @@ export default function ManualPage() {
 
         <SubHeader>Webhooks de admisión</SubHeader>
         <P>
-          Las matrículas pueden llegar automáticamente desde formularios externos.
+          Las solicitudes de admisión llegan automáticamente desde formularios externos.
           En la pestaña «Webhooks de admisión» genera tokens, obtén el endpoint y configura tu formulario.
         </P>
 
@@ -823,7 +824,7 @@ export default function ManualPage() {
             activar el proyecto. Vacío = color por defecto del CRM.
           </FeatureCard>
           <FeatureCard icon={ToggleRight} title="Módulos activos" color="green">
-            Activa o desactiva Leads, Matrículas, Contabilidad, Documentos, etc. Solo aparecen en el menú
+            Activa o desactiva Leads, Solicitud de admisión, Contabilidad, Documentos, etc. Solo aparecen en el menú
             los módulos habilitados.
           </FeatureCard>
           <FeatureCard icon={LockKey} title="API keys" color="violet">

@@ -72,6 +72,17 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Ticket de soporte', agrupa: false,
     descripcion: 'Alguien del equipo ha reportado una averia o pedido algo',
   },
+  // CRM#820: alguien pide un alta, un permiso, un campus o Claude. Le llega a
+  // soporte y a los admins del campus que puedan verlo; hay que prepararlo.
+  acceso_pedido: {
+    clase: ACCION, etiqueta: 'Petición de acceso', agrupa: false,
+    descripcion: 'Alguien del equipo pide un alta, un permiso, un campus o Claude',
+  },
+  // Y a quien la pidió, cuando soporte la mueve: en preparación, hecha o rechazada.
+  acceso_respondido: {
+    clase: AVISO, etiqueta: 'Tu petición de acceso', agrupa: false,
+    descripcion: 'Soporte ha movido una petición de acceso tuya',
+  },
   dup_review_pending: {
     clase: ACCION, etiqueta: 'Duplicados por revisar', agrupa: true,
     descripcion: 'Hay fichas esperando en la cola de revisión',
@@ -111,6 +122,16 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Tope de gasto de IA', agrupa: false,
     descripcion: 'El gasto de IA del mes llega al 80 % o al 100 % del tope; al 100 % la IA se para hasta el día 1',
   },
+  // Disputas de Stripe (#396): a los admins de la empresa del campus y a los
+  // super admin. Una por disputa; la respuesta se da en Stripe.
+  stripe_disputa: {
+    clase: ACCION, etiqueta: 'Disputa de Stripe', agrupa: false,
+    descripcion: 'Entra una disputa (contracargo) en la cuenta de Stripe de uno de tus campus',
+  },
+  stripe_disputa_vence: {
+    clase: ACCION, etiqueta: 'Disputa de Stripe a punto de vencer', agrupa: false,
+    descripcion: 'Una disputa sigue sin respuesta en Stripe y vence en pocos días',
+  },
   task_asignada: {
     clase: ACCION, etiqueta: 'Tarea asignada', agrupa: false,
     descripcion: 'Cuando te asignan una tarea del equipo',
@@ -142,6 +163,21 @@ export const TIPOS = {
   factura_colaborador: {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
+  },
+  // Monitask (#236): la factura por horas de un colaborador no cuadra con
+  // Monitask (pasa del margen). A quien la paga, antes de pagarla.
+  monitask_descuadre: {
+    clase: ACCION, etiqueta: 'Horas que no cuadran con Monitask', agrupa: false,
+    descripcion: 'Cuando las horas de la factura de un colaborador se separan de las de Monitask más del margen',
+  },
+  // La auditoría de facturación (#765): la pausa pide que alguien la resuelva.
+  facturacion_pausada: {
+    clase: ACCION, etiqueta: 'Facturación pausada', agrupa: false,
+    descripcion: 'La auditoría de cada 2 horas ha encontrado un error y ha pausado la emisión de facturas',
+  },
+  facturacion_reanudada: {
+    clase: AVISO, etiqueta: 'Facturación reanudada', agrupa: false,
+    descripcion: 'La auditoría ha salido limpia y se ha reanudado la emisión de facturas',
   },
   // Cursos pendientes para las tutoras (#336): lo que pide hacer algo va arriba.
   curso_pendiente_asignado: {
@@ -176,6 +212,11 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
     descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',
   },
+  // Control de subidas (#771): solo campana, a quien lleva las subidas del campus.
+  curso_pendiente_subida_vencida: {
+    clase: ACCION, etiqueta: 'Subidas de un curso atrasadas', agrupa: false,
+    descripcion: 'Un curso entregado tiene vídeos, módulos o datos de directores sin subir pasada su fecha límite',
+  },
   // Consultas de alumnos (#190, decisión 4): al tutor, cuando una consulta
   // abierta llega a las 3/4 partes del plazo; a administración del campus,
   // cuando se pasa (para reasignarla). Y al tutor, la carga sin actualizar.
@@ -187,12 +228,24 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Consulta fuera de plazo', agrupa: false,
     descripcion: 'Una consulta de tus campus se ha pasado del plazo sin respuesta',
   },
+  // Mi campus (#681): a la tutora, sus entregas que llevan más de 48 h sin corregir
+  // (una vez por entrega; un aviso por vuelta con todas las nuevas).
+  entregas_sin_corregir: {
+    clase: ACCION, etiqueta: 'Entregas sin corregir', agrupa: false,
+    descripcion: 'Entregas de tus alumnos que llevan más de 48 h sin corregir',
+  },
   carga_desactualizada: {
     clase: ACCION, etiqueta: 'Carga de trabajo sin actualizar', agrupa: false,
     descripcion: 'Llevas más de una semana sin actualizar tu carga de trabajo',
   },
   // MCP (#326): un Claude se ha conectado con tu URL y espera a que lo autorices.
   // Si no eres tú, es que la URL se ha colado: hay que rechazarlo.
+  // 17/11/2026: Brevo ha bloqueado el correo de alguien del equipo y no le llega
+  // ningún aviso. Va a superadmins y admins de sus campus, una vez por bloqueo.
+  brevo_bloqueado: {
+    clase: ACCION, etiqueta: 'Correo bloqueado en Brevo', agrupa: false,
+    descripcion: 'A alguien del equipo no le llegan los correos del CRM porque Brevo bloquea su dirección',
+  },
   mcp_conexion_nueva: {
     clase: ACCION, etiqueta: 'Claude pide conectarse', agrupa: false,
     descripcion: 'Un Claude se ha conectado con tu URL del MCP y espera a que lo autorices',
@@ -203,12 +256,36 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
     descripcion: 'El Moodle de un campus no responde o su token ya no vale',
   },
+  // Matrícula automática (#767): a administración del campus (sus admins y los super admin).
+  // Una por alumno: cada una es una matrícula que hacer o que arreglar.
+  matricula_moodle_lista: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle lista', agrupa: false,
+    descripcion: 'Un alumno ya ha pagado, ha llegado su día y toca matricularle en Moodle',
+  },
+  matricula_moodle_fallo: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
+    descripcion: 'No se pudo preparar la matrícula de un alumno en Moodle (con el motivo)',
+  },
+  // #471: la renovación diaria de un token de Meta Ads o de Instagram ha fallado,
+  // o el token caduca en menos de 7 días. Hay que volver a conectar la cuenta.
+  // Una vez por fallo y una por fecha de caducidad (jobs/metaTokensScheduler.js).
+  meta_token: {
+    clase: ACCION, etiqueta: 'Token de Meta o Instagram', agrupa: false,
+    descripcion: 'La renovación de un token de Meta Ads o Instagram ha fallado, o el token caduca en menos de 7 días',
+  },
   // MCP (Diego, 22/10): tu Claude consulta con la URL sola, conectado como antes
   // de la #326, y el CRM no le da datos. Hay que conectarlo una vez. Como mucho
   // uno al día por URL (mcp.conexiones.js).
   mcp_conector_antiguo: {
     clase: ACCION, etiqueta: 'Conectar Claude una vez', agrupa: false,
     descripcion: 'Tu Claude intenta consultar con tu URL del MCP sin haber iniciado sesión y hay que conectarlo una vez',
+  },
+  // #627: un webhook de Make en activo sin mapeo. Los prospectos entran igual
+  // —por el nombre habitual de cada campo— pero hay que guardar el mapeo.
+  // Como mucho uno al día por webhook (make.service.js).
+  make_sin_mapeo: {
+    clase: ACCION, etiqueta: 'Webhook de Make sin mapeo', agrupa: true,
+    descripcion: 'Un webhook de Make está en activo sin mapeo: los prospectos entran por el nombre habitual de cada campo',
   },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,

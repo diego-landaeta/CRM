@@ -106,7 +106,8 @@ export default function ComisionesTutoresPage() {
       const [r, l, a, sf] = await Promise.all([
         tutoresApi.resumenComisiones({ periodo, projectId, issuerId }),
         tutoresApi.comisiones({ periodo, projectId, issuerId }),
-        tutoresApi.ajustes(),
+        // Los ajustes son de quien gestiona tutores; sin eso, 403 (#631).
+        puede ? tutoresApi.ajustes() : Promise.resolve({ success: false, data: null }),
         tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId, issuerId),
       ]);
       setResumen(r.success ? (r.data || []) : []);
@@ -114,7 +115,7 @@ export default function ComisionesTutoresPage() {
       setAjustes(a.success ? a.data : null);
       setSinFormacion(sf.success ? (sf.data || []) : []);
     } finally { setCargando(false); }
-  }, [periodo, projectId, issuerId]);
+  }, [periodo, projectId, issuerId, puede]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -396,8 +397,10 @@ export default function ComisionesTutoresPage() {
                     )}
 
                     {/* «Avisar tutor». Va junto a pagar y no dentro del
-                        desplegable: es la otra cosa que se hace con una fila. */}
-                    {esAdmin && can('tutores.liquidar') && Number(r.pendiente) > 0 && (
+                        desplegable: es la otra cosa que se hace con una fila.
+                        Lo que pide el servidor: `tutores.avisar` y gestionar
+                        colaboraciones (`exigirGestion`), no liquidar. */}
+                    {puede && can('tutores.avisar') && Number(r.pendiente) > 0 && (
                       <Button size="sm" variant="outline" disabled={preparando === r.tutor_id}
                         title={r.tutor_email ? `Escribir a ${r.tutor_email}` : 'Este tutor no tiene correo en su ficha'}
                         onClick={() => verElAviso(r)}>

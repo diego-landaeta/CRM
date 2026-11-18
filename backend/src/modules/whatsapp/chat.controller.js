@@ -12,7 +12,8 @@ import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
 import { porQueNoPuede, porQueNoUsa, tienePermisoDeUsar } from './roles.js';
 import { explicarPermisosRecordados } from '../permissions/permissions.service.js';
-import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, comoLista, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
@@ -92,6 +93,13 @@ export async function usuarioObjetivo(req) {
   if (req.user.role !== 'superadmin' && !u.comparten) {
     throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
   }
+  // Quien lleva un equipo comercial supervisa a su equipo y a nadie más (QA del
+  // 09/11/2026): compartir campus no basta. Un admin sin equipo y el super
+  // admin, como siempre.
+  const equipo = await alcanceDeLider(req.user);
+  if (equipo && !equipo.includes(pedido)) {
+    throw new AppError('Esa persona no esta en tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+  }
   // Y el candado del rol, AQUI tambien. Que la lista lo diga no basta: sin esto,
   // quien acertara el `usuarioId` de un tutor trabajaria sobre su sesion aunque
   // la pantalla no se la enseñara. La regla vive en `roles.js`, una sola vez.
@@ -148,8 +156,25 @@ async function miConversacion(req, id) {
  * Quien no lleva prospectos no entra, ni a lo suyo.
  */
 async function sesionesQuePuedeMirar(req) {
+  // Quien lleva un equipo comercial (QA del 09/11/2026), si supervisa o ve el
+  // banco: las líneas de su equipo y la suya, no las de todas. Es la misma
+  // regla que `usuarioObjetivo`.
+  const lider = await alcanceDeLider(req.user);
+  if (lider && (await puedeWa(req, 'whatsapp.supervisar') || await puedeWa(req, 'whatsapp.banco'))) {
+    return lider.map((id) => evolution.instanciaDe(id));
+  }
   // #423: quien supervisa ve todas las líneas; quien usa el suyo, la suya.
   if (await puedeWa(req, 'whatsapp.supervisar')) return null;
+  // «Ver el banco de mensajes» (Diego, 04/11: el project manager ve todo): las
+  // líneas de quien está o estuvo en uno de SUS campus, en solo lectura. Nunca
+  // todas: un banco con conversaciones de clientes de otra empresa no es suyo.
+  if (await puedeWa(req, 'whatsapp.banco')) {
+    const mios = await campusDeLaPersona(req.user.userId);
+    const { rows } = await query(
+      'SELECT DISTINCT user_id FROM user_projects WHERE project_id = ANY($1::int[])', [mios.length ? mios : [-1]]);
+    const ids = new Set([Number(req.user.userId), ...rows.map((r) => Number(r.user_id))]);
+    return [...ids].map((id) => evolution.instanciaDe(id));
+  }
   // Una gestora, a su numero y punto. Es un respaldo con conversaciones de
   // clientes dentro: nunca todas las lineas para cualquiera.
   //
@@ -1242,7 +1267,11 @@ export async function usuarios(req, res, next) {
               WHERE up.user_id = u.id AND up.active
                 AND up.project_id = ANY($2::int[])))`
       : '';
-    const par = campus ? [yo, campus] : [yo];
+    // Quien lleva un equipo comercial (QA del 09/11/2026): ella y su equipo,
+    // no todo el campus. Va el último parámetro.
+    const equipo = soloMio ? null : await alcanceDeLider(req.user);
+    const par = [yo, ...(campus ? [campus] : []), ...(equipo ? [equipo] : [])];
+    const delEquipo = equipo ? `AND u.id = ANY($${par.length}::int[])` : '';
 
     const { rows } = await query(
       soloMio
@@ -1260,6 +1289,7 @@ export async function usuarios(req, res, next) {
                  FROM users u
                 WHERE u.active
                   ${deLaEmpresa}
+                  ${delEquipo}
                 ORDER BY (u.id = $1) DESC, u.nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
@@ -1282,6 +1312,7 @@ export async function usuarios(req, res, next) {
                      WHERE b.user_id = u.id AND b.active
                   )
                   ${deLaEmpresa}
+                  ${delEquipo}
                 ORDER BY (u.id = $1) DESC, u.nombre`),
       // La rama de «solo yo» usa un solo parametro: pasarle dos lo rechaza
       // Postgres con «bind message supplies 2 parameters».

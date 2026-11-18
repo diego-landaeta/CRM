@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { personaDelInforme, alcanceComercial } from '../../shared/utils/roles.js';
 import * as service from './feedback.service.js';
 import { CLAVES, DISPARADORES, MOTIVOS } from './motivos.js';
 import { preguntasPara } from './preguntas.js';
@@ -14,6 +15,7 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
  *   · superadmin y soporte: lo que pidan.
  *   · admin: lo que pida, pero solo dentro de SUS campus.
  *   · gestora: solo lo suyo, lo pida como lo pida.
+ *   · quien lleva un equipo comercial (09/11/2026): lo de su equipo.
  */
 async function recorteDe(req) {
   const rol = req.user?.role;
@@ -22,11 +24,15 @@ async function recorteDe(req) {
     .split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0);
   const projectIds = ambito.projectIds
     || (varios.length ? varios : (ambito.projectId ? [ambito.projectId] : null));
-  const esJefe = rol === 'admin' || rol === 'superadmin' || rol === 'soporte';
+  // «sin» = los envíos sin gestora (la fila «Sin gestora» del desglose, #593).
+  // Solo vale para quien ve a todas las gestoras (`personaDelInforme` da null);
+  // a una gestora o a quien lleva un equipo se le queda su recorte de siempre.
+  const sinGestora = req.query.gestoraId === 'sin';
+  const deQuien = await personaDelInforme(req.user, sinGestora ? null : (Number(req.query.gestoraId) || null),
+    { jefes: ['admin', 'superadmin', 'soporte'] });
   return {
     projectIds,
-    // «sin» = los envíos sin gestora (la fila «Sin gestora» del desglose).
-    gestoraId: esJefe ? (req.query.gestoraId === 'sin' ? 'sin' : (Number(req.query.gestoraId) || null)) : req.user.userId,
+    gestoraId: sinGestora && deQuien == null ? 'sin' : deQuien,
     deUsuario: rol === 'superadmin' || rol === 'soporte' ? null : req.user.userId,
     desde: FECHA.test(req.query.desde || '') ? req.query.desde : null,
     hasta: FECHA.test(req.query.hasta || '') ? req.query.hasta : null,
@@ -37,11 +43,13 @@ async function recorteDe(req) {
  * Quién puede ver y decidir el correo de un prospecto, por su ALCANCE (#593):
  *
  *   · superadmin y soporte: cualquiera.
- *   · gestora: solo los que lleva.
- *   · el resto (admin, project_manager…): los de SUS campus. Antes un admin
- *     pasaba sin más, y uno de CEDIA podía leer las respuestas de un prospecto
- *     de ICTESS y enviarle o cancelarle el correo; y una project_manager se
- *     llevaba un 403 en la ficha de un prospecto de su propio campus.
+ *   · quien tiene alcance comercial (`alcanceComercial`): la gestora y la
+ *     project manager, solo los que llevan («solo lo suyo», Diego 02/11/2026);
+ *     quien lleva un equipo comercial, los de su equipo (09/11/2026).
+ *   · un admin sin equipo: los de SUS campus. Antes pasaba sin más, y uno de
+ *     CEDIA podía leer las respuestas de un prospecto de ICTESS y enviarle o
+ *     cancelarle el correo.
+ *   · el resto: solo los que lleva, como hasta ahora.
  *
  * El permiso (`feedback.view` / `feedback.enviar`) ya lo pide la ruta; aquí
  * solo se recorta a qué prospectos llega, como `proyectosDelAmbito` (#245).
@@ -51,13 +59,17 @@ async function exigirQueSeaSuyo(req, leadId) {
   const { rows } = await query('SELECT responsable_id, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [leadId]);
   if (!rows[0]) throw new AppError('Prospecto no encontrado', 404, 'NOT_FOUND');
   if (veTodoElCrm(req.user)) return;
-  if (req.user?.role === 'gestor') {
-    if (rows[0].responsable_id !== req.user.userId) throw new AppError('Este prospecto no es tuyo', 403, 'FORBIDDEN');
+  const alcance = await alcanceComercial(req.user);
+  if (!alcance && req.user?.role === 'admin') {
+    const suyos = await campusDeLaPersona(req.user?.userId);
+    if (!suyos.includes(Number(rows[0].project_id))) {
+      throw new AppError('Este prospecto es de un campus que no es tuyo', 403, 'FORBIDDEN');
+    }
     return;
   }
-  const suyos = await campusDeLaPersona(req.user?.userId);
-  if (!suyos.includes(Number(rows[0].project_id))) {
-    throw new AppError('Este prospecto es de un campus que no es tuyo', 403, 'FORBIDDEN');
+  const permitidos = alcance || [req.user?.userId];
+  if (!permitidos.includes(Number(rows[0].responsable_id))) {
+    throw new AppError('Este prospecto no es tuyo', 403, 'FORBIDDEN');
   }
 }
 

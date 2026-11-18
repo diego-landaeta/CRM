@@ -2,10 +2,11 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { Outlet, useLocation } from 'react-router-dom';
 import {
   Calculator, ChartBar, TrendUp, Receipt, TrendDown, GraduationCap,
-  Wallet, HandCoins, CurrencyEur, PlugsConnected, WarningCircle, CreditCard,
+  Wallet, HandCoins, CurrencyEur, PlugsConnected, WarningCircle, CreditCard, ShieldWarning,
 } from '@phosphor-icons/react';
 import SubNav from '@/shared/components/ui/SubNav';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 export const TABS = [
   { label: 'Dashboard', to: '/finanzas', icon: ChartBar },
@@ -23,6 +24,8 @@ export const TABS = [
   // a las que les falta un dato para poder cerrarse (#41).
   { label: 'Sin formación', to: '/finanzas/ventas-sin-formacion', icon: GraduationCap },
   { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard },
+  // Las disputas de Stripe (#396), al lado de los pagos de los que salen.
+  { label: 'Disputas', to: '/finanzas/disputas', icon: ShieldWarning },
   { label: 'Facturas', to: '/finanzas/facturas', icon: Receipt },
   // Facturas de colaboradores (#202): en evaluación, solo en /testeo y en local.
   { label: 'Facturas de colaboradores', to: '/finanzas/facturas-colaboradores', icon: Receipt },
@@ -60,7 +63,8 @@ export default function FinanzasLayout() {
   const { pathname } = useLocation();
   const conSubmenu = !SIN_SUBMENU.includes(pathname.replace(/\/$/, ''));
   const { activeProject } = useProjectContext() as { activeProject: { type?: string } | null };
-  const tabs = activeProject?.type === 'ia'
+  // Solo en pruebas (`shared/lib/proyectosIA`): en /crm, las pestañas de siempre.
+  const tabs = esProyectoIA(activeProject)
     // En IA los cobros no entran por Stripe: la pestaña se llama como lo que enseña.
     ? TABS.filter((t) => EN_IA.has(t.to)).map((t) => (t.to === '/finanzas/pagos-stripe' ? { ...t, label: 'Cobros' } : t))
     : TABS;

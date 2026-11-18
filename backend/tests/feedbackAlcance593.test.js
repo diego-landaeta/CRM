@@ -13,7 +13,8 @@ import feedbackModule from '../src/modules/feedback/index.js';
  * ruta de verdad y contra la base:
  *   · un admin, solo en SUS campus: antes uno de CEDIA leía y decidía el
  *     correo de un prospecto de ICTESS;
- *   · una project_manager, en los suyos (antes, 403 en su propio campus);
+ *   · una project_manager, solo los que lleva («solo lo suyo», Diego
+ *     02/11/2026, `soloLoSuyo` en roles.js), como una gestora;
  *   · una gestora, solo los que lleva;
  *   · un id que no es un número es un 400, no un 500.
  */
@@ -59,6 +60,9 @@ beforeAll(async () => {
         [P[campus], `${clave} ${marca}`, `${clave.toLowerCase()}@${marca}.test`, U.gestora.id])).id;
       ids.leads.push(L[clave]);
     }
+    L.dePm = (await uno('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [P.Cedia, `dePm ${marca}`, `depm@${marca}.test`, U.pmCedia.id])).id;
+    ids.leads.push(L.dePm);
   } catch (err) {
     hayBase = false;
     porQueNo = err.message;
@@ -85,9 +89,10 @@ describe('el feedback de un prospecto, según quién lo mira (#593)', () => {
     expect((await como('adminCedia')(`/api/feedback/lead/${L.deIctess}`)).status).toBe(403);
   });
 
-  it('la project_manager, en su campus, sin 403', async () => {
+  it('la project_manager, solo los que lleva', async () => {
     if (!hayBase) return;
-    expect((await como('pmCedia')(`/api/feedback/lead/${L.deCedia}`)).status).toBe(200);
+    expect((await como('pmCedia')(`/api/feedback/lead/${L.dePm}`)).status).toBe(200);
+    expect((await como('pmCedia')(`/api/feedback/lead/${L.deCedia}`)).status).toBe(403);
     expect((await como('pmCedia')(`/api/feedback/lead/${L.deIctess}`)).status).toBe(403);
   });
 

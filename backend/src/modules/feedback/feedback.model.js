@@ -286,12 +286,14 @@ function recorte({ projectIds, gestoraId, deUsuario, desde, hasta }, par) {
     trozos.push('AND f.project_id NOT IN (SELECT id FROM projects WHERE COALESCE(es_prueba, false))');
   }
   // «sin»: la fila «Sin gestora» del desglose. Antes no mandaba nada y su
-  // lista traía los envíos de todas (#593).
+  // lista traía los envíos de todas (#593). Solo llega aquí para quien ve a
+  // todas las gestoras (lo decide `recorteDe`).
   if (gestoraId === 'sin') {
     trozos.push('AND f.gestora_id IS NULL');
   } else if (gestoraId) {
-    par.push(Number(gestoraId));
-    trozos.push(`AND f.gestora_id = $${par.length}`);
+    // Una gestora o varias (un equipo comercial, 09/11/2026).
+    par.push((Array.isArray(gestoraId) ? gestoraId : [gestoraId]).map(Number));
+    trozos.push(`AND f.gestora_id = ANY($${par.length}::int[])`);
   }
   if (deUsuario) {
     par.push(Number(deUsuario));

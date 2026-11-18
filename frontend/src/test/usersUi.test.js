@@ -75,8 +75,8 @@ describe('roleKeyOf / roleLabelOf', () => {
 describe('ASSIGNABLE_ROLES', () => {
   it('ofrece los cinco roles que el backend acepta, y no superadmin', () => {
     const valores = ASSIGNABLE_ROLES.map((r) => r.value);
-    // user.validation.js: z.enum(['admin','gestor','soporte','tutor','colaborador'])
-    expect(valores).toEqual(['admin', 'gestor', 'soporte', 'tutor', 'colaborador']);
+    // user.validation.js: z.enum(['admin','gestor','soporte','tutor','colaborador','tutor_redactor'])
+    expect(valores).toEqual(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']);
     expect(valores).not.toContain('superadmin');
   });
 

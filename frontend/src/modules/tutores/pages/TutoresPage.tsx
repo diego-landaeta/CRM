@@ -98,7 +98,9 @@ export default function TutoresPage() {
   const puede = can('tutores.gestionar');
   // El correo de un tutor, solo el super admin (#248). La contraseña, también el
   // admin (Diego, 09/10, #246).
-  const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
+  // Basta el permiso (el superadmin lo tiene siempre): se le da a quien administración diga
+  // desde su ficha de permisos. Antes pedía además ser superadmin y la excepción no servía.
+  const puedeCambiarCorreo = can('tutores.cambiar_correo');
   const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
@@ -110,7 +112,12 @@ export default function TutoresPage() {
   // curso. Eso se apaga, no se tapia la pantalla entera.
   const [soloCampus, setSoloCampus] = useState<number | null>(null);
   const projectId = proyectoFijado ?? soloCampus;
-  const puedeAlta = Boolean(projectId);
+  // Dar de alta ya no obliga a cambiar el selector de arriba (#219): con una
+  // empresa o «Todos», el formulario pide el campus, entre los de esa empresa
+  // (o todos los suyos), y de su catálogo salen los cursos.
+  const puedeAlta = Boolean(projectId) || campus.length > 0;
+  const [campusAlta, setCampusAlta] = useState<number | null>(null);
+  const [formacionesAlta, setFormacionesAlta] = useState<Formacion[]>([]);
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
   const [elegido, setElegido] = useState<Tutor | null>(null);
@@ -154,7 +161,13 @@ export default function TutoresPage() {
   const [verRetirados, setVerRetirados] = useState(false);
   // Buscador de la lista. Diego: «necesito una lupa en tutores». No habia
   // ninguno: con 19 tutores ya cuesta, y la lista crece.
-  const [busca, setBusca] = useState('');
+  // `?buscar=` lo trae el buscador (Ctrl K, #591): la lista sale ya filtrada por ese tutor.
+  // Se lee una vez, al abrir, de la dirección: sin el hook del router, que esta
+  // pantalla no necesitaba (y sus pruebas la montan sin él).
+  const [busca, setBusca] = useState(() => new URLSearchParams(window.location.search).get('buscar') ?? '');
+  // `?formacion=` lo trae «Asignar tutor» desde Formaciones sin tutor: al abrir
+  // «Añadir formación», esa formación ya va elegida. Se lee igual que `buscar`.
+  const [formacionDeLaUrl] = useState<number | null>(() => Number(new URLSearchParams(window.location.search).get('formacion')) || null);
   const [popupClave, setPopupClave] = useState(false);
   const [popupPago, setPopupPago] = useState(false);
   // «Cobra desde» en Editar tutor (Diego, 13/10): la fecha de inicio de TODAS
@@ -215,6 +228,22 @@ export default function TutoresPage() {
     return () => { vivo = false; };
   }, [projectId, campus]);
 
+  // Las del alta: las del campus elegido en el formulario (#219). Si es el de
+  // arriba, ya están pedidas.
+  useEffect(() => {
+    if (!popupAlta || !campusAlta) { setFormacionesAlta([]); return; }
+    if (campusAlta === projectId) { setFormacionesAlta(formaciones); return; }
+    let vivo = true;
+    client.get(`/products?projectId=${campusAlta}&limit=500`)
+      .then((r) => {
+        if (!vivo) return;
+        const filas = (r.success ? (r.data || []) : []) as Formacion[];
+        setFormacionesAlta([...filas].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      })
+      .catch(() => { if (vivo) setFormacionesAlta([]); });
+    return () => { vivo = false; };
+  }, [popupAlta, campusAlta, projectId, formaciones]);
+
   // Las de «Añadir formación»: las de todos los campus de quien asigna, sin
   // juntar por nombre, cada una con su campus (#384). Se piden al abrirlo por
   // primera vez; si cambian sus campus, se vuelven a pedir.
@@ -234,14 +263,16 @@ export default function TutoresPage() {
 
   // El arranque del modulo manda sobre la fecha por defecto: si las comisiones
   // empiezan en agosto, proponer hoy solo invita a ponerlo mal.
+  // Los ajustes son de quien gestiona tutores; sin eso, 403 (#631).
   useEffect(() => {
+    if (!puede) return;
     tutoresApi.ajustes().then((r) => {
       if (!r.success || !r.data) return;
       setAjustes(r.data);
       const arranque = String(r.data.aplica_desde).slice(0, 10);
       setNuevaFecha(arranque > hoy() ? arranque : hoy());
     }).catch(() => { /* se queda con hoy */ });
-  }, []);
+  }, [puede]);
 
   // Cerrar con Escape, que es lo que hace todo el mundo antes de buscar la X.
   // Todas las ventanas, no solo el alta y la formación; y con un desplegable
@@ -270,8 +301,24 @@ export default function TutoresPage() {
     // entrar: va ya generada, y el alta no se deja sin ella.
     setContrasena(sinCorreos ? generarContrasena() : '');
     setCopiada(false);
-    setMarcas(projectId ? [projectId] : []);
+    // El campus del alta: el de arriba; si no hay y la empresa tiene uno solo,
+    // ese; si tiene varios, se elige en el formulario (#219).
+    const inicial = projectId ?? (campus.length === 1 ? campus[0].id : null);
+    setCampusAlta(inicial);
+    setMarcas(inicial ? [inicial] : []);
     setPopupAlta(true);
+  }
+
+  // Cambiar el campus del alta cambia el catálogo: los cursos ya añadidos eran
+  // del otro, así que se quitan. Y el campus va marcado en «En qué marcas».
+  function elegirCampusAlta(id: number | null) {
+    setCursosAlta([]);
+    setNuevoCurso('');
+    setMarcas((prev) => {
+      const sin = prev.filter((x) => x !== campusAlta);
+      return id && !sin.includes(id) ? [...sin, id] : sin;
+    });
+    setCampusAlta(id);
   }
 
   const cargarColabs = useCallback(async (t: Tutor) => {
@@ -290,7 +337,7 @@ export default function TutoresPage() {
 
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
-  function abrirColab() { setCursoColab(null); setPopupColab(true); }
+  function abrirColab() { setCursoColab(formacionDeLaUrl); setPopupColab(true); }
 
   function abrirClave() {
     const clave = generarContrasena();
@@ -309,7 +356,7 @@ export default function TutoresPage() {
     try {
       const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva, claveRepetida);
       if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella. Sus sesiones abiertas se han cerrado.` });
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella, y con la anterior no. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setPopupClave(false);
       cargar();
     } catch (err) {
@@ -409,7 +456,7 @@ export default function TutoresPage() {
     e.preventDefault();
     if (!elegido) return;
     const f = new FormData(e.currentTarget);
-    const correoEscrito = esSuperadmin ? String(f.get('email') || '') : '';
+    const correoEscrito = puedeCambiarCorreo ? String(f.get('email') || '') : '';
     if (avisar(faltaNombre(String(f.get('nombre') || ''))
       || (correoEscrito.trim() ? correoMalo(correoEscrito) : null))) return;
     setProcesando(true);
@@ -417,7 +464,7 @@ export default function TutoresPage() {
       const nombre = String(f.get('nombre') || '').trim();
       // El correo solo lo cambia el super admin (#248); a los demás el campo les
       // sale bloqueado y el servidor les contesta 403.
-      const email = esSuperadmin ? String(f.get('email') || '').trim().toLowerCase() : '';
+      const email = puedeCambiarCorreo ? String(f.get('email') || '').trim().toLowerCase() : '';
       const cambiaCorreo = Boolean(email) && email !== String(elegido.email || '').toLowerCase();
       if (cambiaCorreo) {
         const aviso = await avisoCambioCorreo(elegido.id).catch(() => null);
@@ -476,11 +523,11 @@ export default function TutoresPage() {
 
   async function altaTutor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!projectId) return;
     const f = new FormData(e.currentTarget);
     // Todo lo que falta o está mal, de una vez (#106).
     const correo = String(f.get('email') || '');
     const faltan: Falta[] = numerosMalEscritos(e.currentTarget);
+    if (!campusAlta) faltan.push({ title: 'Falta el campus', description: 'Elige en «Campus» en cuál se le da de alta: de su catálogo salen sus cursos.', que: 'el campus en «Campus»' });
     if (!String(f.get('nombre') || '').trim()) faltan.push({ ...faltaNombre('')!, que: 'el nombre en «Nombre y apellidos»' });
     if (!correo.trim()) faltan.push({ title: 'Falta el correo', description: 'Escríbelo en «Correo»: es con lo que entra al CRM.', que: 'el correo en «Correo»' });
     else if (correoMalo(correo)) faltan.push({ ...correoMalo(correo)!, que: 'un correo válido en «Correo» (nombre@dominio.com)' });
@@ -494,13 +541,14 @@ export default function TutoresPage() {
       faltan.push({ ...porcentajeMalo(nuevoPct, '%')!, que: 'un % del curso de 0 a 100' });
     }
     const falta = avisoDeLoQueFalta(faltan);
-    if (falta) { toast(falta); return; }
+    if (falta || !campusAlta) { if (falta) toast(falta); return; }
     setGuardando(true);
     try {
       const r = await tutoresApi.alta({
         nombre: String(f.get('nombre') || ''),
         email: String(f.get('email') || ''),
-        projectIds: marcas.length ? marcas : [projectId],
+        // El campus del alta, siempre; y las demás marcas que se hayan marcado.
+        projectIds: [...new Set([campusAlta, ...marcas])],
         dniNif: String(f.get('dniNif') || '') || undefined,
         iban: String(f.get('iban') || '') || undefined,
         telefono: String(f.get('telefono') || '') || undefined,
@@ -516,7 +564,7 @@ export default function TutoresPage() {
       const cursos = cursosParaElAlta(cursosAlta, nuevoCurso, nuevoPct, nuevaFecha, Number(ajustes?.pct_por_defecto ?? 10));
       const fallidos: CursoQueFallo[] = [];
       for (const c of cursos) {
-        const nombre = formaciones.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
+        const nombre = formacionesAlta.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
         try {
           const rc = await tutoresApi.crearColaboracion({
             tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
@@ -757,7 +805,7 @@ export default function TutoresPage() {
           : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'}`
             + (activeIssuer && !proyectoFijado ? ` de ${activeIssuer.nombre}` : '')
             + ' · cobran un porcentaje de lo que se cobra de sus formaciones'
-            + (puedeAlta ? '' : ' · elige un campus para dar de alta o asignar cursos')}
+            + (puedeAlta ? '' : ' · no tienes ningún campus en el que dar de alta')}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             {/* El campus, dentro de la empresa. Dar de alta o asignar un curso
@@ -770,12 +818,12 @@ export default function TutoresPage() {
                 onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
                 aria-label={`Campus de ${activeIssuer.nombre}`}
                 className="h-9 px-2 rounded-md border border-border bg-card text-sm">
-                <option value="">Todos los campus (solo ver)</option>
+                <option value="">Todos los campus</option>
                 {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
             )}
             <Button onClick={abrirAlta} disabled={!puedeAlta}
-              title={puedeAlta ? undefined : 'Elige un campus para dar de alta a alguien'}>
+              title={puedeAlta ? undefined : 'No tienes ningún campus en el que dar de alta'}>
               <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
             </Button>
           </div>
@@ -1085,15 +1133,15 @@ export default function TutoresPage() {
               </Field>
 
               <div>
-                <Field label="Correo" disabled={!esSuperadmin} htmlFor="pago-email"
-                  hint={esSuperadmin
+                <Field label="Correo" disabled={!puedeCambiarCorreo} htmlFor="pago-email"
+                  hint={puedeCambiarCorreo
                     ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.'
-                    : 'Solo un superadmin puede cambiar el correo.'}>
+                    : 'Solo quien tiene el permiso «Correo de un tutor» puede cambiarlo.'}>
                   <input autoComplete="off" id="pago-email" name="email" type="email" defaultValue={elegido.email || ''}
-                    readOnly={!esSuperadmin} disabled={!esSuperadmin}
-                    className={`${inputClass} ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+                    readOnly={!puedeCambiarCorreo} disabled={!puedeCambiarCorreo}
+                    className={`${inputClass} ${puedeCambiarCorreo ? '' : 'opacity-60 cursor-not-allowed'}`} />
                 </Field>
-                {esSuperadmin && !sinCorreos && (
+                {puedeCambiarCorreo && !sinCorreos && (
                   <label className="mt-1.5 px-1 flex items-center gap-2 text-secundario text-muted-foreground">
                     <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
                     Mandarle el enlace para poner contraseña en la dirección nueva
@@ -1155,6 +1203,21 @@ export default function TutoresPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+              {/* Sin un campus arriba (empresa o «Todos»), se elige aquí (#219). */}
+              {!proyectoFijado && (
+                <section className="space-y-2">
+                  <Field label="Campus" required htmlFor="alta-campus"
+                    hint="En el que se le da de alta. De su catálogo salen los cursos de abajo.">
+                    <select id="alta-campus" value={campusAlta ?? ''}
+                      onChange={(e) => elegirCampusAlta(e.target.value ? Number(e.target.value) : null)}
+                      className={inputClass}>
+                      <option value="">Elige el campus…</option>
+                      {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </Field>
+                </section>
+              )}
+
               <section className="space-y-3">
                 <h3 className="text-tabla uppercase text-muted-foreground">Quién es</h3>
                 <FilaCampos>
@@ -1202,7 +1265,11 @@ export default function TutoresPage() {
                 </Field>
               </section>
 
-              {projects.length > 1 && (
+              {/* Las marcas de lo que hay arriba (#219, Diego 05/11): con una
+                  empresa, solo sus campus, igual que el desplegable «Campus»
+                  (#346). Una marca que ya tuviera de otra empresa no se pierde:
+                  sigue en `marcas`, solo no se ofrece aquí. */}
+              {campus.length > 1 && (
                 <section className="space-y-2 border-t border-border pt-4">
                   <h3 className="text-tabla uppercase text-muted-foreground">
                     En qué marcas da clase
@@ -1210,8 +1277,8 @@ export default function TutoresPage() {
                   <p className="px-1 text-secundario text-muted-foreground">
                     Solo podrá cobrar de cursos de las marcas que marques aquí.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {projects.map((p) => {
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="En qué marcas da clase">
+                    {campus.map((p) => {
                       const puesta = marcas.includes(p.id);
                       return (
                         <button key={p.id} type="button"
@@ -1248,9 +1315,9 @@ export default function TutoresPage() {
                   <Field label="Curso" htmlFor="alta-curso" className="col-span-2 sm:col-span-1">
                     <BuscadorEnLista
                       id="alta-curso"
-                      opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
+                      opciones={formacionesAlta.map((f) => ({ ...f, nota: f.precio }))}
                       comoDinero
-                      placeholder="Escribe para buscar un curso…"
+                      placeholder={campusAlta ? 'Escribe para buscar un curso…' : 'Elige antes el campus'}
                       sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta."
                       valor={nuevoCurso ? Number(nuevoCurso) : null}
                       onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
