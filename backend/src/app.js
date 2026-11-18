@@ -71,6 +71,7 @@ import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
 import soporteModule from './modules/soporte/index.js';
+import incidenciasModule from './modules/incidencias/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
@@ -98,6 +99,7 @@ import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js'
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -129,6 +131,7 @@ import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColabora
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
@@ -362,6 +365,8 @@ const ALL_MODULES = [
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
   { name: 'soporte', mod: soporteModule },
+  // Incidencias (#253), al lado de Soporte: sobre todo las de capa 8. Migración 238.
+  { name: 'incidencias', mod: incidenciasModule },
   // Links de pago (#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
   ...(linksPagoActivos() ? [{ name: 'links-pago', mod: linksPagoModule }] : []),
   // Siempre montado: cada ruta contesta 404 con su interruptor apagado (#766).
@@ -516,6 +521,8 @@ if (process.env.NODE_ENV !== 'test') {
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
+    // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
+    startMetaTokensScheduler();
     startTutorCommissionsScheduler();
     startTutoresCampusScheduler();
     startConsultasCampusScheduler();
@@ -554,6 +561,8 @@ if (process.env.NODE_ENV !== 'test') {
     startFacturacionAuditoriaScheduler();
     // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
     startInformeMensualScheduler();
+    // Apagada de serie (BREVO_BLOQUEADOS_ACTIVO): apagada no arranca ni pregunta a Brevo.
+    startBrevoBloqueadosScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }

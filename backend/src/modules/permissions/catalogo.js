@@ -396,6 +396,9 @@ export const SECCIONES = [
         clave: 'integrations', nombre: 'Integraciones', acciones: [
           a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
+          // CRM#533: la salud de las conexiones de cada campus (y «Comprobar ahora»,
+          // que prueba sin cambiar nada). Solo superadmin y admin, cada uno en lo suyo.
+          a('salud', 'Ver la salud de las conexiones', 'Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora.', ADMIN),
         ],
       },
     ],
@@ -452,12 +455,12 @@ export const SECCIONES = [
         ],
       },
       {
-        clave: 'matriculas', nombre: 'Matrículas', acciones: [
-          a('view', 'Ver matrículas', 'Las matrículas y sus documentos.', yPM(COMERCIAL)),
-          a('create', 'Crear matrículas', 'Una matrícula nueva.', COMERCIAL),
-          a('edit', 'Editar matrículas', 'Cambiar datos y subir documentos.', COMERCIAL),
-          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una matrícula.', ADMIN_SOPORTE),
-          a('delete', 'Borrar matrículas', 'Quitar una matrícula.', ADMIN_SOPORTE),
+        clave: 'matriculas', nombre: 'Solicitud de admisión', acciones: [
+          a('view', 'Ver solicitudes de admisión', 'Las solicitudes de admisión de sus campus, con sus datos y sus documentos.', yPM(COMERCIAL)),
+          a('create', 'Crear solicitudes de admisión', 'Una solicitud de admisión nueva.', COMERCIAL),
+          a('edit', 'Editar solicitudes de admisión', 'Cambiar datos y subir documentos.', COMERCIAL),
+          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una solicitud de admisión.', ADMIN_SOPORTE),
+          a('delete', 'Borrar solicitudes de admisión', 'Quitar una solicitud de admisión.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -537,6 +540,19 @@ export const SECCIONES = [
         ],
       },
       {
+        // CRM#820 (17/11): las peticiones de acceso entran como tickets de Soporte
+        // del tipo «acceso». Pedir lo puede cualquiera con sesión, también quien
+        // tiene la lista de rutas cerrada (tutor, colaborador, tutor redactor):
+        // es justo quien más acaba pidiendo. Ver y gestionar, soporte y admin
+        // (y el superadmin, siempre). Nada de esto crea usuarios ni da permisos.
+        clave: 'accesos', nombre: 'Peticiones de acceso', acciones: [
+          a('pedir', 'Pedir acceso o permiso', 'Pedir un alta, un permiso, un campus o Claude: queda como ticket de Soporte para que lo prepare soporte.',
+            ['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador', 'tutor_redactor'], { propia: true, independiente: true }),
+          a('view', 'Ver las peticiones de acceso', 'Las peticiones de acceso del equipo (un admin, las de sus campus).', ADMIN_SOPORTE),
+          a('gestionar', 'Gestionar las peticiones de acceso', 'Marcarlas en preparación, hechas o rechazadas y contestar a quien las pidió.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'change_requests', nombre: 'Solicitudes de cambio', acciones: [
           a('view', 'Ver solicitudes', 'Las solicitudes de cambio y sus adjuntos.', TODOS),
           a('create', 'Pedir un cambio', 'Abrir una solicitud.', TODOS),
@@ -544,6 +560,18 @@ export const SECCIONES = [
           a('approve', 'Aprobar solicitudes', 'Firmar la aprobación.', TODOS),
           a('delete', 'Borrar solicitudes', 'Quitar una solicitud.', ['admin', 'soporte', 'project_manager']),
           a('reopen', 'Reabrir solicitudes', 'Volver a abrir una cerrada.', ['admin', 'soporte', 'project_manager']),
+        ],
+      },
+      {
+        // Incidencias (#253). Diego: «la crean y la ven super admin y admin; una
+        // gestora ve solo las suyas». Lo de «solo las suyas» es alcance y lo
+        // recorta el servidor (`incidencias.service.js`), no una clave aparte.
+        // Soporte la trae porque el menú se lo enseña todo (Sidebar).
+        clave: 'incidencias', nombre: 'Incidencias', acciones: [
+          a('view', 'Ver incidencias', 'Las incidencias y sus cifras (una gestora, solo las suyas).', ['admin', 'gestor', 'soporte']),
+          // No «Apuntar incidencias»: así se llama ya `status.edit` (las del estado del sistema).
+          a('create', 'Registrar incidencias', 'Registrar una incidencia nueva con sus adjuntos.', ADMIN_SOPORTE),
+          a('edit', 'Editar incidencias', 'Cambiar una incidencia, cerrarla o reabrirla.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -602,6 +630,8 @@ export const SECCIONES = [
           a('contrasena', 'Contraseña de otros', 'Ponerle contraseña a otra persona (un admin, a tutores de sus campus).', ADMIN),
           a('empresas', 'Empresas enteras y correos', 'Dar empresas enteras a un admin y cambiar el correo de alguien.', NADIE),
           a('aviso_correo', 'Aviso de cambio de correo', 'Ver el aviso que recibe quien cambia de correo.', NADIE),
+          // 17/11/2026: una gestora de ISEIE, tres semanas sin avisos por un rebote duro en Brevo.
+          a('brevo_desbloquear', 'Desbloquear correos en Brevo', 'Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos.', ADMIN),
         ],
       },
       {
