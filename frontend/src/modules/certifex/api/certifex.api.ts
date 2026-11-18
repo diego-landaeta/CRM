@@ -368,7 +368,7 @@ export interface Solicitud extends Candidato {
   diploma?: Diploma | null;
 }
 
-/** Una reversión apuntada en el CRM (#624, migración 301). */
+/** Una reversión apuntada en el CRM (#624, migración 302). */
 export interface Revertido {
   nexpediente: string;
   motivo: string;
