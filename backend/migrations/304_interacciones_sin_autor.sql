@@ -1,4 +1,5 @@
--- 300 · Notas del historial sin autor (02/11/2026, #593)
+-- 304 · Notas del historial sin autor (02/11/2026, #593)
+-- (Nació como 300; renumerada al fusionar: en staging la 300 es la de los links de pago, #680.)
 --
 -- El feedback (#169) apunta en el historial del prospecto que se le mandó el
 -- correo, lo que contestó y si pidió que le volvieran a contactar. Esas notas
