@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-896 rutas en 72 módulos, y 31 acciones con condición dentro de una ruta.
+901 rutas en 72 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -311,6 +311,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | resumen | `GET /api/cursos-pendientes/resumen` | (no existía) | (ruta nueva) | lo de cada uno |
+| controlSubidas | `GET /api/cursos-pendientes/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | crear | `POST /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | detalle | `GET /api/cursos-pendientes/:id` | (no existía) | (ruta nueva) | lo de cada uno |
@@ -318,6 +319,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | publicar | `POST /api/cursos-pendientes/:id/publicar` | (no existía) | (ruta nueva) | lo de cada uno |
 | sumarAlumna | `POST /api/cursos-pendientes/:id/alumnas` | (no existía) | (ruta nueva) | lo de cada uno |
 | marcarAlumna | `PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId` | (no existía) | (ruta nueva) | lo de cada uno |
+| abrirSubidas | `POST /api/cursos-pendientes/:id/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| marcarSubida | `PATCH /api/cursos-pendientes/:id/subidas/:punto` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 
 ## diploma-confirmacion
 
@@ -1047,6 +1050,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | stats | `GET /api/stripe-payments/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | sync | `POST /api/stripe-payments/sync` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | corte | `GET /api/stripe-payments/corte` | (no existía) | (ruta nueva) | `stripe.view` |
+| listar | `GET /api/stripe-payments/disputas` | (no existía) | (ruta nueva) | `stripe.edit` |
+| sincronizar | `POST /api/stripe-payments/disputas/sincronizar` | (no existía) | (ruta nueva) | `stripe.edit` |
 | getOne | `GET /api/stripe-payments/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | link | `POST /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | unlink | `DELETE /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
