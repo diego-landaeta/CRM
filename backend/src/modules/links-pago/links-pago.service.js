@@ -1,6 +1,7 @@
 import * as model from './links-pago.model.js';
 import * as stripe from './links-pago.stripe.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
+import { filtroDeMetadata } from '../stripe-payments/stripe-payments.service.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -174,19 +175,22 @@ export function marca({ linkId, projectId, leadId, conversionId, userId }) {
 }
 
 /*
- * LA MARCA DE PLATAFORMA, EN LAS CUENTAS COMPARTIDAS (revisión de la PR #862).
- *
- * Si el campus comparte cuenta de Stripe, su integración declara
- * `config_public.filtro_metadata` y el sondeo trata un cargo SIN esa marca como
- * «sin marcar»: no lo importa y no deja avanzar la marca de agua mientras siga
- * así. El cargo de un link la tiene que llevar. Las claves del CRM (`crm_*`) no
- * se pisan. Sin filtro declarado (cuenta propia), nada.
- */
-export async function marcaDePlataforma(projectId) {
-  const { filtroDeMetadata } = await import('../stripe-payments/stripe-payments.service.js');
-  const f = await filtroDeMetadata(projectId);
-  if (!f || f.clave.startsWith('crm_')) return {};
-  return { [f.clave]: f.valor };
+  CUENTAS DE STRIPE COMPARTIDAS. Si el campus declara `filtro_metadata` en su
+  tarjeta «Stripe» (varios campus en la misma cuenta, #44), el sondeo de cada 5
+  minutos solo se queda con los cargos que llevan esa marca (`deQuienEs`). Un
+  cargo sin ella es «sin marcar»: no entra y, durante 24 horas, NO deja avanzar
+  la marca de agua del campus. Un link pagado sin la marca frenaba la entrada de
+  todos los cobros de ese campus durante un día y su propio cobro no entraba
+  nunca. Por eso el link y su cargo llevan la misma marca que pone la web de la
+  plataforma en su checkout, con la clave y el valor que declara el campus.
+
+  Sin filtro (cuenta propia del campus, lo normal) no se añade nada. Las marcas
+  `crm_*` mandan: la de plataforma no puede pisar ninguna.
+*/
+export function conMarcaDePlataforma(meta, filtro) {
+  if (!filtro?.clave || filtro.valor == null || filtro.valor === '') return meta;
+  if (Object.prototype.hasOwnProperty.call(meta, filtro.clave)) return meta;
+  return { ...meta, [filtro.clave]: String(filtro.valor) };
 }
 
 /**
@@ -200,7 +204,10 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
     precioCatalogo: reglas.precioCatalogo, importe, descuentoPct: reglas.descuentoPct,
     moneda: reglas.moneda, caducidadDias: reglas.caducidadDias,
   });
-  const meta = marca({ linkId: fila.id, projectId, leadId, conversionId, userId });
+  const meta = conMarcaDePlataforma(
+    marca({ linkId: fila.id, projectId, leadId, conversionId, userId }),
+    await filtroDeMetadata(projectId),
+  );
   // Única por link y por entorno: /testeo y local pueden compartir cuenta de test.
   const base = `crm-${meta.crm_entorno}-link-${fila.id}-${new Date(fila.created_at).getTime()}`;
   let precio; let link;
@@ -209,10 +216,8 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
       importe, moneda: reglas.moneda, nombre: prod.nombre || `Curso ${prod.id}`, metadata: meta,
       idempotencia: `${base}-precio`,
     });
-    link = await stripe.crearLink(clave, {
-      priceId: precio.id, metadata: meta, idempotencia: `${base}-link`,
-      metadataDelCargo: { ...meta, ...(await marcaDePlataforma(projectId)) },
-    });
+    // La marca de plataforma de las cuentas compartidas ya va en `meta` (link y cargo).
+    link = await stripe.crearLink(clave, { priceId: precio.id, metadata: meta, idempotencia: `${base}-link` });
   } catch (err) {
     await model.borrar(fila.id).catch((e) => logger.error({ err: e.message, linkId: fila.id }, 'Links de pago: no se pudo borrar la fila de un link fallido'));
     logger.warn({ err: err.message, projectId, userId }, 'Links de pago: Stripe no creó el link');

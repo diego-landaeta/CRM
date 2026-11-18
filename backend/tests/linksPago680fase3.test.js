@@ -460,7 +460,7 @@ describe('crear un link desde una venta: el tope se mide contra lo pendiente', {
     expect((await crear(p.gestora, { leadId: lead, productId: prod.A, importe: 999 })).body.code).toBe('DESCUENTO_MAXIMO');
   });
 
-  it('campus con cuenta compartida: el cargo lleva la marca de plataforma, y el link solo la del CRM', async () => {
+  it('campus con cuenta compartida: el cargo y el link llevan la marca de plataforma, además de la del CRM', async () => {
     const lead = await nuevoLead(C, p.gestora);
     stripeCreaBien();
     const r = await crear(p.gestora, { leadId: lead, productId: prod.C, importe: 300 });
@@ -468,7 +468,8 @@ describe('crear un link desde una venta: el tope se mide contra lo pendiente', {
     const link = llamadas.find((c) => c.ruta === '/v1/payment_links').cuerpo;
     expect(link['payment_intent_data[metadata][proyecto]']).toBe('campus-c');
     expect(link['payment_intent_data[metadata][crm_link_id]']).toBe(String(r.body.data.id));
-    expect(link['metadata[proyecto]']).toBeUndefined();
+    // El link también la lleva (como quedó en staging con la revisión de la #862).
+    expect(link['metadata[proyecto]']).toBe('campus-c');
   });
 
   it('cuenta propia (sin filtro): ninguna marca de más', async () => {
