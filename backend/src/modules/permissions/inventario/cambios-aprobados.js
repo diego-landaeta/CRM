@@ -572,6 +572,19 @@ export const CAMBIOS_DE_MENU = [
     // La escribe Claude principal con el sí de Diego.
     aprobadoPor: 'Pendiente de Diego',
   },
+  {
+    id: 'menu-testeo-solo-diseno',
+    que: 'El apartado «Testeo» del menú (TESTEO2, SUITE DASH y «Las 22 primitivas») sale solo a superadmin, admin y soporte. Solo existe en /testeo y en local; en producción no sale a nadie.',
+    motivo: 'QA de /testeo del 18/11: a una gestora le salían la maqueta del rediseño, la referencia y el muestrario de primitivas, que son herramientas de diseño y no pantallas de trabajo. Solo se esconden: no tienen ruta del servidor y sus páginas siguen abriendo igual.',
+    // Solo menú: no tienen ruta del servidor (`null`), el acceso no cambia.
+    soloMenu: true,
+    perfiles: Object.fromEntries([
+      'gestora', 'project_manager', 'gestora+tutor', 'gestora con factura_manager', 'gestora con editar_fechas_factura',
+      'gestora con usa_mcp', 'gestora con diplomas.view', 'gestora con tasks.close',
+    ].map((perfil) => [perfil, ['- Testeo › TESTEO2', '- Testeo › SUITE DASH', '- Testeo › Las 22 primitivas']])),
+    rutas: { 'Testeo › TESTEO2': null, 'Testeo › SUITE DASH': null, 'Testeo › Las 22 primitivas': null },
+    aprobadoPor: 'Pendiente de Diego (QA de /testeo del 18/11)',
+  },
 ];
 
 /**
