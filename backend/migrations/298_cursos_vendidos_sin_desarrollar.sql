@@ -1,4 +1,6 @@
--- #770 · Cursos vendidos sin desarrollar (Automatizaciones 7/9, fase 2 de #336).
+-- 298 · #770 · Cursos vendidos sin desarrollar (Automatizaciones 7/9, fase 2 de #336).
+-- (Nació como 296; renumerada al fusionar: en staging la 296 es la de Monitask, #236,
+-- y la 297 la del control de subidas, #771.)
 --
 -- Cuando se vende un curso que todavía no existe, el CRM crea solo su
 -- «Curso pendiente» (o suma la alumna al que ya está abierto), se lo asigna a

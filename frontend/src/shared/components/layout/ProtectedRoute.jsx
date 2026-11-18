@@ -17,7 +17,11 @@ const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() 
 // /productos/pendientes: sus cursos por desarrollar (#336, #770). Es a donde
 // llevan sus avisos («Te han asignado un curso»); sin esto, el enlace le echaba
 // a «Mis cursos». Solo esa pestaña: el catálogo, no.
-const RUTAS_DEL_TUTOR = ['/mis-cursos', '/consultas', '/productos/pendientes', '/preferencias', '/perfil', '/set-password'];
+// /tareas: su tablero (Diego, 04/11). El menú le enseña «Mi tablero» y el
+// servidor ya le deja `/api/tasks` (RUTAS_DEL_TUTOR en shared/utils/roles.js);
+// aquí faltaba y la entrada le devolvía a «Mi campus». Lo de dentro que no es
+// suyo (configurar el tablero) lo cierra el permiso (`rutaPermitida`).
+const RUTAS_DEL_TUTOR = ['/mis-cursos', '/consultas', '/tareas', '/productos/pendientes', '/preferencias', '/perfil', '/set-password'];
 
 function tutorPuede(pathname) {
   return RUTAS_DEL_TUTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
