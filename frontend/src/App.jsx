@@ -80,6 +80,7 @@ const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPe
 const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashboardPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
+const IncidenciasPage = lazy(() => import('./modules/incidencias/pages/IncidenciasPage'));
 const StatusPage = lazy(() => import('./modules/status/pages/StatusPage'));
 const RegistroPage = lazy(() => import('./modules/registro/pages/RegistroPage'));
 const NovedadesPage = lazy(() => import('./modules/novedades/pages/NovedadesPage'));
@@ -106,6 +107,8 @@ const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/Pend
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 // Cobros de PayPal y extractos del banco (#766).
 const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
+// Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
+const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -395,6 +398,8 @@ function App() {
           <Route path="/informes/feedback" element={<FeedbackPanelPage />} />
           <Route path="/chat-ia" element={PANTALLAS_IA ? <AIChatPage /> : <Navigate to="/" replace />} />
           <Route path="/soporte" element={<SoportePage />} />
+          {/* Incidencias (#253), al lado de Soporte. */}
+          <Route path="/incidencias" element={<IncidenciasPage />} />
           {/* Las direcciones de antes (avisos ya enviados, marcadores): a Certificaciones. */}
           <Route path="/certifex/consultas" element={<Navigate to="/clientes/matriculas/certificaciones?vista=consultas" replace />} />
           <Route path="/certifex/emisiones" element={<Navigate to="/clientes/matriculas/certificaciones" replace />} />
@@ -416,6 +421,8 @@ function App() {
           <Route path="/tareas/revisar" element={<Navigate to="/tareas/historial" replace />} />
           <Route path="/tareas/configurar" element={<TaskBoardConfigPage />} />
           <Route path="/mi-factura" element={<MiFacturaPage />} />
+          {/* Monitask (#236): la pantalla dice si el servidor lo tiene apagado (MONITASK_ACTIVO). */}
+          <Route path="/equipo/actividad" element={<ConPermiso permiso="monitask.view"><MonitaskActividadPage /></ConPermiso>} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />

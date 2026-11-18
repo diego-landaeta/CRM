@@ -13,7 +13,7 @@ import * as model from './cursos-pendientes.model.js';
  * YouTube, los módulos en el Moodle del campus y los datos de los directores
  * enviados para la web. Administración ve solo lo atrasado.
  *
- *   · Una fila por curso y punto (`cursos_pendientes_subidas`, migración 293).
+ *   · Una fila por curso y punto (`cursos_pendientes_subidas`, migración 297).
  *     `created_at` es «desde cuándo falta»; la fecha límite sale de sumar
  *     CONTROL_SUBIDAS_PLAZO_DIAS (7 de serie) al día en que se abre, y se puede
  *     mover punto a punto.

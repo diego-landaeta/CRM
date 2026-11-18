@@ -165,6 +165,9 @@ export default function TutoresPage() {
   // Se lee una vez, al abrir, de la dirección: sin el hook del router, que esta
   // pantalla no necesitaba (y sus pruebas la montan sin él).
   const [busca, setBusca] = useState(() => new URLSearchParams(window.location.search).get('buscar') ?? '');
+  // `?formacion=` lo trae «Asignar tutor» desde Formaciones sin tutor: al abrir
+  // «Añadir formación», esa formación ya va elegida. Se lee igual que `buscar`.
+  const [formacionDeLaUrl] = useState<number | null>(() => Number(new URLSearchParams(window.location.search).get('formacion')) || null);
   const [popupClave, setPopupClave] = useState(false);
   const [popupPago, setPopupPago] = useState(false);
   // «Cobra desde» en Editar tutor (Diego, 13/10): la fecha de inicio de TODAS
@@ -334,7 +337,7 @@ export default function TutoresPage() {
 
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
-  function abrirColab() { setCursoColab(null); setPopupColab(true); }
+  function abrirColab() { setCursoColab(formacionDeLaUrl); setPopupColab(true); }
 
   function abrirClave() {
     const clave = generarContrasena();
@@ -353,7 +356,7 @@ export default function TutoresPage() {
     try {
       const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva, claveRepetida);
       if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella. Sus sesiones abiertas se han cerrado.` });
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella, y con la anterior no. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setPopupClave(false);
       cargar();
     } catch (err) {

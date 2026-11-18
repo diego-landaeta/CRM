@@ -31,6 +31,10 @@
  *   independiente no pide el `view` de su recurso: es otra pantalla (cuentas por
  *                cobrar no es «editar» el dashboard de finanzas)
  *
+ * Y cada recurso puede llevar `nota`: lo que decide el acceso a esa pantalla y
+ * no es una casilla (en el tablero, quien cierra una tarea con supervisor). La
+ * ficha de cada persona la enseña junto a sus permisos (#694).
+ *
  * Los valores de `roles` no se han inventado: son quién entra HOY a las rutas
  * de cada clave (`inventario/asignacion.js`), y la prueba
  * `catalogoPermisos.test.js` lo comprueba rol por rol.
@@ -139,7 +143,10 @@ export const SECCIONES = [
     clave: 'tareas', nombre: 'Tareas',
     recursos: [
       {
-        clave: 'tasks', nombre: 'Tablero de tareas', acciones: [
+        clave: 'tasks', nombre: 'Tablero de tareas',
+        // Diego, 11/11/2026 (#694): no es una casilla, y la ficha lo explica.
+        nota: 'Quién cierra una tarea no es una casilla: lo decide la propia tarea. Sin supervisor, la cierra quien la lleva; con supervisor, solo su supervisor (ni quien la lleva ni el superadmin), tenga o no estos permisos. «Devolver tareas» es otra cosa: devolver a «En curso», con un comentario, las ya hechas o en revisión.',
+        acciones: [
           // El tutor, el suyo (Diego, 04/11): sus tareas y las de su equipo de TUTORES. Lo
           // de desarrollo no lo ve: no es de ese equipo (tasks.equipos.model.js).
           // El tutor redactor (CRM#708), como un colaborador: ver, crearse y mover las suyas.
@@ -385,9 +392,20 @@ export const SECCIONES = [
         ],
       },
       {
+        // Monitask (#236): qué hace cada colaborador y el cotejo de horas con sus
+        // facturas. Solo admin y superadmin (Manuel, 05/10): es actividad de personas.
+        clave: 'monitask', nombre: 'Monitask', acciones: [
+          a('view', 'Ver la actividad de Monitask', 'Horas, % de actividad, proyectos y tareas de cada persona, y el cotejo con las horas de sus facturas (de sus empresas).', ADMIN),
+          a('configurar', 'Configurar Monitask', 'Conectar la cuenta de Monitask, sincronizar y emparejar sus personas con las del CRM.', ADMIN, { independiente: true }),
+        ],
+      },
+      {
         clave: 'integrations', nombre: 'Integraciones', acciones: [
           a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
+          // CRM#533: la salud de las conexiones de cada campus (y «Comprobar ahora»,
+          // que prueba sin cambiar nada). Solo superadmin y admin, cada uno en lo suyo.
+          a('salud', 'Ver la salud de las conexiones', 'Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora.', ADMIN),
         ],
       },
     ],
@@ -444,12 +462,12 @@ export const SECCIONES = [
         ],
       },
       {
-        clave: 'matriculas', nombre: 'Matrículas', acciones: [
-          a('view', 'Ver matrículas', 'Las matrículas y sus documentos.', yPM(COMERCIAL)),
-          a('create', 'Crear matrículas', 'Una matrícula nueva.', COMERCIAL),
-          a('edit', 'Editar matrículas', 'Cambiar datos y subir documentos.', COMERCIAL),
-          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una matrícula.', ADMIN_SOPORTE),
-          a('delete', 'Borrar matrículas', 'Quitar una matrícula.', ADMIN_SOPORTE),
+        clave: 'matriculas', nombre: 'Solicitud de admisión', acciones: [
+          a('view', 'Ver solicitudes de admisión', 'Las solicitudes de admisión de sus campus, con sus datos y sus documentos.', yPM(COMERCIAL)),
+          a('create', 'Crear solicitudes de admisión', 'Una solicitud de admisión nueva.', COMERCIAL),
+          a('edit', 'Editar solicitudes de admisión', 'Cambiar datos y subir documentos.', COMERCIAL),
+          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una solicitud de admisión.', ADMIN_SOPORTE),
+          a('delete', 'Borrar solicitudes de admisión', 'Quitar una solicitud de admisión.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -480,7 +498,9 @@ export const SECCIONES = [
         clave: 'mcp', nombre: 'MCP (Claude)', acciones: [
           // Antes lo decidía el rol principal (mcp.acceso.js · puedeUsarMcp): admin de serie, el
           // resto con la casilla, y un tutor nunca, aunque tuviera otro rol de más (QA, punto 6).
-          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'tutor_redactor'], soloPrincipal: true }),
+          // Diego, 12/11/2026 (#752): el colaborador, como el tutor y el tutor redactor, nunca;
+          // el que lo tenía con la casilla lo pierde (`colaborador-sin-mcp` en cambios-aprobados).
+          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor', 'colaborador'], nuncaPrincipal: ['tutor', 'tutor_redactor', 'colaborador'], soloPrincipal: true }),
           a('administrar', 'Administrar el MCP', 'Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado.', ADMIN),
           a('supervisar', 'Apagar el MCP', 'El interruptor de emergencia y rechazar conexiones ajenas.', NADIE),
         ],
@@ -529,6 +549,19 @@ export const SECCIONES = [
         ],
       },
       {
+        // CRM#820 (17/11): las peticiones de acceso entran como tickets de Soporte
+        // del tipo «acceso». Pedir lo puede cualquiera con sesión, también quien
+        // tiene la lista de rutas cerrada (tutor, colaborador, tutor redactor):
+        // es justo quien más acaba pidiendo. Ver y gestionar, soporte y admin
+        // (y el superadmin, siempre). Nada de esto crea usuarios ni da permisos.
+        clave: 'accesos', nombre: 'Peticiones de acceso', acciones: [
+          a('pedir', 'Pedir acceso o permiso', 'Pedir un alta, un permiso, un campus o Claude: queda como ticket de Soporte para que lo prepare soporte.',
+            ['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador', 'tutor_redactor'], { propia: true, independiente: true }),
+          a('view', 'Ver las peticiones de acceso', 'Las peticiones de acceso del equipo (un admin, las de sus campus).', ADMIN_SOPORTE),
+          a('gestionar', 'Gestionar las peticiones de acceso', 'Marcarlas en preparación, hechas o rechazadas y contestar a quien las pidió.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'change_requests', nombre: 'Solicitudes de cambio', acciones: [
           a('view', 'Ver solicitudes', 'Las solicitudes de cambio y sus adjuntos.', TODOS),
           a('create', 'Pedir un cambio', 'Abrir una solicitud.', TODOS),
@@ -536,6 +569,18 @@ export const SECCIONES = [
           a('approve', 'Aprobar solicitudes', 'Firmar la aprobación.', TODOS),
           a('delete', 'Borrar solicitudes', 'Quitar una solicitud.', ['admin', 'soporte', 'project_manager']),
           a('reopen', 'Reabrir solicitudes', 'Volver a abrir una cerrada.', ['admin', 'soporte', 'project_manager']),
+        ],
+      },
+      {
+        // Incidencias (#253). Diego: «la crean y la ven super admin y admin; una
+        // gestora ve solo las suyas». Lo de «solo las suyas» es alcance y lo
+        // recorta el servidor (`incidencias.service.js`), no una clave aparte.
+        // Soporte la trae porque el menú se lo enseña todo (Sidebar).
+        clave: 'incidencias', nombre: 'Incidencias', acciones: [
+          a('view', 'Ver incidencias', 'Las incidencias y sus cifras (una gestora, solo las suyas).', ['admin', 'gestor', 'soporte']),
+          // No «Apuntar incidencias»: así se llama ya `status.edit` (las del estado del sistema).
+          a('create', 'Registrar incidencias', 'Registrar una incidencia nueva con sus adjuntos.', ADMIN_SOPORTE),
+          a('edit', 'Editar incidencias', 'Cambiar una incidencia, cerrarla o reabrirla.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -594,6 +639,8 @@ export const SECCIONES = [
           a('contrasena', 'Contraseña de otros', 'Ponerle contraseña a otra persona (un admin, a tutores de sus campus).', ADMIN),
           a('empresas', 'Empresas enteras y correos', 'Dar empresas enteras a un admin y cambiar el correo de alguien.', NADIE),
           a('aviso_correo', 'Aviso de cambio de correo', 'Ver el aviso que recibe quien cambia de correo.', NADIE),
+          // 17/11/2026: una gestora de ISEIE, tres semanas sin avisos por un rebote duro en Brevo.
+          a('brevo_desbloquear', 'Desbloquear correos en Brevo', 'Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos.', ADMIN),
         ],
       },
       {
@@ -697,13 +744,15 @@ export function catalogoParaPantalla() {
     secciones: SECCIONES.map((s) => ({
       clave: s.clave, nombre: s.nombre,
       recursos: s.recursos.map((r) => ({
-        clave: r.clave, nombre: r.nombre,
+        clave: r.clave, nombre: r.nombre, ...(r.nota ? { nota: r.nota } : {}),
         acciones: r.acciones.map((x) => {
           const clave = `${r.clave}.${x.accion}`;
           return {
             clave, accion: x.accion, nombre: x.nombre, descripcion: x.descripcion,
             roles: x.roles, requiere: dependencias(clave), nunca: x.nunca || [], nuncaPrincipal: x.nuncaPrincipal || [],
             soloPantalla: x.soloPantalla === true,
+            // #694: la ficha enseña cada forma de tenerlo.
+            propia: x.propia === true, independiente: x.independiente === true, soloPrincipal: x.soloPrincipal === true,
           };
         }),
       })),

@@ -1,6 +1,9 @@
 -- ============================================================
--- 293: control de subidas de contenido por curso (#771, Automatizaciones 8/9)
+-- 297: control de subidas de contenido por curso (#771, Automatizaciones 8/9)
 -- ============================================================
+-- (Nació como 293; renumerada al fusionar: en staging la 293 es la de la salud
+-- de las conexiones, #533.)
+--
 -- Cuando una formación de «Cursos pendientes» (#336) está entregada, alguien
 -- (la responsable de las subidas) tiene que subir lo que la acompaña. Una fila por curso y punto:
 --
