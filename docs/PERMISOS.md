@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-864 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
+882 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -518,6 +518,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | list | `GET /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | estado | `GET /api/integrations/estado` | (no existía) | (ruta nueva) | `integrations.view` |
+| salud | `GET /api/integrations/salud` | (no existía) | (ruta nueva) | `integrations.salud` |
+| comprobar | `POST /api/integrations/salud/comprobar` | (no existía) | (ruta nueva) | `integrations.salud` |
 | getOne | `GET /api/integrations/:provider` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | upsert | `PUT /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
 | test | `POST /api/integrations/:provider/test` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
@@ -725,6 +727,22 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | setAdSetAssociations | `POST /api/meta-ads/adset-associations` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.edit` |
 | getRoi | `GET /api/meta-ads/roi` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.view` |
 | getProductsView | `GET /api/meta-ads/products-view` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.view` |
+
+## monitask
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/monitask/estado` | (no existía) | (ruta nueva) | `monitask.view` o `monitask.configurar` |
+| guardarApp | `PUT /api/monitask/conexion` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| desconectar | `DELETE /api/monitask/conexion` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| autorizar | `POST /api/monitask/conexion/autorizar` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| sincronizar | `POST /api/monitask/sincronizar` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| personas | `GET /api/monitask/personas` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| emparejar | `PATCH /api/monitask/personas/:id` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| actividad | `GET /api/monitask/actividad` | (no existía) | (ruta nueva) | `monitask.view` |
+| dias | `GET /api/monitask/actividad/:id/dias` | (no existía) | (ruta nueva) | `monitask.view` |
+| cotejo | `GET /api/monitask/cotejo` | (no existía) | (ruta nueva) | `monitask.view` |
+| vueltaOAuth | `GET /api/monitask/oauth/callback` | (no existía) | (ruta nueva) | — |
 
 ## moodle
 
@@ -973,6 +991,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/soporte/` | (no existía) | (ruta nueva) | lo de cada uno |
 | crear | `POST /api/soporte/` | (no existía) | (ruta nueva) | lo de cada uno |
 | tiempos | `GET /api/soporte/tiempos` | (no existía) | (ruta nueva) | lo de cada uno |
+| pedirAcceso | `POST /api/soporte/accesos` | (no existía) | (ruta nueva) | `accesos.pedir` |
+| listarAccesos | `GET /api/soporte/accesos` | (no existía) | (ruta nueva) | `accesos.view` |
+| gestionarAcceso | `PATCH /api/soporte/accesos/:id` | (no existía) | (ruta nueva) | `accesos.gestionar` |
 | descargarAdjunto | `GET /api/soporte/adjuntos/:adjuntoId` | (no existía) | (ruta nueva) | lo de cada uno |
 | porId | `GET /api/soporte/:id` | (no existía) | (ruta nueva) | lo de cada uno |
 | responder | `POST /api/soporte/:id/mensajes` | (no existía) | (ruta nueva) | lo de cada uno |
@@ -1128,6 +1149,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/users/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | buscar | `GET /api/users/buscar` | (no existía) | (ruta nueva) | `users.view` |
 | rolesAsignables | `GET /api/users/roles-asignables` | (no existía) | (ruta nueva) | `users.create` |
+| brevoBloqueos | `GET /api/users/brevo-bloqueos` | (no existía) | (ruta nueva) | `users.view` |
 | listAvailability | `GET /api/users/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | deleteBlock | `DELETE /api/users/availability-blocks/:blockId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | getById | `GET /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
@@ -1137,6 +1159,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | reactivate | `PATCH /api/users/:id/reactivate` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | setPassword | `PATCH /api/users/:id/password` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · a mano: user.controller.js · setPassword | superadmin, admin | `users.contrasena` |
 | avisoCorreo | `GET /api/users/:id/aviso-correo` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · soloRoles(superadmin) | superadmin | `users.aviso_correo` |
+| desbloquearBrevo | `DELETE /api/users/:id/brevo-bloqueo` | (no existía) | (ruta nueva) | `users.brevo_desbloquear` |
 | setAvailability | `PATCH /api/users/:id/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | listBlocks | `GET /api/users/:id/availability-blocks` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | ver | `GET /api/users/:id/equipo-comercial` | (no existía) | (ruta nueva) | `users.view` |
@@ -1569,12 +1592,20 @@ lo que pide para tener sentido (editar pide ver).
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
 | Pagar facturas de colaboradores | `facturas_colaborador.pagar` | Marcarlas pagadas con su justificante. | Admin | `facturas_colaborador.ver_todas` |
 
+### Monitask
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver la actividad de Monitask | `monitask.view` | Horas, % de actividad, proyectos y tareas de cada persona, y el cotejo con las horas de sus facturas (de sus empresas). | Admin |  |
+| Configurar Monitask | `monitask.configurar` | Conectar la cuenta de Monitask, sincronizar y emparejar sus personas con las del CRM. | Admin |  |
+
 ### Integraciones
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver integraciones | `integrations.view` | Los servicios conectados (Stripe, Brevo…). | Admin, Soporte, Project manager |  |
 | Configurar integraciones | `integrations.edit` | Conectarlos, probarlos y desconectarlos. | Admin, Soporte | `integrations.view` |
+| Ver la salud de las conexiones | `integrations.salud` | Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora. | Admin | `integrations.view` |
 
 ## Análisis
 
@@ -1628,15 +1659,15 @@ lo que pide para tener sentido (editar pide ver).
 | Borrar clientes | `clients.delete` | Quitar un cliente. (solo pantalla) | Admin | `clients.view` |
 | Exportar clientes | `clients.export` | Descargar en CSV los clientes que se ven. (solo pantalla) | Admin | `clients.view` |
 
-### Matrículas
+### Solicitud de admisión
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
-| Crear matrículas | `matriculas.create` | Una matrícula nueva. | Admin, Gestora, Soporte | `matriculas.view` |
-| Editar matrículas | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
-| Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una matrícula. | Admin, Soporte | `matriculas.view` |
-| Borrar matrículas | `matriculas.delete` | Quitar una matrícula. | Admin, Soporte | `matriculas.view` |
+| Ver solicitudes de admisión | `matriculas.view` | Las solicitudes de admisión de sus campus, con sus datos y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
+| Crear solicitudes de admisión | `matriculas.create` | Una solicitud de admisión nueva. | Admin, Gestora, Soporte | `matriculas.view` |
+| Editar solicitudes de admisión | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
+| Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
+| Borrar solicitudes de admisión | `matriculas.delete` | Quitar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
 
 ### Diplomas (Certifex)
 
@@ -1711,6 +1742,14 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Usar los mensajes | `mensajes.usar` | Escribirse con el resto del equipo. | Admin, Gestora, Soporte, Project manager, Tutor |  |
 
+### Peticiones de acceso
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Pedir acceso o permiso | `accesos.pedir` | Pedir un alta, un permiso, un campus o Claude: queda como ticket de Soporte para que lo prepare soporte. | Admin, Gestora, Soporte, Project manager, Tutor, Colaborador, Tutor redactor |  |
+| Ver las peticiones de acceso | `accesos.view` | Las peticiones de acceso del equipo (un admin, las de sus campus). | Admin, Soporte |  |
+| Gestionar las peticiones de acceso | `accesos.gestionar` | Marcarlas en preparación, hechas o rechazadas y contestar a quien las pidió. | Admin, Soporte | `accesos.view` |
+
 ### Solicitudes de cambio
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
@@ -1776,6 +1815,7 @@ lo que pide para tener sentido (editar pide ver).
 | Contraseña de otros | `users.contrasena` | Ponerle contraseña a otra persona (un admin, a tutores de sus campus). | Admin | `users.view` |
 | Empresas enteras y correos | `users.empresas` | Dar empresas enteras a un admin y cambiar el correo de alguien. | solo superadmin | `users.view` |
 | Aviso de cambio de correo | `users.aviso_correo` | Ver el aviso que recibe quien cambia de correo. | solo superadmin | `users.view` |
+| Desbloquear correos en Brevo | `users.brevo_desbloquear` | Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos. | Admin | `users.view` |
 
 ### Equipos comerciales
 
