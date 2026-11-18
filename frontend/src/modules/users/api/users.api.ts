@@ -201,7 +201,8 @@ export async function reactivateUser(id: number): Promise<void> {
 }
 
 /**
- * Reset de contraseña por un superadmin. Cierra las sesiones activas del usuario.
+ * Reset de contraseña por un superadmin. Revoca sus refresh tokens: con la anterior
+ * ya no entra, pero el JWT de acceso dura hasta 8 h y sus URL del MCP siguen vivas (#262).
  * Repetida, con las reglas de «Establece tu contraseña» (#248).
  */
 export async function setUserPassword(id: number, password: string, confirmPassword: string): Promise<void> {
@@ -256,4 +257,37 @@ export async function listRolesAsignables(): Promise<RolAsignable[]> {
   const res = await client.get('/users/roles-asignables');
   if (!res.success) throw new Error(res.error || 'No se pudo saber qué roles puedes dar');
   return (res.data || []) as RolAsignable[];
+}
+
+/**
+ * Un correo del equipo que Brevo se niega a entregar (migración 290). Caso real
+ * de ISEIE (17/11/2026): una gestora tres semanas sin avisos por un rebote duro.
+ */
+export interface BrevoBloqueo {
+  id: number;
+  user_id: number;
+  /** El código de Brevo: hardBounce, contactFlaggedAsSpam, unsubscribedViaEmail… */
+  codigo: string | null;
+  /** Ya en castellano. */
+  motivo: string | null;
+  bloqueado_desde: string | null;
+  detectado_at: string | null;
+}
+
+export interface BrevoBloqueos {
+  /** Si la vigilancia está encendida (BREVO_BLOQUEADOS_ACTIVO). Apagada, no hay marcas. */
+  activo: boolean;
+  bloqueos: BrevoBloqueo[];
+}
+
+export async function listBrevoBloqueos(): Promise<BrevoBloqueos> {
+  const res = await client.get('/users/brevo-bloqueos');
+  if (!res.success) throw new Error(res.error || 'No se pudieron leer los bloqueos de Brevo');
+  return { activo: !!res.data?.activo, bloqueos: (res.data?.bloqueos || []) as BrevoBloqueo[] };
+}
+
+/** «Desbloquear en Brevo». Si el buzón sigue sin existir, Brevo lo vuelve a bloquear. */
+export async function desbloquearBrevo(id: number): Promise<void> {
+  const res = await client.delete(`/users/${id}/brevo-bloqueo`);
+  if (!res.success) throw new Error(res.error || 'Brevo no lo desbloqueó');
 }

@@ -350,7 +350,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
           {/* Cabecera: nombre, estado, curso y campus. */}
           <header className="flex items-start justify-between gap-3 p-5 border-b border-border">
             <div className="min-w-0 space-y-1">
-              <h2 id="matricula-detail-title" className="font-semibold text-base truncate">{m.lead_nombre || 'Matrícula'}</h2>
+              <h2 id="matricula-detail-title" className="font-semibold text-base truncate">{m.lead_nombre || 'Solicitud de admisión'}</h2>
               {m.estado && (
                 <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${ESTADO_COLOR[m.estado] || ''}`}>
                   {ESTADO_LABEL[m.estado] || m.estado}
@@ -557,13 +557,13 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
             <footer className="p-4 border-t border-border flex justify-end gap-2">
               {m.estado === 'solicitud_admision' && (
                 <button onClick={() => onEstado(m, 'datos_validados')}
-                  className="flex items-center gap-1 h-9 px-3 rounded-lg bg-success hover:bg-success text-success-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-success/40">
+                  className="flex items-center gap-1 h-9 px-3 rounded-lg bg-success hover:bg-success/90 text-success-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-success/40">
                   <CheckCircle size={14} weight="bold" /> Validar datos
                 </button>
               )}
               {(m.estado === 'datos_validados' || m.estado === 'pendiente') && (
                 <button onClick={() => onEstado(m, 'validada')}
-                  className="flex items-center gap-1 h-9 px-3 rounded-lg bg-success hover:bg-success text-success-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-success/40">
+                  className="flex items-center gap-1 h-9 px-3 rounded-lg bg-success hover:bg-success/90 text-success-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-success/40">
                   <CheckCircle size={14} weight="bold" /> Validar matrícula
                 </button>
               )}
