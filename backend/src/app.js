@@ -97,6 +97,7 @@ import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -128,6 +129,7 @@ import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColabora
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
@@ -513,6 +515,8 @@ if (process.env.NODE_ENV !== 'test') {
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
+    // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
+    startMetaTokensScheduler();
     startTutorCommissionsScheduler();
     startTutoresCampusScheduler();
     startConsultasCampusScheduler();
@@ -551,6 +555,8 @@ if (process.env.NODE_ENV !== 'test') {
     startFacturacionAuditoriaScheduler();
     // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
     startInformeMensualScheduler();
+    // Apagada de serie (BREVO_BLOQUEADOS_ACTIVO): apagada no arranca ni pregunta a Brevo.
+    startBrevoBloqueadosScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
