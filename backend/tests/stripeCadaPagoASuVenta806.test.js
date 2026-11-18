@@ -23,7 +23,7 @@ const MARCA = `P6TEST${Date.now().toString(36)}`;
 const m = MARCA.toLowerCase();
 const ids = {};
 const uno = async (sql, p) => (await query(sql, p)).rows[0];
-const ENCENDIDO = { COMPRA_DIRECTA_ACTIVA: 'true', COMPRA_DIRECTA_ESPERA_HORAS: '24', COMPRA_DIRECTA_DIAS: '30' };
+const ENCENDIDO = { STRIPE_ASOCIACION_V2_ACTIVA: 'true', COMPRA_DIRECTA_ACTIVA: 'true', COMPRA_DIRECTA_ESPERA_HORAS: '24', COMPRA_DIRECTA_DIAS: '30' };
 const haceDias = (d) => Math.floor(Date.now() / 1000) - d * 86400;
 
 const evento = (id, euros, { email, created = Math.floor(Date.now() / 1000), metadata = {}, customer = null } = {}) => ({
@@ -63,7 +63,12 @@ async function cargoGuardado(stripeId, euros, { email, dias = 2, orderId = null 
     [ids.PA, stripeId, euros, email, `${MARCA} Comprador`, orderId ? { order_id: String(orderId), site_url: 'https://tienda.test' } : {}, dias]);
 }
 
+// Las reglas nuevas van con interruptor y salen apagadas: aquí se encienden para
+// probarlas, y el último bloque comprueba que apagadas no cambia nada.
+const V2_ANTES = process.env.STRIPE_ASOCIACION_V2_ACTIVA;
+
 beforeAll(async () => {
+  process.env.STRIPE_ASOCIACION_V2_ACTIVA = 'true';
   // El campus nace hace un año: el suelo de la pasada es el alta del campus.
   ids.PA = (await uno(
     `INSERT INTO projects (nombre, slug, webhook_api_key, created_at) VALUES ($1, $2, $3, NOW() - interval '1 year') RETURNING id`,
@@ -76,6 +81,7 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  if (V2_ANTES === undefined) delete process.env.STRIPE_ASOCIACION_V2_ACTIVA; else process.env.STRIPE_ASOCIACION_V2_ACTIVA = V2_ANTES;
   // El campus se lleva en cascada fichas, ventas, cobros, cargos, pedidos y productos.
   try { await query(`DELETE FROM projects WHERE id = $1`, [ids.PA]); } catch { /* sigue */ }
 });
@@ -263,5 +269,107 @@ describe('la compra directa en la web crea su venta', { timeout: 60000 }, () => 
     for (const id of ['igual', 'doble', 'reciente']) {
       expect((await cargo(`ch_${MARCA}_${id}`)).conversion_id, id).toBeNull();
     }
+  });
+});
+
+/*
+  EL INTERRUPTOR (STRIPE_ASOCIACION_V2_ACTIVA). Apagado, que es como sale, un cargo
+  se asocia EXACTAMENTE como antes de la puerta 6: por el correo, a la ficha más
+  nueva del campus, solo si está «convertida» y tiene venta. Los mismos casos de
+  arriba, con el interruptor apagado, dan lo que daban antes.
+*/
+describe('con el interruptor apagado no cambia nada', { timeout: 60000 }, () => {
+  async function apagado(fn) {
+    const antes = process.env.STRIPE_ASOCIACION_V2_ACTIVA;
+    delete process.env.STRIPE_ASOCIACION_V2_ACTIVA;
+    try { return await fn(); } finally {
+      if (antes === undefined) delete process.env.STRIPE_ASOCIACION_V2_ACTIVA; else process.env.STRIPE_ASOCIACION_V2_ACTIVA = antes;
+    }
+  }
+  const cobrosDe = async (conversionId) => Number((await uno(
+    `SELECT COUNT(*)::int AS n FROM conversion_payments WHERE conversion_id = $1`, [conversionId])).n);
+
+  it('sale apagado: solo «1» o «true» lo encienden', () => {
+    expect(servicio.asociacionV2Activa({})).toBe(false);
+    expect(servicio.asociacionV2Activa({ STRIPE_ASOCIACION_V2_ACTIVA: 'false' })).toBe(false);
+    expect(servicio.asociacionV2Activa({ STRIPE_ASOCIACION_V2_ACTIVA: '0' })).toBe(false);
+    expect(servicio.asociacionV2Activa({ STRIPE_ASOCIACION_V2_ACTIVA: '1' })).toBe(true);
+    expect(servicio.asociacionV2Activa({ STRIPE_ASOCIACION_V2_ACTIVA: 'true' })).toBe(true);
+  });
+
+  it('una ficha «convertida» con venta: se asocia por el correo, como siempre', () => apagado(async () => {
+    const email = `off.normal@${m}.test`;
+    await lead('LoffN', email);
+    await venta('VoffN', 'LoffN');
+    await servicio.handleWebhookEvent(ids.PA, evento(`ch_${MARCA}_offn`, 70, { email }));
+    const sp = await cargo(`ch_${MARCA}_offn`);
+    expect(sp).toMatchObject({ conversion_id: ids.VoffN, lead_id: ids.LoffN, link_method: 'auto_email' });
+    expect(sp.conversion_payment_id).not.toBeNull();
+    expect(await cobrosDe(ids.VoffN)).toBe(1);
+  }));
+
+  it('una ficha con venta que ya no está «convertida»: queda pendiente, no se apunta ningún cobro', () => apagado(async () => {
+    const email = `off.estado@${m}.test`;
+    await lead('LoffE', email, { status: 'en_seguimiento' });
+    await venta('VoffE', 'LoffE');
+    await servicio.handleWebhookEvent(ids.PA, evento(`ch_${MARCA}_offe`, 80, { email }));
+    expect(await cargo(`ch_${MARCA}_offe`)).toMatchObject({
+      conversion_id: null, conversion_payment_id: null, lead_id: ids.LoffE, link_method: 'auto_pending' });
+    expect(await cobrosDe(ids.VoffE)).toBe(0);
+  }));
+
+  it('ficha duplicada después de comprar: no se va a buscar la venta de la ficha de antes', () => apagado(async () => {
+    const email = `off.dup@${m}.test`;
+    await lead('LoffD1', email, { creado: "NOW() - interval '30 days'" });
+    await venta('VoffD', 'LoffD1');
+    await lead('LoffD2', email, { status: 'nuevo' });
+    await servicio.handleWebhookEvent(ids.PA, evento(`ch_${MARCA}_offd`, 120, { email }));
+    expect(await cargo(`ch_${MARCA}_offd`)).toMatchObject({
+      conversion_id: null, conversion_payment_id: null, lead_id: ids.LoffD2, link_method: 'auto_pending' });
+    expect(await cobrosDe(ids.VoffD)).toBe(0);
+  }));
+
+  it('una compra de la web: no se mira el pedido; va a la venta más reciente de la ficha, como siempre', () => apagado(async () => {
+    const email = `off.web@${m}.test`;
+    await lead('LoffW', email);
+    await venta('VoffWB', 'LoffW', { producto: 'FB' });
+    await venta('VoffWA', 'LoffW', { producto: 'FA' }); // la más reciente es de A
+    await pedido(5901, [7002]); // el pedido es de la formación B
+    await servicio.handleWebhookEvent(ids.PA, evento(`ch_${MARCA}_offw`, 95, { email, metadata: { order_id: '5901' } }));
+    expect(await cargo(`ch_${MARCA}_offw`)).toMatchObject({ conversion_id: ids.VoffWA, link_method: 'auto_email' });
+    expect(await cobrosDe(ids.VoffWB)).toBe(0);
+  }));
+
+  it('una renovación pagada con otro correo: no se asocia por la suscripción', () => apagado(async () => {
+    await lead('LoffS', `off.sub@${m}.test`);
+    await venta('VoffS', 'LoffS', { total: 900, sub: `sub_${MARCA}_off` });
+    const id = `ch_${MARCA}_offs`;
+    await query(
+      `INSERT INTO stripe_payments (project_id, stripe_id, type, status, amount, currency, customer_email, stripe_created_at,
+                                    stripe_subscription_id, suscripcion_buscada, customer_stripe_id)
+       VALUES ($1, $2, 'charge', 'succeeded', 300, 'EUR', $3, NOW(), $4, true, 'cus_off')`,
+      [ids.PA, id, `off.otro@${m}.test`, `sub_${MARCA}_off`]);
+    await servicio.handleWebhookEvent(ids.PA, evento(id, 300, { email: `off.otro@${m}.test`, customer: 'cus_off' }));
+    expect(await cargo(id)).toMatchObject({ conversion_id: null, conversion_payment_id: null });
+    expect(await cobrosDe(ids.VoffS)).toBe(0);
+  }));
+
+  it('la compra directa tampoco crea ventas, aunque tenga su interruptor encendido', async () => {
+    await pedido(6900, [7003]);
+    await cargoGuardado(`ch_${MARCA}_offcd`, 150, { email: `off.cd@${m}.test`, orderId: 6900 });
+    const soloCompraDirecta = { ...ENCENDIDO, STRIPE_ASOCIACION_V2_ACTIVA: 'false' };
+    expect(await servicio.comprasDirectasSinVenta(ids.PA, { env: soloCompraDirecta })).toEqual({ mirados: 0, creadas: 0 });
+    expect((await cargo(`ch_${MARCA}_offcd`)).conversion_id).toBeNull();
+  });
+});
+
+describe('el aviso de Stripe no espera a la tienda', { timeout: 60000 }, () => {
+  it('un pedido que aún no está guardado en el CRM no se decide dentro del aviso', async () => {
+    const { formacionDelPedido, PEDIDO_SIN_LEER } = await import('../src/modules/stripe-payments/compra-directa.service.js');
+    const pedir = async () => { throw new Error('no se debe salir a la tienda'); };
+    expect(await formacionDelPedido(ids.PA, '987654321', { soloGuardado: true, pedir })).toBe(PEDIDO_SIN_LEER);
+    // Guardado, se lee igual con o sin esperar.
+    await pedido(5950, [7001]);
+    expect(await formacionDelPedido(ids.PA, '5950', { soloGuardado: true, pedir })).toMatchObject({ id: ids.FA });
   });
 });

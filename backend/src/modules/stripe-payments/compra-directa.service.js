@@ -88,15 +88,26 @@ async function pedirPedido(creds, orderId) {
 }
 
 /**
- * Las líneas del pedido: primero las que ya están guardadas (#14) y, si no está,
- * se pide a la tienda una vez y se guarda, para no volver a preguntar.
+ * Lo que devuelve `formacionDelPedido` cuando se le pide no salir a la tienda
+ * (`soloGuardado`) y el pedido todavía no está guardado en el CRM: no es «no
+ * tiene formación», es «aún no se ha leído». Quien llama decide cuándo leerlo.
  */
-async function lineasDelPedido(projectId, orderId, { pedir = pedirPedido } = {}) {
+export const PEDIDO_SIN_LEER = Object.freeze({ sinLeer: true });
+
+/**
+ * Las líneas del pedido: primero las que ya están guardadas (#14) y, si no está,
+ * se pide a la tienda una vez y se guarda, para no volver a preguntar. Con
+ * `soloGuardado` no se sale a la tienda: lo pide el aviso de Stripe, que no
+ * puede esperarla.
+ */
+async function lineasDelPedido(projectId, orderId, { pedir = pedirPedido, soloGuardado = false } = {}) {
   const { rows: [guardado] } = await query(
     `SELECT line_items, customer_name FROM woocommerce_orders WHERE project_id = $1 AND wc_order_id = $2::bigint`,
     [projectId, orderId]
   );
   if (guardado) return { lineas: guardado.line_items || [], cliente: guardado.customer_name || null };
+  // El aviso de Stripe no espera a la tienda: lo lee después quien lo enlace.
+  if (soloGuardado) return PEDIDO_SIN_LEER;
 
   const { rows: [creds] } = await query(
     `SELECT project_id, store_url, consumer_key, consumer_secret FROM wc_credentials
@@ -126,6 +137,7 @@ export async function formacionDelPedido(projectId, orderId, opciones = {}) {
     logger.warn({ projectId, orderId, err: err.message }, 'compra directa: no se pudo leer el pedido de WooCommerce');
     return null;
   }
+  if (pedido === PEDIDO_SIN_LEER) return PEDIDO_SIN_LEER;
   if (!pedido?.lineas?.length) return null;
 
   const idsWc = [...new Set(pedido.lineas.map((l) => Number(l.product_id)).filter((n) => Number.isFinite(n) && n > 0))];

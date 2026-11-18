@@ -34,6 +34,7 @@
  *     apunta igual y lo que se haría queda en el registro, pero no se cancela.
  */
 import { query } from '../../shared/config/db.js';
+import { asociacionV2Activa } from './asociacion.config.js';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
@@ -132,6 +133,8 @@ export async function apuntarSuscripcion(stripePaymentId, { clave = claveDeStrip
     `SELECT id, project_id, stripe_id, conversion_id, status, suscripcion_buscada, stripe_subscription_id
        FROM stripe_payments WHERE id = $1`, [stripePaymentId]);
   if (!sp?.conversion_id || sp.status !== 'succeeded') return null;
+  // Con las reglas nuevas apagadas, como siempre: lo ya mirado no se vuelve a tocar.
+  if (sp.suscripcion_buscada && !asociacionV2Activa()) return null;
   let sub;
   if (sp.suscripcion_buscada) {
     // Ya se preguntó cuando el cargo aún no tenía venta (puerta 6, CRM#806): no se
@@ -267,7 +270,7 @@ export async function trasAsociarCargo(stripePaymentId) {
     let sp = await leer();
     if (!sp?.conversion_id) return null;
     // Sin mirar, o mirado cuando aún no tenía venta y la venta no la tiene (puerta 6).
-    if (!sp.suscripcion_buscada || (sp.sub_del_cargo && !sp.stripe_subscription_id)) {
+    if (!sp.suscripcion_buscada || (asociacionV2Activa() && sp.sub_del_cargo && !sp.stripe_subscription_id)) {
       await apuntarSuscripcion(stripePaymentId); sp = await leer();
     }
     if (sp?.stripe_subscription_id && !sp.suscripcion_cerrada_at) return await revisarVenta(sp.conversion_id);
