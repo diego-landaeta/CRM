@@ -1,7 +1,6 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, buscarUsersSchema, confirmarCorreoSchema } from './user.validation.js';
-import { pedirCodigo, confirmarCodigo } from './cambio-de-correo.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, buscarUsersSchema } from './user.validation.js';
 import { veTodoElCrm, campusDeLaPersona, campusParaRecortar } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
@@ -120,24 +119,6 @@ export async function create(req, res, next) {
   } catch (err) { next(err); }
 }
 
-/**
- * POST /api/users/:id/email/confirmar — el código que le llegó a la persona a
- * su dirección nueva (#211). El mismo permiso que cambiarle el correo (#248).
- */
-export async function confirmarCorreo(req, res, next) {
-  try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
-    if (!(await tienePermiso(req, 'users.empresas'))) {
-      throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
-    }
-    const parsed = confirmarCorreoSchema.safeParse(req.body);
-    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const r = await confirmarCodigo({ userId: id, codigo: parsed.data.codigo, porUserId: req.user.userId, ip: req.ip });
-    res.json({ success: true, data: r });
-  } catch (err) { next(err); }
-}
-
 export async function update(req, res, next) {
   try {
     const id = parseInt(req.params.id);
@@ -148,7 +129,7 @@ export async function update(req, res, next) {
     }
     // El correo de otro, solo el super admin (#248). Un admin que lo mande se
     // lleva un 403 aunque la pantalla no se lo ofrezca: no basta con ocultarlo.
-    const { email, reenviarEnlace, conCodigo, ...resto } = parsed.data;
+    const { email, reenviarEnlace, ...resto } = parsed.data;
     if (email !== undefined && !(await tienePermiso(req, 'users.empresas'))) {
       throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
     }
@@ -178,21 +159,28 @@ export async function update(req, res, next) {
       // Y nada de lo que gane puede faltarle a quien lo cambia (QA, punto 7).
       await exigirQueNoDeMasDeLoQueTiene(req.user, id, { role: resto.role, roles_extra: resto.roles_extra });
     }
-    // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
-    // Con `conCodigo` (#211) todavía no cambia: le llega un código a la dirección
-    // nueva, y entra cuando alguien lo mete en POST /users/:id/email/confirmar.
-    const correo = email !== undefined && conCodigo === true
-      ? { pendiente: true, ...(await pedirCodigo({ userId: id, emailNuevo: email, porUserId: req.user.userId, ip: req.ip })) }
-      : email !== undefined
-      ? await userService.cambiarCorreo(id, email, {
-        reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
-        // El rol con el que se va a guardar, para el freno de tutores (#262).
-        rolFinal: resto.role ?? null,
-      })
-      : null;
-    const user = Object.keys(resto).length
+    // El correo se COMPRUEBA primero y se CAMBIA al final (#262). Si choca con el
+    // de otro (409), no se guarda nada; y si lo que falla es el resto, el correo
+    // tampoco ha cambiado. Antes iba primero entero: con un fallo después, la
+    // pantalla decía «error» y la persona ya entraba con otro correo, sin sus
+    // refresh tokens y con el aviso mandado a la dirección vieja.
+    if (email !== undefined) {
+      await userService.comprobarCambioDeCorreo(id, email, { porUserId: req.user.userId });
+    }
+    let user = Object.keys(resto).length
       ? await userService.update(id, resto, { porUserId: req.user?.userId ?? null })
       : await userService.getById(id);
+    // Al momento y sin código (Diego, 06/11, #688): el código es solo para quien
+    // cambia el suyo desde «Mi perfil».
+    const correo = email !== undefined
+      ? await userService.cambiarCorreo(id, email, {
+        reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
+        // El freno de tutores mira el rol de antes y el de después (#262): aquí
+        // el rol nuevo ya está guardado.
+        rolFinal: resto.role ?? null, rolAntes: antes?.role ?? null,
+      })
+      : null;
+    if (correo?.cambiado) user = { ...user, email: correo.email };
 
     // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
     // sus conversaciones se quedan. El numero es suyo y no puede seguir
@@ -395,6 +383,9 @@ const AVISOS = [
     detalle: 'Cuando cambia de estado una tarea que llevas, supervisas o creaste (si se mueve varias veces seguidas, un solo correo).' },
   { aviso: 'tareas_resumen', titulo: 'Tu resumen de tareas',
     detalle: 'De lunes a viernes por la tarde: lo que hiciste hoy en el tablero y lo que te falta.' },
+  // Consultas de alumnos (#769), en consultas.plazos.js. Solo administración.
+  { aviso: 'consulta_fuera_de_plazo', titulo: 'Consulta fuera de plazo',
+    detalle: 'Cuando la consulta de un alumno de tus campus pasa el plazo sin respuesta del tutor. Solo administración.' },
 ];
 
 export async function misAvisos(req, res, next) {
@@ -427,5 +418,32 @@ export async function cambiarMiAviso(req, res, next) {
         [req.user.userId, aviso]);
     }
     res.json({ success: true, data: { aviso, encendido: Boolean(encendido) } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/users/brevo-bloqueos — quién del equipo tiene el correo bloqueado en
+ * Brevo (migración 290), para la marca de la lista y de la ficha. Con el mismo
+ * recorte que la lista. `activo` dice si la vigilancia está encendida: apagada,
+ * el botón de desbloquear no tiene sentido.
+ */
+export async function brevoBloqueos(req, res, next) {
+  try {
+    const { abiertos } = await import('./brevo-bloqueos.js');
+    const { bloqueadosActivo } = await import('../../shared/services/brevo-bloqueados.service.js');
+    const activo = bloqueadosActivo();
+    const bloqueos = activo ? await abiertos({ campus: await campusDeLaLista(req) }) : [];
+    res.json({ success: true, data: { activo, bloqueos } });
+  } catch (err) { next(err); }
+}
+
+/** DELETE /api/users/:id/brevo-bloqueo — «Desbloquear en Brevo» (permiso users.brevo_desbloquear). */
+export async function desbloquearBrevo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
+    const { desbloquear } = await import('./brevo-bloqueos.js');
+    res.json({ success: true, data: await desbloquear({ userId: id, porQuien: req.user?.userId }) });
   } catch (err) { next(err); }
 }

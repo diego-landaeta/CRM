@@ -1,11 +1,14 @@
 import crypto from 'crypto';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
 import { logger } from '../../shared/utils/logger.js';
+import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import { query } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
 import * as tutores from '../tutores/tutor.model.js';
+// Ventas a plazos: al asociar un cargo, su suscripción se apunta y se cierra al completar el pago (#747).
+import { trasAsociarCargo } from './suscripciones.service.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -214,6 +217,9 @@ async function enlazarSiSePuede(projectId, payment, dbRow) {
   // numeradas con lo que hubiera en la ficha en ese momento.
   logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
     'cobro de Stripe registrado; queda en la cola de facturacion');
+  // Factura automatica (#764), si esta encendida en este campus: pide los datos
+  // fiscales al alumno o, si ya los dio, emite la de este cobro.
+  facturaAutomatica(conv.id, cpId);
 
   // AVISAR DE LA VENTA AUTOMATICA (#111).
   //
@@ -492,6 +498,7 @@ async function sincroniza(projectId, { fullHistory = false, retryPending = false
         const dbRow = await model.upsertPayment(payment);
         try { await autoLinkIfPossible(projectId, payment, dbRow); }
         catch (e) { logger.error({ err: e.message, projectId, stripeId: ch.id }, 'stripe: el cargo no se pudo enlazar con su venta (sondeo)'); }
+        await trasAsociarCargo(dbRow.id);
         if (ch.disputed) {
           await fetchAndUpdateDispute(apiKey, projectId, ch);
           disputesFound++;
@@ -653,13 +660,27 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
       'cargo asociado SIN registrar cobro: no consta como cobrado en Stripe');
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
+  // Asociado a mano también cuenta: si era la última cuota, la suscripción se cierra (#747).
+  if (cpId) await trasAsociarCargo(stripePaymentId);
   // Asociar el cargo NO emite la factura: el cobro queda registrado en la venta y
   // espera en la cola. La emite una persona cuando comprueba que los datos del
   // cliente estan bien.
   if (cpId) {
     logger.info({ conversionId, paymentId: cpId, stripePaymentId },
       'cargo de Stripe asociado a mano; queda en la cola de facturacion');
+    if (!yaExistia) facturaAutomatica(conversionId, cpId); // #764, si esta encendida
   }
+}
+
+/**
+ * Factura automatica (#764). No bloquea: el cobro ya esta apuntado y, si esto
+ * falla, sigue en la cola como siempre. Apagada, ni siquiera carga el modulo.
+ */
+function facturaAutomatica(conversionId, paymentId) {
+  if (!facturaAutomaticaActiva() || !conversionId || !paymentId) return;
+  import('../factura-automatica/factura-automatica.service.js')
+    .then((fa) => fa.alCobrar({ conversionId, paymentId }))
+    .catch((err) => logger.warn({ err: err.message, conversionId, paymentId }, 'factura automatica: fallo con un cobro de Stripe'));
 }
 
 export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {
@@ -766,6 +787,7 @@ export async function handleWebhookEvent(projectId, event) {
       const dbRow = await model.upsertPayment(payment);
       try { await autoLinkIfPossible(projectId, payment, dbRow); }
       catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (aviso)'); }
+      if (event.type === 'charge.succeeded') await trasAsociarCargo(dbRow.id);
       if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
       // Un reembolso no acaba en stripe_payments: si el alumno recupera su
       // dinero, hay que registrar la devolucion en su venta y deshacer la
@@ -803,6 +825,7 @@ export async function handleWebhookEvent(projectId, event) {
           const dbRow = await model.upsertPayment(payment);
           try { await autoLinkIfPossible(projectId, payment, dbRow); }
           catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (payment_intent)'); }
+          if (event.type === 'payment_intent.succeeded') await trasAsociarCargo(dbRow.id);
         } catch (e) { logger.warn({ err: e.message }, 'fetch charge from PI failed'); }
       }
       return { processed: event.type, stripeId: obj.id };
