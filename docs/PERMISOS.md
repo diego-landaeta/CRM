@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-892 rutas en 71 módulos, y 31 acciones con condición dentro de una ruta.
+906 rutas en 72 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -311,6 +311,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | resumen | `GET /api/cursos-pendientes/resumen` | (no existía) | (ruta nueva) | lo de cada uno |
+| controlSubidas | `GET /api/cursos-pendientes/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | crear | `POST /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | detalle | `GET /api/cursos-pendientes/:id` | (no existía) | (ruta nueva) | lo de cada uno |
@@ -318,6 +319,19 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | publicar | `POST /api/cursos-pendientes/:id/publicar` | (no existía) | (ruta nueva) | lo de cada uno |
 | sumarAlumna | `POST /api/cursos-pendientes/:id/alumnas` | (no existía) | (ruta nueva) | lo de cada uno |
 | marcarAlumna | `PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId` | (no existía) | (ruta nueva) | lo de cada uno |
+| abrirSubidas | `POST /api/cursos-pendientes/:id/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| marcarSubida | `PATCH /api/cursos-pendientes/:id/subidas/:punto` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+
+## diploma-confirmacion
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estados | `GET /api/diploma-confirmacion/` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
+| pedir | `POST /api/diploma-confirmacion/pedir` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| reenviar | `POST /api/diploma-confirmacion/:matriculaId/reenviar` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| reaplicar | `POST /api/diploma-confirmacion/:matriculaId/aplicar` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| formulario | `GET /api/cd/:token` | (no existía) | (ruta nueva) | — |
+| responder | `POST /api/cd/:token` | (no existía) | (ruta nueva) | — |
 
 ## documents
 
@@ -1048,6 +1062,11 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
+| githubEstado | `GET /api/tasks/github` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubConfig | `PATCH /api/tasks/github` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubSecretos | `PUT /api/tasks/github/secretos` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubPonerUsuario | `PUT /api/tasks/github/usuarios/:login` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubQuitarUsuario | `DELETE /api/tasks/github/usuarios/:login` | (no existía) | (ruta nueva) | `tasks.github` |
 | (anónima) | `GET /api/tasks/metrics` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/metrics/areas` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/assignees` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
@@ -1375,6 +1394,7 @@ lo que pide para tener sentido (editar pide ver).
 | Devolver tareas | `tasks.close` | Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver. | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
 | Gestionar equipos | `tasks.manage_teams` | Crear, renombrar y archivar equipos del tablero, sus cargos y quién está en cada uno. | Admin | `tasks.view_own` |
+| Conectar con GitHub | `tasks.github` | El repositorio, el equipo, el supervisor, los secretos y quién es quién en GitHub. | solo superadmin | `tasks.view_own` |
 
 ## Captación
 
