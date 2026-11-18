@@ -40,7 +40,7 @@ const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u
 const factura = (id) => one('SELECT * FROM invoices WHERE id = $1', [id]);
 const abonosDe = (id) => q(`SELECT * FROM invoices WHERE rectifica_id = $1 AND tipo = 'rectificativa'`, [id]);
 
-async function nueva({ numero, serie = SERIE, estado = 'emitida', tipo = 'normal', nif = 'X1234567L', total = 121 }) {
+async function nueva({ numero, serie = SERIE, estado = 'emitida', tipo = 'normal', nif = 'X1234567L', total = 121, prefijo = '' }) {
   const r = await one(
     `INSERT INTO invoices (project_id, ano, serie, numero, codigo, tipo, estado, fecha_emision,
                            cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
@@ -48,7 +48,7 @@ async function nueva({ numero, serie = SERIE, estado = 'emitida', tipo = 'normal
      VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE, $8, $9, 'Calle 1', 'Madrid', '28001', 'España',
              '[{"descripcion":"Curso","cantidad":1,"precio_unitario":100}]'::jsonb, 100, 21, 21, $10)
      RETURNING id`,
-    [P, ANO, serie, numero, numero == null ? null : `${ANO}/${String(numero).padStart(4, '0')}`,
+    [P, ANO, serie, numero, numero == null ? null : `${prefijo}${ANO}/${String(numero).padStart(4, '0')}`,
      tipo, estado, `${MARCA} Cliente`, nif, total]);
   return r.id;
 }
@@ -73,7 +73,8 @@ beforeAll(async () => {
   EMITIDA_SIN_NIF = await nueva({ numero: 2, nif: '—' });
   EMITIDA_4 = await nueva({ numero: 4 });
   BORRADOR = await nueva({ numero: null, estado: 'borrador' });
-  PROFORMA = await nueva({ numero: 1, serie: SERIE_PRO, tipo: 'proforma' });
+  // El código es único por campus: la proforma numera «PRO-2026/0001», como en la serie PRO.
+  PROFORMA = await nueva({ numero: 1, serie: SERIE_PRO, tipo: 'proforma', prefijo: 'PRO-' });
 }, 60000);
 
 afterAll(async () => {

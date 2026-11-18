@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /*
@@ -20,6 +20,8 @@ const responde = (data: object) => get.mockResolvedValue({ success: true, data: 
 const pinta = () => render(<MemoryRouter><AvisoHuecosFacturas projectId={7} /></MemoryRouter>);
 
 beforeEach(() => { get.mockReset(); });
+// Sin globals de vitest, testing-library no limpia sola entre pruebas.
+afterEach(() => { cleanup(); });
 
 describe('#793 · el aviso de la numeración', () => {
   it('dice el número que falta y, aparte, la anulada con su motivo', async () => {
