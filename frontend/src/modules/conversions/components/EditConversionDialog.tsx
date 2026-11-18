@@ -14,6 +14,7 @@ interface Props {
 const METODOS = [
   { value: '', label: '— Sin especificar —' },
   { value: 'transferencia', label: 'Transferencia' },
+  { value: 'deposito', label: 'Depósito bancario' },
   { value: 'tarjeta', label: 'Tarjeta' },
   { value: 'efectivo', label: 'Efectivo' },
   { value: 'paypal', label: 'PayPal' },
@@ -179,7 +180,7 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
             Cancelar
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+            className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
             {saving ? 'Guardando…' : 'Guardar cambios'}
           </button>
         </div>

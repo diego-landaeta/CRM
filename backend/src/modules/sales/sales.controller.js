@@ -1,14 +1,28 @@
 import * as salesService from './sales.service.js';
 import * as reportModel from '../reports/report.model.js';
 import * as goalsService from './sales.goals.js';
-import { createSaleSchema } from './sales.validation.js';
+import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceComercial, acotarAlAlcance } from '../../shared/utils/roles.js';
+import { leerFiltroPais } from '../leads/pais.js';
 
 export async function create(req, res, next) {
   try {
     const parsed = createSaleSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    // EL CANDADO DE «SIN GESTORA», EN EL SERVIDOR.
+    //
+    // La pantalla esconde el boton a quien no puede, pero esconder no es
+    // impedir: la peticion se puede mandar a mano. Quien no tenga el permiso y
+    // lo pida se lleva un 403, no una venta de nadie.
+    if (parsed.data.sin_gestora) {
+      if (!(await tienePermiso(req, 'conversions.sin_gestora'))) {
+        throw new AppError('No tienes permiso para registrar una venta sin gestora', 403, 'FORBIDDEN');
+      }
     }
     const result = await salesService.createSale(parsed.data, req.user);
     res.status(201).json({ success: true, data: result });
@@ -17,7 +31,7 @@ export async function create(req, res, next) {
 
 export async function topProducts(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const days = req.query.days ? parseInt(req.query.days) : null; // null = all-time
     // Rango de fechas explícito YYYY-MM-DD (hoy/semana/mes/personalizado). Se ignora si el formato no es válido.
@@ -25,19 +39,67 @@ export async function topProducts(req, res, next) {
     const from = dateRe.test(req.query.from || '') ? req.query.from : null;
     const to = dateRe.test(req.query.to || '') ? req.query.to : null;
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-    // Gestor: forzar su propio responsableId (no puede consultar el de otros)
-    if (req.user.role === 'gestor') responsableId = req.user.userId;
-    const result = await salesService.getTopProducts({ projectId, limit, days, from, to, responsableId });
-    res.json({ success: true, data: result });
+    // Gestor: forzar su propio responsableId (no puede consultar el de otros).
+    // Quien lleva un equipo comercial (09/11/2026), el de su equipo.
+    responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
+    const result = await salesService.getTopProducts({
+      projectId, projectIds, limit, days, from, to, responsableId, paisEntrada: leerFiltroPais(req.query.paisEntrada),
+    });
+    // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
+    // y no tiene por qué enterarse. Lo que no es un programa va aparte, y los
+    // totales y las ventas sin cobro también (#225): el total lo da el
+    // servidor, no la suma de las filas que caben en el LIMIT.
+    res.json({
+      success: true,
+      data: result.productos,
+      sinAsignar: result.sinAsignar,
+      totales: result.totales,
+      sinCobro: result.sinCobro,
+    });
+  } catch (err) { next(err); }
+}
+
+// GET /api/ventas/facturado?issuerId|projectId&from&to — lo FACTURADO del
+// Dashboard (#224): por gestora (con «Sin gestora») y por producto, de la
+// misma consulta. Lo pintan el bloque del equipo y «Productos vendidos», y
+// por eso no pueden dar dos cifras distintas.
+export async function facturado(req, res, next) {
+  try {
+    const parsed = facturadoQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    // Una gestora, solo su parte, pida lo que pida (y una líder, la de su equipo).
+    const responsableId = acotarAlAlcance(parsed.data.responsableId ?? null, await alcanceComercial(req.user));
+    const data = await salesService.getFacturado({
+      projectId, projectIds,
+      from: parsed.data.from ?? null,
+      to: parsed.data.to ?? null,
+      responsableId,
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
+    });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 
 // GET /api/sales/gestores-stats?periodo=YYYY-MM&projectId=N — ventas + metas por gestor
 export async function gestoresStats(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     const periodo = req.query.periodo || null;
-    const result = await goalsService.getGestoresStats({ projectId, periodo });
+    // Las fechas mandan sobre el mes: si la pantalla esta mirando un dia, la
+    // tabla del equipo tiene que enseñar ESE dia y no el mes entero.
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const from = re.test(req.query.from || '') ? req.query.from : null;
+    const to = re.test(req.query.to || '') ? req.query.to : null;
+    const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo, from, to });
+    // Quien lleva un equipo comercial (09/11/2026) ve en la tabla a su equipo,
+    // no a todas. Sin equipo, como siempre (lo decide `ventas.view_equipo`).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance && alcance.length > 1) {
+      result.gestores = result.gestores.filter((g) => alcance.includes(Number(g.user_id)));
+    }
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -45,9 +107,9 @@ export async function gestoresStats(req, res, next) {
 // GET /api/sales/my-stats — el propio gestor consulta su progreso
 export async function myStats(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     const periodo = req.query.periodo || null;
-    const result = await goalsService.getMyStats(req.user.userId, { projectId, periodo });
+    const result = await goalsService.getMyStats(req.user.userId, { projectId, projectIds, periodo });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -80,17 +142,23 @@ export async function deleteGoal(req, res, next) {
 }
 
 // --- Vistas agregadas de Ventas -------------------------------------------
-function filtrosDeQuery(req) {
+async function filtrosDeQuery(req) {
   const dateRe2 = /^\d{4}-\d{2}-\d{2}$/;
   let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-  // Gestor: solo lo suyo, ignorando lo que pida por query.
-  if (req.user.role === 'gestor') responsableId = req.user.userId;
+  // Gestor: solo lo suyo, ignorando lo que pida por query (y una líder, lo de su equipo).
+  responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
   return {
-    projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+    // El ambito puede ser un proyecto O una sociedad entera: si viene
+    // `issuerId`, se traduce a la lista de sus campus.
+    ...(await proyectosDelAmbito(req)),
     from: dateRe2.test(req.query.from || '') ? req.query.from : null,
     to: dateRe2.test(req.query.to || '') ? req.query.to : null,
     responsableId,
+    // País de entrada del prospecto de cada venta (#221): un código o `sin_pais`.
+    paisEntrada: leerFiltroPais(req.query.paisEntrada),
     search: (req.query.search || '').trim() || null,
+    // Todas · Solo compartidas · Solo enteras (#163).
+    compartidas: req.query.compartidas || null,
     page: req.query.page,
     limit: req.query.limit,
   };
@@ -99,21 +167,43 @@ function filtrosDeQuery(req) {
 // GET /api/sales/resumen
 export async function resumenVentas(req, res, next) {
   try {
-    res.json({ success: true, data: await salesService.getResumenVentas(filtrosDeQuery(req)) });
+    res.json({ success: true, data: await salesService.getResumenVentas(await filtrosDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
 // GET /api/sales/por-asesora
+/**
+ * Las ventas sin formacion del catalogo (#41).
+ *
+ * Solo admin: es la lista de lo que no cuadra de un proyecto entero, con
+ * nombre y correo de cada alumno.
+ */
+export async function sinFormacion(req, res, next) {
+  try {
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    res.json({
+      success: true,
+      data: await salesService.ventasSinFormacion({
+        projectId, projectIds,
+        from: req.query.from || null,
+        to: req.query.to || null,
+        // Alumnos e importes: quien lleva un equipo comercial, los de su equipo (09/11/2026).
+        responsableId: await alcanceComercial(req.user),
+      }),
+    });
+  } catch (err) { next(err); }
+}
+
 export async function ventasPorAsesora(req, res, next) {
   try {
-    res.json({ success: true, data: await salesService.getVentasPorAsesora(filtrosDeQuery(req)) });
+    res.json({ success: true, data: await salesService.getVentasPorAsesora(await filtrosDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
 // GET /api/sales/por-cliente
 export async function ventasPorCliente(req, res, next) {
   try {
-    const r = await salesService.getVentasPorCliente(filtrosDeQuery(req));
+    const r = await salesService.getVentasPorCliente(await filtrosDeQuery(req));
     res.json({
       success: true,
       data: r.clientes,
@@ -127,12 +217,14 @@ export async function desglose(req, res, next) {
   try {
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     const data = await salesService.getDesglose({
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      ...(await proyectosDelAmbito(req)),
       from: dateRe.test(req.query.from || '') ? req.query.from : null,
       to: dateRe.test(req.query.to || '') ? req.query.to : null,
       // Una gestora ve su propio reparto, no el del proyecto entero.
-      responsableId: req.user.role === 'gestor' ? req.user.userId
-        : (req.query.responsableId ? parseInt(req.query.responsableId) : null),
+      responsableId: acotarAlAlcance(
+        req.query.responsableId ? parseInt(req.query.responsableId) : null,
+        await alcanceComercial(req.user)),
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -143,13 +235,15 @@ export async function desglose(req, res, next) {
 // de pais: es la que ya esta verificada y la que salta de prefijo telefonico.
 export async function paises(req, res, next) {
   try {
-    const f = filtrosDeQuery(req);
+    const f = await filtrosDeQuery(req);
     const hoy = new Date().toISOString().slice(0, 10);
     const data = await reportModel.paisesMasVendidos({
       projectId: f.projectId,
+      projectIds: f.projectIds,
       from: f.from || `${new Date().getFullYear()}-01-01`,
       to: f.to || hoy,
       asesoraId: f.responsableId,
+      paisEntrada: f.paisEntrada,
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -160,6 +254,6 @@ export async function paises(req, res, next) {
 // lo pone filtrosDeQuery, no el cliente.
 export async function serieVentas(req, res, next) {
   try {
-    res.json({ success: true, data: await salesService.getSerieVentas(filtrosDeQuery(req)) });
+    res.json({ success: true, data: await salesService.getSerieVentas(await filtrosDeQuery(req)) });
   } catch (err) { next(err); }
 }

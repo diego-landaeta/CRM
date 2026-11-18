@@ -92,7 +92,7 @@ function Tarta({ titulo, datos, colores, campoN }) {
   );
 }
 
-export default function DesgloseVentas({ projectId, from, to, responsableId = null }) {
+export default function DesgloseVentas({ projectId, issuerId = null, from, to, responsableId = null, paisEntrada = null }) {
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [oscuro, setOscuro] = useState(usaTemaOscuro);
@@ -104,19 +104,24 @@ export default function DesgloseVentas({ projectId, from, to, responsableId = nu
   }, []);
 
   useEffect(() => {
-    if (!projectId) return undefined;
+    // Con una sociedad elegida tambien hay ambito: no se puede salir por
+    // la puerta de «no hay proyecto».
+    if (!projectId && !issuerId) return undefined;
     let vivo = true;
     setCargando(true);
-    const p = new URLSearchParams({ projectId: String(projectId) });
+    const p = new URLSearchParams();
+    if (projectId) p.set('projectId', String(projectId));
+    if (issuerId) p.set('issuerId', String(issuerId));
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
+    if (paisEntrada) p.set('paisEntrada', paisEntrada);
     client.get(`/ventas/desglose?${p}`)
       .then((r) => { if (vivo) setData(r.success ? r.data : null); })
       .catch(() => { if (vivo) setData(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId, paisEntrada]);
 
   const colores = oscuro ? OSCURO : CLARO;
 

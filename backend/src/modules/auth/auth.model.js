@@ -3,7 +3,14 @@ import { query } from '../../shared/config/db.js';
 export async function findUserByEmail(email) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.password_hash, u.role, u.active, u.avatar_url,
-            u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones, u.set_password_token, u.set_password_expires
+            -- Los roles de MAS. El principal sigue siendo u.role; esto solo suma.
+            u.roles_extra::text[] AS roles_extra,
+            u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones, u.set_password_token, u.set_password_expires,
+            -- Via to_jsonb y no u.usa_mcp: si el codigo llega antes que la migracion 182,
+            -- leer la columna directamente romperia el login de todos. Asi vale false.
+            COALESCE((to_jsonb(u)->>'usa_mcp')::boolean, false) AS usa_mcp,
+            -- La casilla de WhatsApp, igual: null si falta la columna (no se le niega a nadie).
+            (to_jsonb(u)->>'usa_whatsapp')::boolean AS usa_whatsapp
      FROM users u
      -- Sin distinguir mayusculas: el formulario de entrada pasa el correo a
      -- minusculas, asi que comparar exacto dejaba FUERA a cualquiera dado de
@@ -17,8 +24,10 @@ export async function findUserByEmail(email) {
 
 export async function findUserById(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.avatar_url, u.custom_role_id,
+    `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.avatar_url, u.custom_role_id,
             u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones,
+            COALESCE((to_jsonb(u)->>'usa_mcp')::boolean, false) AS usa_mcp,
+            (to_jsonb(u)->>'usa_whatsapp')::boolean AS usa_whatsapp,
             cr.label AS custom_role_label
      FROM users u
      LEFT JOIN custom_roles cr ON cr.id = u.custom_role_id
@@ -38,7 +47,12 @@ export async function getUserProjects(userId, role) {
     const { rows } = await query(
       `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key, p.logo_url,
               p.modules, p.shortcuts, p.external_panels, p.sidebar_labels,
-              p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
+              p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+              -- La marca de la EMPRESA, para el menú con una empresa elegida (11/11).
+              s.alias AS sociedad_alias, s.logo_url AS sociedad_logo_url,
+              (s.logo_key IS NOT NULL) AS sociedad_logo_subido,
+              -- Los de pruebas no entran en «Todos» (148); el frontal lo necesita (#346).
+              COALESCE(p.es_prueba, false) AS es_prueba
        FROM projects p
        LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
        WHERE p.active = true
@@ -49,7 +63,11 @@ export async function getUserProjects(userId, role) {
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key, p.logo_url,
             p.modules, p.shortcuts, p.external_panels, p.sidebar_labels, p.theme_color, p.auto_email_documents,
-            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
+            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+              -- La marca de la EMPRESA, para el menú con una empresa elegida (11/11).
+              s.alias AS sociedad_alias, s.logo_url AS sociedad_logo_url,
+              (s.logo_key IS NOT NULL) AS sociedad_logo_subido,
+            COALESCE(p.es_prueba, false) AS es_prueba
      FROM user_projects up
      JOIN projects p ON p.id = up.project_id
      LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
@@ -103,7 +121,7 @@ export async function findUserBySetPasswordToken(tokenHash) {
   const { rows } = await query(
     `SELECT id, email, nombre, set_password_expires
      FROM users
-     WHERE set_password_token = $1`,
+     WHERE set_password_token = $1 AND active = true`,
     [tokenHash]
   );
   return rows[0] || null;
@@ -127,4 +145,53 @@ export async function logActivity(userId, action, details, ipAddress) {
      VALUES ($1, $2, $3, $4)`,
     [userId, action, details ? JSON.stringify(details) : null, ipAddress]
   );
+}
+
+/**
+ * El usuario de ese correo, si lo hay y sigue de alta (#37).
+ *
+ * Solo lo que hace falta para mandarle el enlace. Una baja no recupera
+ * contraseña: se le cerro la puerta a proposito y esto seria una rendija.
+ * Los roles, para el freno de los tutores (NO_ESCRIBIR_A_TUTORES): a un tutor
+ * no se le manda el enlace mientras siga puesto.
+ */
+export async function findActiveUserByEmail(email) {
+  const { rows } = await query(
+    `SELECT id, email, nombre, role, roles_extra::text[] AS roles_extra
+     FROM users
+     WHERE LOWER(email) = LOWER($1) AND active = true`,
+    [email]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Deja puesto el token del enlace de recuperacion (#37).
+ *
+ * Es la MISMA pareja de columnas que usa la invitacion del alta, y eso es
+ * deliberado: son el mismo camino —un enlace de un solo uso que lleva a
+ * `/set-password`— y tener dos juegos de columnas para lo mismo acaba con dos
+ * caducidades distintas y una de las dos sin revisar.
+ *
+ * Al usarse, `updatePassword` las pone a NULL, asi que el enlace muere solo.
+ *
+ * NO PISA un enlace vigente emitido hace poco: `recienteDesde` es la caducidad
+ * a partir de la cual un enlace se considera recien emitido (la caducidad es
+ * «emision + 24 h», asi que no hace falta columna nueva). Sin esto, quien conozca
+ * el correo de otro podria inundarle el buzon e invalidarle el enlace que tiene
+ * pendiente. Va en el propio UPDATE para que dos peticiones a la vez no se cuelen.
+ * Devuelve true si lo dejo puesto, false si habia uno reciente y no toco nada.
+ */
+export async function setRecoveryToken(userId, tokenHash, expires, recienteDesde = null) {
+  const { rowCount } = await query(
+    `UPDATE users
+     SET set_password_token = $2, set_password_expires = $3, updated_at = NOW()
+     WHERE id = $1
+       AND ($4::timestamptz IS NULL
+            OR set_password_token IS NULL
+            OR set_password_expires IS NULL
+            OR set_password_expires <= $4::timestamptz)`,
+    [userId, tokenHash, expires, recienteDesde]
+  );
+  return rowCount > 0;
 }

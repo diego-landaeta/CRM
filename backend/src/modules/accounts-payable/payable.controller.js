@@ -1,3 +1,4 @@
+import { proyectosDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { createPayableSchema, updatePayableSchema, paymentSchema } from './payable.validation.js';
 import * as model from './payable.model.js';
@@ -6,7 +7,7 @@ export async function list(req, res, next) {
   try {
     const { projectId, estado, from, to } = req.query;
     const rows = await model.list({
-      projectId: projectId ? Number(projectId) : null,
+      ...(await proyectosDelAmbito(req)),
       estado: estado || null,
       from: from || null,
       to: to || null,
@@ -19,7 +20,7 @@ export async function stats(req, res, next) {
   try {
     const { projectId, from, to } = req.query;
     const s = await model.getStats({
-      projectId: projectId ? Number(projectId) : null,
+      ...(await proyectosDelAmbito(req)),
       from: from || null,
       to: to || null,
     });
@@ -31,6 +32,8 @@ export async function getOne(req, res, next) {
   try {
     const p = await model.getById(Number(req.params.id));
     if (!p) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    // De sus campus, como la lista (Diego, 04/11): la de otro, como si no existiera.
+    await exigirCampusSuyo(req, p.project_id, 'Factura no encontrada');
     const payments = await model.getPayments(p.id);
     res.json({ success: true, data: { ...p, payments } });
   } catch (err) { next(err); }

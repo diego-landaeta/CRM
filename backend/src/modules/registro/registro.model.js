@@ -53,9 +53,12 @@ export const FUENTES = {
   ficha:      { titulo: 'Fichas',       tabla: 'lead_audit_log',          sistema: false },
   documento:  { titulo: 'Documentos',   tabla: 'document_audit_log',      sistema: false },
   usuario:    { titulo: 'Usuarios',     tabla: 'user_activity_log',       sistema: false },
-  tarea:      { titulo: 'Tareas',       tabla: 'registro_tareas',         sistema: true },
+  // `sinCampus`: sus filas nunca dicen de qué campus son. Solo las ve quien tiene
+  // `registro.sistema` (Diego, 03/11, #620).
+  tarea:      { titulo: 'Tareas',       tabla: 'registro_tareas',         sistema: true, sinCampus: true },
   webhook:    { titulo: 'Webhooks',     tabla: 'make_webhook_deliveries', sistema: true },
-  error:      { titulo: 'Errores',      tabla: 'status_errors',           sistema: true },
+  correo:     { titulo: 'Correos',      tabla: 'email_envios',            sistema: true },
+  error:      { titulo: 'Errores',      tabla: 'status_errors',           sistema: true, sinCampus: true },
 };
 
 export const NOMBRES_FUENTE = Object.keys(FUENTES);
@@ -110,8 +113,33 @@ export const olvidarTablas = () => { existentes = null; };
  * FUERA en vez de traerlas todas — buscar «lo que hizo Laura» y que salgan los
  * webhooks es justo lo que hace inutil un filtro.
  */
-function condiciones({ fechaCol, usuarioCol }, { desde, hasta, usuarioId }, params) {
+function condiciones({ fechaCol, usuarioCol, campusCol = 'NULL::int', personaCol = null }, { desde, hasta, usuarioId, campus, sistema = true }, params) {
   const trozos = [];
+  // De quién es cada fila (Diego, 03/11, #620): «el admin ve las pestañas por
+  // campus y empresas, según sus roles». Una fila CON campus se ve si su campus
+  // es de quien mira (`campus`: su lista; null = todos). Una fila SIN campus
+  // —errores, tareas— es de todo el sistema: solo con `registro.sistema`. No
+  // depende de la fuente, sino de la fila.
+  //
+  // `personaCol`, la segunda vía (Diego, 04/11): «el admin ve los [inicios de
+  // sesión] de la gente de sus campus». Una fila sin campus pero de una persona
+  // con un campus activo de la lista es de quien mira. Con `EXISTS` y no con un
+  // JOIN, que repetiría la fila si la persona está en varios. Sin campus y sin
+  // persona (o de alguien que no es de sus campus), sigue siendo del sistema.
+  const dePersona = (lista) => (personaCol
+    ? `(${campusCol} IS NULL AND EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = ${personaCol} AND up.active AND up.project_id = ANY(${lista})))`
+    : null);
+  if (Array.isArray(campus)) {
+    params.push(campus);
+    const lista = `$${params.length}::int[]`;
+    const vias = [`${campusCol} = ANY(${lista})`];
+    if (sistema) vias.push(`${campusCol} IS NULL`);
+    else if (dePersona(lista)) vias.push(dePersona(lista));
+    trozos.push(vias.length > 1 ? `(${vias.join(' OR ')})` : vias[0]);
+  } else if (!sistema) {
+    // Viendo todos los campus, la fila de una persona no es «del sistema».
+    trozos.push(personaCol ? `(${campusCol} IS NOT NULL OR ${personaCol} IS NOT NULL)` : `${campusCol} IS NOT NULL`);
+  }
   if (desde)  { params.push(desde); trozos.push(`${fechaCol} >= $${params.length}`); }
   if (hasta)  { params.push(hasta); trozos.push(`${fechaCol} < ($${params.length}::date + 1)`); }
   if (usuarioId) {
@@ -125,7 +153,7 @@ function condiciones({ fechaCol, usuarioCol }, { desde, hasta, usuarioId }, para
 /** Cambios en la ficha de un prospecto. */
 async function deFichas(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'a.changed_at', usuarioCol: 'a.changed_by_user_id' }, filtros, params);
+  const donde = condiciones({ fechaCol: 'a.changed_at', usuarioCol: 'a.changed_by_user_id', campusCol: 'l.project_id' }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -156,7 +184,7 @@ async function deFichas(filtros, limite) {
     entidad: 'lead',
     entidad_id: r.lead_id,
     entidad_nombre: r.lead_nombre,
-    enlace: r.lead_id ? `/crm/leads/${r.lead_id}` : null,
+    enlace: r.lead_id ? `/prospectos/${r.lead_id}` : null,
     ok: true,
     detalle: { campo: r.campo, antes: r.antes, despues: r.despues },
   }));
@@ -165,14 +193,15 @@ async function deFichas(filtros, limite) {
 /** Lo que se hizo con un documento. */
 async function deDocumentos(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'd.created_at', usuarioCol: 'd.user_id' }, filtros, params);
+  const donde = condiciones({ fechaCol: 'd.created_at', usuarioCol: 'd.user_id', campusCol: 'doc.project_id' }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
     `SELECT d.id, d.created_at AS cuando, d.action, d.document_id,
-            d.user_id AS usuario_id, u.nombre AS usuario, d.metadata
+            d.user_id AS usuario_id, u.nombre AS usuario, d.metadata, doc.project_id
        FROM document_audit_log d
        LEFT JOIN users u ON u.id = d.user_id
+       LEFT JOIN documents doc ON doc.id = d.document_id
        ${donde}
       ORDER BY d.created_at DESC
       LIMIT $${params.length}`,
@@ -188,7 +217,7 @@ async function deDocumentos(filtros, limite) {
     cuando: r.cuando,
     usuario_id: r.usuario_id,
     usuario: r.usuario,
-    project_id: null,
+    project_id: r.project_id ?? null,
     accion: `documento.${r.action}`,
     resumen: `${COMO_SE_DICE[r.action] || r.action} el documento #${r.document_id}`,
     entidad: 'documento',
@@ -203,7 +232,13 @@ async function deDocumentos(filtros, limite) {
 /** Inicios de sesion, credenciales, WhatsApp: lo que ya escribe medio CRM. */
 async function deUsuarios(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'l.created_at', usuarioCol: 'l.user_id' }, filtros, params);
+  const donde = condiciones({
+    fechaCol: 'l.created_at', usuarioCol: 'l.user_id',
+    // Solo si viene y es un número: un texto raro no puede tirar la consulta.
+    campusCol: "(CASE WHEN (l.details->>'project_id') ~ '^[0-9]+$' THEN (l.details->>'project_id')::int END)",
+    // Un inicio de sesión no trae campus: es de quien mira si la persona es de sus campus.
+    personaCol: 'l.user_id',
+  }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -255,6 +290,9 @@ function enCristiano(action, details) {
     'credencial.cambiar': `Cambió la credencial de ${d.servicio || '—'}`,
     'credencial.borrar': `Borró la credencial de ${d.servicio || '—'}`,
     'credencial.probar': `Probó la credencial de ${d.servicio || '—'}`,
+    // #248: el super admin, sobre otro usuario. La contraseña nunca se guarda.
+    'usuario.cambiar_correo': `Cambió el correo de ${d.nombre || `usuario ${d.usuario_id}`}: ${d.de || '—'} → ${d.a || '—'}`,
+    'usuario.cambiar_contrasena': `Cambió la contraseña de ${d.nombre || `usuario ${d.usuario_id}`}`,
   };
   return M[action] || action;
 }
@@ -296,7 +334,7 @@ async function deTareas(filtros, limite) {
 /** Cada entrega de webhook, con su resultado. */
 async function deWebhooks(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'd.received_at', usuarioCol: null }, filtros, params);
+  const donde = condiciones({ fechaCol: 'd.received_at', usuarioCol: null, campusCol: 'w.project_id' }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -330,12 +368,65 @@ async function deWebhooks(filtros, limite) {
     entidad: r.lead_id ? 'lead' : 'webhook',
     entidad_id: r.lead_id || null,
     entidad_nombre: r.webhook || null,
-    enlace: r.lead_id ? `/crm/leads/${r.lead_id}` : null,
+    enlace: r.lead_id ? `/prospectos/${r.lead_id}` : null,
     ok: r.result !== 'rejected',
     // El `payload` NO viaja. Lleva datos del formulario —nombre, email,
     // telefono— y esto es una lista, no una ficha: si hace falta ver el cuerpo,
     // esta la pantalla del webhook.
     detalle: r.error_message ? { error: r.error_message } : null,
+  }));
+}
+
+/**
+ * Cada correo que ha salido del CRM.
+ *
+ * `email_envios` existe desde la 127 y lo escribe TODO envio, pero no se
+ * enseñaba en ninguna parte. Angel lo pregunto de la forma mas util posible:
+ * «¿por que los correos enviados no aparecen en mi bandeja de salida?».
+ *
+ * No aparecen porque Brevo manda EN NOMBRE de la direccion, no DESDE ella: el
+ * correo no pasa por el buzon y su carpeta de enviados no se entera. Es lo
+ * normal con un servicio transaccional. Pero entonces el unico sitio donde
+ * mirar era el panel de Brevo, fuera del CRM — y el CRM lo tenia apuntado.
+ *
+ * Los correos BLOQUEADOS salen tambien, y son los que mas falta hacen: en
+ * `/testeo` el freno para todo lo que no este en la lista blanca, y sin esta
+ * fila lo unico que se ve es que no llego nada.
+ */
+async function deCorreos(filtros, limite) {
+  const params = [];
+  const donde = condiciones({ fechaCol: 'e.created_at', usuarioCol: null, campusCol: 'e.project_id' }, filtros, params);
+  if (donde === null) return [];
+  params.push(limite);
+  const { rows } = await query(
+    `SELECT e.id, e.created_at AS cuando, e.destinatarios, e.asunto,
+            e.estado, e.intentos, e.error, e.project_id, e.etiquetas
+       FROM email_envios e
+       ${donde}
+      ORDER BY e.created_at DESC
+      LIMIT $${params.length}`,
+    params
+  );
+  const COMO_SE_DICE = { enviado: 'Enviado', fallido: 'NO salio', bloqueado: 'Frenado' };
+  return rows.map((r) => ({
+    fuente: 'correo',
+    id: `em-${r.id}`,
+    cuando: r.cuando,
+    usuario_id: null,
+    usuario: null,
+    project_id: r.project_id,
+    accion: `correo.${r.estado}`,
+    resumen: `${COMO_SE_DICE[r.estado] || r.estado} a ${r.destinatarios} · «${r.asunto}»`
+      + (r.intentos > 1 ? ` · ${r.intentos} intentos` : '')
+      + (r.error ? ` · ${r.error}` : ''),
+    entidad: 'correo',
+    entidad_id: null,
+    entidad_nombre: r.destinatarios,
+    enlace: null,
+    ok: r.estado === 'enviado',
+    // El cuerpo NO se guarda ni se enseña: lleva datos de la persona y esto es
+    // una lista. Lo que hace falta aqui es si salio y a quien.
+    detalle: r.error ? { error: r.error } : null,
   }));
 }
 
@@ -376,7 +467,7 @@ async function deErrores(filtros, limite) {
 
 const LECTORES = {
   ficha: deFichas, documento: deDocumentos, usuario: deUsuarios,
-  tarea: deTareas, webhook: deWebhooks, error: deErrores,
+  tarea: deTareas, webhook: deWebhooks, correo: deCorreos, error: deErrores,
 };
 
 /**
@@ -408,7 +499,8 @@ export async function listar({ vista = 'general', ...filtros } = {}) {
   const pedidas = Array.isArray(filtros.fuentes) && filtros.fuentes.length
     ? deLaVista.filter((f) => filtros.fuentes.includes(f))
     : deLaVista;
-  const usables = pedidas.filter((f) => hay.has(f));
+  // Sin `registro.sistema`, las fuentes que nunca traen campus ni se piden.
+  const usables = pedidas.filter((f) => hay.has(f) && (filtros.sistema !== false || !FUENTES[f].sinCampus));
 
   // Se le pide `limite` a cada una: para dar las N mas nuevas del conjunto
   // basta con las N mas nuevas de cada fuente.

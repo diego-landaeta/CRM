@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, X, ArrowUp, ArrowDown, FloppyDisk, Gear, Notepad } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import Select from '@/shared/components/ui/Select';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import { inputClass } from '@/shared/lib/ui';
 import { toast } from '@/shared/hooks/useToast';
+import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
 import { SectionTitle, useConfirm, FIELD_TYPES, BASE_FIELDS } from './shared';
 import { lista } from '@/shared/lib/lista';
 
@@ -18,7 +22,7 @@ export default function FieldsTab({ project, onSaved }) {
       const res = await client.patch(`/projects/${project.id}`, { lead_base_fields_config: next });
       if (res.success && onSaved) onSaved(res.data);
     } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+      toast({ title: 'No se pudieron guardar los campos base', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' });
     } finally { setSavingBase(false); }
   }
 
@@ -67,7 +71,12 @@ export default function FieldsTab({ project, onSaved }) {
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!newField.field_key || !newField.label) return;
+    // Lo decía el globo del navegador; ahora el CRM, y dónde (#106).
+    const faltan: Falta[] = [];
+    if (!newField.field_key) faltan.push({ title: 'Falta la clave interna', description: 'Escríbela en «Clave interna», en minúsculas y con _ (clave_snake_case).', que: 'la clave en «Clave interna»' });
+    if (!newField.label) faltan.push({ title: 'Falta la etiqueta', description: 'Escríbela en «Etiqueta visible»: es lo que se ve en el formulario.', que: 'la etiqueta en «Etiqueta visible»' });
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     try {
       const payload: Partial<FieldDef> = {
         project_id: project.id,
@@ -86,14 +95,14 @@ export default function FieldsTab({ project, onSaved }) {
       setNewField({ field_key: '', label: '', type: 'text', required: false, grupo: '', options: '' });
       await load();
     } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+      toast({ title: 'No se pudo agregar el campo', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' });
     }
   }
 
   function handleDelete(id) {
     ask('Eliminar campo', '¿Eliminar este campo personalizado? Esta acción no se puede deshacer.', async () => {
       try { await client.delete(`/field-definitions/${id}`); await load(); }
-      catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+      catch (err) { toast({ title: 'No se pudo eliminar el campo', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' }); }
     });
   }
 
@@ -125,10 +134,11 @@ export default function FieldsTab({ project, onSaved }) {
       await client.patch(`/field-definitions/${f.id}`, payload);
       setEditingId(null);
       await load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err) { toast({ title: 'No se pudo guardar el campo', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' }); }
   }
 
-  const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+  // #106: la misma clase de campo que el resto del CRM (antes llevaba la suya,
+  // sin el anillo de foco y con otras esquinas).
   const groups = fields.reduce<Record<string, FieldDef[]>>((acc, f) => {
     const g = f.grupo || 'General';
     (acc[g] = acc[g] || []).push(f);
@@ -149,7 +159,7 @@ export default function FieldsTab({ project, onSaved }) {
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-semibold">{bf.label}</span>
                   <span className="font-mono text-secundario text-muted-foreground">{bf.key}</span>
-                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">SIEMPRE REQ</span>}
+                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-destructive-soft text-destructive-soft-foreground">SIEMPRE REQ</span>}
                 </div>
                 <div className="flex items-center gap-4">
                   <label className={`flex items-center gap-1.5 text-xs ${bf.key === 'nombre' || bf.key === 'email' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -177,31 +187,46 @@ export default function FieldsTab({ project, onSaved }) {
 
       {view === 'editor' ? (
         <>
-          <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border">
+          <form onSubmit={handleAdd} noValidate className="p-4 bg-muted/30 rounded-md border border-border">
             <p className="text-secundario font-medium text-muted-foreground mb-3">Nuevo campo</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={smallInput + ' font-mono text-xs'} required />
-              <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={smallInput} required />
-              <Select
-                value={newField.type}
-                onChange={(v) => setNewField({ ...newField, type: v })}
-                options={FIELD_TYPES.map(t => ({ value: t.v, label: t.label }))}
-                ariaLabel="Tipo de campo"
-              />
-              <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Sección (opcional)" className={smallInput} />
+            {/* #106: cada campo con su etiqueta (antes solo el texto de ejemplo,
+                que desaparece al escribir). Y `sm:col-span-2`, no `col-span-2`:
+                en el móvil la rejilla tiene una columna, y un col-span-2 creaba
+                una segunda que sacaba los campos de la pantalla. */}
+            <FilaCampos>
+              <Field label="Clave interna" required htmlFor="nuevo-campo-clave">
+                <input autoComplete="off" id="nuevo-campo-clave" value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={`${inputClass} font-mono`} required />
+              </Field>
+              <Field label="Etiqueta visible" required htmlFor="nuevo-campo-etiqueta">
+                <input autoComplete="off" id="nuevo-campo-etiqueta" value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={inputClass} required />
+              </Field>
+              <Field label="Tipo" htmlFor="nuevo-campo-tipo">
+                <Select
+                  id="nuevo-campo-tipo"
+                  value={newField.type}
+                  onChange={(v) => setNewField({ ...newField, type: v })}
+                  options={FIELD_TYPES.map(t => ({ value: t.v, label: t.label }))}
+                  ariaLabel="Tipo de campo"
+                />
+              </Field>
+              <Field label="Sección" hint="Opcional" htmlFor="nuevo-campo-seccion">
+                <input autoComplete="off" id="nuevo-campo-seccion" value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Sección (opcional)" className={inputClass} />
+              </Field>
               {newField.type === 'select' && (
-                <input value={newField.options} onChange={e => setNewField({ ...newField, options: e.target.value })} placeholder="Opciones separadas por coma" className={smallInput + ' col-span-2'} />
+                <Field label="Opciones" hint="Separadas por coma" htmlFor="nuevo-campo-opciones" className="sm:col-span-2">
+                  <input autoComplete="off" id="nuevo-campo-opciones" value={newField.options} onChange={e => setNewField({ ...newField, options: e.target.value })} placeholder="Opciones separadas por coma" className={inputClass} />
+                </Field>
               )}
-              <div className="col-span-2 flex items-center justify-between">
-                <label className="flex items-center gap-2 text-xs font-medium">
+              <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
                   <input type="checkbox" checked={newField.required} onChange={e => setNewField({ ...newField, required: e.target.checked })} />
                   Campo requerido
                 </label>
-                <button type="submit" className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90">
+                <button type="submit" className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90">
                   <Plus size={14} weight="bold" /> Agregar
                 </button>
               </div>
-            </div>
+            </FilaCampos>
           </form>
 
           {loading ? (
@@ -210,7 +235,7 @@ export default function FieldsTab({ project, onSaved }) {
             <div className="text-center py-10 border-2 border-dashed border-border rounded-md">
               <Notepad size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
               <p className="text-sm font-semibold">Sin campos custom</p>
-              <p className="text-xs text-muted-foreground mt-1">Los prospectos solo tendran los campos base (nombre, email, telefono)</p>
+              <p className="text-secundario text-muted-foreground mt-1">Los prospectos solo tendrán los campos base (nombre, email, teléfono)</p>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -224,25 +249,34 @@ export default function FieldsTab({ project, onSaved }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       {isEditing ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <input value={editBuf.label} onChange={e => setEditBuf({ ...editBuf, label: e.target.value })} className={smallInput + ' h-8'} />
-                          <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={smallInput + ' h-8'} placeholder="Sección" />
+                        // Cada campo con su etiqueta, como en «Nuevo campo» (#106):
+                        // aquí no tenían ninguna y la sección solo se reconocía
+                        // por el texto de ejemplo.
+                        <FilaCampos>
+                          <Field label="Etiqueta visible" required htmlFor={`campo-${f.id}-etiqueta`}>
+                            <input autoComplete="off" id={`campo-${f.id}-etiqueta`} value={editBuf.label} onChange={e => setEditBuf({ ...editBuf, label: e.target.value })} className={inputClass} />
+                          </Field>
+                          <Field label="Sección" hint="Opcional" htmlFor={`campo-${f.id}-seccion`}>
+                            <input autoComplete="off" id={`campo-${f.id}-seccion`} value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={inputClass} placeholder="Sección" />
+                          </Field>
                           {f.type === 'select' && (
-                            <input value={editBuf.options} onChange={e => setEditBuf({ ...editBuf, options: e.target.value })} className={smallInput + ' h-8 col-span-2'} placeholder="opciones,separadas" />
+                            <Field label="Opciones" hint="Separadas por coma" htmlFor={`campo-${f.id}-opciones`} className="sm:col-span-2">
+                              <input autoComplete="off" id={`campo-${f.id}-opciones`} value={editBuf.options} onChange={e => setEditBuf({ ...editBuf, options: e.target.value })} className={inputClass} placeholder="opciones,separadas" />
+                            </Field>
                           )}
-                          <label className="flex items-center gap-1.5 text-xs col-span-2">
+                          <label className="flex items-center gap-1.5 text-sm sm:col-span-2">
                             <input type="checkbox" checked={editBuf.required} onChange={e => setEditBuf({ ...editBuf, required: e.target.checked })} />
                             Requerido
                           </label>
-                        </div>
+                        </FilaCampos>
                       ) : (
                         <>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{f.label}</span>
                             <span className="font-mono text-secundario text-muted-foreground">{f.field_key}</span>
                             <span className="px-1.5 py-0.5 rounded text-secundario font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
-                            {f.required && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-red-50 text-red-600">REQ</span>}
-                            {f.grupo && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-amber-50 text-amber-700">{f.grupo}</span>}
+                            {f.required && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-destructive-soft text-destructive">REQ</span>}
+                            {f.grupo && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-warning-soft text-warning-soft-foreground">{f.grupo}</span>}
                           </div>
                           {Array.isArray(f.options) && f.options.length > 0 && (
                             <p className="text-secundario text-muted-foreground mt-1 truncate">Opciones: {f.options.join(', ')}</p>
@@ -253,13 +287,13 @@ export default function FieldsTab({ project, onSaved }) {
                     <div className="flex items-center gap-1">
                       {isEditing ? (
                         <>
-                          <button onClick={() => saveEdit(f)} aria-label="Guardar" className="p-1.5 rounded hover:bg-green-50 text-green-600"><FloppyDisk size={14} weight="bold" /></button>
+                          <button onClick={() => saveEdit(f)} aria-label="Guardar" className="p-1.5 rounded hover:bg-success-soft text-success"><FloppyDisk size={14} weight="bold" /></button>
                           <button onClick={() => setEditingId(null)} aria-label="Cancelar edición" className="p-1.5 rounded hover:bg-muted"><X size={14} /></button>
                         </>
                       ) : (
                         <>
                           <button onClick={() => startEdit(f)} aria-label="Editar campo" className="p-1.5 rounded hover:bg-muted opacity-0 group-hover:opacity-100"><Gear size={14} /></button>
-                          <button onClick={() => handleDelete(f.id)} aria-label="Eliminar campo" className="p-1.5 rounded hover:bg-red-50 text-red-500 opacity-0 group-hover:opacity-100"><X size={14} /></button>
+                          <button onClick={() => handleDelete(f.id)} aria-label="Eliminar campo" className="p-1.5 rounded hover:bg-destructive-soft text-destructive opacity-0 group-hover:opacity-100"><X size={14} /></button>
                         </>
                       )}
                     </div>
@@ -271,22 +305,20 @@ export default function FieldsTab({ project, onSaved }) {
         </>
       ) : (
         <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">Asi se veran los campos al crear/editar un lead:</p>
+          <p className="text-secundario text-muted-foreground">Así se verán los campos al crear o editar un prospecto:</p>
           {Object.keys(groups).length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">Sin campos</div>
           ) : Object.entries(groups).map(([grupo, items]) => (
             <div key={grupo} className="bg-muted/20 rounded-md p-4 border border-border">
               <p className="text-secundario font-medium text-muted-foreground mb-3">{grupo}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FilaCampos>
                 {items.map(f => (
-                  <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
-                    <label className="text-xs font-semibold mb-1 block">
-                      {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
-                    </label>
-                    <input disabled type={f.type === 'number' ? 'number' : 'text'} className={smallInput} placeholder={`(${f.field_key})`} />
-                  </div>
+                  // La vista previa, con la misma etiqueta que el formulario de verdad (#106).
+                  <Field key={f.id} label={f.label} required={f.required} htmlFor={`vista-${f.id}`} className={f.type === 'textarea' ? 'sm:col-span-2' : ''}>
+                    <input autoComplete="off" id={`vista-${f.id}`} disabled type={f.type === 'number' ? 'number' : 'text'} className={inputClass} placeholder={`(${f.field_key})`} />
+                  </Field>
                 ))}
-              </div>
+              </FilaCampos>
             </div>
           ))}
         </div>

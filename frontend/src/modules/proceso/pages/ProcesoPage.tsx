@@ -1,0 +1,437 @@
+import { useEffect, useState, type DragEvent } from 'react';
+import { Plus, PencilSimple, EyeSlash, Eye, DotsSixVertical, Info, ArrowRight, ListChecks, ChatText, CaretDown } from '@phosphor-icons/react';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import Card from '@/shared/components/ui/Card';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
+import { toast } from '@/shared/hooks/useToast';
+import { cn } from '@/shared/lib/utils';
+import useProcesoPasos from '../hooks/useProcesoPasos';
+import { procesoApi, mensajeDeError, type Paso } from '../api/proceso.api';
+import DialogoPaso, { type DatosPaso } from '../components/DialogoPaso';
+import PlantillaDelPaso from '../components/PlantillaDelPaso';
+import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
+import { textoDeDias } from '../lib/cuando';
+
+/**
+ * El proceso comercial de la casa: cinco pasos que vivían en un PDF.
+ *
+ * Lo que hay que entender de esta pantalla, y por eso está escrito también
+ * DENTRO de ella: los días son días desde que entró el prospecto, no días de
+ * la semana. El documento dice «lunes o martes» porque describe a alguien que
+ * entró un lunes; lo que ordena el proceso es cuánto lleva esperando.
+ */
+
+export function puedeEditar(rol: string | undefined): boolean {
+  return rol === 'admin' || rol === 'superadmin';
+}
+
+// La frase que dice cuándo toca un paso ya no se escribe aquí: vive en
+// `lib/cuando`, porque la necesitan esta lista y el diálogo. Tenerla en un solo
+// sitio es justo lo que pedía Diego al cerrar el #87.
+
+export default function ProcesoPage() {
+  const { user } = useAuth() as { user: { role?: string } | null };
+  const { activeProject, activeIssuer, isAllProjects } = useProjectContext() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
+    isAllProjects?: boolean;
+  };
+  const admin = puedeEditar(user?.role);
+
+  // EL PROCESO ES DE LA EMPRESA, no de cada campus. Diego, 22/09.
+  //
+  // Los pasos se guardan por proyecto, pero los siete campus de CEDIA llevan
+  // exactamente el mismo proceso: el documento comercial es uno. Antes esta
+  // pantalla pedia elegir campus y no se podia pasar de ahi; ahora, con una
+  // empresa puesta, enseña SU proceso y lo que se cambia se cambia en todos
+  // sus campus a la vez.
+  //
+  // El selector de campus se queda para el caso en que alguno se haya
+  // separado: entonces hay dos respuestas distintas y hay que elegir.
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuer?.id, isAllProjects]);
+  // Con «Todos los proyectos» (#218) no hay una empresa que editar de golpe: el
+  // mismo desplegable pide el campus, entre todos los suyos.
+  const todos = Boolean(isAllProjects && !activeIssuer);
+  const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const projectId = elegido ?? soloCampus;
+  // Con empresa y sin campus a dedo, se pide por empresa.
+  const issuerId = !projectId && activeIssuer?.id ? activeIssuer.id : null;
+  const deQuien = elegido
+    ? activeProject?.nombre
+    : projectId
+      ? campus.find((c) => c.id === projectId)?.nombre
+      : activeIssuer?.nombre;
+
+  const [verInactivos, setVerInactivos] = useState(false);
+  const ambito = { projectId, issuerId };
+  const { pasos, setPasos, cargando, error, recargar } = useProcesoPasos(ambito, verInactivos);
+
+  // Un paso que no esta en todos los campus de la empresa: alguno se separo.
+  // Se avisa en vez de dejar que se edite creyendo que vale para los siete.
+  const separados = issuerId
+    ? pasos.filter((p) => p.en_campus != null && p.en_campus < campus.length)
+    : [];
+
+  const [editando, setEditando] = useState<Paso | null>(null);
+  // El paso con las plantillas desplegadas (#247, Manuel 06/10: «que se haga clic
+  // y carguen las plantillas»). Uno a la vez: con siete abiertos no se lee nada.
+  const [conPlantillas, setConPlantillas] = useState<number | null>(null);
+  const [creando, setCreando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorDialogo, setErrorDialogo] = useState<string | null>(null);
+  const [arrastrando, setArrastrando] = useState<number | null>(null);
+
+  const dialogoAbierto = creando || editando !== null;
+
+  async function guardar(datos: DatosPaso) {
+    setGuardando(true);
+    setErrorDialogo(null);
+    const cuerpo = {
+      nombre: datos.nombre.trim(),
+      cuando: datos.cuando.trim() || null,
+      dia_desde: datos.dia_desde === '' ? null : Number(datos.dia_desde),
+      dia_hasta: datos.dia_hasta === '' ? null : Number(datos.dia_hasta),
+      canales: datos.canales,
+      es_seguimiento: datos.es_seguimiento,
+      nota: datos.nota.trim() || null,
+    };
+    try {
+      if (creando) {
+        await procesoApi.crear({ ...cuerpo, clave: datos.clave.trim(), ...ambito });
+        toast({ title: 'Paso creado' });
+      } else if (editando) {
+        await procesoApi.editar(editando.id, cuerpo, ambito);
+        toast({ title: 'Paso guardado' });
+      }
+      setCreando(false);
+      setEditando(null);
+      recargar();
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      setErrorDialogo(mensajeDeError(err?.status, err?.message || 'No se ha podido guardar.', creando ? 'crear' : 'editar'));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function cambiarActivo(paso: Paso) {
+    try {
+      if (paso.activo) await procesoApi.desactivar(paso.id, ambito);
+      else await procesoApi.editar(paso.id, { activo: true }, ambito);
+      toast({ title: paso.activo ? 'Paso desactivado' : 'Paso reactivado' });
+      recargar();
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      toast({
+        title: 'No se ha podido cambiar',
+        description: mensajeDeError(err?.status, err?.message || '', 'activar'),
+        variant: 'destructive',
+      });
+    }
+  }
+
+  async function soltarEn(destino: number) {
+    if (arrastrando === null || arrastrando === destino) { setArrastrando(null); return; }
+    const antes = pasos;
+    const copia = [...pasos];
+    const [movido] = copia.splice(arrastrando, 1);
+    copia.splice(destino, 0, movido);
+    // Se pinta ya y se avisa despues: arrastrar y ver la fila volver a su sitio
+    // medio segundo se siente roto aunque acabe bien.
+    setPasos(copia);
+    setArrastrando(null);
+    try {
+      // La lista ENTERA de ids, en su nuevo orden, como pide la API.
+      await procesoApi.reordenar(copia.map((p) => p.id), ambito);
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      setPasos(antes);
+      toast({
+        title: 'No se ha podido reordenar',
+        description: mensajeDeError(err?.status, err?.message || '', 'reordenar'),
+        variant: 'destructive',
+      });
+    }
+  }
+
+  return (
+    <div className="space-y-bloque">
+      <PageHeader
+        title="Proceso comercial"
+        subtitle="Los pasos por los que pasa cada prospecto, en orden."
+        backTo="/prospectos"
+        backLabel="Prospectos"
+        actions={admin ? (
+          <button
+            type="button"
+            onClick={() => { setErrorDialogo(null); setCreando(true); }}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
+          >
+            <Plus size={14} weight="bold" />
+            <span className="hidden sm:inline">Nuevo paso</span>
+            <span className="sm:hidden">Nuevo</span>
+          </button>
+        ) : null}
+      />
+
+      {/* Lo que hay que saber antes de tocar nada. Va en la pantalla y no solo
+          en la tarea: quien la abre no ha leido la tarea. */}
+      <Card className="flex items-start gap-2.5">
+        <Info size={17} weight="regular" className="mt-0.5 shrink-0 text-info" />
+        <p className="text-normal text-muted-foreground">
+          Los días son <strong className="text-foreground">días desde que entra el prospecto</strong>, no días de la
+          semana. Quien entra un jueves hace su primer paso el jueves o el viernes; no espera al lunes. El documento
+          comercial los cuenta por día de la semana porque describe a alguien que entró un lunes.
+        </p>
+      </Card>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-secundario text-muted-foreground">
+            {deQuien ? `Proceso de ${deQuien}` : 'Elige un proyecto'}
+            {issuerId && campus.length > 1 && (
+              <span className="ml-1">
+                · sus {campus.length} campus, a la vez
+              </span>
+            )}
+          </p>
+          {/* DE QUIÉN ES LO QUE SE EDITA. El desplegable ya existía y ya hacía
+              lo correcto --con la empresa puesta se tocan todos sus campus a la
+              vez, y eligiendo uno se toca solo ese--, pero decía «Elige uno…» y
+              nada más. Quien pulsaba «Nuevo paso» con CEDIA arriba lo creaba en
+              los siete campus sin saberlo, y quien quería cambiar uno solo no
+              tenía forma de adivinar que era ahí donde se hacía. El poder
+              estaba; lo que faltaba era decirlo. */}
+          {(activeIssuer || todos) && !elegido && campus.length > 0 && (
+            <select
+              value={soloCampus ?? ''}
+              onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+              className="h-8 px-2 rounded-md border border-border bg-card text-normal focus:outline-none focus:ring-2 focus:ring-primary/40"
+              aria-label={activeIssuer ? `A qué campus de ${activeIssuer.nombre} afecta lo que edites` : 'De qué campus es el proceso'}
+            >
+              <option value="">{activeIssuer ? `Toda la empresa · los ${campus.length} campus` : 'Elige un campus…'}</option>
+              {campus.map((c) => <option key={c.id} value={c.id}>{activeIssuer ? `Solo ${c.nombre}` : c.nombre}</option>)}
+            </select>
+          )}
+        </div>
+        <label className="inline-flex items-center gap-2 text-normal">
+          <input
+            type="checkbox"
+            checked={verInactivos}
+            onChange={(e) => setVerInactivos(e.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-ring/40"
+          />
+          Ver también los inactivos
+        </label>
+      </div>
+
+      {separados.length > 0 && (
+        <p className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-normal text-warning-soft-foreground">
+          Hay {separados.length} paso{separados.length === 1 ? '' : 's'} que no está
+          {separados.length === 1 ? '' : 'n'} en los {campus.length} campus de esta empresa
+          ({separados.map((p) => p.nombre).join(', ')}). Lo que cambies aquí se aplica solo
+          donde exista; para verlo campus a campus, elige uno arriba.
+        </p>
+      )}
+
+      {error && (
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive-soft px-3 py-2 text-normal text-destructive-soft-foreground">
+          {error}
+        </p>
+      )}
+
+      {cargando ? (
+        <ul className="space-y-fila" aria-busy="true">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="h-24 animate-pulse rounded-lg border border-border bg-muted/40" />
+          ))}
+        </ul>
+      ) : !projectId && !issuerId ? (
+        <EmptyState
+          icon={ListChecks}
+          title={todos ? 'Elige un campus' : 'Elige un proyecto'}
+          description={todos
+            ? 'Con «Todos los proyectos», elige en el desplegable de arriba de qué campus es el proceso.'
+            : 'Elige un proyecto o una empresa en el selector de la cabecera.'}
+        />
+      ) : pasos.length === 0 ? (
+        <EmptyState
+          icon={ListChecks}
+          title="Todavía no hay pasos"
+          description={admin ? 'Crea el primero para empezar a ordenar el proceso.' : 'Cuando un administrador los cree, aparecerán aquí.'}
+        />
+      ) : (
+        <ol aria-label="Pasos del proceso" className="space-y-fila">
+          {pasos.map((paso, i) => {
+            return (
+              <li
+                key={paso.id}
+                draggable={admin}
+                onDragStart={(e: DragEvent<HTMLLIElement>) => {
+                  setArrastrando(i);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(e: DragEvent<HTMLLIElement>) => { if (admin) e.preventDefault(); }}
+                onDrop={(e: DragEvent<HTMLLIElement>) => { e.preventDefault(); soltarEn(i); }}
+                onDragEnd={() => setArrastrando(null)}
+                className={cn(
+                  'rounded-lg border border-border bg-card p-tarjeta shadow-sm transition-colors',
+                  admin && 'cursor-grab active:cursor-grabbing',
+                  arrastrando === i && 'opacity-50',
+                  !paso.activo && 'opacity-60',
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  {admin && (
+                    <DotsSixVertical
+                      size={18}
+                      weight="regular"
+                      aria-hidden="true"
+                      className="mt-0.5 shrink-0 text-muted-foreground/50"
+                    />
+                  )}
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-secundario font-semibold tabular-nums text-muted-foreground">
+                    {i + 1}
+                  </span>
+
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h2 className="text-normal font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setConPlantillas((x) => (x === paso.id ? null : paso.id))}
+                          className="text-left hover:underline focus:outline-none focus:ring-2 focus:ring-ring/40 rounded"
+                        >
+                          {paso.nombre}
+                        </button>
+                      </h2>
+                      {/* La clave, apagada: hace falta para entenderse con
+                          quien toca el codigo, y no se edita. */}
+                      <code className="rounded bg-muted px-1 py-0.5 text-secundario text-muted-foreground">
+                        {paso.clave}
+                      </code>
+                      {paso.es_seguimiento && (
+                        <span className="rounded bg-info-soft px-1.5 py-0.5 text-secundario font-semibold text-info-soft-foreground">
+                          Seguimiento
+                        </span>
+                      )}
+                      {!paso.activo && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-secundario font-semibold text-muted-foreground">
+                          Inactivo
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secundario text-muted-foreground">
+                      {/* La ventana se DICE a partir de los números, no se escribe
+                          aparte. Antes había un campo de texto al lado —«Lunes o
+                          martes»— que repetía lo mismo y acabó contradiciéndolo:
+                          la pantalla avisaba de que no son días de la semana y
+                          justo debajo ponía uno. Un texto que repite lo que dice
+                          otro campo siempre termina discrepando. */}
+                      {(() => {
+                        const ventana = textoDeDias(paso.dia_desde, paso.dia_hasta);
+                        if (ventana) {
+                          return (
+                            <span title={paso.dia_desde === paso.dia_hasta
+                              ? `Día ${paso.dia_desde} desde que entra el prospecto`
+                              : `Días ${paso.dia_desde}-${paso.dia_hasta} desde que entra el prospecto`}>
+                              {ventana}
+                            </span>
+                          );
+                        }
+                        // Sin días, manda la etiqueta: «Final de mes».
+                        return paso.cuando ? <span>{paso.cuando}</span> : <span>—</span>;
+                      })()}
+                    </div>
+
+                    {paso.canales?.length > 0 && (
+                      <ol aria-label={`Canales de ${paso.nombre}, en orden`} className="flex flex-wrap items-center gap-1">
+                        {paso.canales.map((canal, j) => {
+                          const IconoCanal = iconoDeCanal(canal);
+                          return (
+                            <li key={canal} className="flex items-center gap-1">
+                              {j > 0 && <ArrowRight size={10} weight="bold" className="text-muted-foreground/50" />}
+                              <span className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-secundario">
+                                {IconoCanal && <IconoCanal size={12} weight="regular" className="text-muted-foreground" />}
+                                {nombreDeCanal(canal)}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
+
+                    {paso.nota && <p className="text-secundario text-muted-foreground">{paso.nota}</p>}
+
+                    <button
+                      type="button"
+                      onClick={() => setConPlantillas((x) => (x === paso.id ? null : paso.id))}
+                      aria-expanded={conPlantillas === paso.id}
+                      className="inline-flex items-center gap-1 text-secundario font-semibold text-primary hover:underline"
+                    >
+                      <ChatText size={13} /> Plantillas de este paso
+                      <CaretDown size={11} weight="bold" className={cn('transition-transform', conPlantillas === paso.id && 'rotate-180')} />
+                    </button>
+                    {/* Las de WhatsApp (de la casa y las propias) y el correo del paso,
+                        para copiar. Aquí no hay alumno: van con un nombre de ejemplo y
+                        los demás huecos a la vista, para ver qué se rellena solo. */}
+                    {conPlantillas === paso.id && (
+                      <div className="mt-1 rounded-md border border-border bg-muted/30 p-2">
+                        <PlantillaDelPaso
+                          projectId={projectId}
+                          issuerId={issuerId}
+                          pasoClave={paso.clave}
+                          nombreProyecto={deQuien}
+                          datos={{ nombre: 'María' }}
+                          compacto
+                        />
+                        <p className="mt-1 text-[11px] text-muted-foreground">Con «María» de ejemplo: en la cola y en la ficha salen los datos de cada persona.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {admin && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => { setErrorDialogo(null); setEditando(paso); }}
+                        aria-label={`Editar ${paso.nombre}`}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      >
+                        <PencilSimple size={15} weight="regular" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cambiarActivo(paso)}
+                        aria-label={paso.activo ? `Desactivar ${paso.nombre}` : `Reactivar ${paso.nombre}`}
+                        title={paso.activo ? 'Desactivar — no se borra, deja de verse' : 'Reactivar'}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      >
+                        {paso.activo ? <EyeSlash size={15} weight="regular" /> : <Eye size={15} weight="regular" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      <DialogoPaso
+        abierto={dialogoAbierto}
+        paso={editando}
+        guardando={guardando}
+        errorServidor={errorDialogo}
+        onGuardar={guardar}
+        onCerrar={() => { setCreando(false); setEditando(null); setErrorDialogo(null); }}
+      />
+    </div>
+  );
+}

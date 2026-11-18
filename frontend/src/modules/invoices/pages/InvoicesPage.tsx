@@ -1,10 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
+// Los atajos de fecha. El mismo componente para todas las pantallas con
+// rango: Diego los pidio tres veces en cuatro dias, y eso no son tres tareas.
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
+import AvisoHuecosFacturas from '../components/AvisoHuecosFacturas';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
@@ -14,8 +18,10 @@ import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
 import AsociarVentaDialog from '../components/AsociarVentaDialog';
+import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -24,32 +30,41 @@ const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', c
 const fmtDate = (s: string | null) => s ? formatDateNumeric(s) : '—';
 
 const ESTADO_BADGE: Record<string, string> = {
-  borrador: 'bg-amber-100 text-amber-800 border border-amber-300',
-  emitida:  'bg-blue-100 text-blue-800',
-  enviada:  'bg-amber-100 text-amber-800',
-  pagada:   'bg-emerald-100 text-emerald-800',
-  cancelada: 'bg-red-100 text-red-800',
+  borrador: 'bg-warning-soft text-warning-soft-foreground border border-warning/30',
+  emitida:  'bg-info-soft text-info-soft-foreground',
+  enviada:  'bg-warning-soft text-warning-soft-foreground',
+  pagada:   'bg-success-soft text-success-soft-foreground',
+  cancelada: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 
 type Stats = { total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number };
 
 export default function InvoicesPage() {
-  const { activeProject, projects, switchProject } = useProjectContext() as {
+  const { activeProject, projects, switchProject, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null };
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
     switchProject: (id: number) => void;
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean; editar_fechas_factura?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
-  // factura_manager (el backend valida además que sean SUS facturas).
-  const canManage = isAdmin || !!user?.factura_manager;
-  // Quien factura de verdad. Los totales de la sociedad, las ventas sin
-  // factura y los cobros sueltos son trabajo suyo, no de cada gestora.
-  const puedeFacturar = user?.role === 'superadmin' || !!user?.factura_manager;
+  // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
+  // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
+  // SUS facturas—; quien factura de verdad, «Emitir desde la cola». Los totales
+  // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
+  const { can, llevaEquipo } = usePermission();
+  const canManage = can('facturas.gestionar');
+  // Corregir, abonar, asociar a una venta y eliminar: el permiso Y no llevar un
+  // equipo comercial (Diego, 09/11/2026). El servidor ya le da 403 a quien lo
+  // lleva; aquí no se le enseñan los botones (QA del 09/11).
+  const puedeCorregir = canManage && !llevaEquipo;
+  const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
+  // «Todos los proyectos» (#218): sin campus, las de todos los suyos. El servidor
+  // las recorta a los campus de quien mira; los ajustes siguen siendo por campus.
+  const todos = pid === -1;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
     const t = new URLSearchParams(loc.search).get('tab');
@@ -65,13 +80,34 @@ export default function InvoicesPage() {
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
   // Paginacion: con cientos de facturas ya no cabian todas de una tacada.
   const PER_PAGE = 50;
+
+  // Apuntar que una factura ya se le paso al cliente. Optimista: la marca
+  // cambia al momento y si el servidor dice que no, se recarga y vuelve.
+  async function marcarEntregada(inv: Invoice) {
+    const ahora = inv.sent_at ? null : new Date().toISOString();
+    setInvoices((lista) => lista.map((x) => (x.id === inv.id ? { ...x, sent_at: ahora } : x)));
+    const r = await client.patch(`/invoices/${inv.id}/entregada`, { entregada: !inv.sent_at });
+    if (!r?.success) {
+      toast({ title: 'No se pudo guardar la marca', variant: 'destructive' });
+      load();
+    }
+  }
   const [page, setPage] = useState(1);
   const [totalFacturas, setTotalFacturas] = useState(0);
   const [sending, setSending] = useState<number | null>(null);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
   // sociedad entre proyectos (global), con la columna Proyecto.
-  const [filterIssuer, setFilterIssuer] = useState<string>('');
+  // Si en la cabecera hay una sociedad elegida (#103), manda ella: son dos
+  // formas de pedir lo mismo y tenerlas discrepando —la cabecera diciendo
+  // CEDIA y la tabla enseñando ICTESS— es peor que tener solo una.
+  const [filterIssuer, setFilterIssuer] = useState<string>(() => (activeIssuer ? String(activeIssuer.id) : ''));
+
+  // Y si se cambia de empresa SIN salir de la pantalla, que se entere: sin
+  // esto la cabecera diria CEDIA y la tabla seguiria en la anterior.
+  useEffect(() => {
+    if (activeIssuer) setFilterIssuer(String(activeIssuer.id));
+  }, [activeIssuer?.id]);
   // Dentro de una sociedad: filtrar por uno de sus proyectos. '' = todos.
   const [filterProject, setFilterProject] = useState<string>('');
   const [allIssuers, setAllIssuers] = useState<Issuer[]>([]);
@@ -86,6 +122,17 @@ export default function InvoicesPage() {
   const misSociedadIds = new Set((projects || []).map((p) => p.sociedad_emisora_id).filter((x) => x != null));
   const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
   const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
+  /*
+    El nombre de la sociedad, CON su alias cuando lo tiene.
+
+    Dos emisores pueden compartir razon social y NIF y ser cosas distintas a
+    efectos de numeracion: en MultiCRM, el 9 y el 11 son los dos «Ictess
+    Ingenieria e Innovacion SL», y el 11 es el que Diego llama Solvenic. En el
+    desplegable salian dos opciones identicas, asi que elegir era a ciegas y la
+    factura 2026/0079 --de Solvenic-- parecia no existir.
+  */
+  const nombreSociedad = (i?: { razon_social?: string; alias?: string | null } | null): string =>
+    i ? (i.alias ? `${i.razon_social} · ${i.alias}` : (i.razon_social || '')) : '';
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
   // Cobros de Stripe cobrados pero SIN cliente asociado: salen aquí igual que en
   // Pagos Stripe, porque hasta asociarlos no generan factura.
@@ -94,6 +141,8 @@ export default function InvoicesPage() {
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
   const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
   const [asociarInv, setAsociarInv] = useState<Invoice | null>(null);
+  // Proforma que se está marcando cobrada (apunta el cobro y la pasa a factura).
+  const [cobrarInv, setCobrarInv] = useState<Invoice | null>(null);
   // Cobro por Stripe: al descargar se elige entre la factura del alumno (bruto)
   // y la copia de gestión (neto liquidado).
   const [descargarInv, setDescargarInv] = useState<Invoice | null>(null);
@@ -111,22 +160,35 @@ export default function InvoicesPage() {
       .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message || 'Error desconocido', variant: 'destructive' }));
   }
 
+  // Las tarjetas y «Ventas sin factura» con las mismas fechas y estado que la
+  // lista (#233): con septiembre puesto enseñaban el acumulado de siempre.
+  const hayFechas = Boolean(filters.from || filters.to);
+
   const load = useCallback(async () => {
     if (!pid) return;
+    const periodo = { from: filters.from, to: filters.to, estado: filters.estado };
     setLoading(true);
     try {
-      // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
-      // (stats, emisores, ventas sin factura) sigue por proyecto activo.
+      // Modo sociedad (admin): facturas globales de esa empresa emisora. Las
+      // ventas sin factura tambien van por sociedad; los emisores y los ajustes
+      // siguen siendo por proyecto, que es como se configuran.
       const listParams = porSociedad
         ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, page, limit: PER_PAGE }
-        : { projectId: pid, ...filters, tipo: tipoTab, page, limit: PER_PAGE };
+        : todos
+          ? { ...filters, tipo: tipoTab, page, limit: PER_PAGE }
+          : { projectId: pid, ...filters, tipo: tipoTab, page, limit: PER_PAGE };
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
-          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
-          : invoicesApi.stats({ projectId: pid }),
-        invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
-        invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
+          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null, ...periodo })
+          : invoicesApi.stats({ projectId: todos ? null : pid, ...periodo }),
+        invoicesApi.listIssuers(todos ? undefined : pid).catch(() => ({ success: false, data: [] as Issuer[] })),
+        // Con una sociedad elegida se piden las de TODOS sus campus: es la
+        // pantalla que dice que falta por facturar, y acotarla a un proyecto
+        // dejaba fuera justo lo que se estaba mirando.
+        invoicesApi.ventasSinFactura(porSociedad
+          ? { issuerId: Number(filterIssuer) }
+          : (todos ? {} : { projectId: pid }), periodo).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) {
         setInvoices(r1.data || []);
@@ -137,7 +199,14 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
       // Cobros Stripe sin asociar del proyecto (no bloqueante).
-      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&limit=50`)
+      // `sinEquivalente=1`: aqui solo los huecos DE VERDAD. Un cargo sin enlazar
+      // que ya tiene su cobro apuntado a mano no es dinero que falte, y salia
+      // repetido con la cola de facturacion (los 859,10 de Innovacion Verde).
+      // Para enlazarlos uno a uno esta la pantalla de Pagos Stripe, que los
+      // sigue enseñando todos.
+      // Con «Todos», no: es la cola de UN campus, y la de todos ya está en Pagos Stripe.
+      if (todos) { setStripeSinAsociar([]); return; }
+      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&sinEquivalente=1&limit=50`)
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
@@ -212,7 +281,7 @@ export default function InvoicesPage() {
     // Override opcional de empresa emisora (por defecto hereda la de la factura original)
     let issuerId: number | undefined;
     if (issuers.length > 1) {
-      const opciones = issuers.map((i, idx) => `${idx + 1}. ${i.razon_social}${i.es_default ? ' (default)' : ''}`).join('\n');
+      const opciones = issuers.map((i, idx) => `${idx + 1}. ${nombreSociedad(i)}${i.es_default ? ' (default)' : ''}`).join('\n');
       const sel = prompt(
         `Empresa que emite la rectificativa.\n` +
         `Dejá vacío para usar la misma de la factura original.\n\n${opciones}\n\nNº de empresa (o vacío):`,
@@ -241,15 +310,18 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {/* El subtitulo con una empresa elegida: antes decia «Todos los
+          proyectos» --lo que vale `activeProject.nombre` cuando hay
+          sociedad-- y con CEDIA puesta eso es sencillamente falso. */}
       <PageHeader
         title="Facturas"
-        subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
+        subtitle={`Histórico fiscal — ${activeIssuer ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus` : (activeProject?.nombre || '')}`}
         actions={(
           <div className="flex gap-2">
             <TutorialButton />
             {/* Los abonos (rectificativas) los emite un admin o una gestora con
                 permiso factura_manager. Las demás ven la pestaña pero no crean. */}
-            {!(esAbonos && !canManage) && (
+            {!(esAbonos && !puedeCorregir) && (
               <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
@@ -264,8 +336,29 @@ export default function InvoicesPage() {
         )}
       />
 
+      {/* Si la serie tiene agujeros, se dice aqui: es donde se factura. */}
+      <AvisoHuecosFacturas projectId={activeProject?.id} />
+
+      {canManage && llevaEquipo && (
+        <p role="note" className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/40">
+          Llevas un equipo comercial: ves las facturas de tu equipo, pero corregirlas, abonarlas, asociarlas a una
+          venta o eliminarlas lo hace la administración sin equipo.
+        </p>
+      )}
+
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
-      {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
+      {/* Con una empresa elegida arriba no hay un proyecto en la cabecera: una cola por campus
+          suyo. Antes salía «todo facturado» con 20 cobros esperando en ACADEMIA IA (21/10). */}
+      {!esProformas && !esAbonos && (porSociedad ? (
+        <>
+          {!filterProject && sociedadProjects.length > 1 && (
+            <p className="text-[11px] text-muted-foreground">Cola de facturación por campus: solo salen los que tienen cobros por facturar.</p>
+          )}
+          {(filterProject ? sociedadProjects.filter((p) => String(p.id) === filterProject) : sociedadProjects).map((p) => (
+            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} />
+          ))}
+        </>
+      ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
@@ -279,17 +372,142 @@ export default function InvoicesPage() {
 
       {!esProformas && stats && puedeFacturar && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
-            label="Total facturas" numericValue={stats.total} />
-          <KpiCard icon={Receipt} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+          <KpiCard icon={Receipt} iconBg="bg-info-soft text-info-soft-foreground"
+            label={hayFechas ? 'Facturas del periodo' : 'Total facturas'} numericValue={stats.total} />
+          <KpiCard icon={Receipt} iconBg="bg-success-soft text-success-soft-foreground"
             label="Facturado" numericValue={Number(stats.total_facturado)} format={(n) => fmt(Number(n))} />
-          <KpiCard icon={CheckCircle} iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+          <KpiCard icon={CheckCircle} iconBg="bg-primary/10 text-primary"
             label="Cobrado" numericValue={Number(stats.total_cobrado)} format={(n) => fmt(Number(n))} />
-          <KpiCard icon={Receipt} iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
+          <KpiCard icon={Receipt} iconBg="bg-warning-soft text-warning-soft-foreground"
             label="IVA acumulado" numericValue={Number(stats.total_iva)} format={(n) => fmt(Number(n))} />
         </div>
       )}
 
+      {porSociedad && (
+        <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
+          Mostrando facturas de <strong>{nombreSociedad(allIssuers.find((i) => String(i.id) === filterIssuer)) || 'la sociedad'}</strong>
+          {filterProject
+            ? <> · proyecto <strong>{sociedadProjects.find((p) => String(p.id) === filterProject)?.nombre}</strong>.</>
+            : <> entre <strong>todos sus proyectos</strong> (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.</>}
+        </div>
+      )}
+
+      {/* Cobros de Stripe sin asociar — también visibles aquí, no solo en Pagos Stripe.
+          Hasta asociarlos a un cliente NO generan factura. */}
+      {!esProformas && puedeFacturar && stripeSinAsociar.length > 0 && (
+        <div className="bg-destructive-soft/70 border border-destructive/50 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-destructive/40 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <X size={15} weight="bold" className="text-destructive" />
+              <span className="font-semibold text-sm text-destructive-soft-foreground">Cobros de Stripe sin asociar</span>
+              <span className="text-[11px] text-muted-foreground">
+                · {stripeSinAsociar.length} cobro{stripeSinAsociar.length !== 1 ? 's' : ''} sin cliente — <strong>no generan factura</strong> hasta asociarlos
+              </span>
+            </div>
+            <Link to="/finanzas/pagos-stripe"
+              className="h-8 px-3 rounded-md bg-destructive text-white text-[11px] font-semibold hover:bg-destructive/90 inline-flex items-center gap-1">
+              Asociar en Pagos Stripe →
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="tabla-cifras w-full text-[13px]">
+              <tbody>
+                {stripeSinAsociar.slice(0, 8).map((p) => (
+                  <tr key={p.id} className="border-b border-destructive/20 last:border-0">
+                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(p.stripe_created_at)}</td>
+                    <td className="px-3 py-2 font-medium">{p.customer_name || '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{p.customer_email || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(p.amount))}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Link to="/finanzas/pagos-stripe" className="text-[11px] font-bold text-destructive-soft-foreground hover:underline">
+                        NO ASOCIADO · ASOCIAR
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {stripeSinAsociar.length > 8 && (
+              <div className="px-3 py-2 text-[11px] text-muted-foreground">y {stripeSinAsociar.length - 8} más…</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Ya no se esconde en modo sociedad: la consulta acepta los campus. */}
+      {!esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
+        <div className="bg-warning-soft/60 border border-warning/40 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-warning/40 flex items-center gap-2">
+            <Receipt size={15} weight="bold" className="text-warning" />
+            <span className="font-semibold text-sm">Ventas sin factura</span>
+            <span className="text-[11px] text-muted-foreground">· {ventasSinFactura.length} venta{ventasSinFactura.length !== 1 ? 's' : ''} registrada{ventasSinFactura.length !== 1 ? 's' : ''} sin factura emitida</span>
+          </div>
+          {/* Diego: «las ventas sin factura y la cola de facturación son como
+              lo mismo». Se solapan y la pantalla no lo decia. No son iguales:
+              arriba van los COBROS pendientes de facturar, en orden; aqui las
+              VENTAS sin ninguna factura, incluidas las que todavia no han
+              cobrado nada. Una venta con cobro sale en las dos. */}
+          <p className="px-4 py-2 text-[11px] leading-snug text-muted-foreground border-b border-warning/30">
+            Esto son <b>ventas</b>; arriba, en la cola, van los <b>cobros</b> pendientes de facturar.
+            {' '}Una venta que ya tiene algún cobro sale en las dos:
+            {' '}<b>emítela desde la cola</b>, que es la que respeta el orden de la numeración.
+            {' '}Aquí quedan sobre todo las que aún no han cobrado nada, y por eso todavía no se pueden facturar.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="tabla-cifras w-full text-[13px]">
+              <thead className="bg-warning-soft/40 border-b border-warning/40">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>
+                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Cliente</th>
+                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Producto</th>
+                  <th className="px-3 py-2 text-right text-xs text-muted-foreground">Importe</th>
+                  <th className="px-3 py-2 text-right text-xs text-muted-foreground">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventasSinFactura.map((v) => (
+                  <tr key={v.conversion_id} className="border-b border-warning/20 last:border-0">
+                    <td className="px-3 py-2">{fmtDate(v.fecha_conversion)}</td>
+                    <td className="px-3 py-2 font-medium">{v.cliente_nombre}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{v.producto_contratado || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(v.importe_total))}</td>
+                    <td className="px-3 py-2 text-right">
+                      {Number(v.importe_pagado) > 0 ? (
+                        // Ya cobrada: su factura sale de la cola (por pago y en orden de fecha), no de
+                        // una proforma. Diego, 21/10: «todas las que salen en proforma ya están pagadas».
+                        <span className="text-[11px] font-semibold text-success" title="Ya tiene cobros: su factura sale de la cola de facturación, por orden de fecha.">
+                          Cobrada · factúrala desde la cola
+                        </span>
+                      ) : (
+                      <InvoiceButton
+                        // El campus de la VENTA: con una empresa elegida arriba no hay un
+                        // proyecto en la cabecera y la proforma salía con un 400 (21/10).
+                        projectId={v.project_id ?? pid}
+                        leadId={v.lead_id}
+                        conversionId={v.conversion_id}
+                        items={[{ descripcion: v.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(v.importe_total) }]}
+                        onInvoiced={load}
+                      />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* LOS FILTROS, AQUI Y NO ARRIBA.
+
+          Estaban encima de las tarjetas y de la tabla de ventas sin factura,
+          asi que al bajar a la lista --donde se trabaja-- quedaban fuera de
+          pantalla. Lo resolvi duplicando el buscador, y Diego: «hay dos
+          buscadores, hay que dejar uno». Tenia razon: dos cuadros que hacen lo
+          mismo es peor que uno lejos.
+
+          Se mueve el bloque entero --buscador, sociedad, proyecto, estado,
+          fechas y atajos-- a donde se usa: pegado a la lista que filtra. */}
       <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -304,14 +522,14 @@ export default function InvoicesPage() {
               // y se ofrece el atajo para entrar a uno de sus proyectos.
               if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
                 const soc = sociedadesVisibles.find((s) => s.id === id);
-                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
+                if (soc) setSocPrompt({ id, nombre: nombreSociedad(soc) });
                 return;
               }
               setFilterIssuer(e.target.value);
             }}
             title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
             className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{nombreSociedad(i)}</option>)}
           </select>
         )}
         {porSociedad && sociedadProjects.length > 0 && (
@@ -338,100 +556,15 @@ export default function InvoicesPage() {
           <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         </div>
+        {/* Los atajos van DESPUES de las casillas y no en su lugar: escribir dos
+            fechas sigue siendo posible para el caso raro, y para los cinco de
+            siempre ya no hace falta. */}
+        <RangoRapido
+          valor={{ from: filters.from, to: filters.to }}
+          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
+          className="w-full sm:w-auto"
+        />
       </div>
-
-      {porSociedad && (
-        <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
-          Mostrando facturas de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong>
-          {filterProject
-            ? <> · proyecto <strong>{sociedadProjects.find((p) => String(p.id) === filterProject)?.nombre}</strong>.</>
-            : <> entre <strong>todos sus proyectos</strong> (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.</>}
-        </div>
-      )}
-
-      {/* Cobros de Stripe sin asociar — también visibles aquí, no solo en Pagos Stripe.
-          Hasta asociarlos a un cliente NO generan factura. */}
-      {!esProformas && puedeFacturar && stripeSinAsociar.length > 0 && (
-        <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-300 dark:border-red-900/50 rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-red-200 dark:border-red-900/40 flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <X size={15} weight="bold" className="text-red-600" />
-              <span className="font-semibold text-sm text-red-800 dark:text-red-300">Cobros de Stripe sin asociar</span>
-              <span className="text-[11px] text-muted-foreground">
-                · {stripeSinAsociar.length} cobro{stripeSinAsociar.length !== 1 ? 's' : ''} sin cliente — <strong>no generan factura</strong> hasta asociarlos
-              </span>
-            </div>
-            <Link to="/finanzas/pagos-stripe"
-              className="h-8 px-3 rounded-md bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700 inline-flex items-center gap-1">
-              Asociar en Pagos Stripe →
-            </Link>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="tabla-cifras w-full text-[13px]">
-              <tbody>
-                {stripeSinAsociar.slice(0, 8).map((p) => (
-                  <tr key={p.id} className="border-b border-red-100 dark:border-red-900/20 last:border-0">
-                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(p.stripe_created_at)}</td>
-                    <td className="px-3 py-2 font-medium">{p.customer_name || '—'}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{p.customer_email || '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(p.amount))}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Link to="/finanzas/pagos-stripe" className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline">
-                        NO ASOCIADO · ASOCIAR
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {stripeSinAsociar.length > 8 && (
-              <div className="px-3 py-2 text-[11px] text-muted-foreground">y {stripeSinAsociar.length - 8} más…</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {!porSociedad && !esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
-        <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
-            <Receipt size={15} weight="bold" className="text-amber-600" />
-            <span className="font-semibold text-sm">Ventas sin factura</span>
-            <span className="text-[11px] text-muted-foreground">· {ventasSinFactura.length} venta{ventasSinFactura.length !== 1 ? 's' : ''} registrada{ventasSinFactura.length !== 1 ? 's' : ''} sin factura emitida</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="tabla-cifras w-full text-[13px]">
-              <thead className="bg-amber-100/40 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-900/40">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>
-                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Cliente</th>
-                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Producto</th>
-                  <th className="px-3 py-2 text-right text-xs text-muted-foreground">Importe</th>
-                  <th className="px-3 py-2 text-right text-xs text-muted-foreground">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ventasSinFactura.map((v) => (
-                  <tr key={v.conversion_id} className="border-b border-amber-100 dark:border-amber-900/20 last:border-0">
-                    <td className="px-3 py-2">{fmtDate(v.fecha_conversion)}</td>
-                    <td className="px-3 py-2 font-medium">{v.cliente_nombre}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{v.producto_contratado || '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(v.importe_total))}</td>
-                    <td className="px-3 py-2 text-right">
-                      <InvoiceButton
-                        projectId={pid}
-                        leadId={v.lead_id}
-                        conversionId={v.conversion_id}
-                        items={[{ descripcion: v.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(v.importe_total) }]}
-                        onInvoiced={load}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <div className="bg-card border border-border rounded-lg overflow-x-auto">
         {loading ? (
@@ -458,24 +591,85 @@ export default function InvoicesPage() {
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} className={`border-b last:border-0 hover:bg-muted/30 ${inv.tipo === 'rectificativa' ? 'bg-rose-50/40 dark:bg-rose-950/10' : inv.tipo === 'proforma' ? 'bg-slate-50/60 dark:bg-slate-900/20' : ''}`}>
+                <tr key={inv.id} className={`border-b last:border-0 hover:bg-muted/30 ${inv.tipo === 'rectificativa' ? 'bg-destructive-soft/40' : inv.tipo === 'proforma' ? 'bg-muted/40' : ''}`}>
                   <td className="px-3 py-2 font-mono font-semibold">
                     {inv.codigo || <span className="text-muted-foreground italic">— sin numerar —</span>}
                     {inv.tipo === 'rectificativa' && (
-                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">ABONO</span>
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-destructive-soft text-destructive-soft-foreground">ABONO</span>
                     )}
                     {inv.tipo === 'proforma' && (
-                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">PROFORMA</span>
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">PROFORMA</span>
                     )}
                     {/* Origen del cobro: factura generada automáticamente por un pago Stripe */}
                     {inv.metodo_pago === 'tarjeta_stripe' && (
-                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700" title="Factura generada por un pago de Stripe">STRIPE</span>
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-soft-foreground" title="Factura generada por un pago de Stripe">STRIPE</span>
                     )}
                     {inv.moneda && inv.moneda !== 'EUR' && (
-                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="Factura en moneda extranjera">{inv.moneda}</span>
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground" title="Factura en moneda extranjera">{inv.moneda}</span>
                     )}
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
+                    )}
+                    {/*
+                      Venta nueva o cuota.
+
+                      Diego: «veo esos pagos y no sé cuáles son cuotas o
+                      compras». Sin esto, un día con 7 facturas y 3 ventas
+                      parece un día de 7 ventas: una venta a plazos emite una
+                      factura por cada cobro, así que en un mes cualquiera la
+                      mayoría de las filas NO son ventas de ese mes.
+
+                      La proforma no lleva etiqueta: ya dice lo que es.
+                    */}
+                    {inv.tipo !== 'proforma' && inv.clase === 'cuota' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-soft-foreground"
+                          title={inv.fecha_de_la_venta ? `Cuota de una venta del ${fmtDate(inv.fecha_de_la_venta)}` : 'Cuota de una venta anterior'}>
+                          CUOTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* La misma venta partida en varias facturas. No es una
+                        venta nueva --contarla como tal daba 4 donde habia 3--
+                        ni es una cuota: es otro papel de lo mismo. */}
+                    {/* Sin cobro propio, marcada como pagada, y la venta tiene
+                        mas facturado que cobrado: el dinero de esta factura no
+                        existe. Es la 2026/0102 de Flavia Gerez: 33 segundos
+                        despues de la 0101, mismo importe, un solo cargo en
+                        Stripe. */}
+                    {inv.tipo !== 'proforma' && inv.sospecha_duplicada && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-destructive-soft text-destructive-soft-foreground"
+                          title="Marcada como pagada sin cobro propio, y la venta tiene más facturado que cobrado. Probablemente se emitió dos veces.">
+                          ¿REPETIDA?
+                        </span>
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'parte' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+                          title="Otra factura de una venta ya facturada: la misma venta partida en varios papeles. No cuenta como venta nueva.">
+                          MISMA VENTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'venta' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-success-soft text-success-soft-foreground"
+                          title="Es la factura de una venta nueva">
+                          VENTA
+                        </span>
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2">{fmtDate(inv.fecha_emision)}</td>
@@ -493,7 +687,7 @@ export default function InvoicesPage() {
                       columna Total no cuadraba con lo que suma la factura por
                       debajo: se leian dos cobros donde hay un cobro y una
                       devolucion. Mismo criterio que en el PDF. */}
-                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-destructive' : ''}`}>
                     {inv.total_divisa != null && inv.moneda && inv.moneda !== 'EUR' ? (
                       <>
                         {fmtMoneda(Number(inv.total_divisa), inv.moneda)}
@@ -505,9 +699,34 @@ export default function InvoicesPage() {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
                       {inv.estado.toUpperCase()}
                     </span>
+                    {/* ENTREGADA O NO. Diego, 14/09: «añadir: factura enviada o no».
+
+                        Es una MARCA, no un envio: de 206 facturas ninguna tenia
+                        `sent_at`, porque lo unico que lo rellenaba era un correo
+                        que aqui no se manda --«no enviemos NADA por correo»--.
+                        Las facturas salen por donde cada uno las mande; esto solo
+                        lleva la cuenta de cuales estan hechas. */}
+                    {inv.tipo !== 'proforma' && inv.estado !== 'borrador' && (
+                      <button
+                        type="button"
+                        onClick={() => marcarEntregada(inv)}
+                        title={inv.sent_at ? `Entregada el ${fmtDate(inv.sent_at)} — pulsa para desmarcar` : 'Marcar como entregada al cliente (no manda nada)'}
+                        className={`mt-0.5 block text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors ${
+                          inv.sent_at
+                            ? 'bg-success-soft text-success-soft-foreground'
+                            : 'border border-dashed border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {inv.sent_at ? '✓ entregada' : 'sin entregar'}
+                      </button>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="inline-flex gap-1">
+                    {/* Los botones bajan de línea cuando no caben. Con una fila que
+                        llevaba «Email» y «Pagada», la tabla de Yolanda (ICTESS) se
+                        salía por la derecha y la papelera quedaba fuera de la vista:
+                        parecía que no podía eliminar (Diego, 23/10/2026). */}
+                    <div className="inline-flex flex-wrap justify-end gap-1">
                       <button onClick={() => {
                           const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
                           invoicesApi.openPdf(inv.id, prelim).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
@@ -542,33 +761,33 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>
-                      {inv.estado === 'borrador' && isAdmin && (
+                      {inv.estado === 'borrador' && isAdmin && can('facturas.edit') && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar esta factura abierta (solo admin/superadmin)"
-                          className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
                       )}
                       {inv.estado === 'borrador' && (
                         <button onClick={() => setEmittingInv(inv)}
                           title="Validar los datos y emitir la factura (asigna número fiscal)"
-                          className="h-7 px-2 rounded bg-amber-500 text-white text-[11px] font-semibold hover:bg-amber-600 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning/90 inline-flex items-center gap-1">
                           <CheckCircle size={11} weight="bold" /> Validar y emitir
                         </button>
                       )}
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
-                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && canManage && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && puedeCorregir && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar IVA, datos del cliente o concepto"
-                          className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
                       )}
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
                         <button onClick={() => setEmittingInv(inv)}
                           title={`Para descargar/enviar debes rellenar: ${invoiceFaltantes(inv).join(', ')}`}
-                          className="h-7 px-2 rounded bg-amber-500 text-white text-[11px] font-semibold hover:bg-amber-600 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning/90 inline-flex items-center gap-1">
                           <CheckCircle size={11} weight="bold" /> Completar datos
                         </button>
                       )}
@@ -586,15 +805,27 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} /> Pagada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && canManage && (
+                      {/* Una proforma no se marca «Pagada»: se apunta el cobro en su venta y
+                          pasa a ser la factura, con su número. Lo hace quien factura. */}
+                      {inv.tipo === 'proforma' && inv.estado !== 'borrador' && inv.estado !== 'cancelada' && puedeFacturar && (
+                        <button onClick={() => inv.conversion_id && setCobrarInv(inv)}
+                          disabled={!inv.conversion_id}
+                          title={inv.conversion_id
+                            ? 'El cliente ya pagó: apunta el cobro en la venta y la proforma pasa a ser la factura'
+                            : 'Asóciala antes a la venta del cliente (botón «Venta»): el cobro se apunta en la venta'}
+                          className="h-7 px-2 rounded border border-success/30 text-success-soft-foreground text-[11px] font-semibold hover:bg-success-soft inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                          <CheckCircle size={11} weight="bold" /> Cobrada
+                        </button>
+                      )}
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && puedeCorregir && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
-                          className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
                           <ArrowCounterClockwise size={11} /> Abono
                         </button>
                       )}
                       {/* Asociar la factura a una venta del cliente — Opción B. */}
-                      {inv.estado !== 'cancelada' && canManage && (
+                      {inv.estado !== 'cancelada' && puedeCorregir && (
                         <button onClick={() => setAsociarInv(inv)}
                           title="Asociar esta factura a una venta del cliente"
                           className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
@@ -602,10 +833,10 @@ export default function InvoicesPage() {
                         </button>
                       )}
                       {/* Eliminar factura + liberar número (errores de carga). */}
-                      {canManage && inv.estado !== 'cancelada' && (
+                      {puedeCorregir && inv.estado !== 'cancelada' && (
                         <button onClick={() => setDeletingInv(inv)}
                           title="Eliminar la factura y liberar su número (se equivocaron al cargarla)"
-                          className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
                           <Trash size={11} weight="bold" />
                         </button>
                       )}
@@ -617,6 +848,42 @@ export default function InvoicesPage() {
           </table>
         )}
       </div>
+
+      {/* PAGINACION.
+
+          El estado `page` y el limite de 50 ya existian y viajaban a la API,
+          pero no habia NADA que dejara cambiar de pagina: se veian las 50
+          primeras y las demas no existian para el usuario. Con 205 facturas
+          eso son 155 invisibles. Diego, 14/09: «paginacion en facturacion».
+
+          Se enseña siempre el total --no solo cuando hay varias paginas--
+          porque saber cuantas facturas hay es la mitad de la pregunta. */}
+      {!loading && totalFacturas > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground tabular-nums">
+            {totalFacturas <= PER_PAGE
+              ? `${totalFacturas} ${totalFacturas === 1 ? 'factura' : 'facturas'}`
+              : `${(page - 1) * PER_PAGE + 1}–${Math.min(page * PER_PAGE, totalFacturas)} de ${totalFacturas}`}
+          </span>
+          {totalFacturas > PER_PAGE && (
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={page <= 1}
+                onClick={() => setPage((n) => Math.max(1, n - 1))}
+                className="h-9 px-3 rounded-md border border-border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted/60">
+                ← Anterior
+              </button>
+              <span className="text-muted-foreground tabular-nums px-1">
+                {page} de {Math.ceil(totalFacturas / PER_PAGE)}
+              </span>
+              <button type="button" disabled={page >= Math.ceil(totalFacturas / PER_PAGE)}
+                onClick={() => setPage((n) => n + 1)}
+                className="h-9 px-3 rounded-md border border-border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted/60">
+                Siguiente →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {emittingInv && (
         <EmitirBorradorDialog
@@ -644,8 +911,8 @@ export default function InvoicesPage() {
                 <div className="text-[11px] text-muted-foreground">Importe bruto: {fmt(Number(descargarInv.total))} — lo que pagó el alumno. Es la factura fiscal.</div>
               </button>
               <button onClick={() => { descargar(descargarInv, 'gestor'); setDescargarInv(null); }}
-                className="w-full text-left p-3 rounded-md border border-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30">
-                <div className="text-sm font-semibold text-violet-700 dark:text-violet-300">Copia de gestión</div>
+                className="w-full text-left p-3 rounded-md border border-primary/30 hover:bg-primary/5">
+                <div className="text-sm font-semibold text-primary">Copia de gestión</div>
                 <div className="text-[11px] text-muted-foreground">Importe neto liquidado por Stripe (descontada su comisión). Uso interno.</div>
               </button>
             </div>
@@ -659,13 +926,17 @@ export default function InvoicesPage() {
         <AsociarVentaDialog invoice={asociarInv} onClose={() => setAsociarInv(null)}
           onSaved={() => { setAsociarInv(null); load(); }} />
       )}
+      {cobrarInv && (
+        <CobrarProformaDialog invoice={cobrarInv} onClose={() => setCobrarInv(null)}
+          onSaved={() => { setCobrarInv(null); load(); }} />
+      )}
 
       {/* Confirmación de borrado de factura (libera el número). */}
       {deletingInv && (
         <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => !deleting && setDeletingInv(null)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="font-semibold text-base mb-1 flex items-center gap-2 text-red-600"><Trash size={18} weight="bold" /> Eliminar factura</h3>
+            <h3 className="font-semibold text-base mb-1 flex items-center gap-2 text-destructive"><Trash size={18} weight="bold" /> Eliminar factura</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Vas a eliminar <b>{deletingInv.tipo === 'proforma' ? 'la proforma' : 'la factura'} {deletingInv.codigo}</b> ({fmt(Number(deletingInv.total))}).
               Se <b>liberará su número</b> si es el último de la serie. La venta se mantiene y podrás volver a facturarla. Esta acción no se puede deshacer.
@@ -684,7 +955,7 @@ export default function InvoicesPage() {
                     toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
                   } finally { setDeleting(false); }
                 }}
-                className="h-9 px-4 rounded-md bg-red-600 text-white text-sm font-semibold hover:bg-red-700 inline-flex items-center gap-1.5 disabled:opacity-50">
+                className="h-9 px-4 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 inline-flex items-center gap-1.5 disabled:opacity-50">
                 <Trash size={15} weight="bold" /> {deleting ? 'Eliminando…' : 'Eliminar y liberar número'}
               </button>
             </div>
@@ -712,7 +983,7 @@ export default function InvoicesPage() {
                 </button>
               ))}
               {proyectosDeSociedad(socPrompt.id).length === 0 && (
-                <p className="text-xs text-amber-600">No tienes proyectos asignados en esta sociedad.</p>
+                <p className="text-xs text-warning">No tienes proyectos asignados en esta sociedad.</p>
               )}
             </div>
             <div className="flex justify-end">

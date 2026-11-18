@@ -92,3 +92,23 @@ COMMIT;
 -- GET /api/ia/gasto, que contesta `instalado: false` para que no haya que
 -- adivinarlo.
 -- ─────────────────────────────────────────────────────────────────────────────
+
+-- El #71: esta migracion la corre `postgres` —las tablas viejas son suyas— y
+-- eso hace que la tabla NUEVA nazca siendo de postgres, con el usuario del CRM
+-- sin poder ni leerla. Se le da acceso al que exista en esta instalacion.
+DO $$
+DECLARE rol TEXT; tab TEXT;
+BEGIN
+  FOREACH rol IN ARRAY ARRAY['crm_user', 'crm_iseie_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = rol) THEN
+      FOREACH tab IN ARRAY ARRAY['ia_gasto', 'ia_gasto_topes'] LOOP
+        IF to_regclass('public.' || tab) IS NOT NULL THEN
+          EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO %I', tab, rol);
+          IF to_regclass('public.' || tab || '_id_seq') IS NOT NULL THEN
+            EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE %I TO %I', tab || '_id_seq', rol);
+          END IF;
+        END IF;
+      END LOOP;
+    END IF;
+  END LOOP;
+END $$;

@@ -10,6 +10,16 @@ export interface PlantillaWhatsapp {
   owner_id: number | null;
   orden: number;
   creada_por?: string | null;
+  /** Esta plantilla va con una imagen detrás: al elegirla se abre el selector.
+      El día 2 del proceso es el caso: el mensaje anuncia la opinión y la
+      captura va justo después. */
+  pide_adjunto?: boolean;
+  /** Aviso para la gestora. NO se envía: es la letra pequeña del documento
+      comercial, que hasta ahora solo estaba en el PDF. */
+  pista?: string | null;
+  /** El paso del proceso al que pertenece (`commercial_steps.clave`).
+      Nulo en las cuatro sueltas de siempre, que no son del proceso. */
+  paso_clave?: string | null;
 }
 
 export interface ProspectoCola {
@@ -39,14 +49,30 @@ const qs = (params: Params): string => {
 };
 
 export const whatsappApi = {
-  plantillas: (projectId: number): Promise<ApiResponse<PlantillaWhatsapp[]>> =>
-    client.get(`/whatsapp/templates${qs({ projectId })}`),
+  // Con una EMPRESA puesta no hay UN proyecto: se manda `issuerId` y el
+  // servidor lo traduce a sus campus. Una gestora de CEDIA atiende los siete.
+  plantillas: (
+    projectId: number | null,
+    issuerId: number | null = null,
+    /** Sobre qué WhatsApp se trabaja. Las personales son las de ESE número. */
+    usuarioId: number | null = null,
+  ): Promise<ApiResponse<PlantillaWhatsapp[]>> =>
+    client.get(`/whatsapp/templates${qs({ projectId, issuerId, usuarioId })}`),
 
   crearPlantilla: (data: {
     projectId: number; label: string; body: string; ambito: 'compartida' | 'personal';
+    /** De qué WhatsApp es, si no es el de quien la escribe. */
+    usuarioId?: number | null;
+    /**
+     * De qué paso del proceso es.
+     *
+     * Sin esto una plantilla propia nacía suelta: existía, pero no salía nunca
+     * donde se trabaja —la ficha y la cola del día—, solo en el chat.
+     */
+    paso_clave?: string | null;
   }): Promise<ApiResponse<PlantillaWhatsapp>> => client.post('/whatsapp/templates', data),
 
-  editarPlantilla: (id: number, data: { label?: string; body?: string }):
+  editarPlantilla: (id: number, data: { label?: string; body?: string; paso_clave?: string | null }):
     Promise<ApiResponse<PlantillaWhatsapp>> => client.patch(`/whatsapp/templates/${id}`, data),
 
   borrarPlantilla: (id: number): Promise<ApiResponse<null>> =>
@@ -88,6 +114,16 @@ export interface ChatWhatsapp {
   project_id: number | null;
   /** De que proyecto es el prospecto, si lo tiene. Para decirlo en la lista. */
   proyecto_nombre?: string | null;
+  /**
+   * Las etiquetas que la gestora tiene puestas en SU WhatsApp (#128, #138).
+   *
+   * No confundir con `lead_status`, que es la «etiqueta» del chat en el CRM
+   * (#72): esa la decide el CRM y viaja con la persona. Estas viven en el movil
+   * y las decide ella. Se enseñan las dos.
+   *
+   * Lista vacia mientras la migracion 157 no este aplicada.
+   */
+  etiquetas_wa?: { nombre: string; color: string | null; waId: string }[];
   es_grupo: boolean;
   no_escribir: boolean;
   motivo_no_escribir: string | null;
@@ -235,6 +271,22 @@ export interface FichaProspecto {
   proyecto: string | null;
   responsable: string | null;
   producto: string | null;
+  /**
+   * Los datos de su formación, para rellenar plantillas sin salir del chat
+   * (#129).
+   *
+   * `plazas_libres` se cuenta con el mismo SQL que el catálogo y la cola del
+   * día, y viene calculada en el momento: el documento comercial dice que el
+   * número de plazas «se comprueba antes de cada envío y nunca se arrastra del
+   * mensaje anterior». Puede ser negativa —convocatoria sobrevendida— y quien
+   * la pinta de cara al cliente es el que corta en cero.
+   *
+   * Null cuando esa formación no lleva cuenta de plazas, o cuando el prospecto
+   * no tiene producto de interés.
+   */
+  plazas_libres?: number | null;
+  fecha_cierre_convocatoria?: string | null;
+  fecha_inicio_texto?: string | null;
 }
 
 export interface InteraccionProspecto {
@@ -284,6 +336,15 @@ export const chatApi = {
     client.post(`/leads/${leadId}/interactions`, { tipo: 'nota', nota }),
 
   /**
+   * Apuntar una interacción del tipo que sea desde el chat (Diego, 30/10: «que
+   * pueda añadir interacciones desde ahí»). Una nota no cuenta como contacto; un
+   * WhatsApp, una llamada o un correo sí: cierran el paso que toca y cuentan como
+   * actividad para la asignación.
+   */
+  apuntarInteraccion: (leadId: number, tipo: 'whatsapp' | 'llamada' | 'email' | 'nota', nota: string): Promise<ApiResponse<unknown>> =>
+    client.post(`/leads/${leadId}/interactions`, { tipo, nota, fecha: new Date().toISOString() }),
+
+  /**
    * La ficha del prospecto de una conversacion, para el popup del chat.
    *
    * `usuarioId` NO es opcional de verdad: sin el, con la sesion de otra persona
@@ -318,11 +379,15 @@ export const chatApi = {
     busca?: string | null,
     /** El estado del prospecto, que es lo que hace de etiqueta (#72). */
     estado?: string | null,
+    /** Una etiqueta de WhatsApp, la del móvil de la gestora (#128, #138).
+        Se puede combinar con `estado`: son dos filtros distintos. */
+    etiquetaWa?: string | null,
   ): Promise<ApiResponse<ChatWhatsapp[]>> =>
     client.get(`/whatsapp/chats${qs({
       projectId, usuarioId,
       busca: busca || undefined,
       estado: estado || undefined,
+      etiquetaWa: etiquetaWa || undefined,
     })}`),
 
   /** Quien esta escribiendo ahora mismo en la conversacion abierta. */
@@ -394,8 +459,8 @@ export const chatApi = {
     client.post('/whatsapp/chats', { telefono, usuarioId }),
 
   // Prospectos con telefono, para elegir a quien escribir.
-  buscarProspectos: (projectId: number | null, texto: string): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
-    client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
+  buscarProspectos: (projectId: number | null, texto: string, projectIds: string | null = null): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
+    client.get(`/leads${qs({ projectId, projectIds, search: texto || undefined, limit: 15 })}`),
 
   // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
   sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number; progreso: number | null }>> =>
@@ -451,6 +516,15 @@ export interface UsuarioWhatsapp {
    */
   puede: boolean;
   motivo: string | null;
+  /**
+   * Si ADEMAS lo usa (#128): la casilla de su ficha.
+   *
+   * Son dos preguntas: un admin puede tener derecho a WhatsApp y no usarlo. Los
+   * apagados no se pintan en la lista —eso pidio Diego— pero el servidor los
+   * sigue devolviendo y se cuentan al pie, para que no desaparezca gente sin
+   * explicacion, que es lo que la #68 vino a arreglar.
+   */
+  usa: boolean;
 }
 
 /**
@@ -459,5 +533,33 @@ export interface UsuarioWhatsapp {
  * La pantalla no decide nada: pregunta y pinta. Si el servidor devuelve una
  * sola persona —el caso de una gestora— el selector ni se enseña.
  */
-export const usuariosWhatsapp = (): Promise<ApiResponse<UsuarioWhatsapp[]>> =>
-  client.get('/whatsapp/usuarios');
+export const usuariosWhatsapp = (
+  ambito: { projectId?: number | null; issuerId?: number | null } = {},
+): Promise<ApiResponse<UsuarioWhatsapp[]>> =>
+  client.get(`/whatsapp/usuarios${qs(ambito)}`);
+
+/** Una etiqueta del WhatsApp de la gestora (#128, #138). */
+export interface EtiquetaWhatsapp {
+  id: number;
+  wa_id: string;
+  nombre: string;
+  color: string | null;
+  conversaciones: number;
+}
+
+/**
+ * Las etiquetas de esta sesion.
+ *
+ * Vacio NO es un error: las etiquetas son de WhatsApp Business, asi que una
+ * cuenta personal no tiene ninguna. La pantalla lo trata como «aqui no hay
+ * nada que enseñar» y no pinta el boton.
+ */
+export const etiquetasWhatsapp = (usuarioId?: number | null):
+  Promise<ApiResponse<EtiquetaWhatsapp[]>> =>
+  client.get(`/whatsapp/etiquetas${qs({ usuarioId })}`);
+
+/** Pone o quita una etiqueta en un chat. */
+export const etiquetarChat = (
+  conversacionId: number, waId: string, poner: boolean, usuarioId?: number | null,
+): Promise<ApiResponse<{ waId: string; puesta: boolean }>> =>
+  client.post(`/whatsapp/chats/${conversacionId}/etiqueta${qs({ usuarioId })}`, { waId, poner });

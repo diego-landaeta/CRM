@@ -1,11 +1,36 @@
 import crypto from 'crypto';
+import * as mcpModel from '../mcp/mcp.model.js';
 import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
-import { revokeAllUserTokens } from '../auth/auth.model.js';
-import { sendWelcomeUserEmail } from '../../shared/services/brevo.service.js';
+import * as empresas from './user.empresas.js';
+import { puedeTenerEmpresa } from './user.validation.js';
+import { comoLista } from '../../shared/utils/roles.js';
+import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
+import { sendWelcomeUserEmail, sendCorreoCambiadoEmail, sendEmail } from '../../shared/services/brevo.service.js';
+import { notifyUsers } from '../notifications/notifications.service.js';
+import { marcaDeLaPersona, remitenteDe } from '../../shared/services/marca.service.js';
+
+// A LOS TUTORES NO SE LES MANDA NADA. TODAVIA NO.
+//
+// Diego, 15/09/2026: «quita esa opcion, que nadie reciba nada aun. NO SE PUEDEN
+// ENVIAR LOS CORREOS A TUTORES NI NADA DE ESO».
+//
+// Paso esto: Vanessa dio de alta a Cristina Garcia Torres como tutora del Master
+// en Medicina Nuclear, el CRM le mando el correo de Brevo con el enlace para
+// poner contraseña, y a ella le salia «required» y no podia entrar. O sea que el
+// correo sale solo, llega a una persona de fuera, y encima el enlace no funciona.
+//
+// El aviso se corta antes del envio y no en la pantalla del alta a proposito:
+// hay tres caminos que llegan al buzon de un tutor, y taparlos de uno en uno es
+// como se escapa el tercero. La razon y como levantarlo, en el fichero.
+//
+// Para que un tutor entre mientras tanto: darle contraseña al crearlo, o desde
+// «Cambiar contraseña» en su ficha. Eso no manda ningun correo.
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import * as P from '../../shared/services/email-plantilla.service.js';
 
 const BCRYPT_ROUNDS = 12;
 const SET_PASSWORD_EXPIRY_HOURS = 24;
@@ -21,10 +46,19 @@ const SET_PASSWORD_EXPIRY_HOURS = 24;
  * nombre —«Albertoj@iseie.com»— que no existe, asi que el enlace de bienvenida
  * no llego a nadie y ninguno de ellos habia entrado jamas.
  */
-export async function cambiarCorreo(id, email, { reenviarEnlace = false } = {}) {
+export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUserId = null, ip = null, rolFinal = null } = {}) {
   const nuevo = String(email).trim().toLowerCase();
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+  // El de un super admin, solo otro super admin (Diego, 09/10, #246: «sí»). Hasta
+  // entonces no se podía nunca (#248). Se mira quién lo pide en la base, no en el
+  // token: así vale igual desde Usuarios, desde Tutores o desde «Mi perfil».
+  if (user.role === 'superadmin') {
+    const quien = porUserId ? await userModel.findById(porUserId) : null;
+    if (quien?.role !== 'superadmin') {
+      throw new AppError('Solo otro superadmin puede cambiar el correo de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    }
+  }
   if (String(user.email).toLowerCase() === nuevo) return { cambiado: false, email: user.email };
 
   const otro = await userModel.findByEmail(nuevo);
@@ -47,15 +81,48 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false } = {}) 
       [nuevo, tokenHash, expires, id]
     );
   } else {
-    await query('UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2', [nuevo, id]);
+    // El enlace de «poner contraseña» que hubiera pendiente se anula (#262): se
+    // mando a la direccion vieja, y el aviso de abajo le dice a ese buzon cual es
+    // la nueva. Con las dos cosas, quien tenga el buzon viejo entraria.
+    await query(
+      `UPDATE users SET email = $1, set_password_token = NULL, set_password_expires = NULL,
+              updated_at = NOW() WHERE id = $2`,
+      [nuevo, id]
+    );
   }
+
+  // Un código pendiente para otra dirección ya no vale (revisión de Diego,
+  // #688): si no, al meterlo después desharía este cambio (el superadmin le pone
+  // Y y luego su código de X le devuelve a X). Si el cambio viene de un código,
+  // su petición ya está confirmada y esto no la toca.
+  await query(`UPDATE cambios_de_correo SET anulado_at = NOW()
+                WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL`, [id]);
 
   // Las sesiones abiertas se cierran: la credencial ha cambiado.
   try { await revokeAllUserTokens(id); } catch { /* no bloqueante */ }
 
   logger.info({ userId: id, de: user.email, a: nuevo, reenviarEnlace }, 'Correo de usuario cambiado');
+  await anotarCambio(porUserId, 'usuario.cambiar_correo', { usuario_id: id, nombre: user.nombre, de: user.email, a: nuevo }, ip);
 
-  if (rawToken) {
+  // Aviso a la dirección VIEJA (#246): si no lo esperaba, así se entera. No se
+  // espera a que salga: un fallo del correo no puede deshacer el cambio. A un
+  // tutor, nada mientras siga el freno (Diego, #246: «el correo a la dirección
+  // vieja tiene que pasar por NO_ESCRIBIR_A_TUTORES»).
+  // Tutor ANTES o DESPUES de este guardado (#262): si en la misma edicion se le
+  // pasa a tutor, el freno tiene que valer igual.
+  const esTutor = [user.role, rolFinal].includes('tutor');
+  if (NO_ESCRIBIR_A_TUTORES && esTutor) {
+    logger.warn({ userId: id }, 'correo de tutor cambiado SIN avisar a la dirección vieja: los avisos a tutores estan cortados (15/09)');
+  } else {
+    sendCorreoCambiadoEmail({ nombre: user.nombre, de: user.email, a: nuevo })
+      .then((r) => logger.info({ userId: id, enviado: r.sent, motivo: r.reason }, 'Aviso de correo cambiado a la direccion vieja'))
+      .catch((err) => logger.error({ err: err.message, userId: id }, 'Fallo avisando a la direccion vieja'));
+  }
+
+  if (rawToken && NO_ESCRIBIR_A_TUTORES && esTutor) {
+    logger.warn({ userId: id, email: nuevo },
+      'correo de tutor cambiado SIN reenviar el enlace: los avisos a tutores estan cortados (15/09)');
+  } else if (rawToken) {
     const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
     sendWelcomeUserEmail({ nombre: user.nombre, email: nuevo, setPasswordToken: rawToken, baseUrl })
       .then((r) => logger.info({ userId: id, enviado: r.sent, motivo: r.reason }, 'Enlace reenviado'))
@@ -63,6 +130,58 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false } = {}) 
   }
 
   return { cambiado: true, email: nuevo, enlaceReenviado: Boolean(rawToken) };
+}
+
+/**
+ * Un tutor ha cambiado su correo desde «Mi perfil» (#246, Diego 09/10: «sí, y debe
+ * mandar notificación»). Es el correo al que va la factura de su comisión, así que
+ * se avisa a administración: los superadmin y los admin de algún campus del tutor,
+ * en la campanita y por correo. Al tutor no se le escribe mientras siga el freno
+ * (NO_ESCRIBIR_A_TUTORES); a administración, sí.
+ */
+export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
+  const { rows: gente } = await query(
+    `SELECT u.id, u.email, u.nombre FROM users u
+      WHERE u.active AND u.email IS NOT NULL
+        AND (u.role = 'superadmin'
+          OR (u.role = 'admin' AND EXISTS (
+                SELECT 1 FROM user_projects mio JOIN user_projects suyo ON suyo.project_id = mio.project_id
+                 WHERE mio.user_id = u.id AND suyo.user_id = $1)))`,
+    [tutorId]
+  );
+  if (!gente.length) return { avisados: 0 };
+  const titulo = `El tutor ${nombre} cambió su correo`;
+  const texto = `De ${de} a ${a}. Es el correo de la factura de su comisión.`;
+  await notifyUsers({
+    targetUserIds: gente.map((g) => g.id), type: 'tutor_correo_cambiado', title: titulo, message: texto,
+    link_path: '/tutores', metadata: { tutor_id: tutorId, de, a }, triggered_by_user_id: tutorId,
+  });
+  // Con la plantilla común y la marca del tutor (Diego, 10/10: «cada correo
+  // con un formato completo y lindo, y con el branding»). La de su campus si es
+  // uno; si son varios de una empresa, la de la EMPRESA (11/11), y no la del
+  // primero con remitente, que en CEDIA era Fono Aprende.
+  const marca = await marcaDeLaPersona({ userId: tutorId }).catch(() => null);
+  for (const g of gente) {
+    const { htmlContent, textContent } = P.correo({
+      proyecto: marca || {},
+      titulo: titulo,
+      saludo: g.nombre,
+      resumen: `De ${de} a ${a}`,
+      bloques: [
+        P.parrafo(`El tutor <strong>${P.esc(nombre)}</strong> ha cambiado su correo desde «Mi perfil».`),
+        P.nota(`Antes: <strong>${P.esc(de)}</strong><br>Ahora: <strong>${P.esc(a)}</strong>`),
+        P.parrafo('Es el correo al que va la factura de su comisión. Si no os cuadra, revisadlo en Tutores.'),
+        P.boton({ texto: 'Abrir Tutores', url: P.enlace('/tutores') }),
+      ],
+    });
+    sendEmail({
+      to: g.email, subject: titulo, htmlContent, textContent, ...remitenteDe(marca),
+      tags: ['tutor-correo-cambiado'],
+      clave: `tutor-correo-${tutorId}-${g.id}-${a}`,
+    }).catch((err) => logger.error({ err: err.message, a: g.id }, 'Fallo avisando del correo de tutor cambiado'));
+  }
+  logger.info({ tutorId, avisados: gente.length }, 'Correo de tutor cambiado: avisada administración');
+  return { avisados: gente.length };
 }
 
 export async function list(filters) {
@@ -74,12 +193,17 @@ export async function getById(id) {
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
 
   const projects = await userModel.getUserProjects(id);
-  return { ...user, projects };
+  const empresa_ids = await empresas.empresasDelUsuario(id);
+  return { ...user, projects, empresa_ids };
 }
 
-export async function create({ nombre, email, role, projectIds, projects }) {
+export async function create({ nombre, email, role, roles_extra, projectIds, projects, empresaIds }, { porUserId = null, alCrear = null } = {}) {
   const existing = await userModel.findByEmail(email);
   if (existing) throw new AppError('Ya existe un usuario con ese email', 409, 'EMAIL_EXISTS');
+  // La empresa entera (#220): que exista y que la migracion este, ANTES de
+  // crear nada. El esquema ya ha comprobado que solo la lleva un admin.
+  const empresaIdsOk = empresaIds?.length ? empresaIds : [];
+  await empresas.comprobarEmpresas(empresaIdsOk);
 
   // Password temporal (el usuario lo cambiara via set-password)
   const tempPassword = crypto.randomBytes(16).toString('hex');
@@ -97,28 +221,51 @@ export async function create({ nombre, email, role, projectIds, projects }) {
     email,
     passwordHash,
     role,
+    roles_extra,
     projectIds,
     projects,
+    empresaIds: empresaIdsOk,
+    porUserId,
     setPasswordToken: tokenHash,
     setPasswordExpires: expires,
   });
 
+  // #694: lo que va con el alta (sus excepciones), ANTES del correo de
+  // bienvenida. Si falla, la persona recién creada se borra: ni queda a medias
+  // ni le llega un correo de una cuenta que no existe.
+  if (alCrear) {
+    try {
+      await alCrear(user);
+    } catch (err) {
+      await query('DELETE FROM user_projects WHERE user_id = $1', [user.id]).catch(() => {});
+      await query('DELETE FROM users WHERE id = $1', [user.id])
+        .catch((e) => logger.error({ err: e.message, userId: user.id }, 'No se pudo deshacer un alta a medias'));
+      throw err;
+    }
+  }
+
   const userProjects = await userModel.getUserProjects(user.id);
+  const empresa_ids = await empresas.empresasDelUsuario(user.id);
 
   // Envio de email Brevo (async - no bloquea la respuesta)
   const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
+  if (NO_ESCRIBIR_A_TUTORES && role === 'tutor') {
+    logger.warn({ userId: user.id, email: user.email },
+      'tutor dado de alta SIN correo de bienvenida: los avisos a tutores estan cortados (15/09)');
+  } else {
   sendWelcomeUserEmail({ nombre: user.nombre, email: user.email, setPasswordToken: rawToken, baseUrl })
     .then((r) => {
       if (r.sent) logger.info({ userId: user.id, messageId: r.messageId }, 'Welcome email enviado');
       else logger.warn({ userId: user.id, reason: r.reason }, 'Welcome email NO enviado');
     })
     .catch((err) => logger.error({ err: err.message, userId: user.id }, 'Welcome email error'));
+  }
 
   // Retorna el token raw en respuesta para test/desarrollo
-  return { ...user, projects: userProjects, setPasswordToken: rawToken };
+  return { ...user, projects: userProjects, empresa_ids, setPasswordToken: rawToken };
 }
 
-export async function update(id, data) {
+export async function update(id, data, { porUserId = null } = {}) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
 
@@ -126,22 +273,72 @@ export async function update(id, data) {
     throw new AppError('No se puede editar al superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
   }
 
-  const updated = await userModel.update(id, data);
+  // Las empresas enteras (#220). Solo para un admin —contra el rol con el que
+  // se va a quedar, no el que tenia—. Quitarlas todas sin la migracion
+  // aplicada no es un error: no habia nada que quitar.
+  const cambios = { ...data };
+  if (cambios.empresaIds?.length) {
+    // El admin (con sus campus) y el colaborador (solo la empresa, para Tareas).
+    const rolFinal = cambios.role ?? user.role;
+    const extra = comoLista(cambios.roles_extra ?? user.roles_extra ?? []);
+    if (rolFinal !== 'admin' && !puedeTenerEmpresa(rolFinal, extra)) {
+      throw new AppError('Solo un admin o un colaborador pueden tener una empresa entera', 400, 'VALIDATION_ERROR');
+    }
+    await empresas.comprobarEmpresas(cambios.empresaIds);
+  } else if (cambios.empresaIds !== undefined && !(await empresas.existeTablaEmpresas())) {
+    delete cambios.empresaIds;
+  }
+
+  const updated = await userModel.update(id, { ...cambios, porUserId });
   const projects = await userModel.getUserProjects(id);
-  return { ...updated, projects };
+  const empresa_ids = await empresas.empresasDelUsuario(id);
+  return { ...updated, projects, empresa_ids };
 }
 
-export async function setPassword(id, password) {
+export async function setPassword(id, password, { porUserId = null, ip = null } = {}) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  // La de un superadmin, solo otro superadmin: la misma regla que su correo
+  // (#246). Hasta el 26/10 no se podía nunca; desde que Diego es superadmin con
+  // soporte (#423), sin esto nadie podría ponerle contraseña como hasta ahora.
   if (user.role === 'superadmin') {
-    throw new AppError('No se puede cambiar la contraseña de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    const quien = porUserId ? await userModel.findById(porUserId) : null;
+    if (quien?.role !== 'superadmin' || Number(quien.id) === Number(id)) {
+      throw new AppError('La contraseña de un superadmin solo la cambia otro superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    }
   }
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   await userModel.setPasswordHash(id, passwordHash);
   // Cierra sesiones activas: obliga a entrar con la nueva contraseña.
   await revokeAllUserTokens(id);
+  // Quién y a quién; la contraseña, nunca.
+  await anotarCambio(porUserId, 'usuario.cambiar_contrasena', { usuario_id: id, nombre: user.nombre }, ip);
   return { id };
+}
+
+/**
+ * Deja escrito en el registro de actividad quién cambió el correo o la
+ * contraseña de otro, cuándo, y el correo anterior y el nuevo (#248). Va a
+ * `user_activity_log`, el mismo registro que el resto («Registro» → usuario),
+ * con quien lo hizo en `user_id` y a quién en `details.usuario_id`.
+ *
+ * El cambio ya está hecho cuando se llega aquí: si el registro falla, se avisa
+ * en el log del servidor pero no se deshace — volver al correo viejo sería peor.
+ */
+async function anotarCambio(porUserId, action, details, ip) {
+  if (!porUserId) return;
+  try {
+    await logActivity(porUserId, action, details, ip || null);
+  } catch (err) {
+    logger.error({ err: err.message, porUserId, action, details }, 'No se pudo anotar el cambio en el registro');
+  }
+}
+
+/** Antes de cambiar un correo: si la persona recibe prospectos, avisar de Make (#248). */
+export async function avisoCambioCorreo(id) {
+  const aviso = await userModel.avisoCambioCorreo(id);
+  if (!aviso) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  return aviso;
 }
 
 export async function deactivate(id) {
@@ -155,6 +352,10 @@ export async function deactivate(id) {
   await userModel.deactivate(id);
   // PDF spec: al desactivar, la sesion activa se cierra inmediatamente
   await revokeAllUserTokens(id);
+  // Y sus URLs del MCP de Claude, revocadas, no pausadas (#194): si un día se
+  // reactiva, tendrá que crear URLs nuevas. Quitar solo la casilla de acceso
+  // al MCP sigue pausando; esto es para quien deja de estar en el CRM.
+  await mcpModel.revocarTodasDeLaPersona(id, 'usuario_desactivado');
 
   // Huerfanizar los leads de los que era responsable y re-asignar via
   // round-robin a los gestores restantes de cada proyecto afectado.

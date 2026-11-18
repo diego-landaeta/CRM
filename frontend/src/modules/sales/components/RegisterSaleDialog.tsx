@@ -1,17 +1,44 @@
 import { useEffect, useState } from 'react';
-import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus } from '@phosphor-icons/react';
+import { hoyEnMadrid, sumarMeses } from '@/shared/lib/fechas';
+import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus, UserMinus } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
+import { lazy, Suspense, useRef } from 'react';
+import { invoicesApi } from '@/modules/invoices/api/invoices.api';
+const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
 import Portal from '@/shared/components/ui/portal';
+
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import Field from '@/shared/components/ui/Field';
+import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
+
+// Las notas y la dirección: la clase común, con la altura que pidan sus filas.
+const textareaClass = `${inputClass} h-auto py-2 resize-none`;
 
 interface Product { id: number; nombre: string; precio?: number | string; moneda?: string }
 interface Project { id: number; nombre?: string }
-interface LeadLite { id: number; nombre?: string; email?: string; telefono?: string; status?: string }
+interface LeadLite {
+  id: number; nombre?: string; email?: string; telefono?: string; status?: string;
+  /** Quien lleva el prospecto: es de quien sera la venta en «de otra gestora». */
+  responsable_id?: number | null; responsable_nombre?: string | null;
+}
 interface Props {
   open: boolean;
   onClose: () => void;
   project: Project | null;
   onSaved?: (result: { sale_id: number; lead_id: number; retroactiva: boolean }) => void;
+  /**
+   * Con que modo se abre.
+   *
+   * Lo elige el desplegable del boton «Nueva venta» (Diego, 25/09): venta
+   * propia, de otra gestora, o automatica sin gestora. Quien no lo pasa abre
+   * como siempre, que es lo que hacen Clientes e Ingresos.
+   */
+  modoInicial?: Mode;
 }
 
 const PAYMENT_METHODS = [
@@ -22,11 +49,67 @@ const PAYMENT_METHODS = [
   { value: 'fraccionado', label: 'Fraccionado' },
 ];
 
-type Mode = 'existing' | 'new';
+/**
+ * De quien es la venta que se esta registrando.
+ *
+ * `sin_gestora` es de Diego (25/09): una venta que se crea de cero y **no es de
+ * nadie**. Hoy, quien la registra se la queda --si es gestor-- o el round-robin
+ * se la encaja a la gestora que toque --si es admin--, y en los dos casos el
+ * informe acaba diciendo que vendio quien solo la apunto. Lo piden las
+ * contables de CEDIA e ICTESS, que registran ventas que no cerraron ellas.
+ */
+type Mode = 'existing' | 'new' | 'sin_gestora' | 'otra_gestora';
 
-export default function RegisterSaleDialog({ open, onClose, project, onSaved }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [mode, setMode] = useState<Mode>('existing');
+/** Para comparar lo que se escribe con lo que hay: sin tildes y en minusculas. */
+function sinTildes(s: string) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+export default function RegisterSaleDialog({ open, onClose, project, onSaved, modoInicial }: Props) {
+  // Hoy en Madrid (#693): con el día UTC, de 00:00 a 02:00 en España el tope
+  // del calendario era «ayer» y no dejaba poner la venta de hoy.
+  const today = hoyEnMadrid();
+  const { can } = usePermission();
+  // Quien puede registrar una venta que no es de nadie. De serie admin y
+  // superadmin; a las contables de CEDIA e ICTESS se les da por persona desde
+  // el panel de permisos, que es lo que permite quitarlas o anadir a otra sin
+  // un despliegue de por medio.
+  const puedeSinGestora = can('conversions.sin_gestora');
+  // EL CAMPUS, CUANDO SE ENTRA CON UNA EMPRESA PUESTA.
+  //
+  // Diego, 25/09: «como voy a registrar una venta de una empresa y me sale
+  // esto, no puede pasar». Con CEDIA elegida `activeProject.id` es -1, y antes
+  // el boton salia apagado con un «selecciona un proyecto concreto»: te
+  // mandaba a cambiar el selector de la barra lateral y volver.
+  //
+  // Una venta ES de un campus --la matricula, la factura y la serie son suyas--
+  // asi que hay que saber cual. Pero eso se pregunta AQUI, en una linea, no
+  // cerrando la puerta.
+  const campusDelAmbito = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const [campus, setCampus] = useState<number | null>(null);
+  const pid = project?.id && project.id !== -1 ? project.id : campus;
+  const hayQueElegirCampus = !(project?.id && project.id !== -1);
+
+  // EL NUMERO DE FACTURA, AQUI MISMO.
+  //
+  // Diego, 25/09: «falta anadir que se puedan poner el numero de factura como
+  // en los demas». «Los demas» es el dialogo de convertir un prospecto, que
+  // desde el 15/09 pregunta el numero y emite. Registrar la venta desde
+  // Finanzas te dejaba sin esa opcion: la venta caia en la cola y habia que ir
+  // a Facturacion a buscarla.
+  //
+  // Se reusa la MISMA cadena --el siguiente numero del servidor y
+  // FiscalDataDialog para emitir-- y no se escribe otra numeracion. Una segunda
+  // via de numerar es una segunda via de dejar huecos en la serie.
+  const [numeraAqui, setNumeraAqui] = useState(false);
+  const numeraAquiRef = useRef(false);
+  const [numero, setNumero] = useState('');
+  const [sugerido, setSugerido] = useState('');
+  // La venta recien creada, mientras se decide si se le pone documento.
+  const [creada, setCreada] = useState<{ sale_id: number; lead_id: number } | null>(null);
+  const [emitir, setEmitir] = useState<'factura' | 'proforma' | null>(null);
+
+  const [mode, setMode] = useState<Mode>(modoInicial || 'existing');
 
   // Cliente nuevo
   const [nombre, setNombre] = useState('');
@@ -65,7 +148,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   useEffect(() => {
     if (!open) return;
-    setMode('existing');
+    setMode(modoInicial || 'existing');
     setNombre(''); setEmail(''); setTelefono('');
     setClientSearch(''); setClientResults([]); setSelectedClient(null);
     setIdentificacionFiscal('');
@@ -75,27 +158,77 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     setFecha(today); setNotas('');
   }, [open, today]);
 
+  // Si esta empresa numera al registrar, y cual seria el siguiente libre. Se
+  // pregunta con el campus ya sabido: sin campus no hay serie.
+  useEffect(() => {
+    if (!open || !pid) { setNumeraAqui(false); return; }
+    let vivo = true;
+    invoicesApi.getConfig(pid)
+      .then((r: any) => {
+        if (!vivo) return;
+        const numera = Boolean(r?.success && r.data?.numera_al_convertir);
+        setNumeraAqui(numera);
+        numeraAquiRef.current = numera;
+        // Solo se rellena solo a quien numera al registrar. A los demas se les
+        // deja vacio: vacio = a la cola, que es como funcionan hoy.
+        if (numera) {
+          setNumero((n) => n || '');
+        }
+      })
+      .catch(() => { if (vivo) setNumeraAqui(false); });
+    client.get<{ siguiente: number }>('/invoices/siguiente-numero?projectId=' + pid)
+      .then((r: any) => {
+        if (!vivo || !r?.success) return;
+        setSugerido(String(r.data.siguiente));
+        // Con numeracion al registrar se deja puesto el siguiente libre; si no,
+        // solo se ensena como pista.
+        setNumero((n) => (n ? n : (numeraAquiRef.current ? String(r.data.siguiente) : '')));
+      })
+      .catch(() => { /* se escribe a mano */ });
+    return () => { vivo = false; };
+  }, [open, pid]);
+
+  // SI LA BUSQUEDA DEJA UNA SOLA, SE ELIGE SOLA.
+  //
+  // Es lo que la gente espera al escribir el nombre entero: Ana escribio
+  // «Curso de Escritura Terapéutica y Narrativa», que solo casa con una, y aun
+  // asi el desplegable seguia en «— Selecciona —» y la venta no se dejaba
+  // registrar.
+  useEffect(() => {
+    if (!productSearch.trim()) return;
+    const hay = products.filter((p) => sinTildes(p.nombre).includes(sinTildes(productSearch)));
+    if (hay.length === 1 && productoId !== hay[0].id) setProductoId(hay[0].id);
+  }, [productSearch, products]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // Productos del proyecto
   useEffect(() => {
-    if (!open || !project?.id) return;
-    client.get<Product[]>('/products', { params: { projectId: project.id, limit: 500 } })
+    if (!open || !pid) return;
+    client.get<Product[]>('/products', { params: { projectId: pid, limit: 500 } })
       .then((r) => setProducts(Array.isArray(r?.data) ? r.data : []))
       .catch(() => setProducts([]));
-  }, [open, project?.id]);
+  }, [open, pid]);
 
   // Búsqueda debounced de clientes existentes (leads convertidos del proyecto)
   useEffect(() => {
-    if (mode !== 'existing' || !open || !project?.id) return;
+    if ((mode !== 'existing' && mode !== 'otra_gestora') || !open || !pid) return;
     if (clientSearch.trim().length < 2) { setClientResults([]); return; }
     const handle = setTimeout(() => {
       setSearching(true);
-      client.get<LeadLite[]>('/leads', { params: { projectId: project.id, status: 'convertido', search: clientSearch.trim(), limit: 20 } })
+      client.get<LeadLite[]>('/leads', {
+        params: {
+          projectId: pid,
+          // En «de otra gestora» se busca entre TODOS: es un prospecto al que
+          // se le registra la venta, no un cliente que ya compro.
+          ...(mode === 'existing' ? { status: 'convertido' } : {}),
+          search: clientSearch.trim(), limit: 20,
+        },
+      })
         .then((r) => setClientResults(Array.isArray(r?.data) ? r.data : []))
         .catch(() => setClientResults([]))
         .finally(() => setSearching(false));
     }, 250);
     return () => clearTimeout(handle);
-  }, [mode, open, project?.id, clientSearch]);
+  }, [mode, open, pid, clientSearch]);
 
   const productoSel = products.find((p) => p.id === productoId);
   useEffect(() => {
@@ -104,9 +237,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   // Helpers para pagos fraccionados (cuotas)
   function addMonths(isoDate: string, months: number): string {
-    const d = new Date(isoDate);
-    d.setMonth(d.getMonth() + months);
-    return d.toISOString().slice(0, 10);
+    return sumarMeses(isoDate, months);
   }
   function distributeInstallments(total: number, n: number, fechaInicio: string): Array<{ importe_previsto: string; fecha_vencimiento: string }> {
     if (!isFinite(total) || total <= 0 || n < 2) return [];
@@ -143,8 +274,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   if (!open) return null;
 
+  // Sin tildes y sin mayusculas: «terapeutica» tiene que encontrar
+  // «Terapéutica». Nadie escribe las tildes en un buscador.
   const productosFiltrados = productSearch.trim()
-    ? products.filter((p) => p.nombre.toLowerCase().includes(productSearch.toLowerCase()))
+    ? products.filter((p) => sinTildes(p.nombre).includes(sinTildes(productSearch)))
     : products;
   const isRetroactiva = fecha < today;
 
@@ -162,22 +295,33 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
   }
 
   async function handleSave() {
-    if (!project?.id) { toast({ title: 'Selecciona un proyecto', variant: 'destructive' }); return; }
-    if (mode === 'existing' && !selectedClient) {
-      toast({ title: 'Selecciona un cliente', description: 'Búscalo por nombre, email o teléfono.', variant: 'destructive' }); return;
+    // Cada aviso dice qué falta y dónde ponerlo, no solo «requerido»; y si
+    // faltan varias cosas, todas de una vez (#106).
+    const faltan: Falta[] = [];
+    if (!pid) faltan.push({ title: 'Elige el campus', description: 'Una venta es de un campus concreto.', que: 'el campus en «Campus de la venta»' });
+    if ((mode === 'existing' || mode === 'otra_gestora') && !selectedClient) {
+      faltan.push({ title: 'Selecciona un cliente', description: 'Búscalo por nombre, email o teléfono.', que: 'el cliente (búscalo por nombre, email o teléfono)' });
     }
-    if (mode === 'new') {
-      if (!nombre.trim()) { toast({ title: 'Nombre requerido', variant: 'destructive' }); return; }
-      if (!email.trim() && !telefono.trim()) {
-        toast({ title: 'Email o teléfono requerido', variant: 'destructive' }); return;
-      }
+    // Sin gestora basta el nombre: esta venta se registra justo cuando no hay
+    // nada mas, y pedir un correo inventado es peor que no pedir nada.
+    if ((mode === 'new' || mode === 'sin_gestora') && !nombre.trim()) {
+      faltan.push({ title: 'Falta el nombre del cliente', description: 'Escríbelo en «Nombre del cliente».', que: 'el nombre en «Nombre del cliente»' });
     }
-    if (!productoId) { toast({ title: 'Producto requerido', variant: 'destructive' }); return; }
+    if (mode === 'new' && !email.trim() && !telefono.trim()) {
+      faltan.push({ title: 'Falta una forma de contacto', description: 'Pon el email o el teléfono del cliente: al menos uno de los dos.', que: 'el email o el teléfono' });
+    }
+    if (!productoId) {
+      faltan.push({ title: 'Falta la formación', description: 'Elígela en la lista de «Producto» (puedes buscarla escribiendo encima).', que: 'la formación en «Producto»' });
+    }
     const totalNum = parseFloat(importeTotal);
-    if (!totalNum || totalNum <= 0) { toast({ title: 'Importe inválido', variant: 'destructive' }); return; }
+    if (!totalNum || totalNum <= 0) {
+      faltan.push({ title: 'Falta el importe total', description: 'Escribe en «Importe total» una cantidad mayor que 0.', que: 'el importe en «Importe total»' });
+    }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     const pagadoNum = importePagado === '' ? totalNum : parseFloat(importePagado);
     if (pagadoNum < 0 || pagadoNum > totalNum) {
-      toast({ title: 'Importe pagado inválido', description: 'Entre 0 y el total', variant: 'destructive' }); return;
+      toast({ title: 'El importe pagado no cuadra', description: `Tiene que estar entre 0 y el importe total (${totalNum.toFixed(2)}). Si lo dejas vacío, se toma el total.`, variant: 'destructive' }); return;
     }
     // Validación específica de cuotas
     if (metodo === 'fraccionado') {
@@ -189,14 +333,14 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         toast({ title: 'Las cuotas no suman el total', description: `Suma actual: ${installmentsSum.toFixed(2)} · Total: ${totalNum.toFixed(2)}`, variant: 'destructive' });
         return;
       }
-      for (const it of installments) {
+      for (const [i, it] of installments.entries()) {
         const imp = parseFloat(it.importe_previsto);
         if (!isFinite(imp) || imp <= 0) {
-          toast({ title: 'Cuota inválida', description: 'Todas las cuotas necesitan importe > 0', variant: 'destructive' });
+          toast({ title: `A la cuota ${i + 1} le falta el importe`, description: 'Cada cuota necesita un importe mayor que 0. Corrígelo en el plan de cuotas.', variant: 'destructive' });
           return;
         }
         if (!it.fecha_vencimiento) {
-          toast({ title: 'Fecha de cuota faltante', variant: 'destructive' });
+          toast({ title: `A la cuota ${i + 1} le falta la fecha`, description: 'Elige su vencimiento en el plan de cuotas.', variant: 'destructive' });
           return;
         }
       }
@@ -205,7 +349,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
-        project_id: project.id,
+        project_id: pid,
         producto_interes_id: productoId,
         importe_total: totalNum,
         importe_pagado: pagadoNum,
@@ -218,6 +362,14 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
           importe_previsto: parseFloat(it.importe_previsto),
           fecha_vencimiento: it.fecha_vencimiento,
         }));
+      }
+      if (mode === 'sin_gestora') body.sin_gestora = true;
+      // De otra gestora: el prospecto elegido y, fijada en la venta, la
+      // persona que lo lleva. Fijarla importa: si manana reasignan el
+      // prospecto, la venta tiene que seguir siendo de quien la hizo.
+      if (mode === 'otra_gestora' && selectedClient) {
+        body.lead_id = selectedClient.id;
+        if (selectedClient.responsable_id) body.vendedora_id = selectedClient.responsable_id;
       }
       if (mode === 'existing' && selectedClient) {
         body.lead_id = selectedClient.id;
@@ -239,13 +391,50 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         : (data.retroactiva ? `Venta histórica registrada (${fecha})${data.duplicado ? ' — sobre cliente existente' : ''}` : `Venta registrada${data.duplicado ? ' — sobre cliente existente' : ''}`);
       toast({ title: 'Venta creada', description: desc });
       onSaved?.(data);
-      onClose();
+      // Con numeracion al registrar, la venta no se cierra todavia: se ofrece
+      // ponerle el numero y emitir. Sin ella, como siempre — el cobro se queda
+      // en la cola de facturacion, que es el freno del 14/09.
+      // Con numero escrito se emite ya, sin preguntar otra vez: el numero se
+      // puso arriba a proposito. Vacio = se deja en la cola de facturacion.
+      if (numero.trim()) {
+        const sinCobro = Number(pagadoNum) <= 0;
+        setCreada({ sale_id: data.sale_id, lead_id: data.lead_id });
+        setEmitir(sinCobro ? 'proforma' : 'factura');
+      } else {
+        onClose();
+      }
     } catch (err: unknown) {
       const e = err as { data?: { error?: string }; message?: string };
-      toast({ title: 'Error', description: e?.data?.error || e?.message || 'No se pudo registrar', variant: 'destructive' });
+      toast({ title: 'No se pudo registrar la venta', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
+  }
+
+  // Emitiendo: el mismo dialogo fiscal que usa la conversion, con su numero.
+  if (emitir && creada && pid) {
+    return (
+      <Suspense fallback={null}>
+        <FiscalDataDialog
+          projectId={pid}
+          leadId={creada.lead_id}
+          conversionId={creada.sale_id}
+          docTipo={emitir}
+          numero={numero ? Number(numero) : null}
+          defaultItems={[{
+            descripcion: products.find((p) => p.id === productoId)?.nombre || 'Servicio',
+            cantidad: 1,
+            precio_unitario: Number(importeTotal) || 0,
+          }]}
+          defaultNotas={notas.trim() || undefined}
+          onClose={() => { setEmitir(null); setCreada(null); onClose(); }}
+          onCreated={(id: number) => {
+            invoicesApi.openPdf(id).catch(() => {});
+            setEmitir(null); setCreada(null); onClose();
+          }}
+        />
+      </Suspense>
+    );
   }
 
   return (
@@ -254,7 +443,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative bg-card rounded-lg border border-border w-full max-w-lg flex flex-col max-h-[90vh]">
           <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-            <div className="w-9 h-9 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-md bg-success-soft text-success-soft-foreground flex items-center justify-center flex-shrink-0">
               <Receipt size={18} weight="regular" />
             </div>
             <div className="min-w-0 flex-1">
@@ -267,7 +456,29 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto">
-            {/* Toggle: existente / nuevo */}
+            {/* DE QUE CAMPUS. Solo sale cuando hace falta: con un campus ya
+                elegido en la barra lateral, preguntarlo otra vez sobra. */}
+            {hayQueElegirCampus && (
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <Field label="Campus de la venta" required htmlFor="venta-campus"
+                  hint="La venta es de un campus: de ahí salen su matrícula y su factura.">
+                  <Select<number | null>
+                    id="venta-campus"
+                    value={campus}
+                    onChange={setCampus}
+                    ariaLabel="Campus de la venta"
+                    options={[
+                      { value: null, label: 'Elige el campus…' },
+                      ...campusDelAmbito.map((c) => ({ value: c.id, label: c.nombre })),
+                    ]}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {/* Cliente existente o nuevo. Solo en la venta propia: en los
+                otros modos ya lo dijo el desplegable del boton. */}
+            {(mode === 'existing' || mode === 'new') && (
             <div className="bg-muted/40 p-1 rounded-lg grid grid-cols-2 gap-1">
               <button
                 type="button"
@@ -284,29 +495,31 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                 <UserPlus size={14} weight="bold" /> Cliente nuevo
               </button>
             </div>
-
+            )}
             {/* MODO: cliente existente */}
             {mode === 'existing' && (
               <div className="space-y-3">
                 {!selectedClient ? (
                   <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Buscar cliente *</label>
-                    <div className="relative">
-                      <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        autoFocus
-                        value={clientSearch}
-                        onChange={(e) => setClientSearch(e.target.value)}
-                        placeholder="Nombre, email o teléfono…"
-                        className="w-full h-10 pl-9 pr-3 rounded-md border border-border bg-card text-sm"
-                      />
-                    </div>
+                    <Field label="Buscar cliente" required htmlFor="venta-buscar-cliente">
+                      <div className="relative">
+                        <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input autoComplete="off"
+                          id="venta-buscar-cliente"
+                          autoFocus
+                          value={clientSearch}
+                          onChange={(e) => setClientSearch(e.target.value)}
+                          placeholder="Nombre, email o teléfono…"
+                          className={`${inputClass} pl-9`}
+                        />
+                      </div>
+                    </Field>
                     {clientSearch.trim().length > 0 && clientSearch.trim().length < 2 && (
-                      <p className="text-[11px] text-muted-foreground mt-1">Escribe al menos 2 caracteres…</p>
+                      <p className="mt-1 px-1 text-secundario text-muted-foreground">Escribe al menos 2 caracteres…</p>
                     )}
-                    {searching && <p className="text-[11px] text-muted-foreground mt-1">Buscando…</p>}
+                    {searching && <p className="mt-1 px-1 text-secundario text-muted-foreground">Buscando…</p>}
                     {!searching && clientSearch.trim().length >= 2 && clientResults.length === 0 && (
-                      <p className="text-[11px] text-muted-foreground mt-1">
+                      <p className="mt-1 px-1 text-secundario text-muted-foreground">
                         No se encontraron clientes. ¿Quizás es <button type="button" onClick={() => setMode('new')} className="text-primary font-semibold hover:underline">un cliente nuevo</button>?
                       </p>
                     )}
@@ -319,7 +532,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                             onClick={() => selectClient(c)}
                             className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0 border-border"
                           >
-                            <p className="font-medium truncate">{c.nombre || '— sin nombre —'}</p>
+                            <p className="font-medium truncate">{c.nombre || 'Sin nombre'}</p>
                             <p className="text-[11px] text-muted-foreground truncate">{c.email || '—'} {c.telefono ? `· ${c.telefono}` : ''}</p>
                           </button>
                         ))}
@@ -327,14 +540,14 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                     )}
                   </div>
                 ) : (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-md p-3 flex items-start gap-3">
-                    <UserCheck size={20} weight="duotone" className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div className="bg-success-soft border border-success/30 rounded-md p-3 flex items-start gap-3">
+                    <UserCheck size={20} weight="duotone" className="text-success flex-shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold truncate">{selectedClient.nombre || '— sin nombre —'}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">Cliente seleccionado — se le añadirá una nueva venta.</p>
+                      <p className="text-sm font-semibold truncate">{selectedClient.nombre || 'Sin nombre'}</p>
+                      <p className="text-secundario text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
+                      <p className="text-secundario text-success-soft-foreground mt-0.5">Cliente seleccionado — se le añadirá una nueva venta.</p>
                     </div>
-                    <button type="button" onClick={clearSelectedClient} className="text-[11px] text-muted-foreground hover:text-foreground underline flex-shrink-0">
+                    <button type="button" onClick={clearSelectedClient} className="text-secundario text-muted-foreground hover:text-foreground underline flex-shrink-0">
                       Cambiar
                     </button>
                   </div>
@@ -342,162 +555,300 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
               </div>
             )}
 
+            {/* MODO: venta de otra gestora. Diego, 25/09: «que en este caso
+                seleccione el prospecto y haga ese proceso».
+
+                Se busca entre TODOS los prospectos, no solo los convertidos: el
+                caso es justo ese, alguien que todavía no ha comprado. Y la
+                venta queda de quien lo lleva, no de quien la está tecleando. */}
+            {mode === 'otra_gestora' && (
+              <div className="space-y-3">
+                {!selectedClient ? (
+                  <div>
+                    <Field label="Buscar el prospecto" required htmlFor="venta-buscar-prospecto">
+                      <div className="relative">
+                        <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input autoComplete="off"
+                          id="venta-buscar-prospecto"
+                          autoFocus
+                          value={clientSearch}
+                          onChange={(e) => setClientSearch(e.target.value)}
+                          placeholder="Nombre, correo o teléfono…"
+                          className={`${inputClass} pl-9`}
+                        />
+                      </div>
+                    </Field>
+                    {searching && <p className="mt-1 px-1 text-secundario text-muted-foreground">Buscando…</p>}
+                    {!searching && clientSearch.trim().length >= 2 && clientResults.length === 0 && (
+                      <p className="mt-1 px-1 text-secundario text-muted-foreground">No se encontró ningún prospecto con eso.</p>
+                    )}
+                    {clientResults.length > 0 && (
+                      <div className="mt-1.5 border border-border rounded-md max-h-48 overflow-y-auto">
+                        {clientResults.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => selectClient(c)}
+                            className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0 border-border"
+                          >
+                            <p className="font-medium truncate">{c.nombre || 'Sin nombre'}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {c.email || '—'} {c.telefono ? `· ${c.telefono}` : ''}
+                              {' · '}{c.responsable_nombre || 'sin gestora'}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-info-soft border border-info/30 rounded-md p-3 flex items-start gap-3">
+                    <UserCheck size={20} weight="duotone" className="text-info flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold truncate">{selectedClient.nombre || 'Sin nombre'}</p>
+                      <p className="text-secundario text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
+                      {selectedClient.responsable_nombre ? (
+                        <p className="text-secundario text-info-soft-foreground mt-0.5">
+                          Esta venta será de <strong>{selectedClient.responsable_nombre}</strong>, que es quien lleva el prospecto.
+                        </p>
+                      ) : (
+                        <p className="text-secundario text-warning-soft-foreground mt-0.5">
+                          Este prospecto no tiene gestora, así que la venta no será de nadie.
+                        </p>
+                      )}
+                    </div>
+                    <button type="button" onClick={clearSelectedClient} className="text-secundario text-muted-foreground hover:text-foreground underline flex-shrink-0">
+                      Cambiar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MODO: venta sin gestora. Pide lo mismo que «cliente nuevo» pero
+                con el nombre solo basta, y avisa de en que se nota. */}
+            {mode === 'sin_gestora' && (
+              <div className="space-y-3">
+                <p className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
+                  Esta venta <strong>no se le asigna a nadie</strong>: no cuenta en los
+                  números de ninguna gestora ni avanza el reparto de prospectos. Con el
+                  nombre basta.
+                </p>
+                <Field label="Nombre del cliente" required htmlFor="venta-nombre">
+                  <input autoComplete="off" id="venta-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
+                </Field>
+                <FilaCampos>
+                  <Field label="Email" htmlFor="venta-email">
+                    <input autoComplete="off" id="venta-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="opcional" className={inputClass} />
+                  </Field>
+                  <Field label="Teléfono" htmlFor="venta-telefono">
+                    <input autoComplete="off" id="venta-telefono" value={telefono} onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="opcional" className={inputClass} />
+                  </Field>
+                </FilaCampos>
+              </div>
+            )}
+
             {/* MODO: cliente nuevo */}
             {mode === 'new' && (
               <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Nombre del cliente *</label>
-                  <input value={nombre} onChange={(e) => setNombre(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Email</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="correo@ejemplo.com"
-                      className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
-                    <input value={telefono} onChange={(e) => setTelefono(e.target.value)}
-                      placeholder="+34..."
-                      className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground -mt-1">Requerido al menos uno de los dos.</p>
+                <Field label="Nombre del cliente" required htmlFor="venta-nombre">
+                  <input autoComplete="off" id="venta-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
+                </Field>
+                <FilaCampos>
+                  <Field label="Email" hint="Hace falta el email o el teléfono" htmlFor="venta-email">
+                    <input autoComplete="off" id="venta-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="correo@ejemplo.com" className={inputClass} />
+                  </Field>
+                  <Field label="Teléfono" hint="Hace falta el teléfono o el email" htmlFor="venta-telefono">
+                    <input autoComplete="off" id="venta-telefono" value={telefono} onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="+34..." className={inputClass} />
+                  </Field>
+                </FilaCampos>
               </div>
             )}
 
             {/* Datos fiscales (opcionales, común a ambos modos) */}
             <div className="space-y-2">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Identificación fiscal <span className="text-muted-foreground/70">(opcional)</span>
-                </label>
-                <input
+              <Field label="Identificación fiscal (opcional)" htmlFor="venta-identificacion">
+                <input autoComplete="off"
+                  id="venta-identificacion"
                   value={identificacionFiscal}
                   onChange={(e) => setIdentificacionFiscal(e.target.value)}
                   placeholder="NIF / CIF / NIE / Cédula / RFC…"
                   maxLength={50}
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
+                  className={inputClass}
                 />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Dirección fiscal <span className="text-muted-foreground/70">(opcional)</span>
-                </label>
-                <textarea
+              </Field>
+              <Field label="Dirección fiscal (opcional)" htmlFor="venta-direccion"
+                hint="Los dos datos fiscales son para emitir factura. Si no los tienes, déjalos vacíos.">
+                <textarea autoComplete="off"
+                  id="venta-direccion"
                   value={direccionFiscal}
                   onChange={(e) => setDireccionFiscal(e.target.value)}
                   placeholder="Calle, número, piso · Código postal · Ciudad · Provincia · País"
                   maxLength={500}
                   rows={2}
-                  className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none"
+                  className={textareaClass}
                 />
-              </div>
-              <p className="text-[11px] text-muted-foreground">Para emitir factura. Si no los tienes, déjalos vacíos.</p>
+              </Field>
+
+              {/* EL NUMERO DE FACTURA, AQUI.
+                  Diego, 25/09: «no veo donde poner la factura aqui la
+                  enumeracion al registrar la venta». Solo sale si la empresa
+                  numera al registrar --CEDIA e ICTESS lo tienen puesto--; el
+                  resto sigue con el cobro en la cola, que es el freno del
+                  14/09. */}
+              {(
+                <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                  <Field label="Número de factura" htmlFor="venta-numero-factura" disabled={!pid}
+                    hint={!pid
+                      ? 'La serie y el número son del campus, así que hace falta elegirlo antes.'
+                      : sugerido
+                        ? `El siguiente libre es el ${sugerido}. Puedes poner ese u otro. Si lo dejas vacío, la venta se queda en la cola de facturación.`
+                        : 'Si lo dejas vacío, la venta se queda en la cola de facturación.'}>
+                    <input autoComplete="off"
+                      id="venta-numero-factura"
+                      type="number" min="1" value={numero}
+                      disabled={!pid}
+                      onChange={(e) => setNumero(e.target.value)}
+                      placeholder={pid ? (sugerido || 'automático') : 'elige antes el campus'}
+                      className={`${inputClass} tabular-nums disabled:opacity-60`}
+                    />
+                  </Field>
+                  <p className="mt-1.5 px-1 text-secundario text-warning-soft-foreground">
+                    Comprueba la numeración en el Excel de facturación antes de emitir.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Producto + importes (común a ambos modos) */}
             <div className="border-t border-border pt-3 space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Producto *</label>
-                <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Buscar producto…"
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm mb-1.5" />
-                <select value={productoId} onChange={(e) => setProductoId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm">
-                  <option value="">— Selecciona —</option>
-                  {productosFiltrados.map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` (${p.precio} ${p.moneda || ''})` : ''}</option>
-                  ))}
-                </select>
+                <Field label="Producto" required htmlFor="venta-producto">
+                  <div className="space-y-1.5">
+                    <input autoComplete="off" value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Buscar producto…" aria-label="Buscar producto"
+                      className={inputClass} />
+                    {/* El desplegable del CRM, como el resto (#106, #134). */}
+                    <Select<number | ''>
+                      id="venta-producto"
+                      value={productoId}
+                      onChange={setProductoId}
+                      ariaLabel="Producto"
+                      options={[
+                        { value: '', label: 'Elige la formación…' },
+                        ...productosFiltrados.map((p) => ({
+                          value: p.id,
+                          label: `${p.nombre}${p.precio ? ` (${p.precio} ${p.moneda || ''})` : ''}`,
+                        })),
+                      ]}
+                    />
+                  </div>
+                </Field>
+                {/* Que se sepa siempre en que punto esta: la caja de arriba
+                    solo filtra, y sin esto un desplegable vacio no dice si no
+                    hay formaciones, si no casa la busqueda, o si falta elegir
+                    el campus. */}
+                <p className="mt-1 px-1 text-secundario text-muted-foreground">
+                  {!pid
+                    ? 'Elige antes el campus: las formaciones son suyas.'
+                    : products.length === 0
+                      ? 'Cargando las formaciones…'
+                      : productosFiltrados.length === 0
+                        ? <span className="text-warning-soft-foreground">No hay ninguna formación con ese texto. Prueba con menos palabras.</span>
+                        : productoId
+                          ? 'Formación elegida.'
+                          : `${productosFiltrados.length} formación${productosFiltrados.length === 1 ? '' : 'es'} — elige una en la lista de arriba.`}
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Importe total *</label>
-                  <input type="number" min="0" step="0.01" value={importeTotal}
-                    onChange={(e) => setImporteTotal(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Importe pagado</label>
-                  <input type="number" min="0" step="0.01" value={importePagado}
-                    onChange={(e) => setImportePagado(e.target.value)}
-                    placeholder={`Por defecto: ${importeTotal || 'igual al total'}`}
-                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-                </div>
-              </div>
+              <FilaCampos>
+                <Field label="Importe total" required htmlFor="venta-importe-total">
+                  <input autoComplete="off" id="venta-importe-total" type="number" min="0" step="0.01" value={importeTotal}
+                    onChange={(e) => setImporteTotal(e.target.value)} className={inputClass} />
+                </Field>
+                {/* «Por defecto: igual al total» iba de texto de ejemplo dentro
+                    del campo y en el móvil salía cortado (#134): va debajo. */}
+                <Field label="Importe pagado" htmlFor="venta-importe-pagado"
+                  hint={importeTotal ? `Si lo dejas vacío, se toma el total (${importeTotal}).` : 'Si lo dejas vacío, se toma el total.'}>
+                  <input autoComplete="off" id="venta-importe-pagado" type="number" min="0" step="0.01" value={importePagado}
+                    onChange={(e) => setImportePagado(e.target.value)} className={inputClass} />
+                </Field>
+              </FilaCampos>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Método de pago</label>
-                  <select value={metodo} onChange={(e) => setMetodo(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm">
-                    {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    Fecha de pago *
-                    {isRetroactiva && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Histórica</span>}
-                  </label>
-                  <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={today}
-                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-                </div>
-              </div>
+              <FilaCampos>
+                <Field label="Método de pago" htmlFor="venta-metodo">
+                  <Select<string>
+                    id="venta-metodo"
+                    value={metodo}
+                    onChange={setMetodo}
+                    ariaLabel="Método de pago"
+                    options={PAYMENT_METHODS}
+                  />
+                </Field>
+                <Field label="Fecha de pago" required htmlFor="venta-fecha"
+                  hint={isRetroactiva ? 'Anterior a hoy: la venta se registra como histórica.' : undefined}>
+                  <input id="venta-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={today}
+                    className={inputClass} />
+                </Field>
+              </FilaCampos>
 
               {/* Cuotas — solo cuando método es fraccionado */}
               {metodo === 'fraccionado' && (
                 <div className="space-y-3 p-3 rounded-md border border-border bg-muted/20">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plan de cuotas</span>
+                    <span className="px-1 text-tabla uppercase text-muted-foreground">Plan de cuotas</span>
                     <button type="button"
                       onClick={() => { setInstallmentsDirty(false); }}
-                      className="text-[10px] text-primary hover:underline">
+                      className="text-secundario text-primary hover:underline">
                       Auto-distribuir
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">N° de cuotas</label>
-                      <input type="number" min={2} max={36} value={numCuotas}
+                  <FilaCampos>
+                    <Field label="N° de cuotas" htmlFor="venta-num-cuotas">
+                      <input autoComplete="off" id="venta-num-cuotas" type="number" min={2} max={36} value={numCuotas}
                         onChange={(e) => { setNumCuotas(parseInt(e.target.value) || 2); setInstallmentsDirty(false); }}
-                        className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">1ª fecha de vencimiento</label>
-                      <input type="date" value={fechaPrimeraCuota}
+                        className={inputClass} />
+                    </Field>
+                    <Field label="1ª fecha de vencimiento" htmlFor="venta-primera-cuota">
+                      <input id="venta-primera-cuota" type="date" value={fechaPrimeraCuota}
                         onChange={(e) => { setFechaPrimeraCuota(e.target.value); setInstallmentsDirty(false); }}
-                        className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm" />
-                    </div>
-                  </div>
+                        className={inputClass} />
+                    </Field>
+                  </FilaCampos>
                   {installments.length > 0 && (
                     <div className="space-y-1.5">
-                      <div className="grid grid-cols-[40px_1fr_1fr] gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                      {/* En el móvil cada cuota va en dos líneas (fecha arriba,
+                          importe debajo) y la cabecera sobra: los campos dicen
+                          qué son. En pantalla ancha, una línea por cuota (#106). */}
+                      <div className="hidden sm:grid grid-cols-[40px_1fr_1fr] gap-fila text-tabla uppercase text-muted-foreground px-1">
                         <span>#</span><span>Vencimiento</span><span className="text-right">Importe €</span>
                       </div>
                       {installments.map((it, idx) => (
-                        <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center">
+                        <div key={idx} className="grid grid-cols-[2rem_1fr] sm:grid-cols-[40px_1fr_1fr] gap-fila items-center">
                           <span className="text-xs text-muted-foreground px-1">{idx + 1}</span>
                           <input type="date" value={it.fecha_vencimiento}
+                            aria-label={`Vencimiento de la cuota ${idx + 1}`}
                             onChange={(e) => {
                               const next = [...installments];
                               next[idx] = { ...next[idx], fecha_vencimiento: e.target.value };
                               setInstallments(next); setInstallmentsDirty(true);
                             }}
-                            className="h-8 px-2 rounded border border-border bg-card text-xs" />
-                          <input type="number" min="0" step="0.01" value={it.importe_previsto}
+                            className={`${inputClass} min-w-0`} />
+                          <input autoComplete="off" type="number" min="0" step="0.01" value={it.importe_previsto}
+                            aria-label={`Importe de la cuota ${idx + 1}`}
                             onChange={(e) => {
                               const next = [...installments];
                               next[idx] = { ...next[idx], importe_previsto: e.target.value };
                               setInstallments(next); setInstallmentsDirty(true);
                             }}
-                            className="h-8 px-2 rounded border border-border bg-card text-xs text-right" />
+                            className={`${inputClass} min-w-0 text-right col-start-2 sm:col-start-auto`} />
                         </div>
                       ))}
-                      <div className={`text-[11px] text-right pt-1 ${installmentsMismatch ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                      <div className={`text-secundario text-right pt-1 ${installmentsMismatch ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
                         Suma: {installmentsSum.toFixed(2)} € · Total: {(parseFloat(importeTotal) || 0).toFixed(2)} €
                         {installmentsMismatch && ' ⚠ no coinciden'}
                       </div>
@@ -506,12 +857,11 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                 </div>
               )}
 
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Notas (opcional)</label>
-                <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
+              <Field label="Notas (opcional)" htmlFor="venta-notas">
+                <textarea autoComplete="off" id="venta-notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
                   placeholder="Comentarios sobre la venta…"
-                  className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none" />
-              </div>
+                  className={textareaClass} />
+              </Field>
             </div>
           </div>
 
@@ -521,7 +871,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
               Cancelar
             </button>
             <button onClick={handleSave} disabled={saving}
-              className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+              className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
               {saving ? 'Guardando…' : 'Registrar venta'}
             </button>
           </div>

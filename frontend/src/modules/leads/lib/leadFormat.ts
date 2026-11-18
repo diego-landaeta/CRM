@@ -1,18 +1,17 @@
+import { avatarColorFor } from '@/shared/lib/ui';
 // Helpers de formato y avatar para LeadsPage. Extraídos de la página
 // para facilitar su test unitario y aliviar el archivo principal.
 import type { Lead } from '@/shared/types';
 import type { ExportColumn } from '@/shared/lib/export';
+import { soloFecha, formatFecha, formatRelative } from '@/shared/lib/fechas';
+import { nombreDelPais } from '@/shared/lib/paises';
 
-const AVATAR_COLORS: ReadonlyArray<string> = [
-  'bg-rose-100 text-rose-700',
-  'bg-sky-100 text-sky-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700',
-  'bg-teal-100 text-teal-700',
-  'bg-pink-100 text-pink-700',
-  'bg-indigo-100 text-indigo-700',
-];
+// Las fechas se calculaban aquí y otras dos veces más —dentro de ClientsPage y
+// dentro de SiguientesAcciones—, y la de Clientes no coincidía: las compras
+// salían un día antes. Ahora hay una sola definición, en `shared/lib/fechas`.
+// Se siguen exportando desde aquí porque medio módulo de prospectos las importa
+// por este nombre.
+export { formatFecha, formatRelative };
 
 export function getInitials(name: string | null | undefined): string {
   if (!name) return '??';
@@ -20,44 +19,12 @@ export function getInitials(name: string | null | undefined): string {
 }
 
 export function getAvatarColor(id: number): string {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+  return avatarColorFor(id);
 }
 
 export function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '--';
-  // Strings 'YYYY-MM-DD' se interpretan como local para evitar desfase TZ (-1 día).
-  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-}
-
-// Fecha REAL (no relativa). En "Último contacto" el equipo necesita ver el día
-// exacto en que se registró el contacto, no "hoy"/"hace 3d".
-export function formatFecha(dateStr: string | null | undefined): string | null {
-  if (!dateStr) return null;
-  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
-}
-
-export function formatRelative(
-  dateStr: string | null | undefined,
-  { future = false }: { future?: boolean } = {},
-): string | null {
-  if (!dateStr) return null;
-  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  const diffMs = future ? d.getTime() - now.getTime() : now.getTime() - d.getTime();
-  const diffDays = Math.round(diffMs / 86400000);
-  if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
-  if (diffDays === 0) return 'hoy';
-  if (diffDays === 1) return future ? 'mañana' : 'ayer';
-  if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
-  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
+  const d = soloFecha(dateStr);
+  if (!d) return '--';
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
@@ -89,6 +56,8 @@ const STATUS_LABELS_ES: Record<string, string> = {
 export function getLeadExportColumns(): ExportColumn<Lead>[] {
   return [
     { key: 'proyecto', label: 'Proyecto', type: 'string', value: (l) => l.proyecto_nombre || '', width: 18 },
+    // País de entrada (#221): el del subdominio por el que entró.
+    { key: 'pais_entrada', label: 'País de entrada', type: 'string', value: (l) => nombreDelPais(l.pais_origen), width: 14 },
     { key: 'nombre', label: 'Nombre', type: 'string', value: (l) => l.nombre || '', width: 24 },
     { key: 'email', label: 'Email', type: 'string', value: (l) => l.email || '', width: 28 },
     { key: 'telefono', label: 'Teléfono', type: 'string', value: (l) => l.telefono || '', width: 16 },
@@ -119,7 +88,7 @@ export function exportLeadsCSV(leads: Lead[], filename: string): void {
       l.notas || '',
       l.created_at ? new Date(l.created_at).toLocaleDateString('es-ES') : '',
       l.last_interaction_at ? new Date(l.last_interaction_at).toLocaleDateString('es-ES') : '',
-      l.next_reminder_at ? new Date(l.next_reminder_at).toLocaleDateString('es-ES') : '',
+      l.next_reminder_at ? (soloFecha(l.next_reminder_at)?.toLocaleDateString('es-ES') ?? '') : '',
     ]),
   ];
   const csv = rows.map((r) => r.map((v: unknown) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');

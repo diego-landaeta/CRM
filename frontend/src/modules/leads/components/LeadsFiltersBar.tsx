@@ -1,3 +1,4 @@
+import { cssDeEstado } from '../lib/estadoTono';
 // LeadsFiltersBar — v2 UI Prospectos.
 // Reemplaza las 4 franjas (filtros, stats, quick-filters, leyenda) del LeadsPage v1
 // por una sola fila compacta con:
@@ -17,6 +18,8 @@ import {
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import DateRangeFilter from './DateRangeFilter';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
+import usePermission from '@/shared/hooks/usePermission';
+import { nombreDelPais, opcionesDePais } from '@/shared/lib/paises';
 
 const STATUS_LABELS: Record<string, string> = {
   nuevo: 'Nuevo',
@@ -59,7 +62,7 @@ const SORT_LABELS: Record<string, string> = {
 
 interface Props {
   activeProject: { id?: number | null; nombre?: string };
-  projects: Array<{ id: number; nombre?: string }>;
+  projects: Array<{ id: number; nombre?: string; paises_por_subdominio?: Record<string, string> | null }>;
   selectedProjectIds: number[];
   setSelectedProjectIds: (ids: number[]) => void;
   gestores: Array<{ id: number; nombre: string; project_ids?: number[] }>;
@@ -67,7 +70,14 @@ interface Props {
   user: { role?: string } | null;
   search: string; setSearch: (v: string) => void;
   filterEstado: string; setFilterEstado: (v: string) => void;
+  filterSeguimiento: string; setFilterSeguimiento: (v: string) => void;
+  /** En qué paso del proceso comercial va. Vacío = cualquiera. */
+  filterPaso: string; setFilterPaso: (v: string) => void;
+  /** Los pasos del proyecto o de la empresa, para poder nombrarlos. */
+  pasosDelProceso: Array<{ clave: string; nombre: string; orden: number }>;
   filterOrigen: string; setFilterOrigen: (v: string) => void;
+  /** País de entrada (#221): código ISO o `sin_pais`. Vacío = todos. */
+  filterPais: string; setFilterPais: (v: string) => void;
   filterResponsable: string; setFilterResponsable: (v: string) => void;
   filterProducto: string; setFilterProducto: (v: string) => void;
   dateFrom: string; dateTo: string; setDateRange: (from: string, to: string) => void;
@@ -86,15 +96,25 @@ interface Props {
 export default function LeadsFiltersBar(props: Props) {
   const {
     activeProject, projects, selectedProjectIds, setSelectedProjectIds,
-    gestores, products, user,
+    gestores, products, user, filterPaso, setFilterPaso, pasosDelProceso,
     search, setSearch, filterEstado, setFilterEstado,
-    filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
+    filterSeguimiento, setFilterSeguimiento,
+    filterOrigen, setFilterOrigen, filterPais, setFilterPais, filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto, dateFrom, dateTo, setDateRange,
     sortMode, setSortMode, sortDir, setSortDir, quickFilter, setQuickFilter, quickCounts,
     filterDup, setFilterDup, filterReincidente, setFilterReincidente,
     stats, leadsCount, filteredCount, onAssignPending,
   } = props;
 
+  // Los países que se pueden elegir: los de la tabla de los campus que se ven (#221).
+  const opcionesPais = opcionesDePais(
+    activeProject?.id && activeProject.id > 0
+      ? projects.filter((p) => p.id === activeProject.id)
+      : (selectedProjectIds.length ? projects.filter((p) => selectedProjectIds.includes(p.id)) : projects),
+  );
+
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   // Cruce Gestor ↔ Proyecto:
@@ -163,7 +183,13 @@ export default function LeadsFiltersBar(props: Props) {
   const activePills: Array<{ key: string; label: string; onClear: () => void }> = [];
   if (search.trim()) activePills.push({ key: 'search', label: `🔎 "${search.slice(0, 20)}${search.length > 20 ? '…' : ''}"`, onClear: () => setSearch('') });
   if (filterEstado) activePills.push({ key: 'estado', label: STATUS_LABELS[filterEstado] || filterEstado, onClear: () => setFilterEstado('') });
+  if (filterSeguimiento) activePills.push({
+    key: 'seg',
+    label: filterSeguimiento === '5' ? 'Seguimiento 5 o más' : `Seguimiento ${filterSeguimiento}`,
+    onClear: () => setFilterSeguimiento(''),
+  });
   if (filterOrigen) activePills.push({ key: 'origen', label: ORIGEN_LABELS[filterOrigen] || filterOrigen, onClear: () => setFilterOrigen('') });
+  if (filterPais) activePills.push({ key: 'pais', label: nombreDelPais(filterPais), onClear: () => setFilterPais('') });
   if (filterResponsable) {
     const label = filterResponsable === 'unassigned'
       ? 'Sin asignar'
@@ -183,6 +209,7 @@ export default function LeadsFiltersBar(props: Props) {
     setSearch('');
     setFilterEstado('');
     setFilterOrigen('');
+    setFilterPais('');
     setFilterResponsable('');
     setFilterProducto('');
     setDateRange('', '');
@@ -191,7 +218,7 @@ export default function LeadsFiltersBar(props: Props) {
     setFilterReincidente(false);
   }
 
-  const showAssignBtn = isAdmin
+  const showAssignBtn = isAdmin && can('leads.assign')
     && ((stats?.sin_asignar ?? 0) > 0 || filterResponsable === 'unassigned')
     && activeProject?.id && activeProject.id > 0;
 
@@ -222,50 +249,136 @@ export default function LeadsFiltersBar(props: Props) {
           <div
             ref={panelRef}
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
-            className="bg-card border border-border rounded-lg shadow-xl overflow-hidden"
+            className="bg-card border border-border rounded-lg shadow-dialog overflow-hidden"
           >
             <div style={{ maxHeight: pos.maxH }} className="overflow-y-auto">
               {/* Búsqueda */}
-              <Section title="Búsqueda">
-                <div className="relative">
-                  <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Nombre, email o teléfono…"
-                    className="w-full h-9 pl-9 pr-3 rounded-md border border-border bg-muted/40 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              </Section>
+              {/* Aqui habia otro buscador, otro «Estado» y otro «Orden». Los
+                  tres estan en la fila de arriba, a la vista (#125): tenerlos
+                  dos veces obliga a mirar en dos sitios para saber que hay
+                  puesto, y a acordarse de limpiarlos en los dos.
+
+                  Detras del boton se queda lo que NO cabe en la fila: gestor,
+                  programa, proyecto, fechas, direccion y lo de admin. */}
 
               {/* Filtros principales */}
               <Section title="Filtros principales">
+                {/* ESTADO, CANAL Y ORDEN VUELVEN AQUÍ DENTRO. Diego, 23/09:
+                    «mete esos filtros allí».
+
+                    Estuvieron un tiempo en la fila de arriba (#125) para que se
+                    vieran sin abrir nada. El problema era otro: la fila se
+                    llenaba de desplegables y el botón «Filtros» parecía llevar
+                    a otro sitio distinto. Con todo dentro hay UN solo sitio
+                    donde mirar, y lo que haya puesto lo canta el número del
+                    botón y las píldoras de al lado — que es lo que de verdad
+                    evita el filtro puesto sin querer. */}
                 <Row label="Estado">
                   <select
                     value={filterEstado}
                     onChange={(e) => setFilterEstado(e.target.value)}
                     className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    aria-label="Estado"
                   >
                     <option value="">Todos los estados</option>
-                    {/* "Convertido" NO se filtra aquí: los convertidos se ven en
-                        Clientes/Ventas, no en Prospectos. */}
-                    {Object.entries(STATUS_LABELS).filter(([k]) => k !== 'convertido').map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
+                    {Object.entries(STATUS_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
                     ))}
                   </select>
                 </Row>
+                {/* EN QUÉ PASO DEL PROCESO VA. Diego, 23/09: «en filtros que
+                    diga proceso de ventas y puedas elegir cuál».
+
+                    Los pasos se leen del proceso de verdad —no una lista fija—
+                    porque cada campus puede renombrarlos, y un filtro que diga
+                    «Día 2» cuando la pantalla de pasos dice «Prueba social» no
+                    se entiende. */}
+                {pasosDelProceso.length > 0 && (
+                  <Row label="Proceso de ventas">
+                    <select
+                      value={filterPaso}
+                      onChange={(e) => setFilterPaso(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                      aria-label="Paso del proceso comercial"
+                    >
+                      <option value="">Cualquier paso</option>
+                      {pasosDelProceso.map((p) => (
+                        <option key={p.clave} value={p.clave}>
+                          {p.orden}. {p.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </Row>
+                )}
                 <Row label="Canal">
-                  <SearchableSelect
+                  <select
                     value={filterOrigen}
-                    onChange={(v) => setFilterOrigen(v)}
-                    options={Object.entries(ORIGEN_LABELS).map(([value, label]) => ({ value, label }))}
-                    placeholder="Buscar canal…"
-                    allLabel="Todos los canales"
-                    ariaLabel="Canal"
-                    maxWidth="100%"
-                  />
+                    onChange={(e) => setFilterOrigen(e.target.value)}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    aria-label="Canal de entrada"
+                  >
+                    <option value="">Todos los orígenes</option>
+                    {Object.entries(ORIGEN_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
                 </Row>
+                {/* País de entrada (#221): solo si algún campus de la vista
+                    separa por país (o si ya viene puesto en la dirección). */}
+                {(opcionesPais.length > 0 || filterPais) && (
+                  <Row label="País">
+                    <select
+                      value={filterPais}
+                      onChange={(e) => setFilterPais(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                      aria-label="País de entrada"
+                    >
+                      <option value="">Todos los países</option>
+                      {opcionesPais.map((o) => (
+                        <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+                      ))}
+                      {filterPais && !opcionesPais.some((o) => o.valor === filterPais) && (
+                        <option value={filterPais}>{nombreDelPais(filterPais)}</option>
+                      )}
+                    </select>
+                  </Row>
+                )}
+                <Row label="Orden">
+                  <select
+                    value={sortMode}
+                    onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    aria-label="Orden de la lista"
+                  >
+                    {Object.entries(SORT_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
+                </Row>
+                {/* El «por que seguimiento va» cuelga del estado «En
+                    seguimiento» porque solo ahi significa algo: preguntar por el
+                    seguimiento 3 de un «no interesado» no dice nada. El «por que
+                    seguimiento va» no esta arriba ni en ningun otro sitio, y
+                    cuelga del estado «En seguimiento» porque solo ahi significa
+                    algo: preguntar por el seguimiento 3 de un «no interesado» no
+                    dice nada. Diego: «seria seguimiento 1, 2, y eso en el estado
+                    de seguimiento, como un submenu». */}
+                {filterEstado === 'en_seguimiento' && (
+                  <Row label="Por qué seguimiento va">
+                    <select
+                      value={filterSeguimiento}
+                      onChange={(e) => setFilterSeguimiento(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    >
+                      <option value="">Cualquiera</option>
+                      <option value="1">Seguimiento 1 — un contacto</option>
+                      <option value="2">Seguimiento 2 — dos contactos</option>
+                      <option value="3">Seguimiento 3</option>
+                      <option value="4">Seguimiento 4</option>
+                      <option value="5">Seguimiento 5 o más</option>
+                    </select>
+                  </Row>
+                )}
                 {isAdmin && (
                   <Row label="Gestor">
                     <SearchableSelect
@@ -311,17 +424,6 @@ export default function LeadsFiltersBar(props: Props) {
                 )}
                 <Row label="Fechas">
                   <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => setDateRange(f, t)} />
-                </Row>
-                <Row label="Orden">
-                  <select
-                    value={sortMode}
-                    onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
-                  >
-                    {Object.entries(SORT_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
                 </Row>
                 {/* Dirección del orden cronológico: descendente (más reciente
                     primero, default) o ascendente (más antiguo primero). */}
@@ -372,7 +474,7 @@ export default function LeadsFiltersBar(props: Props) {
                   Se aplican sobre toda la base, no sobre la página que ves. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
                 </p>
                 {(quickFilter === 'urgent' || quickFilter === 'no-contact') && filterEstado && (
-                  <div className="mt-1.5 text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2.5 py-1.5">
+                  <div className="mt-1.5 text-[11px] rounded-md border border-warning/30 bg-warning-soft text-warning px-2.5 py-1.5">
                     ⚠️ «{QUICK_LABELS[quickFilter] || quickFilter}» y «Estado» están activos a la vez y se contradicen — quita uno de los dos.
                   </div>
                 )}
@@ -394,12 +496,12 @@ export default function LeadsFiltersBar(props: Props) {
                 <Section title="Resumen">
                   <div className="flex flex-wrap gap-1.5">
                     <StatPill label="Total" value={stats.total || 0} />
-                    <StatPill label="Nuevos" value={stats.nuevo || 0} dot="#3b82f6" />
-                    <StatPill label="Por contactar" value={stats.por_contactar || 0} dot="#f59e0b" />
-                    <StatPill label="Contactados" value={stats.contactado || 0} dot="#10b981" />
-                    <StatPill label="En seguimiento" value={stats.en_seguimiento || 0} dot="#eab308" />
-                    <StatPill label="Convertidos" value={stats.convertido || 0} dot="#8b5cf6" />
-                    <StatPill label="No interesado" value={stats.no_interesado || 0} dot="#ef4444" />
+                    <StatPill label="Nuevos" value={stats.nuevo || 0} dot={cssDeEstado('nuevo')} />
+                    <StatPill label="Por contactar" value={stats.por_contactar || 0} dot={cssDeEstado('por_contactar')} />
+                    <StatPill label="Contactados" value={stats.contactado || 0} dot={cssDeEstado('contactado')} />
+                    <StatPill label="En seguimiento" value={stats.en_seguimiento || 0} dot={cssDeEstado('en_seguimiento')} />
+                    <StatPill label="Convertidos" value={stats.convertido || 0} dot={cssDeEstado('convertido')} />
+                    <StatPill label="No interesado" value={stats.no_interesado || 0} dot={cssDeEstado('no_interesado')} />
                   </div>
                   {quickFilter && (
                     <p className="text-[11px] text-muted-foreground mt-2">
@@ -452,13 +554,13 @@ export default function LeadsFiltersBar(props: Props) {
       {showAssignBtn && (
         <button
           onClick={onAssignPending}
-          className="ml-auto h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+          className="ml-auto h-9 px-3 rounded-md bg-warning hover:bg-warning/90 text-warning-foreground text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-warning/40"
           title="Aplica round-robin a todos los prospectos sin responsable"
         >
           <WarningCircle size={13} weight="fill" />
           Asignar pendientes
           {(stats?.sin_asignar ?? 0) > 0 && (
-            <span className="bg-white text-amber-700 text-[10px] font-black px-1.5 py-0.5 rounded">
+            <span className="bg-white text-warning text-[10px] font-black px-1.5 py-0.5 rounded">
               {stats?.sin_asignar}
             </span>
           )}
@@ -499,14 +601,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 type ChipTone = 'default' | 'danger' | 'warning';
 function QuickChip({ active, onClick, label, count, tone = 'default' }: { active: boolean; onClick: () => void; label: string; count?: number; tone?: ChipTone }) {
   const toneActive: string = ({
-    default: 'bg-primary text-white',
-    danger: 'bg-red-600 text-white',
-    warning: 'bg-amber-600 text-white',
+    default: 'bg-primary text-primary-foreground',
+    danger: 'bg-destructive text-destructive-foreground',
+    warning: 'bg-warning text-warning-foreground',
   } as Record<ChipTone, string>)[tone];
   const toneIdleCount: string = ({
     default: 'bg-primary/15 text-primary',
-    danger: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
-    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    danger: 'bg-destructive-soft text-destructive-soft-foreground',
+    warning: 'bg-warning-soft text-warning-soft-foreground',
   } as Record<ChipTone, string>)[tone];
   return (
     <button

@@ -1,8 +1,12 @@
+
+import Field from '@/shared/components/ui/Field';
 import { useEffect, useState, useCallback } from 'react';
+import { inputClass } from '@/shared/lib/ui';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS, type LeadFormData } from '../validation/lead.schema';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X, Warning, Link as LinkIcon } from '@phosphor-icons/react';
@@ -12,7 +16,9 @@ import ProductCombobox from './ProductCombobox';
 import client from '@/shared/api/client';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { detectCountryFromPhone } from '../lib/phoneCountry';
-import type { Lead } from '@/shared/types';
+import type { Lead } from '@/shared/types';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import { rutaApp } from '@/shared/lib/rutaApp';
 
 interface CustomFieldDef {
   id: number;
@@ -41,20 +47,6 @@ interface Props {
   onSubmit: (data: LeadFormData & { custom_fields: Record<string, unknown> }) => Promise<void> | void;
 }
 
-function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-        {label}
-      </label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground mt-1 px-1">{hint}</p>}
-      {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
-    </div>
-  );
-}
-
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
@@ -68,6 +60,11 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   // El form NECESITA un proyecto concreto, asi que mostramos un selector
   // al inicio para que el usuario elija a cual asignar el lead.
   const [pickedProjectId, setPickedProjectId] = useState<number | null>(null);
+  const delAmbito = useProyectosDelAmbito<{ id: number; nombre?: string; sociedad_emisora_id?: number | null }>();
+  // Se pulsó «Crear» sin elegir proyecto. Antes el desplegable era el del
+  // navegador con `required` y él mismo lo avisaba; con el del CRM hay que
+  // decirlo aquí, o el botón no haría nada (#106).
+  const [faltaProyecto, setFaltaProyecto] = useState(false);
   // Al editar, el proyecto siempre es el del propio lead. Antes, con la vista
   // global "Todos los proyectos", effectiveProjectId quedaba null y Guardar
   // terminaba sin enviar la actualización.
@@ -81,7 +78,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     : activeProject;
 
   useEffect(() => {
-    if (!open) setPickedProjectId(null);
+    if (!open) { setPickedProjectId(null); setFaltaProyecto(false); }
   }, [open]);
 
   const { user } = useAuth() as any;
@@ -91,6 +88,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
+  // Los personalizados obligatorios que se quedaron vacíos al pulsar «Crear».
+  // Antes lo decía el globo del navegador; ahora, el Field de cada uno (#106).
+  const [faltanPersonalizados, setFaltanPersonalizados] = useState<string[]>([]);
+  // Y los de número con algo que no es un número: sin el globo del navegador
+  // (noValidate) pasaban como vacíos.
+  const [numerosMalos, setNumerosMalos] = useState<string[]>([]);
+  const vacio = (k: string) => (customValues[k] ?? '') === '';
   const [duplicates, setDuplicates] = useState<DuplicateLead[]>([]);
   const [pendingDup, setPendingDup] = useState<{
     lead: { id: number; nombre?: string; email?: string; telefono?: string; status?: string; responsable_nombre?: string; created_at?: string; masked?: boolean; message?: string };
@@ -113,8 +117,16 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     },
   });
 
+  // El aviso de un `refine` sin `path` (la forma de contacto) no cuelga de
+  // ningún campo: zodResolver lo deja en la clave vacía, o en `root`.
+  const errorSinCampo = (errors as Record<string, { message?: string } | undefined>)['']?.message
+    ?? errors.root?.message;
+
   const watchedEmail = watch('email');
   const watchedTelefono = watch('telefono');
+  const watchedUsuario = watch('whatsapp_usuario');
+  const avisoContacto = errorSinCampo && !(watchedEmail || watchedTelefono || watchedUsuario)
+    ? errorSinCampo : undefined;
 
   // Que se esta escribiendo: el numero, el usuario, o los dos.
   //
@@ -155,6 +167,9 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
         ? (lead.telefono ? 'ambos' : 'usuario')
         : 'numero');
       setCustomValues((lead?.custom_fields as Record<string, unknown>) || {});
+      // Los avisos de personalizados de la vez anterior no se arrastran.
+      setFaltanPersonalizados([]);
+      setNumerosMalos([]);
     }
   }, [open, lead, reset]);
 
@@ -178,11 +193,23 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   if (!open) return null;
 
-  async function handleFormSubmit(data: LeadFormData): Promise<void> {
+  async function handleFormSubmit(data: LeadFormData, evento?: { target?: EventTarget | null }): Promise<void> {
     if (!effectiveProjectId) {
-      // Modo ALL sin proyecto elegido — el banner pide elegirlo
+      // Modo ALL sin proyecto elegido: se dice debajo del desplegable.
+      setFaltaProyecto(true);
       return;
     }
+    // Los mismos que comprobaba el navegador: los de texto, número, fecha y
+    // área de texto. El desplegable y el sí/no nunca se comprobaron.
+    const faltan = customFields
+      .filter((f) => f.required && f.type !== 'select' && f.type !== 'boolean' && vacio(f.field_key))
+      .map((f) => f.field_key);
+    setFaltanPersonalizados(faltan);
+    const malos = [...((evento?.target as Element | null)?.querySelectorAll<HTMLInputElement>('input[type=number][id^="prospecto-cf-"]') || [])]
+      .filter((c) => c.validity?.badInput)
+      .map((c) => c.id.replace('prospecto-cf-', ''));
+    setNumerosMalos(malos);
+    if (faltan.length || malos.length) return;
     // El ProductCombobox guarda el NOMBRE del producto en data.producto_interes,
     // pero el backend acepta producto_interes_id (number). Resolvemos el nombre
     // a ID buscando en el array `products` (case-insensitive trim).
@@ -223,58 +250,67 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   return (
     <Portal>
-      <div role="dialog" aria-label={isEdit ? 'Editar Lead' : 'Nuevo Prospecto'} className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+      <div role="dialog" aria-label={isEdit ? 'Editar prospecto' : 'Nuevo prospecto'} className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
         <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-2xl mx-4 p-4 sm:p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold">{isEdit ? 'Editar Lead' : 'Nuevo Prospecto'}</h2>
-              <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la información del lead' : 'Registra un nuevo lead manualmente'}</p>
+              <h2 className="text-lg font-semibold">{isEdit ? 'Editar prospecto' : 'Nuevo prospecto'}</h2>
+              <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la información del prospecto' : 'Registra un nuevo prospecto manualmente'}</p>
             </div>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
               <X size={18} weight="bold" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
+          {/* noValidate: los avisos los da el CRM (el esquema y los Field), no
+              el globo del navegador (#106). */}
+          <form onSubmit={handleSubmit(handleFormSubmit, () => { if (!effectiveProjectId) setFaltaProyecto(true); })} noValidate className="space-y-3">
             {/* En modo "Todos los proyectos": pedimos al usuario que elija
                 a qué proyecto pertenece el lead antes de poder rellenar nada. */}
             {isAllProjects && !isEdit && (
-              <div className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-3">
-                <label className="text-xs font-semibold text-violet-800 dark:text-violet-300 block mb-1.5">
-                  Proyecto al que pertenece este prospecto *
-                </label>
-                <select
-                  value={pickedProjectId ?? ''}
-                  onChange={(e) => setPickedProjectId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm"
+              <div className="rounded-md border border-info/30 bg-info-soft p-3">
+                {/* El desplegable del CRM, como «Origen» y «País»: era el único
+                    con la flecha del navegador (#106, #134). */}
+                <Field
+                  label="Proyecto al que pertenece este prospecto"
                   required
+                  htmlFor="prospecto-proyecto"
+                  hint="Estás en la vista global. El prospecto se creará en el proyecto elegido y aplicará su round-robin."
+                  error={faltaProyecto && !pickedProjectId
+                    ? 'Elige el proyecto antes de crear el prospecto: estás en la vista de todos los proyectos.'
+                    : undefined}
                 >
-                  <option value="">— Elige proyecto —</option>
-                  {(projects || []).map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-violet-700 dark:text-violet-400 mt-1.5">
-                  Estás en la vista global. El lead se creará en el proyecto elegido y aplicará su round-robin.
-                </p>
+                  <Select<string>
+                    id="prospecto-proyecto"
+                    value={pickedProjectId ? String(pickedProjectId) : ''}
+                    onChange={(v) => setPickedProjectId(v ? Number(v) : null)}
+                    ariaLabel="Proyecto al que pertenece este prospecto"
+                    options={[
+                      { value: '', label: 'Elige el proyecto…' },
+                      // Con una empresa puesta, solo sus campus. Diego, 10/10:
+                      // «campus solo de esa empresa». Antes salían todos.
+                      ...delAmbito.map((p) => ({ value: String(p.id), label: p.nombre || `Proyecto ${p.id}` })),
+                    ]}
+                  />
+                </Field>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Nombre *" error={errors.nombre?.message}>
-                <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
+            <FilaCampos>
+              <Field label="Nombre" required error={errors.nombre?.message} htmlFor="prospecto-nombre">
+                <input autoComplete="off" id="prospecto-nombre" {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
               </Field>
-              <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono">
-                <input {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
+              <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono" htmlFor="prospecto-email">
+                <input autoComplete="off" id="prospecto-email" {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
               </Field>
-            </div>
+            </FilaCampos>
 
             {duplicates.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md p-3 flex gap-3 items-start">
-                <Warning size={16} weight="fill" className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="bg-warning-soft border border-warning/30 rounded-md p-3 flex gap-3 items-start">
+                <Warning size={16} weight="fill" className="text-warning flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                  <p className="text-xs font-bold text-warning dark:text-warning">
                     Ya existe {duplicates.length} lead{duplicates.length > 1 ? 's' : ''} con ese email
                   </p>
                   {duplicates.slice(0, 3).map(d => {
@@ -288,17 +324,17 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                       </>
                     );
                     return isMine ? (
-                      <a key={d.id} href={`/crm/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
+                      <a key={d.id} href={rutaApp(`/prospectos/${d.id}`)} target="_blank" rel="noopener noreferrer"
+                        className="text-secundario text-warning hover:underline flex items-center gap-1 mt-0.5"
                       >{inner}</a>
                     ) : (
-                      <div key={d.id} className="text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5"
-                        title="Este lead pertenece a otra asesora — contacta con ella para coordinar"
+                      <div key={d.id} className="text-secundario text-warning flex items-center gap-1 mt-0.5"
+                        title="Este prospecto pertenece a otra asesora — contacta con ella para coordinar"
                       >{inner}</div>
                     );
                   })}
                   {isGestor && duplicates.some(d => d.responsable_id !== user?.id) && (
-                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 italic">
+                    <p className="text-secundario text-warning mt-1.5 italic">
                       Hay duplicados asignados a otras asesoras. Coordina con ellas antes de crear un registro nuevo.
                     </p>
                   )}
@@ -306,10 +342,10 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email">
+            <FilaCampos>
+              <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email" htmlFor="prospecto-telefono">
                 <div className="relative">
-                  <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass + ' pr-14'} />
+                  <input autoComplete="off" id="prospecto-telefono" {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass + ' pr-14'} />
                   {(() => {
                     const c = detectCountryFromPhone(watchedTelefono);
                     if (!c) return null;
@@ -321,12 +357,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   })()}
                 </div>
               </Field>
-              <Field label="Origen *" error={errors.origen?.message}>
+              <Field label="Origen" required error={errors.origen?.message} htmlFor="prospecto-origen">
                 <Controller
                   name="origen"
                   control={control}
                   render={({ field }) => (
                     <Select<LeadFormData['origen']>
+                      id="prospecto-origen"
                       value={field.value}
                       onChange={field.onChange}
                       options={ORIGEN_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
@@ -335,7 +372,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-            </div>
+            </FilaCampos>
               {/* Numero o usuario de WhatsApp.
                   El desplegable elige QUE se esta escribiendo, no «uno u otro
                   para siempre»: la misma persona puede tener los dos, y con
@@ -344,7 +381,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   Se valida distinto segun el tipo: un numero lleva prefijo de
                   pais y solo cifras; un usuario no. Validar un usuario con las
                   reglas de un telefono lo rechazaria siempre. */}
-              <Field label="Contacto de WhatsApp"
+              <Field label="Contacto de WhatsApp" htmlFor="prospecto-whatsapp"
                 hint="Elige si tienes su número, su usuario, o los dos">
                 {/* El ancho lo ponen las envolturas, NO las clases del campo.
                     Antes el desplegable llevaba `w-40` encima de `inputClass`,
@@ -357,19 +394,27 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                     `min-w-0` en el segundo hace falta: sin el, un elemento flex
                     no baja de su contenido y vuelve a desbordar. */}
                 <div className="flex gap-2 items-start">
+                  {/* El desplegable del CRM, no el del sistema. Era el unico
+                      control del formulario con la flecha del navegador, al
+                      lado de «Origen» y «Pais» que llevan la del CRM: un solo
+                      campo distinto en un formulario se ve enseguida (#125). */}
                   <div className="w-40 flex-none">
-                    <select
+                    <Select<ModoContacto>
+                      id="prospecto-whatsapp"
                       value={modoContacto}
-                      onChange={(e) => setModoContacto(e.target.value as ModoContacto)}
-                      className={inputClass}>
-                      <option value="numero">Número</option>
-                      <option value="usuario">Usuario de WhatsApp</option>
-                      <option value="ambos">Ambos</option>
-                    </select>
+                      onChange={(v) => setModoContacto(v)}
+                      ariaLabel="Qué tienes de WhatsApp"
+                      options={[
+                        { value: 'numero', label: 'Número' },
+                        { value: 'usuario', label: 'Usuario de WhatsApp' },
+                        { value: 'ambos', label: 'Ambos' },
+                      ]}
+                    />
                   </div>
                   {modoContacto !== 'numero' && (
                     <div className="flex-1 min-w-0">
-                      <input {...register('whatsapp_usuario')}
+                      <input autoComplete="off" {...register('whatsapp_usuario')}
+                        aria-label="Usuario de WhatsApp"
                         placeholder="@usuario o como lo tengas guardado"
                         className={inputClass} />
                     </div>
@@ -377,13 +422,14 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 </div>
               </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={`${productoLabel} de interes`}>
+            <FilaCampos>
+              <Field label={`${productoLabel} de interés`} htmlFor="prospecto-producto">
                 <Controller
                   name="producto_interes"
                   control={control}
                   render={({ field }) => (
                     <ProductCombobox
+                      id="prospecto-producto"
                       value={field.value}
                       onChange={field.onChange}
                       products={products}
@@ -394,12 +440,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-              <Field label="Pais">
+              <Field label="País" htmlFor="prospecto-pais">
                 <Controller
                   name="pais"
                   control={control}
                   render={({ field }) => (
                     <Select<string>
+                      id="prospecto-pais"
                       value={field.value || ''}
                       onChange={field.onChange}
                       options={[
@@ -411,30 +458,36 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-            </div>
+            </FilaCampos>
 
             {customFields.length > 0 && (
               <div className="border-t border-border pt-3 mt-3 space-y-3">
-                <p className="text-xs text-muted-foreground text-muted-foreground">Campos personalizados</p>
-                <div className="grid grid-cols-2 gap-3">
+                <p className="mb-1.5 px-1 text-tabla uppercase text-muted-foreground">Campos personalizados</p>
+                <FilaCampos>
                   {customFields.map(f => (
-                    <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
-                      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-                        {f.label} {f.required && <span className="text-red-500">*</span>}
-                      </label>
+                    <Field key={f.id} label={f.label} required={f.required} htmlFor={`prospecto-cf-${f.field_key}`}
+                      className={f.type === 'textarea' ? 'sm:col-span-2' : undefined}
+                      error={faltanPersonalizados.includes(f.field_key) && vacio(f.field_key)
+                        ? `Falta «${f.label}»: es obligatorio.`
+                        : numerosMalos.includes(f.field_key) ? `En «${f.label}», escribe solo un número.` : undefined}>
                       {f.type === 'textarea' ? (
-                        <textarea
+                        // `h-auto`, no `h-20`: en la hoja de estilos `h-9` (de
+                        // inputClass) va después de `h-20` y la dejaba en 36 px.
+                        <textarea autoComplete="off"
+                          id={`prospecto-cf-${f.field_key}`}
                           value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
                           required={f.required}
-                          className={inputClass + ' h-20 py-2 resize-none'}
+                          rows={3}
+                          className={`${inputClass} h-auto py-2 resize-none`}
                         />
                       ) : f.type === 'select' ? (
                         <Select<string>
+                          id={`prospecto-cf-${f.field_key}`}
                           value={(customValues[f.field_key] as string) || ''}
                           onChange={(v) => setCustomValues({ ...customValues, [f.field_key]: v })}
                           options={[
-                            { value: '', label: 'Seleccionar...' },
+                            { value: '', label: 'Elige una opción…' },
                             ...(f.options || []).map(o => ({ value: o, label: o })),
                           ]}
                           ariaLabel={f.label}
@@ -442,13 +495,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                       ) : f.type === 'boolean' ? (
                         <label className="flex items-center gap-2 h-9">
                           <input type="checkbox"
+                            id={`prospecto-cf-${f.field_key}`}
                             checked={!!customValues[f.field_key]}
                             onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.checked })}
                           />
-                          <span className="text-sm">Si</span>
+                          <span className="text-sm">Sí</span>
                         </label>
                       ) : (
-                        <input
+                        <input autoComplete="off"
+                          id={`prospecto-cf-${f.field_key}`}
                           type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                           value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
@@ -456,39 +511,47 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                           className={inputClass}
                         />
                       )}
-                    </div>
+                    </Field>
                   ))}
-                </div>
+                </FilaCampos>
               </div>
             )}
 
-            <Field label="Notas">
-              <textarea
+            <Field label="Notas" htmlFor="prospecto-notas">
+              <textarea autoComplete="off"
+                id="prospecto-notas"
                 {...register('notas')}
-                placeholder="Notas adicionales sobre el lead..."
+                placeholder="Notas adicionales sobre el prospecto..."
                 rows={3}
-                className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+                className={`${inputClass} h-auto py-2 resize-none`}
               />
             </Field>
+
+            {/* Lo que no es de un campo concreto: «hace falta al menos una forma
+                de contacto». El esquema lo devolvía sin campo y no se pintaba en
+                ningún sitio, así que al pulsar «Crear» no pasaba nada (#106). */}
+            {avisoContacto && (
+              <p role="alert" className="px-1 text-secundario text-destructive">{avisoContacto}</p>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose}
                 className="h-9 px-4 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors"
               >Cancelar</button>
               <button type="submit" disabled={isSubmitting}
-                className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >{isSubmitting ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear lead'}</button>
+                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >{isSubmitting ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear prospecto'}</button>
             </div>
           </form>
         </div>
       </div>
 
       {pendingDup && (
-        <div role="dialog" aria-label="Lead duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div role="dialog" aria-label="Prospecto duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPendingDup(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="relative bg-card border border-border rounded-xl shadow-dialog w-full max-w-md p-6 space-y-4">
             <div>
-              <h3 className="text-base font-semibold mb-1">Ya existe un lead con estos datos</h3>
+              <h3 className="text-base font-semibold mb-1">Ya existe un prospecto con estos datos</h3>
               <p className="text-sm text-muted-foreground">
                 {pendingDup.lead.masked
                   ? pendingDup.lead.message || 'Existe un lead duplicado asignado a otro gestor.'
@@ -516,8 +579,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               {!pendingDup.lead.masked && (
                 <button type="button"
                   onClick={() => { const id = pendingDup.lead.id; setPendingDup(null); onClose(); const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, ''); window.location.href = `${base}/prospectos/${id}`; }}
-                  className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90"
-                >Ver lead existente</button>
+                  className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+                >Ver prospecto existente</button>
               )}
               <button type="button"
                 onClick={async () => { const p = pendingDup; setPendingDup(null); await proceedSubmit(p.formData, p.productoInteresId); }}

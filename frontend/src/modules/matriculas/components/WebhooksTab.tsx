@@ -19,17 +19,40 @@ interface WebhookToken {
   last_used_at?: string;
   field_mapping?: Record<string, string>;
   sample_payload?: any;
+  aviso_emails?: string[];
 }
 
 interface Project {
   id: number;
 }
 
+// A qué dato del CRM se puede mapear cada campo del formulario de admisión (#198,
+// contrato de Diego del 01/10). Las claves son las del servidor (admision.service.js):
+// si el formulario ya manda estos nombres, no hace falta mapear nada.
 const MATRICULA_TARGETS = [
-  { key: 'dni', label: 'DNI / Identificación' },
-  { key: 'titulo', label: 'Título / Programa' },
+  { key: 'nombre', label: 'Nombre' },
+  // Casi todos los formularios mandan los apellidos aparte (#714): se añaden al nombre.
+  { key: 'apellidos', label: 'Apellidos' },
   { key: 'email', label: 'Email' },
+  { key: 'telefono', label: 'Teléfono' },
+  { key: 'documento_tipo', label: 'Tipo de documento' },
+  { key: 'dni', label: 'DNI / Nº de documento' },
+  { key: 'fecha_nacimiento', label: 'Fecha de nacimiento' },
+  { key: 'direccion', label: 'Dirección' },
+  // La ciudad y el código postal solo van a los datos fiscales de la ficha (13/11/2026).
+  { key: 'ciudad', label: 'Ciudad' },
+  { key: 'codigo_postal', label: 'Código postal' },
+  { key: 'pais', label: 'País' },
+  { key: 'estudios', label: 'Estudios' },
+  { key: 'curso_solicitado', label: 'Curso solicitado' },
+  { key: 'titulo', label: 'Título / Programa' },
   { key: 'notas', label: 'Notas / Comentarios' },
+  // Los documentos: archivo, URL o imagen en texto (data:image/…;base64).
+  { key: 'dni_frente', label: 'DNI · delante (archivo)' },
+  { key: 'dni_dorso', label: 'DNI · detrás (archivo)' },
+  { key: 'foto', label: 'Foto (archivo)' },
+  { key: 'titulo_doc', label: 'Título (archivo)' },
+  { key: 'firma', label: 'Firma (archivo)' },
 ];
 
 export default function WebhooksTab({ project }: { project: Project | null | undefined }) {
@@ -135,7 +158,7 @@ function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit:
           <button
             onClick={onDelete}
             aria-label="Eliminar webhook"
-            className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+            className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-destructive-soft text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/40"
           >
             <Trash size={14} />
           </button>
@@ -151,6 +174,11 @@ function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit:
           <Copy size={12} />
         </button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {(token.aviso_emails || []).length > 0
+          ? <>Avisa por correo, sin datos, a: <strong className="text-foreground">{(token.aviso_emails || []).join(', ')}</strong></>
+          : 'No avisa a nadie por correo: las solicitudes se ven en la lista.'}
+      </p>
       {Object.keys(token.field_mapping || {}).length > 0 && (
         <pre className="text-[10px] p-2 bg-muted/30 rounded overflow-x-auto">{JSON.stringify(token.field_mapping, null, 2)}</pre>
       )}
@@ -168,6 +196,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
   const [notas, setNotas] = useState<string>(token?.notas || '');
   const [active, setActive] = useState<boolean>(token ? token.active : true);
   const [mapping, setMapping] = useState<Record<string, string>>(token?.field_mapping || {});
+  const [avisos, setAvisos] = useState<string>((token?.aviso_emails || []).join(', '));
   const [samplePayload, setSamplePayload] = useState<any>(token?.sample_payload || null);
   const [listening, setListening] = useState(false);
   const [mapPath, setMapPath] = useState<string | null>(null);
@@ -204,13 +233,19 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, [pollRef]);
 
   function save() {
-    onSave({ notas, active, field_mapping: mapping });
+    const aviso_emails = avisos.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+    const mal = aviso_emails.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (mal) { toast({ title: 'Revisa los correos del aviso', description: `«${mal}» no es un correo.`, variant: 'destructive' }); return; }
+    if (aviso_emails.length > 10) { toast({ title: 'Como mucho 10 correos en el aviso', variant: 'destructive' }); return; }
+    onSave({ notas, active, field_mapping: mapping, aviso_emails });
   }
 
   const url = token?.token ? `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/webhook-tokens/receive/${token.token}` : null;
 
   return (
-    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    // Solo el fondo cierra: un clic en la ventanita de «Mapear» (que va dentro, por el
+    // árbol de React) subía hasta aquí y cerraba el editor sin mapear (#198).
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="webhook-editor-title" className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 id="webhook-editor-title" className="font-extrabold">{token ? 'Editar' : 'Nuevo'} webhook de admisión</h3>
@@ -224,6 +259,15 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
         </div>
         <div className="p-5 space-y-4 text-sm">
           <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Nombre / Descripción (ej: Form admisión web 2026)" className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+
+          {/* El aviso sin datos (#714): la solicitud se queda en el CRM y el correo solo avisa. */}
+          <div className="space-y-1">
+            <label htmlFor="webhook-aviso-emails" className="text-[11px] font-bold uppercase text-muted-foreground">Avisar por correo a</label>
+            <input id="webhook-aviso-emails" value={avisos} onChange={e => setAvisos(e.target.value)} placeholder="admisiones@tucampus.com, otra@tucampus.com" className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+            <p className="text-xs text-muted-foreground">
+              El aviso dice solo que ha llegado una solicitud, el curso y su número, con un botón a la ficha. <strong>Sin nombre, sin DNI y sin adjuntos</strong>: los datos y los documentos se quedan en el CRM. Separa los correos con comas; vacío, no avisa a nadie.
+            </p>
+          </div>
 
           {url && (
             <div className="p-3 rounded-xl bg-muted/30 border border-border space-y-2">
@@ -251,10 +295,15 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
                 {!listening ? (
                   <button onClick={startListening} className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-bold whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40">Esperar payload</button>
                 ) : (
-                  <button onClick={stopListening} className="h-9 px-3 rounded-lg bg-amber-500 text-white text-xs font-bold whitespace-nowrap animate-pulse focus:outline-none focus:ring-2 focus:ring-amber-500/40">Escuchando... (cancelar)</button>
+                  <button onClick={stopListening} className="h-9 px-3 rounded-lg bg-warning text-warning-foreground text-xs font-bold whitespace-nowrap animate-pulse focus:outline-none focus:ring-2 focus:ring-warning/40">Escuchando... (cancelar)</button>
                 )}
               </div>
-              {listening && <p className="text-xs text-amber-600 mt-2">→ Manda ahora un POST de prueba al URL de arriba con tu sistema externo o curl.</p>}
+              {listening && <p className="text-xs text-warning mt-2">→ Manda ahora un POST de prueba al URL de arriba con tu sistema externo o curl.</p>}
+              <p className="text-xs text-muted-foreground mt-2">
+                Los documentos (DNI, foto, título, firma) pueden llegar como archivo adjunto, como enlace a la imagen
+                o como imagen en texto. JPG, PNG, WEBP o PDF, hasta 10 MB cada uno; el envío entero, hasta 19 MB
+                (los enlaces no cuentan: cada uno se descarga aparte). La firma se guarda con el fondo transparente.
+              </p>
             </div>
           )}
 
@@ -275,7 +324,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
                         <button
                           onClick={() => { const m = { ...mapping }; delete m[t.key]; setMapping(m); }}
                           aria-label={`Quitar mapping de ${t.label}`}
-                          className="text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40 rounded"
+                          className="text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/40 rounded"
                         >
                           <X size={12} />
                         </button>
@@ -329,12 +378,26 @@ interface PayloadTreeProps {
 
 function PayloadTree({ obj, path, onSelect, mapping }: PayloadTreeProps) {
   if (obj === null || obj === undefined) return <span className="text-muted-foreground italic">null</span>;
+  // Un archivo del envío (#198): el servidor lo marca como { __archivo, nombre, tamano }.
+  // Se mapea entero, con un clic, como cualquier otro campo.
+  if (typeof obj === 'object' && !Array.isArray(obj) && obj.__archivo) {
+    const usedAs = Object.entries(mapping || {}).find(([, v]) => v === path)?.[0];
+    return (
+      <button
+        onClick={() => onSelect(path)}
+        className={`text-left px-1.5 py-0.5 rounded text-[11px] font-mono hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40 ${usedAs ? 'bg-success-soft text-success-soft-foreground' : ''}`}
+        title={usedAs ? `Mapeado a: ${usedAs}` : 'Click para mapear'}
+      >
+        📎 archivo{obj.nombre ? `: ${String(obj.nombre).slice(0, 60)}` : ''}{usedAs && ` ← ${usedAs}`}
+      </button>
+    );
+  }
   if (typeof obj !== 'object') {
     const usedAs = Object.entries(mapping || {}).find(([, v]) => v === path)?.[0];
     return (
       <button
         onClick={() => onSelect(path)}
-        className={`text-left px-1.5 py-0.5 rounded text-[11px] font-mono hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40 ${usedAs ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : ''}`}
+        className={`text-left px-1.5 py-0.5 rounded text-[11px] font-mono hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40 ${usedAs ? 'bg-success-soft text-success-soft-foreground' : ''}`}
         title={usedAs ? `Mapeado a: ${usedAs}` : 'Click para mapear'}
       >
         {String(obj).slice(0, 80)}{usedAs && ` ← ${usedAs}`}

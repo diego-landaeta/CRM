@@ -1,9 +1,16 @@
 import * as authService from './auth.service.js';
 import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
-import { loginSchema, setPasswordSchema } from './auth.validation.js';
+import bcrypt from 'bcrypt';
+import { pedirCodigo, confirmarCodigo, codigoFrenadoPara, MENSAJE_FRENADO, MINUTOS as MINUTOS_CODIGO } from '../users/cambio-de-correo.js';
+import { query } from '../../shared/config/db.js';
+import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema, pedirCodigoCorreoSchema, olvidoSchema } from './auth.validation.js';
+import * as userService from '../users/user.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
+import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -55,6 +62,7 @@ export async function login(req, res, next) {
         user: result.user,
         projects: result.projects,
         activeProjectId: result.activeProjectId,
+        permissions: result.permissions,
       },
     });
   } catch (err) {
@@ -121,10 +129,13 @@ export async function me(req, res, next) {
       throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     }
 
-    const [projects, permissions, view] = await Promise.all([
+    const [projects, permissions, view, equipo] = await Promise.all([
       authModel.getUserProjects(user.id, user.role),
-      buildPermissionsMap(user.id, user.role, user.custom_role_id),
+      buildPermissionsMap(user.id, user.role, user.custom_role_id, user.roles_extra),
       resolveUserView(user.id, user.role, user.custom_role_id),
+      // El equipo comercial que lleva (QA del 09/11/2026). No puede tumbar /me:
+      // sin él, la pantalla se queda como estaba.
+      alcanceDeLider({ userId: user.id, role: user.role, roles_extra: user.roles_extra }).catch(() => null),
     ]);
 
     res.json({
@@ -135,16 +146,180 @@ export async function me(req, res, next) {
           nombre: user.nombre,
           email: user.email,
           role: user.role,
+          // Los roles de mas, para que la pantalla pueda enseñar lo de cada uno.
+          roles_extra: user.roles_extra || [],
           avatar_url: user.avatar_url,
           custom_role_id: user.custom_role_id,
           custom_role_label: user.custom_role_label,
           factura_manager: !!user.factura_manager,
           gestor_colaboraciones: !!user.gestor_colaboraciones,
           editar_fechas_factura: !!user.editar_fechas_factura,
+          usa_mcp: !!user.usa_mcp,
+          // Para que la pantalla no pregunte por WhatsApp a quien lo tiene
+          // apagado (QA de Diego, 22/10, punto 8). null = sin la columna.
+          usa_whatsapp: user.usa_whatsapp ?? null,
+          // El equipo comercial (QA del 09/11/2026), igual que en CRM-ISEIE.
+          // La pantalla lo usa para no enseñar lo que el servidor le negaría
+          // (corregir o abonar facturas, egresos y balance).
+          lleva_equipo: Boolean(equipo),
+          // Mientras siga el freno de tutores, a un tutor no le sale el código
+          // para cambiar su correo (Diego, 06/11, #688): la pantalla lo explica
+          // de entrada en vez de pedirle la contraseña para nada.
+          correo_propio_frenado: codigoFrenadoPara(user) ? MENSAJE_FRENADO : null,
         },
         permissions,
+        // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].
+        alcance_comercial: equipo,
         view,
         projects: sanitizeProjects(projects, user.role),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/auth/change-password — { currentPassword, newPassword, confirmPassword }
+export async function changePassword(req, res, next) {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
+    const { currentPassword, newPassword } = parsed.data;
+    const userId = req.user.userId;
+
+    const { rows } = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (!rows[0]) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+    const ok = rows[0].password_hash ? await bcrypt.compare(currentPassword, rows[0].password_hash) : false;
+    // 400 y no 401: un 401 hace que la pantalla intente renovar la sesion,
+    // cuando lo unico que ha pasado es que la contraseña actual no es esa.
+    if (!ok) throw new AppError('La contraseña actual no es correcta', 400, 'INVALID_CURRENT_PASSWORD');
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
+    await authModel.logActivity(userId, 'change_password', null, getClientIp(req));
+
+    res.json({ success: true, data: { message: 'Contraseña actualizada' } });
+  } catch (err) { next(err); }
+}
+
+// PATCH /api/auth/me — { nombre }
+export async function updateMyProfile(req, res, next) {
+  try {
+    const parsed = updateMyProfileSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
+    const userId = req.user.userId;
+
+    await query('UPDATE users SET nombre = $1, updated_at = NOW() WHERE id = $2', [parsed.data.nombre, userId]);
+    const { rows } = await query(
+      'SELECT id, nombre, email, role, active, avatar_url FROM users WHERE id = $1',
+      [userId]
+    );
+    await authModel.logActivity(userId, 'update_profile', null, getClientIp(req));
+    res.json({ success: true, data: { user: rows[0] } });
+  } catch (err) { next(err); }
+}
+
+// PATCH /api/auth/me/email — un TUTOR cambia su propio correo (#246, Diego 09/10:
+// «sí, y debe mandar notificación, aunque actualmente no tienen acceso»). El resto
+// de roles lo sigue pidiendo a administración. Es la credencial: al cambiarlo se
+// cierran sus sesiones y tiene que volver a entrar con el nuevo. Se avisa a
+// administración, porque es el correo de la factura de su comisión.
+/**
+ * POST /api/auth/me/email/codigo — paso 1 del correo propio (#211): con la
+ * contraseña actual, manda un código de 6 cifras a la dirección NUEVA. Todavía
+ * no cambia nada. A un tutor, mientras siga el freno, no le sale: 200 con
+ * `frenado` y el motivo, sin error (Diego, 06/11, #688).
+ */
+export async function pedirCodigoMiCorreo(req, res, next) {
+  try {
+    const parsed = pedirCodigoCorreoSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
+    const userId = req.user.userId;
+    const { rows: [yo] } = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (!yo) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+    const ok = yo.password_hash ? await bcrypt.compare(parsed.data.password, yo.password_hash) : false;
+    // 400 y no 401, como en el cambio de contraseña: un 401 haría renovar la sesión.
+    if (!ok) throw new AppError('La contraseña actual no es correcta', 400, 'INVALID_CURRENT_PASSWORD');
+    const r = await pedirCodigo({ userId, emailNuevo: parsed.data.email, porUserId: userId, ip: getClientIp(req) });
+    res.json({ success: true, data: {
+      email: r.email, expira_at: r.expira_at, enviado: r.enviado, minutos: MINUTOS_CODIGO,
+      ...(r.frenado ? { frenado: true, motivo: r.motivo } : {}),
+    } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * PATCH /api/auth/me/email — paso 2 (#211): con el código que llegó a la
+ * dirección nueva, el correo cambia. Antes cambiaba sin comprobar nada (#246).
+ */
+export async function updateMyEmail(req, res, next) {
+  try {
+    // Quién puede: la ruta pide «Cambiar su correo» (#423, #211).
+    const parsed = updateMyEmailSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
+    const userId = req.user.userId;
+    // `es_tutor`: si tiene ficha de tutor, es el correo de su factura y se avisa
+    // a administración (#246). Por la ficha y no por el rol (#423).
+    const { rows: [yo] } = await query(
+      `SELECT nombre, email, EXISTS (SELECT 1 FROM tutor_profiles tp WHERE tp.user_id = users.id) AS es_tutor
+         FROM users WHERE id = $1`, [userId]);
+    if (!yo) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+    const r = await confirmarCodigo({ userId, codigo: parsed.data.codigo, porUserId: userId, ip: getClientIp(req) });
+    if (r.cambiado && yo.es_tutor) {
+      await userService.avisarCorreoDeTutorCambiado({ tutorId: userId, nombre: yo.nombre, de: yo.email, a: r.email })
+        .catch(() => {});
+    }
+    res.json({ success: true, data: { email: r.email, cambiado: r.cambiado, hayQueVolverAEntrar: r.cambiado } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/auth/forgot-password — «he olvidado la contraseña» (#37).
+ *
+ * LA RESPUESTA ES SIEMPRE LA MISMA, exista el correo o no. Es el punto del
+ * ticket que no se puede negociar: «que no diga si el correo existe o no — si
+ * lo dice, sirve para averiguar quien trabaja aqui».
+ *
+ * Eso obliga a mas de lo que parece:
+ *
+ *   - mismo cuerpo y mismo 200 en los dos casos;
+ *   - el envio del correo va SIN esperar y su fallo no toca la respuesta, que
+ *     si no, tardar mas o dar error ya distingue un correo real de uno que no
+ *     lo es. Un cronometro es tan buen delator como un 404.
+ */
+export async function forgotPassword(req, res, next) {
+  try {
+    const parsed = olvidoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+
+    const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
+
+    // TODO EL TRABAJO VA SIN ESPERAR, no solo el correo. Con un correo que
+    // existe hay que buscar, guardar el token y apuntar el registro; con uno
+    // que no, nada de eso. Si se esperara aqui, la diferencia de tiempo
+    // delataria la cuenta igual que lo haria un 404: un cronometro basta.
+    // La respuesta sale a la vez en los dos casos y lo demas pasa detras.
+    authService.pedirRecuperacion(parsed.data.email, baseUrl)
+      .then((pedido) => {
+        if (!pedido) return null;
+        return sendPasswordResetEmail({
+          nombre: pedido.user.nombre,
+          email: pedido.user.email,
+          setPasswordToken: pedido.rawToken,
+          baseUrl: pedido.baseUrl,
+        }).then((r) => {
+          if (r.sent) logger.info({ userId: pedido.user.id }, 'Correo de recuperacion enviado');
+          else logger.warn({ userId: pedido.user.id, reason: r.reason }, 'Correo de recuperacion NO enviado');
+        });
+      })
+      .catch((err) => logger.error({ err: err.message }, 'Recuperacion de contraseña: error'));
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Si ese correo tiene una cuenta activa, le llegara un enlace para poner una contrasena nueva.',
       },
     });
   } catch (err) {

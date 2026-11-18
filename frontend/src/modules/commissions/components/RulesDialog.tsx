@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { useEffect, useState, type FormEvent } from 'react';
 import { commissionsApi, type CommissionRule } from '../api/commissions.api';
 import Portal from '@/shared/components/ui/portal';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
@@ -8,7 +9,6 @@ import { Gear, X, Plus, Trash } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import type { User, Project } from '@/shared/types';
 
-const inputClass = 'h-9 px-3 rounded-lg border border-border bg-card text-sm';
 
 interface ProductOption {
   id: number;
@@ -148,7 +148,7 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
                 />
                 <div className="flex gap-1">
                   <input type="number" min="0" max="100" step="0.01" placeholder="%" value={newRule.pct} onChange={e => setNewRule({ ...newRule, pct: e.target.value })} className={inputClass + ' flex-1'} required />
-                  <button type="submit" aria-label="Añadir regla" className="px-3 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                  <button type="submit" aria-label="Añadir regla" className="px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-primary/40">
                     <Plus size={12} weight="bold" />
                   </button>
                 </div>
@@ -193,7 +193,7 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
                       className="w-20 h-9 px-2 rounded-lg border border-border bg-card text-sm text-right font-bold"
                     />
                     <span className="text-sm font-bold">%</span>
-                    <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500 opacity-0 group-hover:opacity-100">
+                    <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-destructive-soft text-destructive opacity-0 group-hover:opacity-100">
                       <Trash size={14} />
                     </button>
                   </div>

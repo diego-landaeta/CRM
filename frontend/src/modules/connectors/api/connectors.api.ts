@@ -1,4 +1,5 @@
-import client from '@/shared/api/client';
+import client, { API_BASE_URL } from '@/shared/api/client';
+import type { McpEstadoCodigo } from '@/modules/mcp/api/mcp.api';
 
 /**
  * Los conectores de un proyecto (#6).
@@ -16,6 +17,7 @@ export const TIPOS = [
   { id: 'wp_rest', label: 'WordPress (REST)' },
   { id: 'acf', label: 'WordPress + ACF' },
   { id: 'custom_api', label: 'API propia' },
+  { id: 'mcp', label: 'Claude (MCP)' },
 ] as const;
 
 /** Donde acaba lo que trae. Espejo de VALID_DESTINATIONS. */
@@ -71,11 +73,65 @@ export const CAMPOS_POR_TIPO: Record<TipoConector, Array<{
     { clave: 'items_path', label: 'Dónde está la lista', ayuda: 'Por ejemplo data — vacío si el JSON ya es la lista' },
     { clave: 'bearer_token', label: 'Token', ayuda: 'Se manda como Authorization: Bearer', secreto: true },
   ],
+  // «Servidor MCP» no se configura: no trae datos, da una URL para Claude
+  // (Diego, 29/09: «es para que dé la API y yo meterla en Claude»).
+  mcp: [],
 };
+
+/** De quién es un conector (migración 183). */
+export type AlcanceConector = 'campus' | 'empresa' | 'sistema';
+
+/** Un campus tal como llega del contexto: con su empresa. */
+export type Campus = { id: number; nombre: string; sociedad_emisora_id?: number | null; sociedad_nombre?: string | null };
+
+/**
+ * Las opciones de «Para quién» (Diego, 29/09: «también poder elegir empresas y,
+ * si soy super admin, todo el sistema»). Un conector de empresa o de sistema es
+ * UNO solo para todos sus campus, no una copia en cada uno. Las usan los dos
+ * formularios de la sección Conexión: el de Claude y el de traer datos.
+ */
+export function opcionesDeAlcance(proyectos: Campus[], esSuperadmin: boolean) {
+  const empresas = new Map<number, { nombre: string; n: number }>();
+  for (const p of proyectos) {
+    if (!p.sociedad_emisora_id) continue;
+    const e = empresas.get(Number(p.sociedad_emisora_id));
+    empresas.set(Number(p.sociedad_emisora_id), { nombre: p.sociedad_nombre || 'Empresa', n: (e?.n || 0) + 1 });
+  }
+  return [
+    ...(esSuperadmin ? [{ value: 'sistema', label: `Todo el sistema · ${proyectos.length} campus` }] : []),
+    ...[...empresas.entries()]
+      .sort((a, b) => a[1].nombre.localeCompare(b[1].nombre))
+      .map(([id, e]) => ({ value: `e:${id}`, label: `Toda la empresa · ${e.nombre} (${e.n} campus)` })),
+    ...[...proyectos]
+      .sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .map((p) => ({ value: `c:${p.id}`, label: `Campus · ${p.nombre}` })),
+  ];
+}
+
+/**
+ * La URL para pegar en Claude («Agregar conector personalizado»). La URL
+ * personal del MCP de Diana, con el token de este conector.
+ */
+export const urlParaClaude = (token: string) => `${window.location.origin}${API_BASE_URL}/mcp/u/${token}`;
 
 export interface Conector {
   id: number;
   project_id: number;
+  /** El nombre de su campus (en uno de empresa o de sistema, el campus por defecto). */
+  proyecto?: string | null;
+  alcance?: AlcanceConector;
+  issuer_id?: number | null;
+  /** Nombre de su empresa, si es de empresa. */
+  empresa?: string | null;
+  /** «Servidor MCP»: la URL de esta persona, si ya tiene (solo el inicio del token). */
+  mcp_mio?: {
+    id: number; prefijo: string; created_at: string; last_used_at: string | null;
+    /** Cuándo caduca la URL (#194); null = no caduca. */
+    expires_at: string | null;
+    vivo: boolean;
+    /** Cuándo volverá a pedir el código (#192); null con el código apagado. */
+    codigo: McpEstadoCodigo | null;
+  } | null;
   type: TipoConector;
   label: string;
   destination: DestinoConector;
@@ -88,6 +144,16 @@ export interface Conector {
   last_sync_status: 'success' | 'error' | 'partial' | null;
   last_sync_count: number | null;
   sample_received_at: string | null;
+  created_at?: string;
+  /** Quién lo creó (migración 185). Los de antes de esa fecha pueden no tenerlo. */
+  created_by?: number | null;
+  creado_por?: string | null;
+  /** Si esta persona puede cambiarlo y borrarlo (lo decide el servidor). */
+  puede_tocar?: boolean;
+  /** En los de Claude: cuánta gente tiene URL, quién, y cuándo la usó Claude. */
+  personas_con_url?: number;
+  con_url?: string[] | null;
+  ultimo_uso_claude?: string | null;
 }
 
 /** Un campo del JSON externo, tal y como lo describe el servidor. */
@@ -112,7 +178,15 @@ export interface VistaPrevia {
 }
 
 export const conectoresApi = {
-  listar: (projectId: number) => client.get(`/connectors?projectId=${projectId}`),
+  /**
+   * `projectId`, `issuerId` (una empresa: los de todos sus campus) o nada
+   * («Todos los proyectos»: todo lo que la persona puede ver), de `ponerAmbito`.
+   * `tipo`: 'mcp' las conexiones de Claude, 'datos' los que traen datos.
+   */
+  listar: (ambito: URLSearchParams, tipo?: 'mcp' | 'datos') => {
+    if (tipo) ambito.set('tipo', tipo);
+    return client.get(`/connectors?${ambito.toString()}`);
+  },
   uno: (id: number) => client.get(`/connectors/${id}`),
   crear: (datos: Partial<Conector>) => client.post('/connectors', datos),
   cambiar: (id: number, datos: Partial<Conector>) => client.patch(`/connectors/${id}`, datos),
@@ -121,4 +195,6 @@ export const conectoresApi = {
   vistaPrevia: (id: number) => client.post(`/connectors/${id}/preview`, {}),
   /** Lanza la importación. Contesta en seguida; el estado se mira releyendo. */
   importar: (id: number) => client.post(`/connectors/${id}/import`, {}),
+  /** «Servidor MCP»: una URL nueva para Claude. La anterior deja de valer. */
+  mcpUrl: (id: number) => client.post(`/connectors/${id}/mcp-url`, {}),
 };

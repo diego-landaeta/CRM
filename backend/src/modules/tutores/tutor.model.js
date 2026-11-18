@@ -1,5 +1,45 @@
 import bcrypt from 'bcrypt';
 import { query, getClient } from '../../shared/config/db.js';
+import { AppError } from '../../shared/utils/AppError.js';
+
+/**
+ * Lo que todavia se le debe a un tutor.
+ *
+ * Se dice por lo que NO es, y a proposito. Los estados que significan «sigue sin
+ * cobrar» son ya tres —`pendiente`, `notificada`, `falta_factura`— y el dia que
+ * se añada un cuarto, esto lo cuenta solo. Listandolos, habria que acordarse de
+ * venir aqui, y no se acuerda nadie: avisar a un tutor lo sacaria de «Por
+ * pagar» y la pantalla diria que no se le debe nada.
+ *
+ * Pagada y revertida son las dos unicas que sacan el dinero de la cuenta.
+ */
+export const SE_LE_DEBE = "estado NOT IN ('pagada', 'revertida')";
+
+/** Los estados por los que se puede filtrar y a los que se puede cambiar. */
+export const ESTADOS_COMISION = ['pendiente', 'notificada', 'falta_factura', 'pagada', 'revertida'];
+
+
+/*
+  QUE UN CURSO TENGA TUTOR HOY.
+
+  No basta con la casilla `activa`: una colaboracion puede estar marcada activa
+  y su vigencia haber terminado, y entonces ese curso no lo lleva nadie aunque
+  la fila siga ahi. Al reves tambien: un tramo que empieza el mes que viene no
+  deberia tapar el curso desde hoy.
+
+  La regla estaba escrita en la lista de colaboraciones --como `rige_hoy`-- pero
+  «Formaciones sin tutor» solo miraba `activa`, asi que un curso cuya
+  colaboracion caducaba no volvia nunca al panel. Carlos, 17/09: «si se quita un
+  tutor de colaboracion de un curso, ese curso vuelve a estar disponible y por
+  tanto debe de volver al panel de cursos sin tutor».
+
+  Vive aqui una sola vez. `alias` es como se llame la tabla en cada consulta.
+*/
+export const RIGE_HOY = (alias = 'c') => `(
+  ${alias}.activa
+  AND ${alias}.vigente_desde <= CURRENT_DATE
+  AND (${alias}.vigente_hasta IS NULL OR ${alias}.vigente_hasta >= CURRENT_DATE)
+)`;
 
 // Tutores y colaboraciones.
 //
@@ -10,7 +50,52 @@ import { query, getClient } from '../../shared/config/db.js';
 
 // ── Tutores ─────────────────────────────────────────────────────────────────
 
-export async function listar({ projectId, activos = true }) {
+/**
+ * Si el tutor está en alguno de esos campus (#245: su ficha solo para quien comparte campus).
+ *
+ * También por sus EMPRESAS (QA de Diego, 22/10, punto 7). `tutor_empresas` no
+ * copia filas en `user_projects` —se resuelve al consultar (#187), al revés que
+ * `user_empresas`—, así que mirando solo `user_projects` un tutor dado de alta
+ * por empresa no estaba en ningún campus y su ficha daba «no encontrado».
+ */
+export async function tieneAlgunCampus(tutorId, projectIds) {
+  if (!Array.isArray(projectIds) || !projectIds.length) return false;
+  const { rows } = await query(
+    `SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = ANY($2::int[])
+     UNION ALL
+     SELECT 1 FROM tutor_empresas te
+       JOIN projects p ON p.sociedad_emisora_id = te.issuer_id AND p.active = true
+      WHERE te.tutor_id = $1 AND p.id = ANY($2::int[])
+     LIMIT 1`,
+    [tutorId, projectIds.map(Number)]);
+  return rows.length > 0;
+}
+
+/**
+ * El buscador (Ctrl K, #591): un tutor por nombre o correo, sin acentos.
+ * Solo lo que sale en el resultado: ni DNI, ni IBAN, ni banco, ni notas
+ * (esos se ven en su ficha, con su guarda). `campus` null: todos.
+ */
+export async function buscar({ q, campus, limit = 5 }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.active,
+            (SELECT string_agg(DISTINCT pr.nombre, ' · ' ORDER BY pr.nombre)
+               FROM user_projects up JOIN projects pr ON pr.id = up.project_id
+              WHERE up.user_id = u.id) AS marcas
+       FROM users u
+      WHERE u.role IN ('tutor', 'tutor_redactor')
+        AND (unaccent(COALESCE(u.nombre, '')) ILIKE unaccent($1) OR u.email ILIKE $1)
+        AND ($2::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.project_id = ANY($2::int[])))
+      ORDER BY u.active DESC, u.nombre
+      LIMIT $3`,
+    [`%${q}%`, campus, limit],
+  );
+  return rows;
+}
+
+export async function listar({ projectId, projectIds = null, activos = true }) {
   // Con un proyecto elegido no se corta en seco: primero los profesores de ESE
   // proyecto y despues los de los demas proyectos de la MISMA SOCIEDAD.
   //
@@ -24,13 +109,21 @@ export async function listar({ projectId, activos = true }) {
        SELECT p.id,
               (p.id = $1) AS es_el_elegido
          FROM projects p
-        WHERE $1::int IS NULL
-           OR p.id = $1
-           OR (p.sociedad_emisora_id IS NOT NULL
-               AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))
+        -- Con una SOCIEDAD elegida, el alcance son sus campus y punto: no se
+        -- amplia a la sociedad de nadie porque ya ES una sociedad.
+        WHERE ($2::int[] IS NOT NULL AND p.id = ANY($2::int[]))
+           OR ($2::int[] IS NULL AND (
+                $1::int IS NULL
+                OR p.id = $1
+                OR (p.sociedad_emisora_id IS NOT NULL
+                    AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))))
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
-            u.set_password_token IS NOT NULL AS pendiente_de_entrar,
+            -- «Aun no ha entrado»: tiene un enlace pendiente Y nunca ha iniciado
+            -- sesion. Lo segundo es lo que distingue la invitacion real (caducada o
+            -- no, sigue sin haber entrado) de «he olvidado mi clave» (#37), que deja
+            -- un token en un tutor que ya entraba, y que nadie limpia al caducar.
+            (u.set_password_token IS NOT NULL AND u.last_login_at IS NULL) AS pendiente_de_entrar,
             perfil.dni_nif, perfil.iban, perfil.banco, perfil.telefono, perfil.notas,
             -- Sus cursos dentro del alcance: los de fuera no son asunto de esta pantalla.
             (SELECT count(*) FROM tutor_collaborations c
@@ -46,16 +139,25 @@ export async function listar({ projectId, activos = true }) {
                FROM user_projects up3 JOIN projects pr3 ON pr3.id = up3.project_id
               WHERE up3.user_id = u.id) AS marcas,
             -- ¿Es de la marca que hay elegida arriba, o de una hermana?
-            EXISTS (SELECT 1 FROM user_projects upx
-                     WHERE upx.user_id = u.id AND ($1::int IS NULL OR upx.project_id = $1)) AS es_de_este_proyecto
+            -- (también si le llega por su empresa entera, como en tieneAlgunCampus)
+            (EXISTS (SELECT 1 FROM user_projects upx
+                      WHERE upx.user_id = u.id AND ($1::int IS NULL OR upx.project_id = $1))
+             OR EXISTS (SELECT 1 FROM tutor_empresas tex
+                          JOIN projects px ON px.sociedad_emisora_id = tex.issuer_id AND px.active = true
+                         WHERE tex.tutor_id = u.id AND ($1::int IS NULL OR px.id = $1))) AS es_de_este_proyecto
        FROM users u
        LEFT JOIN tutor_profiles perfil ON perfil.user_id = u.id
-      WHERE u.role = 'tutor'
+      WHERE u.role IN ('tutor', 'tutor_redactor')
         ${activos ? 'AND u.active' : ''}
-        AND EXISTS (SELECT 1 FROM user_projects up
-                     WHERE up.user_id = u.id AND up.project_id IN (SELECT id FROM alcance))
+        -- Por sus campus o por sus EMPRESAS (QA de Diego, 22/10, punto 7): un
+        -- tutor dado de alta por empresa no tiene filas en user_projects.
+        AND (EXISTS (SELECT 1 FROM user_projects up
+                      WHERE up.user_id = u.id AND up.project_id IN (SELECT id FROM alcance))
+             OR EXISTS (SELECT 1 FROM tutor_empresas te
+                          JOIN projects p ON p.sociedad_emisora_id = te.issuer_id AND p.active = true
+                         WHERE te.tutor_id = u.id AND p.id IN (SELECT id FROM alcance)))
       ORDER BY es_de_este_proyecto DESC, u.nombre`,
-    [projectId || null]
+    [projectId || null, (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -66,7 +168,7 @@ export async function ficha(tutorId) {
             p.dni_nif, p.iban, p.banco, p.telefono, p.notas
        FROM users u
        LEFT JOIN tutor_profiles p ON p.user_id = u.id
-      WHERE u.id = $1 AND u.role = 'tutor'`,
+      WHERE u.id = $1 AND u.role IN ('tutor', 'tutor_redactor')`,
     [tutorId]
   );
   return t || null;
@@ -90,6 +192,20 @@ export async function ponerContrasena(userId, password) {
       WHERE id = $1`,
     [userId, hash]
   );
+}
+
+/**
+ * Cambiar el nombre del tutor. Vive en `users` y solo se toca si es OTRO:
+ * un UPDATE que escribe lo mismo ensucia `updated_at` y no dice nada.
+ */
+export async function renombrarTutor(tutorId, nombre) {
+  const { rows } = await query(
+    `UPDATE users SET nombre = $2, updated_at = now()
+      WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') AND nombre IS DISTINCT FROM $2
+      RETURNING id, nombre`,
+    [tutorId, String(nombre).trim()]
+  );
+  return rows[0] || null;
 }
 
 export async function guardarPerfil(tutorId, datos = {}) {
@@ -148,9 +264,11 @@ export async function guardarPerfil(tutorId, datos = {}) {
 
 // ── Colaboraciones ──────────────────────────────────────────────────────────
 
-export async function colaboraciones({ tutorId, productId, soloActivas = false }) {
+export async function colaboraciones({ tutorId, productId, soloActivas = false, projectIds = null }) {
   const cond = [];
   const params = [];
+  // Solo las de esos campus (la formación manda): quien no lo ve todo no ve las de otra empresa.
+  if (Array.isArray(projectIds)) { params.push(projectIds.map(Number)); cond.push(`p.project_id = ANY($${params.length}::int[])`); }
   if (tutorId) { params.push(tutorId); cond.push(`c.tutor_id = $${params.length}`); }
   if (productId) { params.push(productId); cond.push(`c.product_id = $${params.length}`); }
   if (soloActivas) cond.push('c.activa');
@@ -161,10 +279,8 @@ export async function colaboraciones({ tutorId, productId, soloActivas = false }
             p.project_id, pr.nombre AS proyecto,
             -- Una colaboracion puede estar marcada activa y aun asi no regir
             -- hoy, si su vigencia ya termino. Se dice por separado para que la
-            -- pantalla no tenga que recalcularlo.
-            (c.activa
-             AND c.vigente_desde <= CURRENT_DATE
-             AND (c.vigente_hasta IS NULL OR c.vigente_hasta >= CURRENT_DATE)) AS rige_hoy
+            -- pantalla no tenga que recalcularlo. La regla es la de RIGE_HOY.
+            ${RIGE_HOY('c')} AS rige_hoy
        FROM tutor_collaborations c
        JOIN users u ON u.id = c.tutor_id
        JOIN products p ON p.id = c.product_id
@@ -180,8 +296,13 @@ export async function colaboraciones({ tutorId, productId, soloActivas = false }
 // pueden solaparse. Si lo hicieran no habria forma de saber que porcentaje
 // aplicar a un pago de esas fechas, y el tutor cobraria de mas o de menos sin
 // que nadie lo notara.
-export async function haySolape({ tutorId, productId, desde, hasta, excluirId = null }) {
-  const { rows } = await query(
+//
+// `ejecutar` es por donde va la consulta: el pool, por defecto, o el cliente de
+// una transaccion. «Cobra desde» mueve varias a la vez y cada comprobacion
+// tiene que ver lo que la anterior ya cambio, o dos tramos podrian pasar el
+// filtro por separado y chocar juntos.
+export async function haySolape({ tutorId, productId, desde, hasta, excluirId = null }, ejecutar = query) {
+  const { rows } = await ejecutar(
     `SELECT id, vigente_desde, vigente_hasta FROM tutor_collaborations
       WHERE tutor_id = $1 AND product_id = $2
         AND ($5::int IS NULL OR id <> $5)
@@ -190,6 +311,97 @@ export async function haySolape({ tutorId, productId, desde, hasta, excluirId = 
     [tutorId, productId, desde, hasta || null, excluirId]
   );
   return rows;
+}
+
+/**
+ * «Cobra desde» de un tutor: la misma fecha de inicio para TODAS sus
+ * colaboraciones activas.
+ *
+ * Diego, 13/10, al abrir «Editar tutor»: «ni me deja poner la fecha de inicio
+ * del tutor». Y Carlos queria «colocar fecha de ingreso en el CRM y poder
+ * cambiarla a más antes para que cuadren». Hasta hoy solo se podia formacion a
+ * formacion, con «Editar» en cada fila.
+ *
+ * Lo que NO hace, a proposito:
+ *   - no genera comisiones. Eso sigue siendo el boton «Calcular», que no
+ *     duplica y se puede revisar antes de pagar;
+ *   - no toca las comisiones ya generadas: la generacion usa ON CONFLICT DO
+ *     NOTHING, asi que adelantar la fecha solo AÑADE las que falten al pulsar
+ *     Calcular, y retrasarla no borra nada del historial;
+ *   - no salta el corte general: la generacion cuenta desde
+ *     GREATEST(aplica_desde, vigente_desde), y poner 2025 aqui no paga nada
+ *     anterior a `tutor_settings.aplica_desde`.
+ *
+ * Una colaboracion que no se puede mover se deja como esta y se devuelve en
+ * `noCambiadas` con el motivo: o terminaria antes de empezar (la base lo
+ * prohibe con un CHECK) o se solaparia con otro tramo suyo de esa misma
+ * formacion. Mejor que mover las demas y decir «hecho» en bloque.
+ *
+ * Todo en una transaccion: si algo falla a medias, no se queda ninguna movida.
+ */
+export async function cambiarCobraDesde(tutorId, desde) {
+  const client = await getClient();
+  const ejecutar = (sql, params) => client.query(sql, params);
+  try {
+    await client.query('BEGIN');
+    // FOR UPDATE: que nadie edite una de estas filas mientras se repasan.
+    const { rows: colabs } = await client.query(
+      `SELECT c.id, c.product_id, c.vigente_desde, c.vigente_hasta, p.nombre AS formacion
+         FROM tutor_collaborations c
+         JOIN products p ON p.id = c.product_id
+        WHERE c.tutor_id = $1 AND c.activa
+        ORDER BY p.nombre, c.id
+          FOR UPDATE OF c`,
+      [tutorId]
+    );
+
+    const cambiadas = [];
+    const noCambiadas = [];
+    let sinCambio = 0;
+    for (const c of colabs) {
+      const antes = String(c.vigente_desde).slice(0, 10);
+      const hasta = c.vigente_hasta ? String(c.vigente_hasta).slice(0, 10) : null;
+      if (antes === desde) { sinCambio += 1; continue; }
+
+      if (hasta && hasta < desde) {
+        noCambiadas.push({
+          id: c.id, formacion: c.formacion, desde: antes, hasta,
+          motivo: `Termina el ${hasta}, antes de esa fecha.`,
+        });
+        continue;
+      }
+
+      const choques = await haySolape(
+        { tutorId, productId: c.product_id, desde, hasta, excluirId: c.id }, ejecutar);
+      if (choques.length) {
+        const o = choques[0];
+        const oDesde = String(o.vigente_desde).slice(0, 10);
+        const oHasta = o.vigente_hasta ? String(o.vigente_hasta).slice(0, 10) : null;
+        noCambiadas.push({
+          id: c.id, formacion: c.formacion, desde: antes, hasta,
+          motivo: `Se solaparía con otro tramo suyo de esa formación (${oDesde}`
+            + `${oHasta ? ' a ' + oHasta : ' en adelante'}).`,
+        });
+        continue;
+      }
+
+      await client.query(
+        `UPDATE tutor_collaborations
+            SET vigente_desde = $2, updated_at = NOW()
+          WHERE id = $1`,
+        [c.id, desde]
+      );
+      cambiadas.push({ id: c.id, formacion: c.formacion, antes, desde });
+    }
+
+    await client.query('COMMIT');
+    return { desde, total: colabs.length, cambiadas, noCambiadas, sinCambio };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function colaboracionPorId(id) {
@@ -208,18 +420,103 @@ export async function crearColaboracion({ tutorId, productId, pct, desde, hasta,
   return c;
 }
 
-export async function actualizarColaboracion(id, { pct, desde, hasta, activa, notas }) {
+/**
+ * Dar de alta al tutor en el campus de la formacion y asignarsela, de una vez
+ * (#384). Diego: «si no está en ese campus debe de salir "¿deseas añadirla a
+ * este campus?"». Hasta hoy el CRM contestaba «añádelo a ese proyecto primero»
+ * y no habia desde donde: quien lleva las colaboraciones no da de alta usuarios.
+ *
+ * Es el mismo alta en un campus que la de un tutor nuevo con `projectIds`
+ * (`user_projects` activo, sin recibir prospectos), y si ya tuvo ese campus y
+ * se le quito, se le vuelve a activar.
+ *
+ * Todo en una transaccion: si la colaboracion no se puede crear —se solapa con
+ * otro tramo suyo, o falla la base— el tutor NO se queda en el campus.
+ *
+ * Solo un TUTOR (rol principal, el mismo criterio que la lista de Tutores): por
+ * aqui no se mete a una gestora ni a un admin en un campus ajeno. Devuelve null
+ * si ese id no es un tutor.
+ */
+export async function crearColaboracionEnOtroCampus({
+  tutorId, projectId, productId, pct, desde, hasta, notas, createdBy,
+}) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: [tutor] } = await client.query(
+      `SELECT id FROM users WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') FOR UPDATE`, [tutorId]);
+    if (!tutor) { await client.query('ROLLBACK'); return null; }
+
+    await client.query(
+      `INSERT INTO user_projects (user_id, project_id, orden_cola, recibe_leads)
+       VALUES ($1, $2, (SELECT COALESCE(MAX(orden_cola), 0) + 1 FROM user_projects WHERE project_id = $2), false)
+       ON CONFLICT (user_id, project_id) DO UPDATE SET active = true`,
+      [tutorId, projectId]
+    );
+
+    // Dentro de la transaccion: lo que se comprueba es lo que se va a escribir.
+    const choques = await haySolape({ tutorId, productId, desde, hasta },
+      (sql, params) => client.query(sql, params));
+    if (choques.length) {
+      const c = choques[0];
+      throw new AppError(
+        `Ya hay una colaboracion suya en esa formacion del ${String(c.vigente_desde).slice(0, 10)}`
+        + `${c.vigente_hasta ? ' al ' + String(c.vigente_hasta).slice(0, 10) : ' en adelante'}.`
+        + ' Ciérrala antes de abrir otra.',
+        409, 'SOLAPE'
+      );
+    }
+
+    const { rows: [colab] } = await client.query(
+      `INSERT INTO tutor_collaborations
+         (tutor_id, product_id, pct, vigente_desde, vigente_hasta, notas, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [tutorId, productId, pct, desde, hasta || null, notas || null, createdBy]
+    );
+    await client.query('COMMIT');
+    return colab;
+  } catch (e) {
+    // Tambien el solape: el alta en el campus se deshace con la colaboracion.
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function actualizarColaboracion(id, datos = {}) {
+  // Lo que NO viene no se toca. Antes `vigente_hasta = $4` iba siempre, asi que
+  // una llamada que solo cambiaba el porcentaje --o ahora una casilla de
+  // entregables-- BORRABA la fecha de fin sin decirlo. Es el mismo fallo que ya
+  // nos comio los datos de pago de los tutores.
+  //
+  // `undefined` = ausente, no se toca. `null` = vaciar a proposito.
+  const COLUMNAS = {
+    pct: 'pct',
+    desde: 'vigente_desde',
+    hasta: 'vigente_hasta',
+    activa: 'activa',
+    notas: 'notas',
+    entregoFoto: 'entrego_foto',
+    entregoVideo: 'entrego_video',
+    modulosPct: 'modulos_pct',
+  };
+  const presentes = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
+  if (!presentes.length) return colaboracionPorId(id);
+
+  const params = [id];
+  const sets = presentes.map((k) => {
+    params.push(datos[k]);
+    return `${COLUMNAS[k]} = $${params.length}`;
+  });
+
   const { rows: [c] } = await query(
     `UPDATE tutor_collaborations
-        SET pct = COALESCE($2, pct),
-            vigente_desde = COALESCE($3, vigente_desde),
-            vigente_hasta = $4,
-            activa = COALESCE($5, activa),
-            notas = COALESCE($6, notas),
-            updated_at = NOW()
+        SET ${sets.join(', ')}, updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
-    [id, pct ?? null, desde ?? null, hasta ?? null, activa ?? null, notas ?? null]
+    params
   );
   return c || null;
 }
@@ -232,8 +529,28 @@ export async function borrarColaboracion(id) {
     [id]
   );
   if (c.n > 0) {
-    await query('UPDATE tutor_collaborations SET activa = FALSE, updated_at = NOW() WHERE id = $1', [id]);
-    return { borrada: false, desactivada: true, comisiones: c.n };
+    // Diego, 17/09: «hay que poner fecha de fin / si genera debe de guardar un
+    // historial». Antes solo se apagaba la casilla: quedaba constancia de que
+    // el tutor estuvo, pero no de hasta cuando, y esa es justo la fecha que
+    // hace falta para revisar una comision. La lista de colaboraciones ya
+    // devuelve las inactivas, asi que el historial se ve sin tocar la pantalla.
+    //
+    // LEAST y no COALESCE a secas: si el tramo tenia fin en diciembre y se
+    // quita hoy, el tutor no estuvo hasta diciembre. Y si ya habia terminado
+    // antes, se respeta la fecha que tenia.
+    const { rows: [h] } = await query(
+      `UPDATE tutor_collaborations
+          SET activa = FALSE,
+              vigente_hasta = LEAST(COALESCE(vigente_hasta, CURRENT_DATE), CURRENT_DATE),
+              updated_at = NOW()
+        WHERE id = $1
+      RETURNING vigente_desde, vigente_hasta`,
+      [id]
+    );
+    return {
+      borrada: false, desactivada: true, comisiones: c.n,
+      desde: h?.vigente_desde ?? null, hasta: h?.vigente_hasta ?? null,
+    };
   }
   await query('DELETE FROM tutor_collaborations WHERE id = $1', [id]);
   return { borrada: true, desactivada: false, comisiones: 0 };
@@ -310,17 +627,29 @@ export async function simular({ desde, hasta, tutorId = null, projectId = null }
 // comprobar "un" proyecto: se mira si el de la formacion esta entre los suyos.
 // Sin esto se le podia colgar a un tutor de ISEIH un curso de ICTESS, y cobraria
 // de una marca en la que no da clase.
+//
+// Devuelve tambien de QUE campus es la formacion (`projectId`, `proyecto`): si
+// el tutor no esta ahi, la pantalla ofrece añadirlo a ese campus (#384). Un
+// `projectId` nulo es que la formacion no existe.
+//
+// Cuenta solo un campus ACTIVO: si se le quito, no se le cuelgan cursos de ahi
+// sin preguntar —se ofrece volver a añadirlo, que lo reactiva—.
 export async function formacionEsDeSuProyecto(tutorId, productId) {
   const { rows } = await query(
     `SELECT EXISTS (
        SELECT 1 FROM products p
         WHERE p.id = $2
           AND EXISTS (SELECT 1 FROM user_projects up
-                       WHERE up.user_id = $1 AND up.project_id = p.project_id)) AS ok,
-       (SELECT pr.nombre FROM products p JOIN projects pr ON pr.id = p.project_id WHERE p.id = $2) AS proyecto`,
+                       WHERE up.user_id = $1 AND up.project_id = p.project_id AND up.active)) AS ok,
+       (SELECT pr.nombre FROM products p JOIN projects pr ON pr.id = p.project_id WHERE p.id = $2) AS proyecto,
+       (SELECT p.project_id FROM products p WHERE p.id = $2) AS project_id`,
     [tutorId, productId]
   );
-  return { ok: rows[0]?.ok === true, proyecto: rows[0]?.proyecto || null };
+  return {
+    ok: rows[0]?.ok === true,
+    proyecto: rows[0]?.proyecto || null,
+    projectId: rows[0]?.project_id != null ? Number(rows[0].project_id) : null,
+  };
 }
 
 // ── El dinero de verdad ─────────────────────────────────────────────────────
@@ -343,7 +672,7 @@ export async function formacionEsDeSuProyecto(tutorId, productId) {
 // Una comision ya creada NO se toca aunque despues cambie el porcentaje de la
 // colaboracion: lo devengado, devengado esta. Para rehacerla hay que revertirla
 // a mano, y eso deja rastro.
-export async function reconciliar({ desde = null, hasta = null, projectId = null } = {}) {
+export async function reconciliar({ desde = null, hasta = null, projectId = null, projectIds = null } = {}) {
   const { rows } = await query(
     `INSERT INTO tutor_commissions
        (payment_id, tutor_id, collaboration_id, product_id, base_calculo, pct, importe, periodo)
@@ -364,10 +693,14 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
         AND (c.vigente_hasta IS NULL OR cp.fecha <= c.vigente_hasta)
         AND ($1::date IS NULL OR cp.fecha >= $1::date)
         AND ($2::date IS NULL OR cp.fecha <= $2::date)
-        AND ($3::int  IS NULL OR p.project_id = $3)
+        -- Con una empresa elegida se calcula de todos sus campus de una vez,
+        -- que es lo que se pide al pulsar «Calcular» con CEDIA puesta.
+        AND ($4::int[] IS NOT NULL AND p.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR p.project_id = $3))
      ON CONFLICT (payment_id, tutor_id) DO NOTHING
      RETURNING id, importe, tutor_id, periodo`,
-    [desde, hasta, projectId]
+    [desde, hasta, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
 
   return {
@@ -379,13 +712,17 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
 }
 
 // Las comisiones ya creadas, con lo que hace falta para entender cada una.
-export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, limit = 1000 }) {
+export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, projectIds = null, limit = 1000 }) {
   const { rows } = await query(
     `SELECT tc.id, tc.periodo, tc.estado, tc.base_calculo, tc.pct, tc.importe,
             tc.fecha_liquidacion, tc.created_at,
             tc.tutor_id, u.nombre AS tutor,
             tc.product_id, p.nombre AS formacion, p.project_id, pr.nombre AS proyecto,
             cp.fecha AS fecha_cobro, cp.importe AS cobro,
+            -- Que ha entregado de ESA formacion. Se lee aqui porque esta es la
+            -- pantalla donde se pulsa «Marcar pagado»: pagar una colaboracion a
+            -- medio entregar obligaba a salirse a /tutores a comprobarlo.
+            col.entrego_foto, col.entrego_video, col.modulos_pct,
             COALESCE(l.nombre, '—') AS alumno,
             liq.nombre AS liquidada_por_nombre
        FROM tutor_commissions tc
@@ -396,28 +733,38 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
        LEFT JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
        LEFT JOIN users liq ON liq.id = tc.liquidada_por
+       LEFT JOIN tutor_collaborations col ON col.id = tc.collaboration_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
-        AND ($4::int IS NULL OR p.project_id = $4)
+        AND ($5::int[] IS NOT NULL AND p.project_id = ANY($5::int[])
+             OR $5::int[] IS NULL AND ($4::int IS NULL OR p.project_id = $4))
       ORDER BY tc.periodo DESC, u.nombre, cp.fecha
       LIMIT ${Number(limit) || 1000}`,
-    [periodo, tutorId, estado, projectId]
+    [periodo, tutorId, estado, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
 
 // Una fila por tutor y mes: lo que hay que pagarle y lo que ya se le pago.
-export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null }) {
+export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null, projectIds = null }) {
   const { rows } = await query(
     `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
             u.email AS tutor_email, perfil.iban AS tutor_iban,
             COUNT(*)::int AS lineas,
             COALESCE(SUM(tc.base_calculo), 0) AS base,
-            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pendiente'), 0) AS pendiente,
+            -- Por pagar = todo lo que no esta pagado ni revertido. Filtrar por
+            -- 'pendiente' a secas hacia que una comision marcada «notificada»
+            -- se cayera del total y el mes pareciera cuadrado sin estarlo.
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0) AS pendiente,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0) AS pagada,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0) AS revertida,
-            MAX(tc.fecha_liquidacion) AS ultima_liquidacion
+            MAX(tc.fecha_liquidacion) AS ultima_liquidacion,
+            -- Cuando se le mando el correo de «Avisar tutor». Va aparte del
+            -- estado a proposito: avisar no es cobrar, y una comision avisada
+            -- sigue contando en «pendiente».
+            MAX(tc.avisado_at) AS avisado_at
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
        -- El IBAN y el correo viajan con el resumen: pagar a un profesor
@@ -426,10 +773,13 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
        LEFT JOIN products p ON p.id = tc.product_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
-        AND ($3::int IS NULL OR p.project_id = $3)
+        -- Una empresa manda sobre el proyecto: son sus campus, no «todos».
+        AND ($4::int[] IS NOT NULL AND p.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR p.project_id = $3))
       GROUP BY tc.periodo, tc.tutor_id, u.nombre, u.email, perfil.iban
       ORDER BY tc.periodo DESC, u.nombre`,
-    [periodo, tutorId, projectId]
+    [periodo, tutorId, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -439,25 +789,69 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
 //
 // Solo pasan de 'pendiente' a 'pagada'. Una revertida no se paga por descuido, y
 // una ya pagada no se paga dos veces aunque se pulse el boton dos veces.
-export async function liquidar({ ids = null, periodo = null, tutorId = null, userId }) {
+export async function liquidar({ ids = null, periodo = null, tutorId = null, userId, projectIds = null }) {
   const { rows } = await query(
     `UPDATE tutor_commissions
         SET estado = 'pagada',
             fecha_liquidacion = CURRENT_DATE,
             liquidada_por = $1,
             updated_at = NOW()
-      WHERE estado = 'pendiente'
+      -- Se paga lo que se debe, tambien si ya se le habia avisado o si
+      -- faltaba su factura. Se dice por descarte a proposito: asi un
+      -- estado nuevo entra solo, sin tener que acordarse de esta linea.
+      WHERE estado NOT IN ('pagada', 'revertida')
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
         AND ($4::int IS NULL OR tutor_id = $4)
+        -- Solo las de mis campus: un tutor que da clase en varias empresas no se paga entero
+        -- por quien lleva solo una de ellas.
+        AND ($5::int[] IS NULL OR id IN (
+          SELECT tc.id FROM tutor_commissions tc
+            LEFT JOIN products p ON p.id = tc.product_id
+            LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
+            LEFT JOIN conversions cv ON cv.id = cp.conversion_id
+           WHERE COALESCE(p.project_id, cv.project_id) = ANY($5::int[])))
       RETURNING id, importe, tutor_id`,
-    [userId, ids && ids.length ? ids : null, periodo, tutorId]
+    [userId, ids && ids.length ? ids : null, periodo, tutorId, Array.isArray(projectIds) ? projectIds.map(Number) : null]
   );
   return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
 }
 
 // Deshacer una liquidacion o anular una comision. Queda escrito quien y por que:
 // esto mueve dinero y no puede pasar sin dejar rastro.
+/**
+ * Mover una comision de estado a mano. Diego, 14/09: «ahi que pone pendiente
+ * deben aparecer los siguientes estados: Pendiente, Notificada, Falta Factura».
+ *
+ * Solo entre esas tres. Pagar y revertir NO pasan por aqui y es a proposito:
+ * cada una tiene su camino —`liquidarComisiones` deja fecha y quien liquido,
+ * `revertirComision` pide motivo— y dejarlas caer en un cambio de estado suelto
+ * perderia ese rastro. Es dinero: quien lo movio y por que tiene que quedar.
+ *
+ * Y una que ya esta pagada no vuelve: eso seria deshacer un pago escribiendo en
+ * una casilla.
+ */
+export async function cambiarEstadoComision(id, estado, userId) {
+  const PERMITIDOS = ['pendiente', 'notificada', 'falta_factura'];
+  if (!PERMITIDOS.includes(estado)) {
+    throw new AppError(
+      `«${estado}» no se pone a mano. Para cobrar esta «Marcar pagado», y para deshacer, revertir.`,
+      400, 'ESTADO_NO_PERMITIDO');
+  }
+  const { rows } = await query(
+    `UPDATE tutor_commissions
+        SET estado = $2, updated_at = NOW()
+      WHERE id = $1 AND estado NOT IN ('pagada', 'revertida')
+      RETURNING id, estado, periodo, tutor_id`,
+    [id, estado]);
+  if (!rows[0]) {
+    throw new AppError(
+      'Esa comision ya esta pagada o revertida: su estado no se cambia desde aqui.',
+      409, 'COMISION_CERRADA');
+  }
+  return rows[0];
+}
+
 export async function revertirComision(id, { userId, motivo }) {
   const { rows: [c] } = await query(
     `UPDATE tutor_commissions
@@ -476,7 +870,7 @@ export async function revertirComision(id, { userId, motivo }) {
 //
 // Salen a la vista a proposito: si desaparecieran, el total del mes pareceria
 // cuadrado cuando en realidad hay dinero sin atribuir y un tutor sin cobrar.
-export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
+export async function pagosSinFormacion({ desde, hasta, projectId = null, projectIds = null }) {
   const { rows } = await query(
     `SELECT cp.id, cp.fecha, cp.importe,
             cv.id AS venta, COALESCE(l.nombre, '—') AS alumno,
@@ -490,9 +884,11 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
       WHERE cv.producto_contratado_id IS NULL
         AND cp.fecha >= GREATEST($1::date, s.aplica_desde)
         AND cp.fecha <= $2::date
-        AND ($3::int IS NULL OR cv.project_id = $3)
+        AND ($4::int[] IS NOT NULL AND cv.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR cv.project_id = $3))
       ORDER BY cp.fecha DESC, cp.importe DESC`,
-    [desde, hasta, projectId]
+    [desde, hasta, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -519,36 +915,165 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
  * Cuenta los pagos, no las ventas: una venta a plazos con seis cobros ya lleva
  * seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
  */
-export async function formacionesSinTutor({ projectId = null } = {}) {
+/**
+ * Las formaciones que nadie tutoriza.
+ *
+ * `desdeElCorte` manda sobre lo que se enseña:
+ *
+ *   true  (por defecto) · solo las ventas desde `tutor_settings.aplica_desde`.
+ *                         Es lo de siempre y es lo correcto para el dia a dia:
+ *                         antes del corte no se genera comision, y una venta de
+ *                         febrero pudo tener tutor entonces.
+ *   false · TODAS. Diego, 23/09: veintidos cursos de ICTESS sin tutor que no
+ *           salian en la lista --de febrero a julio, o sea por debajo del
+ *           corte--. La pantalla no los escondia por error, pero quien busca
+ *           «que esta descubierto» no puede enterarse de que hay doce mas solo
+ *           mirando el codigo.
+ *
+ * Cada fila dice si su venta mas reciente es anterior al corte, para que la
+ * pantalla pueda marcarlas y no mezclar las dos cosas sin avisar.
+ */
+export async function formacionesSinTutor({ projectId = null, projectIds = null, desdeElCorte = true } = {}) {
   const { rows } = await query(
-    `SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
+    `WITH sin_tutor AS (
+     SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
             count(DISTINCT cv.id)::int  AS ventas,
             count(DISTINCT cv.lead_id)::int AS alumnos,
             count(cp.id)::int           AS pagos,
             COALESCE(sum(cp.importe), 0) AS cobrado,
             min(cp.fecha) AS primer_cobro,
-            max(cp.fecha) AS ultimo_cobro
+            max(cp.fecha) AS ultimo_cobro,
+            max(cv.fecha_conversion) AS ultima_venta,
+            -- Si su venta mas reciente es anterior al corte. Sirve para que la
+            -- pantalla las marque en vez de mezclarlas con las de ahora.
+            (max(cv.fecha_conversion) < min(s.aplica_desde)) AS antes_del_corte,
+            min(s.aplica_desde) AS corte
        FROM products p
        JOIN conversions cv ON cv.producto_contratado_id = p.id
        JOIN conversion_payments cp ON cp.conversion_id = cv.id
        LEFT JOIN projects pr ON pr.id = p.project_id
        CROSS JOIN tutor_settings s
       WHERE NOT EXISTS (
+              -- Con la vigencia, no solo con la casilla: un curso cuya
+              -- colaboracion ya caduco no lo lleva nadie y tiene que volver
+              -- aqui. Ver RIGE_HOY arriba.
               SELECT 1 FROM tutor_collaborations tc
-               WHERE tc.product_id = p.id AND tc.activa
+               WHERE tc.product_id = p.id AND ${RIGE_HOY('tc')}
             )
-        -- Solo los cobros desde que las comisiones aplican.
+        -- El corte va sobre la fecha de la VENTA, no la del cobro.
         --
-        -- Antes de esa fecha no se genera comision de todos modos, y una venta
-        -- de abril pudo tener tutor entonces y no tenerlo ahora: sacarla aqui
-        -- seria acusar de un agujero que no existe.
-        AND cp.fecha >= s.aplica_desde
-        AND ($1::int IS NULL OR p.project_id = $1)
+        -- Diego: «recuerda que la sincronizacion es de las ventas de agosto
+        -- para aca, que son las que se estan viendo».
+        --
+        -- Iba por la fecha del pago, y eso metia en la lista ventas viejas que
+        -- siguen pagando cuotas. El «Master en Ginecologia y Obstetricia» es
+        -- una venta del 25 de febrero cuya alumna paga 95,17 EUR al mes: cada
+        -- mes volvia a asomar como formacion sin tutor. Eran 35 asi entre los
+        -- dos CRMs --15 en MultiCRM y 20 en ISEIE--, casi un tercio de la
+        -- lista, y buscar tutor para una matricula de febrero no tiene sentido.
+        --
+        -- Antes del corte tampoco se genera comision, y una venta de abril pudo
+        -- tener tutor entonces y no tenerlo ahora: sacarla aqui seria acusar de
+        -- un agujero que no existe.
+        ${desdeElCorte ? 'AND cv.fecha_conversion >= s.aplica_desde' : ''}
+        AND ($2::int[] IS NOT NULL AND p.project_id = ANY($2::int[])
+             OR $2::int[] IS NULL AND ($1::int IS NULL OR p.project_id = $1))
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
-      ORDER BY sum(cp.importe) DESC`,
-    [projectId]
+    )
+    SELECT s.*,
+           COALESCE(b.buscando, false)                    AS buscando,
+           b.nota                                         AS busqueda_nota,
+           b.updated_at                                   AS busqueda_desde,
+           COALESCE(b.adset_id, b.campaign_id)            AS anuncio_id,
+           COALESCE(ads.nombre, cam.nombre)               AS anuncio_nombre,
+           COALESCE(ads.status, cam.status)               AS anuncio_estado,
+           COALESCE(ads.total_spend, cam.total_spend)     AS anuncio_gasto,
+           COALESCE(ads.total_leads, cam.total_leads)     AS anuncio_leads,
+           -- Se apuntó un anuncio y en Meta ya no está: archivado o borrado
+           -- allí. Se dice, no se calla — si no, el día que alguien lo pause la
+           -- pantalla seguiría diciendo «buscando» sin que nadie pague nada.
+           (COALESCE(b.adset_id, b.campaign_id) IS NOT NULL
+            AND ads.adset_id IS NULL AND cam.campaign_id IS NULL) AS anuncio_desaparecido
+      FROM sin_tutor s
+      LEFT JOIN tutor_busquedas b ON b.product_id = s.id
+      LEFT JOIN meta_adsets   ads ON ads.adset_id = b.adset_id
+      -- La campaña sale del conjunto elegido si lo hay; si se apuntó la campaña
+      -- entera —hay quien anuncia así—, de ella misma.
+      LEFT JOIN meta_campaigns cam ON cam.campaign_id = COALESCE(ads.campaign_id, b.campaign_id)
+     ORDER BY s.cobrado DESC`,
+    [projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
+  return rows;
+}
+
+/**
+ * Decir que se busca —o que ya no— tutor para una formacion.
+ *
+ * Es un upsert: la formacion tiene una respuesta o no la tiene, no un historial.
+ * Se guarda quien lo marco y cuando porque la pregunta que sigue siempre a esta
+ * pantalla es «¿y esto quien lo puso, y desde cuando?».
+ */
+export async function marcarBusquedaDeTutor({
+  productId, buscando = true, campaignId = null, adsetId = null, nota = null, userId = null,
+}) {
+  // El proyecto NO viene de fuera: se lee del producto. Mandarlo desde la
+  // pantalla dejaria apuntar una formacion de un proyecto contra otro.
+  const { rows: [prod] } = await query(
+    'SELECT id, project_id FROM products WHERE id = $1', [productId]);
+  if (!prod) return null;
+
+  // Si se apunta un conjunto de anuncios, su campana se deduce: pedir las dos
+  // cosas a la pantalla es pedir que se contradigan.
+  let campana = campaignId;
+  if (adsetId) {
+    const { rows: [a] } = await query(
+      'SELECT campaign_id FROM meta_adsets WHERE adset_id = $1', [adsetId]);
+    campana = a?.campaign_id || campaignId;
+  }
+
+  const { rows } = await query(
+    `INSERT INTO tutor_busquedas
+       (product_id, project_id, buscando, campaign_id, adset_id, nota, marcada_por_user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (product_id) DO UPDATE
+        SET buscando = EXCLUDED.buscando,
+            campaign_id = EXCLUDED.campaign_id,
+            adset_id = EXCLUDED.adset_id,
+            nota = EXCLUDED.nota,
+            marcada_por_user_id = EXCLUDED.marcada_por_user_id,
+            updated_at = NOW()
+     RETURNING *`,
+    [productId, prod.project_id, buscando, campana, adsetId, nota, userId]);
+  return rows[0];
+}
+
+/**
+ * Los anuncios que se pueden enganchar a una formacion.
+ *
+ * Se devuelven TODOS los del ambito, no solo los que parecen de tutores: quien
+ * lleva esto sabe mejor que una expresion regular cual es cual, y esconderle los
+ * demas le obligaria a renombrar en Meta para poder elegir aqui. Lo que si se
+ * hace es ponerle delante los que se llaman como si buscaran tutores, que es lo
+ * que se busca el 95 % de las veces.
+ */
+export async function anunciosDeTutores({ projectId = null, projectIds = null } = {}) {
+  const { rows } = await query(
+    `SELECT a.adset_id, a.nombre, a.status, a.total_spend, a.total_leads,
+            a.project_id, c.campaign_id, c.nombre AS campana, c.status AS campana_estado,
+            (c.nombre ~* '(tutor|docent|profesor)'
+             OR a.nombre ~* '(tutor|docent|profesor)') AS parece_de_tutores
+       FROM meta_adsets a
+       JOIN meta_campaigns c ON c.campaign_id = a.campaign_id
+      WHERE ($2::int[] IS NOT NULL AND a.project_id = ANY($2::int[])
+             OR $2::int[] IS NULL AND ($1::int IS NULL OR a.project_id = $1))
+      ORDER BY parece_de_tutores DESC,
+               (a.status = 'ACTIVE') DESC,
+               a.total_spend DESC NULLS LAST
+      LIMIT 300`,
+    [projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]);
   return rows;
 }
 
@@ -710,17 +1235,19 @@ export async function retirarTutor(tutorId) {
     await client.query('BEGIN');
     const { rows: [t] } = await client.query(
       `UPDATE users SET active = false, updated_at = NOW()
-        WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+        WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') RETURNING id, nombre, email`, [tutorId]);
     if (!t) { await client.query('ROLLBACK'); return null; }
     const { rowCount } = await client.query(
       `UPDATE tutor_collaborations
           SET activa = false,
-              vigente_hasta = COALESCE(vigente_hasta, CURRENT_DATE),
+              -- Mismo criterio que borrarColaboracion: el tramo se cierra hoy,
+              -- no en la fecha futura que tuviera puesta.
+              vigente_hasta = LEAST(COALESCE(vigente_hasta, CURRENT_DATE), CURRENT_DATE),
               updated_at = NOW()
         WHERE tutor_id = $1 AND activa`, [tutorId]);
     const { rows: [pend] } = await client.query(
       `SELECT COALESCE(SUM(importe), 0) AS pendiente
-         FROM tutor_commissions WHERE tutor_id = $1 AND estado = 'pendiente'`, [tutorId]);
+         FROM tutor_commissions WHERE tutor_id = $1 AND estado NOT IN ('pagada', 'revertida')`, [tutorId]);
     await client.query('COMMIT');
     return { ...t, cursosCerrados: rowCount, pendienteDePagar: Number(pend.pendiente) };
   } catch (e) {
@@ -732,6 +1259,6 @@ export async function retirarTutor(tutorId) {
 export async function reactivarTutor(tutorId) {
   const { rows: [t] } = await query(
     `UPDATE users SET active = true, updated_at = NOW()
-      WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+      WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') RETURNING id, nombre, email`, [tutorId]);
   return t || null;
 }

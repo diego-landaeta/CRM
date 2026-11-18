@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Trash, Warning } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 
 interface LeadLite {
   id: number;
@@ -23,18 +25,27 @@ const REASONS: Array<{ value: string; label: string; desc: string }> = [
   { value: 'otro',              label: 'Otro',              desc: 'Especifica el motivo abajo.' },
 ];
 
-// Soft delete (superadmin). Permite recuperar el lead luego desde DB si hace falta.
+// Lo que puede alegar una gestora con permiso de eliminar (#204): limpieza.
+// «Otro» es de quien administra. El servidor aplica la misma lista.
+const MOTIVOS_DE_GESTORA = ['test', 'spam', 'duplicado_manual'];
+
+// Soft delete. Permite recuperar el lead luego desde DB si hace falta.
 export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Props) {
+  const { user } = useAuth();
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const esJefe = (user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'soporte') && can('leads.delete_cualquiera');
+  const motivos = esJefe ? REASONS : REASONS.filter((r) => MOTIVOS_DE_GESTORA.includes(r.value));
   const [reason, setReason] = useState<string>('spam');
   const [motivo, setMotivo] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setReason('spam');
+      setReason(esJefe ? 'spam' : 'test');
       setMotivo('');
     }
-  }, [open]);
+  }, [open, esJefe]);
 
   if (!open || !lead) return null;
 
@@ -61,11 +72,11 @@ export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Pro
       <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-md flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-          <div className="w-9 h-9 rounded-md bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-md bg-destructive-soft text-destructive flex items-center justify-center flex-shrink-0">
             <Trash size={18} weight="regular" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-base">Eliminar lead</h3>
+            <h3 className="font-semibold text-base">Eliminar prospecto</h3>
             <p className="text-xs text-muted-foreground truncate">{lead.nombre} {lead.email ? `· ${lead.email}` : ''}</p>
           </div>
         </div>
@@ -73,12 +84,12 @@ export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Pro
           <div>
             <label className="text-xs font-semibold text-foreground mb-1.5 block">Motivo</label>
             <div className="grid grid-cols-2 gap-1.5">
-              {REASONS.map((r) => (
+              {motivos.map((r) => (
                 <button
                   key={r.value}
                   type="button"
                   onClick={() => setReason(r.value)}
-                  className={`h-9 rounded-md border text-xs font-medium ${reason === r.value ? 'bg-red-600 text-white border-red-600' : 'border-border bg-card hover:bg-muted'}`}
+                  className={`h-9 rounded-md border text-xs font-medium ${reason === r.value ? 'bg-destructive text-destructive-foreground border-destructive/30' : 'border-border bg-card hover:bg-muted'}`}
                 >
                   {r.label}
                 </button>
@@ -97,10 +108,10 @@ export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Pro
             />
           </div>
 
-          <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-            <Warning size={16} className="text-amber-600 flex-shrink-0 mt-0.5" weight="duotone" />
-            <p className="text-[11px] text-amber-800 dark:text-amber-300">
-              Soft delete: el lead se oculta de las listas y stats pero queda en la base de datos para auditoría. Se puede restaurar.
+          <div className="flex items-start gap-2 p-3 rounded-md bg-warning-soft border border-warning/30">
+            <Warning size={16} className="text-warning flex-shrink-0 mt-0.5" weight="duotone" />
+            <p className="text-[11px] text-warning">
+              Soft delete: el prospecto se oculta de las listas y stats pero queda en la base de datos para auditoría. Se puede restaurar.
             </p>
           </div>
         </div>
@@ -110,7 +121,7 @@ export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Pro
             Cancelar
           </button>
           <button onClick={handleDelete} disabled={saving}
-            className="inline-flex items-center h-9 px-4 rounded-md bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50">
+            className="inline-flex items-center h-9 px-4 rounded-md bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 disabled:opacity-50">
             {saving ? 'Eliminando...' : 'Eliminar'}
           </button>
         </div>

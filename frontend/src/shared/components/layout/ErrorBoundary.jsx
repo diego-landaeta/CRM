@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import { WarningCircle, ArrowClockwise } from '@phosphor-icons/react';
+import { API_BASE_URL } from '@/shared/api/client';
 
 /**
  * ErrorBoundary global. Captura errores no manejados en cualquier descendiente
@@ -9,6 +10,13 @@ import { WarningCircle, ArrowClockwise } from '@phosphor-icons/react';
  *   <ErrorBoundary>
  *     <App />
  *   </ErrorBoundary>
+ *
+ * Con `dentro`, para la pantalla que va dentro del marco (AppLayout): el aviso
+ * ocupa solo el hueco de la pantalla y el menú sigue ahí (CRM#625). Novedades
+ * rota tapaba el CRM entero, sin menú, y al navegar el aviso se quedaba puesto
+ * hasta recargar, porque el único ErrorBoundary estaba por encima del Router.
+ * AppLayout lo monta dentro del `key={pathname}`: cambiar de pantalla lo
+ * vuelve a montar limpio.
  */
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -21,10 +29,24 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // En el futuro: enviar a Sentry / logging service.
-    // Por ahora console.error en producción para tener pista en DevTools.
-     
     console.error('[ErrorBoundary]', error, info?.componentStack);
+    // Y al servidor, que es donde alguien lo puede ver: sin esto una pantalla rota
+    // solo deja rastro en el navegador de quien la sufre (como en CRM-ISEIE).
+    // `API_BASE_URL` y no '/api': aquí la API cuelga de /crm/api o /testeo/api.
+    try {
+      fetch(`${API_BASE_URL}/client-errors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: error?.message || String(error),
+          stack: error?.stack || null,
+          componentStack: info?.componentStack || null,
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+        }),
+        credentials: 'include',
+      }).catch(() => {});
+    } catch { /* que avisar no rompa la pantalla de error */ }
   }
 
   handleReset = () => {
@@ -39,10 +61,15 @@ export default class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
 
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="bg-card border border-border rounded-xl shadow-lg max-w-md w-full p-6 text-center">
-          <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/30 flex items-center justify-center mx-auto mb-4">
-            <WarningCircle size={24} weight="regular" className="text-red-600 dark:text-red-400" />
+      <div
+        role="alert"
+        className={this.props.dentro
+          ? 'flex items-center justify-center py-16 px-2'
+          : 'min-h-screen bg-background flex items-center justify-center p-6'}
+      >
+        <div className="bg-card border border-border rounded-xl shadow-popover max-w-md w-full p-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive-soft flex items-center justify-center mx-auto mb-4">
+            <WarningCircle size={24} weight="regular" className="text-destructive" />
           </div>
           <h1 className="text-lg font-semibold mb-1.5">Algo se ha roto</h1>
           <p className="text-sm text-muted-foreground mb-4 leading-relaxed">

@@ -2,6 +2,29 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
+import { comoLista } from '../../shared/utils/ambito.js';
+import { comoIds, alcanceComercial } from '../../shared/utils/roles.js';
+import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
+import { recalcularCobrado } from '../conversions/cobrado.js';
+import { frenarSiPosibleDuplicada, vieneConfirmada } from './posible-duplicada.js';
+// La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
+import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
+
+/**
+ * ¿El CIF del emisor es el marcador que sembro la migracion 102?
+ *
+ * Aquella dejo las tres sociedades con «PENDIENTE-CIF-CEDIA» y sus hermanas
+ * escritas a mano, para rellenarlas despues. Nadie las relleno, y el PDF imprime
+ * `NIF: <lo que haya>` sin preguntar: cada factura emitida bajo una de esas
+ * sociedades salio con un CIF que no existe, encima de un documento fiscal.
+ *
+ * Se mira por el prefijo y no por la lista de las tres: el dia que alguien
+ * siembre una cuarta sociedad con la misma costumbre, esto la coge sola.
+ */
+export function nifSinRellenar(nif) {
+  return /^PENDIENTE-CIF-/i.test(String(nif || '').trim());
+}
+
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -16,6 +39,46 @@ async function issuerOfProject(exec, projectId) {
 // de una misma sociedad comparten contador por serie+año, aunque sean de proyectos
 // distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
 // proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
+/**
+ * Reservar un numero ELEGIDO A MANO.
+ *
+ * Diego, 14/09: «que se ponga con numero de factura y que salga el numero
+ * siguiente disponible, pero que pueda poner ese u otro».
+ *
+ * Se comprueba dentro de la misma transaccion y con el mismo cerrojo que el
+ * automatico: si no, dos personas eligiendo el mismo numero a la vez lo
+ * cogerian las dos. Y si ya esta usado se dice CUAL lo tiene, que es lo que
+ * hace falta para decidir --un numero repetido en una serie fiscal no es un
+ * aviso, es un problema--.
+ */
+export async function reservarNumero(client, projectId, issuerId, ano, serie, numero) {
+  const n = Number(numero);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new AppError('El número de factura tiene que ser un entero mayor que cero', 400, 'BAD_NUMBER');
+  }
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice_serie:${ano}:${serie}`]);
+  const { rows: [ocupado] } = await client.query(
+    `SELECT codigo, cliente_nombre, total, fecha_emision::date::text AS fecha
+       FROM invoices WHERE ano = $1 AND serie = $2 AND numero = $3 LIMIT 1`,
+    [ano, serie, n]
+  );
+  if (ocupado) {
+    throw new AppError(
+      `El número ${ano}/${String(n).padStart(4, '0')} ya lo tiene la factura de `
+      + `${ocupado.cliente_nombre || 'sin nombre'} (${Number(ocupado.total).toFixed(2)} €, ${ocupado.fecha}). `
+      + 'Elige otro.',
+      409, 'NUMBER_TAKEN');
+  }
+  // El contador solo sube: si se rellena un hueco anterior, no se baja, porque
+  // el siguiente automatico volveria a chocar con lo que ya existe.
+  await client.query(
+    `UPDATE invoice_sequences SET ultimo_numero = GREATEST(ultimo_numero, $1)
+      WHERE ano = $2 AND serie = $3`,
+    [n, ano, serie]
+  );
+  return n;
+}
+
 export async function nextNumero(client, projectId, issuerId, ano, serie) {
   // El numero es unico por SERIE Y AÑO, mire desde el proyecto que mire.
   //
@@ -103,8 +166,15 @@ export async function create(data, userId) {
       iss = r.rows[0] || null;
     }
 
-    // Proforma = presupuesto NO fiscal. No consume el correlativo 'A', usa su
-    // propia serie (issuer.serie_proforma, def 'PRO') y NO pasa por el gating fiscal.
+    // Proforma = presupuesto NO fiscal: no pasa por el gating fiscal.
+    //
+    // OJO, esto decia que usaba su propia serie (`issuer.serie_proforma`, 'PRO').
+    // Ya NO es asi y la columna no se lee en ningun sitio: desde el cambio de
+    // criterio, la proforma toma numero del MISMO correlativo que las facturas
+    // --misma serie y mismo contador-- y lo MANTIENE al convertirse en factura.
+    // El comentario viejo sobrevivio al cambio y decia lo contrario que el codigo
+    // de tres lineas mas abajo. Quedan 4 proformas antiguas con serie PRO, de
+    // abril a junio de 2026, sin venta asociada: son de entonces.
     const isProforma = data.tipo === 'proforma';
     // Borrador = factura preliminar (al convertir): se guarda aunque falten datos
     // fiscales, SIN numero/codigo (no consume correlativo) y sin gating. Se
@@ -140,7 +210,60 @@ export async function create(data, userId) {
     // número de la secuencia y se numera con el mismo formato.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
-    const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
+    /*
+      ANTES DE NUMERAR: mirar si ya hay una factura igual (posible-duplicada.js).
+
+      Es lo que produjo la 2026/0102. A las 14:14:07 el CRM emitio la 0101 al
+      entrar el cobro de Stripe; 33 segundos despues la gestora emitio otra a
+      mano sin ver la primera. Un cobro, dos facturas, y nadie se entero hasta
+      que Diego las encontro un mes despues.
+
+      Aqui miraba solo la misma venta y el mismo dia. Desde el 17/11 (CRM#819)
+      mira el mismo cliente --nombre normalizado o NIF-- o la misma venta, el
+      mismo total y 7 dias. No se bloquea del todo: hay casos legitimos --dos
+      cobros de verdad el mismo dia, como los de Bibiana-- y por eso se puede
+      seguir con `confirmar_duplicada`. Lo que no puede pasar es que salga sin
+      que nadie lo vea.
+    */
+    if (!isBorrador && !isProforma && data.tipo !== 'rectificativa') {
+      await frenarSiPosibleDuplicada({
+        nombre: data.clienteNombre, nif: data.clienteNif, total: data.total,
+        fecha: data.fechaEmision || null, conversionId: data.conversionId || null,
+      }, { confirmada: vieneConfirmada(data), exec: (sql, params) => client.query(sql, params) });
+    }
+
+    /*
+      Y ANTES DE NUMERAR: que el emisor tenga un CIF de verdad.
+
+      Va aqui y no mas abajo a proposito. Numerar quema un correlativo fiscal, y
+      quemarlo en una factura que se va a rechazar deja un hueco en la serie que
+      luego hay que explicar.
+
+      Se bloquea del todo, y esta vez sin escapatoria —a diferencia del aviso de
+      duplicados, donde hay casos legitimos—: un CIF que no existe no tiene caso
+      legitimo. Sale en el PDF, se le manda a un cliente, y no hay forma de
+      recogerlo. Es mas barato no emitirla.
+
+      Un borrador y una proforma si pasan: no son documentos fiscales y sirven
+      justo para preparar lo que falta.
+    */
+    if (!isBorrador && data.tipo !== 'proforma' && nifSinRellenar(iss?.nif)) {
+      throw new AppError(
+        `${iss?.razon_social || 'Esta sociedad'} no tiene el CIF puesto: figura como «${iss.nif}». `
+        + 'Se rellena en Facturacion › Emisores. Emitir asi imprimiria ese texto en el PDF como si fuera el NIF.',
+        409, 'EMISOR_SIN_CIF');
+    }
+
+    // Con la facturacion pausada por la auditoria (#765) no se gasta ningun
+    // numero nuevo. Un borrador si se guarda: no es documento fiscal.
+    if (!isBorrador) await exigirFacturacionActiva({ paymentId: data.paymentId || null });
+
+    // El numero: el que elija quien emite, o el siguiente libre si no dice nada.
+    const numero = isBorrador
+      ? null
+      : (data.numero != null && data.numero !== ''
+          ? await reservarNumero(client, data.projectId, iss?.id || null, ano, serie, data.numero)
+          : await nextNumero(client, data.projectId, iss?.id || null, ano, serie));
     const codigo = isBorrador ? null : `${ano}/${String(numero).padStart(4, '0')}`;
 
     const { rows } = await client.query(
@@ -347,6 +470,22 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
   }
 }
 
+/**
+ * TODAS las facturas de una venta (13/11/2026, la ficha de la matrícula): con una
+ * factura por cobro (migración 107) una venta puede tener varias, y también la
+ * proforma y los abonos. Lo justo para listarlas; la factura entera, en su ficha.
+ */
+export async function findAllByConversion(conversionId) {
+  const { rows } = await query(
+    `SELECT id, codigo, tipo, estado, fecha_emision, total, moneda, total_divisa
+       FROM invoices
+      WHERE conversion_id = $1
+      ORDER BY fecha_emision, id`,
+    [conversionId]
+  );
+  return rows;
+}
+
 export async function findByConversion(conversionId) {
   // Devuelve el documento vigente de la conversión: prefiere la factura fiscal
   // (tipo normal) y, si aún no existe, cae en la proforma activa. Así el botón de
@@ -362,20 +501,71 @@ export async function findByConversion(conversionId) {
   return rows[0] || null;
 }
 
+/*
+  LA MISMA SOCIEDAD, AUNQUE SEAN DOS FILAS.
+
+  Dos emisores pueden ser la misma empresa a efectos fiscales: mismo NIF y misma
+  serie, y por tanto UN SOLO correlativo. En MultiCRM son el 9 y el 11 --los dos
+  «Ictess Ingenieria e Innovacion SL», NIF B25951955, serie ICTESS; el 11 lleva
+  el alias «Solvenic»--. `invoice_sequences` tiene UNA sola fila para los dos y
+  la numeracion va seguida entre ellos: …62, 63 de Solvenic, 64… 78, 79 de
+  Solvenic, 80.
+
+  Filtrar por `issuer_id` a secas partia ese correlativo en dos listas y dejaba
+  huecos en ambas: la 2026/0079 no salia por ningun lado y parecia perdida
+  --Diego, 16/09: «ponla en la facturacion que no se ve»--. Un correlativo
+  fiscal se lee entero o no se lee.
+
+  Se filtra por la IDENTIDAD FISCAL, no por la fila. Sin NIF no se agrupa nada:
+  cae al emisor exacto, que es el comportamiento de antes.
+*/
+const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
+    SELECT e.id
+      FROM invoice_issuers e, invoice_issuers base
+     WHERE base.id = ${marcador}
+       AND (e.id = base.id
+            OR (base.nif IS NOT NULL AND e.nif = base.nif
+                AND e.serie IS NOT DISTINCT FROM base.serie)))`;
+
 // Listado de facturas. Ámbito:
 //  - por PROYECTO (projectId): el flujo normal.
 //  - por SOCIEDAD (issuerId, sin projectId): vista global de todas las facturas
 //    de esa empresa emisora entre todos los proyectos (correlativos en orden).
 //    Solo admin/superadmin (lo restringe el controller).
-export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
+/*
+  DE QUIEN ES UNA FACTURA, para una gestora: la que escribio ella, o la de una
+  venta suya (quien vendio, y si no consta, de quien es la ficha). Necesita los
+  alias `i`, `cv` (la venta) y `l` (la ficha).
+
+  ICTESS, 06/10: Yolanda emitio la 2026/0086 --una ponencia para una empresa,
+  sin venta ni ficha detras-- y no le salia en su lista; a Diego, si, y con
+  «Yolanda» en la columna de gestora. La lista miraba solo la venta y la ficha,
+  y una factura sin ninguna de las dos no era de nadie. Lo mismo con editar,
+  borrar o hacer el abono, que miraban solo la ficha (`invoices.lead_id`, vacia
+  en casi toda la carga historica). Las proformas ya iban asi; ahora todo igual.
+
+  Y LAS SIN GESTORA DE SUS CAMPUS. Diego, con Yolanda: «son facturas sin
+  gestora, debo de verlas»; y que tambien las gestione (con su permiso de
+  facturacion). Ya corre asi en las dos producciones desde el 06/10.
+*/
+// El parámetro es una LISTA de personas: la gestora sola o, si lleva un equipo
+// comercial (09/11/2026), ella y las de su equipo.
+export const FACTURA_DE = (param) => `(i.created_by = ANY(${param}::int[])
+    OR COALESCE(cv.vendedora_id, l.responsable_id) = ANY(${param}::int[])
+    OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
+        AND EXISTS (SELECT 1 FROM user_projects up
+                     WHERE up.user_id = ANY(${param}::int[]) AND up.project_id = i.project_id AND up.active)))`;
+
+export async function list({ projectId, projectIds, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
-  // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
-  // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
-  if (responsableId) { conds.push(`COALESCE(cv.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  // Los campus de quien mira (#591): null es «todos» (superadmin y soporte).
+  if (Array.isArray(projectIds)) { conds.push(`i.project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
+  // Gestor: solo ve las SUYAS (ver FACTURA_DE). Admin/superadmin ven todas.
+  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(comoIds(responsableId)); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
   // correlativo que las facturas normales, asi que si se ocultan parece que
   // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
@@ -386,7 +576,13 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   else conds.push(`i.tipo <> 'rectificativa'`);                                // compat
   if (estado) { conds.push(`i.estado = $${idx++}`); params.push(estado); }
   // Busca por nombre, NIF, codigo y tambien por NUMERO de factura (escribir "641").
-  if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx} OR i.numero::text LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
+  // Recortado: un espacio pegado al nombre dejaba el buscador a cero.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  // Y por el ALUMNO de la venta (nombre y correo) y el correo de la factura (19/10): una
+  // factura a nombre de su EMPRESA no salía buscando a la persona. Adriana facturó el
+  // cobro de Monica Estrada (venta 701 de ISEIE, de Fabiola) a «ETC Expert Techonology
+  // Consultants SAS», y buscando «Monica» la lista quedaba vacía.
+  if (termino) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx} OR i.numero::text LIKE $${idx} OR LOWER(COALESCE(i.cliente_email, '')) LIKE $${idx} OR LOWER(COALESCE(l.nombre, '')) LIKE $${idx} OR LOWER(COALESCE(l.email, '')) LIKE $${idx})`); params.push(`%${termino.toLowerCase()}%`); idx++; }
   if (from) { conds.push(`i.fecha_emision >= $${idx++}`); params.push(from); }
   if (to)   { conds.push(`i.fecha_emision <= $${idx++}`); params.push(to); }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
@@ -399,7 +595,13 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             i.project_id, p.nombre AS proyecto_nombre,
             i.issuer_id, i.issuer_razon_social,
             i.metodo_pago, i.moneda, i.total_divisa,
-            u.nombre AS gestora_nombre
+            u.nombre AS gestora_nombre,
+            ${CLASE_FACTURA} AS clase,
+            -- De cuando es la venta, para poder decir «cuota de una venta del 6/7».
+            cv.fecha_conversion AS fecha_de_la_venta,
+            -- Lo que falta por cobrar de la venta: el importe que propone «Cobrada».
+            (cv.importe_total - COALESCE(cv.importe_pagado, 0)) AS pendiente_de_la_venta,
+            ${SOSPECHA_DUPLICADA} AS sospecha_duplicada
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
      -- La gestora sale de la VENTA. invoices.lead_id esta vacio en toda la carga
@@ -427,12 +629,29 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
 
 // Stats de la MISMA vista que la lista: por proyecto o por sociedad (issuerId),
 // pudiendo acotar a un proyecto de esa sociedad. Así los KPIs cuadran con la tabla.
-export async function getStats({ projectId, issuerId } = {}) {
+//
+// Y con LOS MISMOS FILTROS que la lista (#233, Manuel 03/10: «poner una fecha y que
+// no agarre»): con septiembre puesto, las tarjetas decían el acumulado de siempre.
+// `personas` (QA del 09/11/2026): los mismos recortes que la lista. Una gestora,
+// las suyas; quien lleva un equipo comercial, las de su equipo (FACTURA_DE). Sin
+// esto las tarjetas de arriba sumaban todo el campus y la lista de abajo no.
+export async function getStats({ projectId, projectIds, issuerId, from, to, estado, personas = null } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`issuer_id = $${idx++}`);  params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
+  if (Array.isArray(projectIds)) { conds.push(`project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
+  if (from)      { conds.push(`fecha_emision >= $${idx++}`); params.push(from); }
+  if (to)        { conds.push(`fecha_emision <= $${idx++}`); params.push(to); }
+  if (estado)    { conds.push(`estado = $${idx++}`); params.push(estado); }
+  if (Array.isArray(personas) && personas.length) {
+    conds.push(`id IN (SELECT i.id FROM invoices i
+                         LEFT JOIN conversions cv ON cv.id = i.conversion_id
+                         LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+                        WHERE ${FACTURA_DE(`$${idx++}`)})`);
+    params.push(personas.map(Number));
+  }
   const { rows } = await query(
     `SELECT
        COUNT(*) FILTER (WHERE estado <> 'borrador')::int AS total,
@@ -486,16 +705,23 @@ export async function deleteInvoice(id) {
     const inv = sel[0];
     if (!inv) { await client.query('ROLLBACK'); return null; }
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
-    // Reajusta el correlativo de la serie (issuer_id, ano, serie) al máximo restante.
-    if (inv.issuer_id != null && inv.serie != null && inv.numero != null) {
+    // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
+    // filas: es como numera `nextNumero`, que coge el mayor de todas.
+    //
+    // Iba por emisora, y CEDIA lleva la misma serie en cuatro filas (una por
+    // campus, tres sin emisora): borrar la ultima bajaba una y las otras tres se
+    // quedaban arriba, asi que la siguiente factura se saltaba numeros. Paso con
+    // la 0188 de CEDIA el 06/10.
+    if (inv.serie != null && inv.numero != null) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice_serie:${inv.ano}:${inv.serie}`]);
       const { rows: mx } = await client.query(
-        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE issuer_id = $1 AND ano = $2 AND serie = $3`,
-        [inv.issuer_id, inv.ano, inv.serie]
+        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE ano = $1 AND serie = $2`,
+        [inv.ano, inv.serie]
       );
       await client.query(
         `UPDATE invoice_sequences SET ultimo_numero = $1
-          WHERE issuer_id = $2 AND ano = $3 AND serie = $4 AND ultimo_numero > $1`,
-        [mx[0].m, inv.issuer_id, inv.ano, inv.serie]
+          WHERE ano = $2 AND serie = $3 AND ultimo_numero > $1`,
+        [mx[0].m, inv.ano, inv.serie]
       );
     }
     await client.query('COMMIT');
@@ -522,52 +748,113 @@ export async function conversionSinPago(conversionId) {
   return rows[0] ? Number(rows[0].pagado) <= 0 && !rows[0].tiene_pagos : false;
 }
 
-// ¿El usuario tiene el permiso factura_manager? (gestora con poderes de factura).
-export async function esFacturaManager(userId) {
-  const { rows } = await query(`SELECT factura_manager FROM users WHERE id = $1`, [userId]);
-  return !!rows[0]?.factura_manager;
+/*
+  UNA FACTURA DE UNA VENTA NO PASA DE LO COBRADO (06/10).
+
+  La factura va por cobro: cada abono o cuota lleva la suya (migracion 107). La
+  cola lo hace bien, pero la factura hecha a mano desde la venta salia con el
+  precio de la venta entero. Dos el mismo dia:
+
+  - ICTESS, la 87: segunda cuota de un curso de 333 € en dos plazos de 111.
+    Salio por los 333 enteros; la primera cuota ya tenia la suya (la 0077).
+  - CEDIA, la 0188 de Delia Garcia Moratilla: cobrados 285,50, y la factura de
+    345,45 --el IVA sumado encima de un precio que ya lo llevaba--. Ademas, como
+    la factura no casaba con el cobro, el cobro se quedo en la cola, y «Generar
+    factura» devolvia la misma 0188 sin quitarlo de alli.
+
+  La regla: lo que ya se ha facturado de esa venta mas esta factura no pasa de
+  lo cobrado. Las de abono restan (van en negativo). No se cierra del todo: una
+  empresa que paga a 30 dias recibe la factura antes de pagar, y por eso se
+  puede confirmar y emitir igual (`permitirMasDeLoCobrado`).
+
+  Separada de la consulta para poder probarla sola: es la parte que decide.
+*/
+export function motivoParaNoFacturarDeMas({ total, base, ivaPct = 0, ivaIncluido = false, cobrado, facturado, totalVenta }) {
+  const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const eur = (n) => `${r2(n).toFixed(2)} €`;
+  const queda = r2(Math.max(0, Number(cobrado || 0) - Number(facturado || 0)));
+  if (r2(total) <= queda + 0.01) return null;
+
+  const cuenta = Number(facturado) > 0.005
+    ? `Esta venta lleva cobrados ${eur(cobrado)} y ya tiene facturados ${eur(facturado)}`
+    : `Esta venta lleva cobrados ${eur(cobrado)}`;
+  const confirmar = ' Si de verdad tiene que ser por más —una empresa que paga a 30 días, por ejemplo—, confírmalo y se emite igual.';
+  if (queda <= 0.01) {
+    return `${cuenta}: no queda nada por facturar. La siguiente factura sale cuando entre el próximo cobro, desde la cola de facturación.${confirmar}`;
+  }
+  let porQue = '';
+  if (Number(ivaPct) > 0 && !ivaIncluido && Math.abs(r2(base) - queda) <= 0.01) {
+    porQue = ' La diferencia es el IVA: si el precio ya lo lleva, marca «IVA incluido».';
+  } else if (Number(totalVenta) > Number(cobrado) + 0.01) {
+    porQue = ' La venta va a plazos: cada factura es la de su cobro, y sale de la cola de facturación.';
+  }
+  return `${cuenta}, así que lo que queda por facturar son ${eur(queda)}, y esta factura es de ${eur(total)}.${porQue}${confirmar}`;
 }
 
-// ¿Puede este usuario poner NUMERO a una factura?
-// Admin y superadmin siempre. Una gestora, solo si tiene factura_manager.
+// Lo cobrado y lo facturado de la venta `c`. Cobrado: lo mayor entre la cifra
+// de la venta y la suma de sus cobros --hay ventas antiguas con `importe_pagado`
+// y sin filas de cobro, y quedarse con la menor bloquearia facturas legitimas--.
+// Facturado: las facturas y las de abono, que restan.
+const COBRADO_DE_LA_VENTA = `GREATEST(COALESCE(c.importe_pagado, 0),
+         COALESCE((SELECT SUM(cp.importe) FROM conversion_payments cp
+                    WHERE cp.conversion_id = c.id), 0))`;
+const FACTURADO_DE_LA_VENTA = `COALESCE((SELECT SUM(i.total) FROM invoices i
+          WHERE i.conversion_id = c.id
+            AND i.tipo IN ('normal', 'rectificativa')
+            AND i.estado NOT IN ('cancelada', 'borrador')), 0)`;
+
+/** Lo que lleva cobrado y facturado una venta, para `motivoParaNoFacturarDeMas`. */
+export async function cuadreDeVenta(conversionId) {
+  const { rows: [r] } = await query(
+    `SELECT c.importe_total AS total_venta,
+            ${COBRADO_DE_LA_VENTA} AS cobrado,
+            ${FACTURADO_DE_LA_VENTA} AS facturado
+       FROM conversions c
+      WHERE c.id = $1`,
+    [conversionId]
+  );
+  return r
+    ? { totalVenta: Number(r.total_venta), cobrado: Number(r.cobrado), facturado: Number(r.facturado) }
+    : null;
+}
+
+// ¿Tiene esta persona esta clave del catálogo? (#423) Para donde no hay `req`
+// (servicios). Con `req`, `tienePermiso` de shared/middleware/permissions.js.
+export async function tieneLaClave(userId, clave) {
+  const { explicarPermisos } = await import('../permissions/permissions.service.js');
+  const e = await explicarPermisos(userId);
+  return e?.mapa[clave] === true;
+}
+
+// ¿Puede este usuario poner NUMERO a una factura? El permiso «Poner número
+// al cobrar» (#423; antes, admin/superadmin o la casilla factura_manager).
 // Sin usuario (sincronía de Stripe, cron) se deja pasar: no hay nadie a quien
 // pedirle los datos, y el cobro ya viene de una pasarela.
 export async function puedeEmitirFactura(userId) {
   if (!userId) return true;
+  return tieneLaClave(userId, 'facturas.emitir');
+}
+
+// ¿Es una factura que esta persona gestiona? El permiso («Corregir y abonar»)
+// lo pide la ruta; esto es el ALCANCE (#423): admin y superadmin, cualquiera;
+// el resto, solo las de sus prospectos.
+//
+// Diego, 09/11/2026: corregir y abonar, solo las administradoras SIN equipo
+// comercial (y el super admin). Quien lleva un equipo (`equipo_comercial`) no
+// corrige, abona, asocia ni borra NINGUNA factura, ni las de su equipo.
+export async function esFacturaQueGestiona(userId, role, invoiceId) {
+  const esJefe = role === 'admin' || role === 'superadmin';
+  const alcance = await alcanceComercial({ userId, role });
+  if (alcance && alcance.length > 1) return false;
+  if (esJefe) return true;
   const { rows } = await query(
-    `SELECT role, COALESCE(factura_manager, false) AS factura_manager
-       FROM users WHERE id = $1`,
-    [userId]
+    `SELECT 1 FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+      WHERE i.id = $1 AND ${FACTURA_DE('$2')}`,
+    [invoiceId, comoIds(userId)]
   );
-  const u = rows[0];
-  if (!u) return false;
-  return u.role === 'admin' || u.role === 'superadmin' || u.factura_manager === true;
-}
-
-// ¿Puede este usuario gestionar (editar/corregir/eliminar/abonar) esta factura?
-// Admin/superadmin → cualquiera. Gestor → solo si es factura_manager Y la factura
-// es de un lead del que es responsable (sus propias facturas).
-export async function puedeGestionarFactura(userId, role, invoiceId) {
-  if (role === 'admin' || role === 'superadmin') return true;
-  if (role !== 'gestor') return false;
-  if (!(await esFacturaManager(userId))) return false;
-  const { rows } = await query(
-    `SELECT l.responsable_id FROM invoices i LEFT JOIN leads l ON l.id = i.lead_id WHERE i.id = $1`,
-    [invoiceId]
-  );
-  return !!rows[0] && rows[0].responsable_id === userId;
-}
-
-// Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de
-// las facturas, sin tocar importes/conceptos. Admin/superadmin siempre pueden.
-export async function esEditorFechas(userId) {
-  const { rows } = await query(`SELECT editar_fechas_factura FROM users WHERE id = $1`, [userId]);
-  return !!rows[0]?.editar_fechas_factura;
-}
-
-export async function puedeEditarFechas(userId, role) {
-  if (role === 'admin' || role === 'superadmin') return true;
-  return esEditorFechas(userId);
+  return rows.length > 0;
 }
 
 // Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
@@ -643,6 +930,7 @@ async function numerarBorrador(invoiceId) {
     const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [invoiceId]);
     const inv = sel[0];
     if (!inv || inv.estado !== 'borrador') { await client.query('COMMIT'); return inv || null; }
+    await exigirFacturacionActiva({ paymentId: inv.payment_id || null });
     const ano = new Date().getFullYear();
     const serie = (inv.serie && inv.serie.trim()) || 'A';
     const numero = await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
@@ -668,7 +956,7 @@ async function numerarBorrador(invoiceId) {
 // Si había borrador → se numera tal cual. Si no había factura → se crea emitida
 // con los datos de la conversión + lo que el lead tenga (faltantes = '—').
 // Los datos incompletos NO bloquean la numeración, solo enviar/descargar.
-const METODOS_PAGO_VALIDOS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro'];
+const METODOS_PAGO_VALIDOS = ['transferencia', 'deposito', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro'];
 
 // Datos fiscales del cliente + snapshot de la conversión, para armar la factura.
 async function _convDataParaFactura(conversionId) {
@@ -701,6 +989,33 @@ function nombreClienteFactura(conv) {
   return razonSocial || conv.lead_nombre || 'Cliente';
 }
 
+// Los datos del cliente de una factura por cobro: los de la ficha, como
+// siempre, o los de la factura automatica (#764) si los hay.
+function clienteDeLaFactura(conv, df = null) {
+  if (df) {
+    return {
+      clienteNombre: df.nombre,
+      clienteTipo: df.cliente_tipo || null,
+      clienteNif: df.nif || undefined,
+      clienteDireccion: df.direccion || undefined,
+      clienteCiudad: df.ciudad || undefined,
+      clienteCp: df.codigo_postal || undefined,
+      clientePais: df.pais || 'España',
+      clienteEmail: df.email || conv.lead_email || null,
+    };
+  }
+  return {
+    clienteNombre: nombreClienteFactura(conv),
+    clienteTipo: conv.cliente_tipo || null,
+    clienteNif: conv.identificacion_fiscal || undefined,
+    clienteDireccion: conv.direccion_fiscal || undefined,
+    clienteCiudad: conv.ciudad_fiscal || undefined,
+    clienteCp: conv.codigo_postal_fiscal || undefined,
+    clientePais: conv.pais_fiscal || 'España',
+    clienteEmail: conv.lead_email || null,
+  };
+}
+
 function telefonoClienteFactura(conv) {
   const telefonoFiscal = conv.cliente_tipo === 'empresa'
     ? String(conv.custom_fields?.telefono_facturacion || '').trim()
@@ -711,6 +1026,13 @@ function telefonoClienteFactura(conv) {
 // PROFORMA → FACTURA: convierte una proforma (número fiscal ya reservado) en
 // factura definitiva con ESE MISMO número, por el TOTAL de la conversión. Así el
 // correlativo fiscal queda continuo (el número reservado acaba siendo factura).
+//
+// Y CONSERVA SU FECHA. Antes tomaba la del cobro, y eso descolocaba la serie:
+// la 2026/0065 de ICTESS es una proforma del 7/8; cobrada a finales de
+// septiembre habria salido fechada detras de la 0066 a la 0085, con un numero
+// menor y una fecha posterior. El numero se le dio el dia de la proforma, y
+// numero y fecha van juntos. El cobro guarda su propia fecha en fecha_pago.
+// Diego, 29/09, al pedir el boton «Cobrada».
 async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const total = Number(conv.importe_total) || 0;
   const pagado = Number(conv.importe_pagado) || 0;
@@ -727,7 +1049,6 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const { rows } = await query(
     `UPDATE invoices SET
        tipo = 'normal', estado = $2::text,
-       fecha_emision = COALESCE($3::date, fecha_emision),
        fecha_pago = CASE WHEN $2::text = 'pagada' THEN $3::date ELSE NULL END,
        payment_id = COALESCE(payment_id, $4::int),
        items = $5::jsonb, base_imponible = $6::numeric, iva_pct = $7::numeric, iva_importe = $8::numeric,
@@ -743,13 +1064,88 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   return rows[0];
 }
 
+// La proforma de una venta que pasa a factura cuando se cobra: la ultima viva
+// y ya numerada.
+async function proformaQueSeConvierte(conversionId) {
+  const { rows } = await query(
+    `SELECT * FROM invoices
+      WHERE conversion_id = $1 AND tipo = 'proforma'
+        AND estado NOT IN ('cancelada', 'borrador') AND numero IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [conversionId]);
+  return rows[0] || null;
+}
+
+/*
+  ¿SE PUEDE COBRAR ESTA PROFORMA?
+
+  El boton «Cobrada» apunta el cobro en la venta y luego convierte la proforma
+  por el mismo camino que la cola (emitirFacturaDePago). Ese camino tiene
+  salidas en las que el cobro se queda apuntado pero la proforma NO pasa a
+  factura. Se miran antes de apuntar nada, para no dejar un cobro a medias.
+  Devuelve null si se puede, o { code, texto } si no.
+*/
+export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
+  const vigente = await proformaQueSeConvierte(prof.conversion_id);
+  if (!vigente || vigente.id !== prof.id) {
+    return { code: 'OTRA_PROFORMA',
+      texto: `La venta tiene otra proforma más reciente${vigente?.codigo ? ` (${vigente.codigo})` : ''}: es esa la que pasa a factura.` };
+  }
+  // Una factura de la venta por el mismo importe y sin cobro: el cobro se le
+  // engancharia a ella y la proforma se quedaria como estaba.
+  const { rows: huerfana } = await query(
+    `SELECT codigo FROM invoices
+      WHERE conversion_id = $1 AND payment_id IS NULL
+        AND tipo = 'normal' AND estado <> 'cancelada'
+        AND ABS(total - $2::numeric) < 0.01
+      LIMIT 1`,
+    [prof.conversion_id, importe]);
+  if (huerfana[0]) {
+    return { code: 'YA_HAY_FACTURA',
+      texto: `La venta ya tiene la factura ${huerfana[0].codigo || ''} por ese importe: el cobro va con ella, no con la proforma.` };
+  }
+  // Cobros de antes de que la sociedad empezara a facturar no llevan factura.
+  const { rows: antes } = await query(
+    `SELECT to_char(MIN(f.fecha_emision), 'DD/MM/YYYY') AS desde
+       FROM projects pr
+       JOIN invoices f ON f.issuer_id = pr.sociedad_emisora_id
+         AND f.tipo <> 'proforma' AND f.numero IS NOT NULL
+      WHERE pr.id = $1
+      GROUP BY pr.id
+     HAVING COALESCE($2::date, CURRENT_DATE) < MIN(f.fecha_emision)`,
+    [prof.project_id, fecha || null]);
+  if (antes[0]) {
+    return { code: 'ANTES_DEL_ARRANQUE',
+      texto: `Esa fecha es anterior a la primera factura de la sociedad (${antes[0].desde}): ese cobro no lleva factura.` };
+  }
+  return null;
+}
+
+// ¿Es de esta gestora? La hizo ella, o es de su venta o de su cliente: lo mismo
+// que le deja verla en el listado, mas la que escribio. `userId` puede ser una
+// lista (una líder y su equipo comercial).
+export async function esProformaDe(userId, invoiceId) {
+  const { rows } = await query(
+    `SELECT 1 FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+      WHERE i.id = $1
+        AND ${FACTURA_DE('$2')}`,
+    [invoiceId, comoIds(userId)]);
+  return rows.length > 0;
+}
+
 // FACTURA POR PAGO (spec owner 2026-07-16): cada abono genera su propia factura
 // por el MONTO PAGADO (no por el total del programa). El importe del pago se
 // trata como BRUTO (IVA incluido); se desglosa base + IVA. Dedup por payment_id
 // (índice único parcial) → reintentos/reejecuciones no duplican.
 // EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
 // convierte en factura con ese número, en vez de crear una factura nueva.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false }, userId = null) {
+// `datosFiscales` (#764): la fila de `factura_datos_fiscales` con la que sale
+// sola la factura automatica. Con ella, los datos del cliente son los que dio el
+// alumno (o los de su ficha ya validados) y la factura queda marcada con
+// `datos_fiscales_id`. Sin ella, todo como siempre.
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, numero = null, datosFiscales = null, confirmarDuplicada = false }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -762,13 +1158,19 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // mano y luego se asocia el pago de Stripe). Si ya hay una factura de esta venta por
   // ese mismo importe y sin pago vinculado, se le engancha este pago en vez de emitir
   // otra: así queda vinculada y NO se duplica el importe facturado.
+  //
+  // Pero solo si ESTE cobro es el suyo (13/10, ver HUERFANA_ES_DE): una venta a
+  // plazos tiene varios cobros del mismo importe, y la factura del pago inicial no
+  // puede quedarse con la cuota de la semana siguiente.
   const { rows: huerfana } = await query(
-    `SELECT * FROM invoices
-      WHERE conversion_id = $1 AND payment_id IS NULL
-        AND tipo = 'normal' AND estado <> 'cancelada'
-        AND ABS(total - $2::numeric) < 0.01
-      ORDER BY id LIMIT 1`,
-    [conversionId, monto]
+    `SELECT h.* FROM invoices h
+       JOIN conversion_payments cp ON cp.id = $3
+      WHERE h.conversion_id = $1 AND h.payment_id IS NULL
+        AND h.tipo = 'normal' AND h.estado <> 'cancelada'
+        AND ABS(h.total - $2::numeric) < 0.01
+        AND ${HUERFANA_ES_DE('h', 'cp')}
+      ORDER BY h.id LIMIT 1`,
+    [conversionId, monto, paymentId]
   );
   if (huerfana[0]) {
     const { rows: upd } = await query(
@@ -820,10 +1222,18 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
 
   // ¿La conversión tiene una PROFORMA? → convertirla en factura (por el total, con
   // su número reservado). El correlativo fiscal queda continuo.
-  const { rows: prof } = await query(
-    `SELECT * FROM invoices WHERE conversion_id = $1 AND tipo = 'proforma' AND estado <> 'cancelada' ORDER BY id DESC LIMIT 1`,
-    [conversionId]);
-  if (prof[0]) return await _convertirProformaEnFactura(prof[0], conv, paymentId, fechaPago);
+  // Solo una proforma CON numero: la que una gestora deja esperando aprobacion es
+  // un borrador sin numero, y convertirla daria una factura sin numero.
+  const prof = await proformaQueSeConvierte(conversionId);
+  // Una proforma lleva los datos que puso una persona: la convierte una persona.
+  if (prof && datosFiscales) {
+    throw new AppError('Esta venta tiene una proforma: se convierte desde la cola.', 409, 'TIENE_PROFORMA');
+  }
+  if (prof) {
+    // Pasar la proforma a factura tambien es emitir (#765).
+    await exigirFacturacionActiva({ paymentId });
+    return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
+  }
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
@@ -884,15 +1294,15 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     projectId: conv.project_id,
     conversionId,
     paymentId,
+    // El numero que eligio quien factura desde la cola. Si no dijo nada, va
+    // null y `create` coge el siguiente libre, como siempre.
+    numero,
+    // El aviso de posible duplicada (CRM#819) vale tambien aqui. Desde la cola,
+    // quien factura lo confirma; la emision automatica no confirma nunca, asi
+    // que no emite y el cobro se queda en la cola con ese motivo.
+    confirmarDuplicada,
     leadId: conv.lead_id,
-    clienteNombre: nombreClienteFactura(conv),
-    clienteTipo: conv.cliente_tipo || null,
-    clienteNif: conv.identificacion_fiscal || undefined,
-    clienteDireccion: conv.direccion_fiscal || undefined,
-    clienteCiudad: conv.ciudad_fiscal || undefined,
-    clienteCp: conv.codigo_postal_fiscal || undefined,
-    clientePais: conv.pais_fiscal || 'España',
-    clienteEmail: conv.lead_email || null,
+    ...clienteDeLaFactura(conv, datosFiscales),
     clienteTelefono: telefonoClienteFactura(conv),
     items: [{ descripcion: concepto, cantidad: 1, precio_unitario: base }],
     baseImponible: base,
@@ -913,6 +1323,11 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Un pago recibido → factura PAGADA (no 'emitida'), con la fecha del cobro.
   if (inv?.id) {
     try { await markPaid(inv.id, fechaPago); inv.estado = 'pagada'; inv.fecha_pago = fechaPago; } catch { /* no bloqueante */ }
+  }
+  // Salio sola (#764): queda dicho en la factura, con que datos.
+  if (inv?.id && datosFiscales?.id) {
+    await query('UPDATE invoices SET datos_fiscales_id = $2 WHERE id = $1', [inv.id, datosFiscales.id]);
+    inv.datos_fiscales_id = datosFiscales.id;
   }
   return inv;
 }
@@ -1031,6 +1446,29 @@ export async function emitirBorrador(id, patch = {}) {
       throw new AppError(`No se puede emitir. Falta: ${faltan.join(', ')}.`, 400, 'DRAFT_INCOMPLETE');
     }
 
+    // La misma regla que al crearla: un borrador de una venta tampoco sale por
+    // mas de lo cobrado. El borrador no cuenta en lo facturado (aun no lo esta).
+    // En otra divisa, `total` esta en euros solo si se dio su importe en euros
+    // (`total_divisa` puesto); si no, no hay con que comparar.
+    if (inv.tipo === 'normal' && inv.conversion_id && !patch.permitirMasDeLoCobrado
+        && (!inv.moneda || inv.moneda === 'EUR' || inv.total_divisa != null)) {
+      const cuadre = await cuadreDeVenta(inv.conversion_id);
+      const motivo = cuadre && motivoParaNoFacturarDeMas({
+        total: inv.total, base: inv.base_imponible, ivaPct: inv.iva_pct,
+        ivaIncluido: inv.iva_incluido, ...cuadre,
+      });
+      if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
+    }
+
+    // Y la misma que al crearla: ¿hay ya una factura igual de este cliente? Con
+    // los datos ya completados y sin contarse a si misma (CRM#819).
+    if (inv.tipo === 'normal') {
+      await frenarSiPosibleDuplicada({
+        nombre: merged.cliente_nombre, nif: merged.cliente_nif, total: inv.total,
+        fecha: inv.fecha_emision || null, conversionId: inv.conversion_id || null, excluirId: inv.id,
+      }, { confirmada: vieneConfirmada(patch), exec: (sql, params) => client.query(sql, params) });
+    }
+
     // Gating fiscal del emisor (igual que en create): NIF inválido bloquea.
     if (inv.issuer_id) {
       const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [inv.issuer_id]);
@@ -1041,6 +1479,9 @@ export async function emitirBorrador(id, patch = {}) {
           400, 'ISSUER_NIF_INVALID');
       }
     }
+
+    // Con la facturacion pausada por la auditoria no se emite (#765).
+    await exigirFacturacionActiva({ paymentId: inv.payment_id || null });
 
     // Numeración fiscal AHORA (el borrador nunca consumió número).
     // Respeta un número YA reservado (borrador con hueco reservado, p.ej. 0612);
@@ -1092,6 +1533,26 @@ export async function emitirBorrador(id, patch = {}) {
   }
 }
 
+// Un cobro es «de Stripe» cuando tiene enganchado un cargo de Stripe cobrado:
+// entonces su importe es el que cobro Stripe, dinero real, y nada de la factura
+// lo cambia (15/10, venta 643). Un cobro apuntado a mano no entra aqui aunque
+// diga «tarjeta_stripe»: ese importe lo tecleo una persona.
+const ES_COBRO_DE_STRIPE = (cp) => `EXISTS (
+          SELECT 1 FROM stripe_payments sp
+           WHERE sp.conversion_payment_id = ${cp}.id AND sp.status = 'succeeded')`;
+
+/** El cobro de una factura: su importe y si entro por Stripe. Null si no tiene. */
+export async function cobroDeLaFactura(invoiceId) {
+  const { rows: [r] } = await query(
+    `SELECT cp.id, cp.importe, ${ES_COBRO_DE_STRIPE('cp')} AS de_stripe
+       FROM invoices i
+       JOIN conversion_payments cp ON cp.id = i.payment_id
+      WHERE i.id = $1`,
+    [invoiceId]
+  );
+  return r ? { id: r.id, importe: Number(r.importe), deStripe: !!r.de_stripe } : null;
+}
+
 // Edición COMPLETA de una factura en BORRADOR (solo admin/superadmin vía ruta).
 // Permite cambiar cliente, conceptos, importes, fecha, emisor, moneda… Nunca toca
 // una factura ya emitida (fiscalmente inmutable). Los importes llegan ya
@@ -1106,6 +1567,32 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
     // soloBorrador=false → corrección admin de una factura ya emitida/pagada
     // (mantiene su número fiscal; se usa para enmendar datos/IVA/concepto).
     if (soloBorrador && inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
+
+    // EL NUMERO DE FACTURA se puede cambiar.
+    //
+    // Diego, 19/09: «LA GESTORA TIENE QUE PODER CAMBIAR EL NUMERO DE FACTURA».
+    //
+    // La pantalla ya lo mandaba —InvoiceCreatePage manda numero en el cuerpo—
+    // pero esta consulta no guardaba ni numero ni codigo. El servidor respondia
+    // «guardado», guardaba lo demas y tiraba el numero sin decir nada: la
+    // gestora lo cambiaba, recargaba, y seguia saliendo el viejo. Un descarte
+    // silencioso es peor que un error, porque nadie sabe que hay que avisar.
+    //
+    // Se apoya en reservarNumero, que toma el cerrojo de la serie y, si el
+    // numero ya esta cogido, dice QUIEN lo tiene. Un numero repetido en una
+    // serie fiscal no es un aviso, es un problema.
+    //
+    // Solo para facturas YA numeradas: un borrador coge su numero al emitirse,
+    // y adelantarlo aqui chocaria con ese momento.
+    let numeroFinal = inv.numero;
+    let codigoFinal = inv.codigo;
+    if (inv.numero != null && data.numero != null && Number(data.numero) !== Number(inv.numero)) {
+      numeroFinal = await reservarNumero(client, inv.project_id, inv.issuer_id, inv.ano, inv.serie, data.numero);
+      // El prefijo se conserva tal cual: la serie PRO numera «PRO-2026/0032»,
+      // y las demas «2026/0126». Se reemplaza solo la cola.
+      const prefijo = String(inv.codigo || '').replace(/\d{4}\/\d+$/, '');
+      codigoFinal = prefijo + inv.ano + '/' + String(numeroFinal).padStart(4, '0');
+    }
 
     // Snapshot del emisor si cambia; si no, conserva el actual.
     let iss = { id: inv.issuer_id, razon_social: inv.issuer_razon_social, nif: inv.issuer_nif, direccion: inv.issuer_direccion, ciudad: inv.issuer_ciudad, cp: inv.issuer_cp, pais: inv.issuer_pais };
@@ -1125,7 +1612,7 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
          -- Faltaba, y era invisible: cambiar de persona fisica a empresa se
          -- guardaba en la pantalla pero no en la factura, asi que el PDF seguia
          -- saliendo con nombre y apellidos.
-         cliente_tipo=$31, updated_at=NOW()
+         cliente_tipo=$31, numero=$32, codigo=$33, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [id,
        g('clienteNombre', inv.cliente_nombre), g('clienteNif', inv.cliente_nif), g('clienteDireccion', inv.cliente_direccion),
@@ -1138,7 +1625,7 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
        iss.id, iss.razon_social, iss.nif, iss.direccion, iss.ciudad, iss.cp, iss.pais,
        g('projectId', inv.project_id),
        g('totalDivisa', inv.total_divisa),
-       g('clienteTipo', inv.cliente_tipo)]);
+       g('clienteTipo', inv.cliente_tipo), numeroFinal, codigoFinal]);
     // Corrección de una emitida: invalida el PDF cacheado para que se regenere
     // con los datos nuevos la próxima vez que se descargue.
     if (!soloBorrador) {
@@ -1149,15 +1636,36 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
       // cliente aparece el monto corregido (ej.: era 300 y se puso 250, se corrige).
       const nuevoTotal = Number(rows[0].total);
       const viejoTotal = Number(inv.total);
-      if (inv.payment_id && Number.isFinite(nuevoTotal) && Math.abs(nuevoTotal - viejoTotal) > 0.001) {
+      const cambiaElTotal = inv.payment_id && Number.isFinite(nuevoTotal) && Math.abs(nuevoTotal - viejoTotal) > 0.001;
+      // SALVO SI EL COBRO ES DE STRIPE (15/10, venta 643). Ese cobro es lo que
+      // cobro Stripe: dinero real, con el IVA dentro si lo lleva. Una factura no lo
+      // cambia. Antes se sincronizaba igual, y corregir la 2026/0196 para ponerle
+      // el IVA convirtio un cobro de 412,25 € en uno de 498,82 que nadie pago.
+      const { rows: [cobro] } = cambiaElTotal
+        ? await client.query(
+          `SELECT cp.importe, ${ES_COBRO_DE_STRIPE('cp')} AS de_stripe
+             FROM conversion_payments cp WHERE cp.id = $1`, [inv.payment_id])
+        : { rows: [] };
+      if (cambiaElTotal && cobro?.de_stripe) {
+        // Llevar la factura a lo cobrado se puede (es arreglarla); otro importe no.
+        if (Math.abs(nuevoTotal - Number(cobro.importe)) > 0.01) {
+          const eur = (n) => `${Number(n).toFixed(2)} €`;
+          throw new AppError(
+            `Esta factura es de un cobro de Stripe de ${eur(cobro.importe)} y su total tiene que ser ese: `
+            + `es lo que pago el cliente, con el IVA dentro si lo lleva. Con estos cambios saldria de ${eur(nuevoTotal)}. `
+            + 'Si lleva IVA, marca «El precio ya incluye IVA». Si el importe de verdad es otro, '
+            + 'hace falta una factura rectificativa, no cambiar el cobro.',
+            409, 'COBRO_DE_STRIPE');
+        }
+      } else if (cambiaElTotal) {
         await client.query(`UPDATE conversion_payments SET importe = $1 WHERE id = $2`, [nuevoTotal, inv.payment_id]);
         await client.query(`UPDATE conversion_installments SET importe_cobrado = $1 WHERE payment_id = $2 AND fecha_cobro IS NOT NULL`, [nuevoTotal, inv.payment_id]);
-        if (inv.conversion_id) {
-          await client.query(
-            `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado + $1), updated_at = NOW() WHERE id = $2`,
-            [nuevoTotal - viejoTotal, inv.conversion_id]
-          );
-        }
+        // La venta del COBRO, y su cobrado desde los pagos (#692). Antes sumaba
+        // la diferencia con el total de la FACTURA, que no tiene por qué ser lo
+        // que decía el cobro, y el desfase se quedaba en la venta.
+        const { rows: [delCobro] } = await client.query(
+          'SELECT conversion_id FROM conversion_payments WHERE id = $1', [inv.payment_id]);
+        if (delCobro?.conversion_id) await recalcularCobrado(client, delCobro.conversion_id);
       }
     }
     await client.query('COMMIT');
@@ -1176,7 +1684,10 @@ export async function getLeadConversions(leadId) {
   const { rows } = await query(
     `SELECT c.id, c.producto_contratado, c.producto_contratado_id,
             c.importe_total, c.importe_pagado, c.metodo_pago, c.fecha_conversion,
-            p.nombre AS producto_nombre, p.precio AS producto_precio
+            p.nombre AS producto_nombre, p.precio AS producto_precio,
+            -- Lo cobrado que aun no tiene factura: es lo que propone «Nueva
+            -- factura» en una venta que ya ha cobrado algo (06/10, la 87).
+            (${COBRADO_DE_LA_VENTA} - ${FACTURADO_DE_LA_VENTA}) AS por_facturar
        FROM conversions c
        LEFT JOIN products p ON p.id = c.producto_contratado_id
       WHERE c.lead_id = $1
@@ -1236,11 +1747,11 @@ export async function getDefaultIssuer(projectId) {
 export async function createIssuer(d, userId) {
   const { rows } = await query(
     `INSERT INTO invoice_issuers
-       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by, bic)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [d.projectId || null, d.razonSocial, d.nif, d.direccion || null, d.ciudad || null, d.cp || null,
      d.pais || 'España', d.email || null, d.telefono || null, d.iban || null, d.logoUrl || null,
-     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId]
+     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId, (d.bic && d.bic.trim()) || null]
   );
   return rows[0];
 }
@@ -1249,7 +1760,7 @@ export async function updateIssuer(id, d) {
   // Update parcial: solo toca los campos presentes en `d` (no pisa el resto con null).
   const COLS = {
     razonSocial: 'razon_social', nif: 'nif', direccion: 'direccion', ciudad: 'ciudad',
-    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban',
+    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban', bic: 'bic',
     logoUrl: 'logo_url', logoKey: 'logo_key', pieDefault: 'pie_default',
     esDefault: 'es_default', activo: 'activo', serie: 'serie',
   };
@@ -1393,19 +1904,42 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura(projectId) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null, personas = null } = {}) {
+  /*
+    Un proyecto O UNA SOCIEDAD ENTERA.
+
+    Diego: «si elijo facturas y estoy eligiendo CEDIA debe de salir». Esta
+    consulta solo sabia de un proyecto, asi que con una sociedad elegida la
+    pantalla no tenia nada que pedir y salia el muro de «elige un proyecto»
+    --justo en la pantalla que dice QUE FALTA POR FACTURAR de toda la empresa.
+
+    Se devuelve tambien el proyecto de cada venta: mirando siete campus a la vez,
+    una fila sin marca no dice a quien hay que facturarle.
+  */
+  const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre,
-            c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago
+            c.producto_contratado, c.importe_total, c.importe_pagado, c.fecha_conversion, c.metodo_pago,
+            c.project_id, pr.nombre AS proyecto_nombre
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN projects pr ON pr.id = c.project_id
        LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada' AND i.tipo <> 'proforma'
-      WHERE c.project_id = $1
+      WHERE ($1::int[] IS NULL OR c.project_id = ANY($1::int[]))
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
         AND c.factura_no_requerida IS NOT TRUE
+        -- El periodo de arriba (#233): con septiembre puesto salían ventas de junio.
+        AND ($2::date IS NULL OR c.fecha_conversion::date >= $2::date)
+        AND ($3::date IS NULL OR c.fecha_conversion::date <= $3::date)
+        -- Una gestora o un equipo comercial (QA del 09/11/2026): solo las
+        -- suyas, con la regla de Ventas (conversion_reparto).
+        AND ($4::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM conversion_reparto r
+               WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($4::int[])))
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [projectId]
+    [lista, from || null, to || null,
+      Array.isArray(personas) && personas.length ? personas.map(Number) : null]
   );
   return rows;
 }
@@ -1415,9 +1949,15 @@ export async function getProjectInvoicerData(projectId) {
   // solo aporta nombre/defaults del proyecto. No se referencia datos_fiscales
   // porque esa columna no existe en todas las instancias.
   const { rows } = await query(
-    `SELECT id, nombre, slug, logo_url,
-            factura_pie_default, factura_serie_default, factura_metodo_default
-     FROM projects WHERE id = $1`,
+    `SELECT p.id, p.nombre, p.slug, p.logo_url,
+            p.factura_pie_default, p.factura_serie_default, p.factura_metodo_default,
+            -- Si las gestoras de esa empresa pueden numerar al registrar la venta,
+            -- en vez de mandarla a la cola. Va en la empresa: CEDIA lleva siete
+            -- campus y en los siete decide la misma gente.
+            COALESCE(e.numera_al_convertir, false) AS numera_al_convertir
+     FROM projects p
+     LEFT JOIN invoice_issuers e ON e.id = p.sociedad_emisora_id
+    WHERE p.id = $1`,
     [projectId]
   );
   return rows[0] || null;
@@ -1510,19 +2050,100 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 }
 
 // Proformas que una gestora dejo esperando el visto bueno.
-export async function listProformasPendientes(projectId) {
+// `personas` (QA del 09/11/2026): con equipo comercial, solo las que ve en
+// Facturas (FACTURA_DE). null = todas las del campus, como siempre.
+export async function listProformasPendientes(projectId, { personas = null } = {}) {
+  const equipo = Array.isArray(personas) && personas.length ? personas.map(Number) : null;
   const { rows } = await query(
     `SELECT i.id, i.total, i.fecha_emision, i.created_at, i.conversion_id,
             i.cliente_nombre, u.nombre AS creada_por
        FROM invoices i
        LEFT JOIN users u ON u.id = i.created_by
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.project_id = $1 AND i.tipo = 'proforma'
         AND i.estado = 'borrador' AND i.numero IS NULL
+        ${equipo ? `AND ${FACTURA_DE('$2')}` : ''}
       ORDER BY i.created_at ASC`,
-    [projectId]
+    equipo ? [projectId, equipo] : [projectId]
   );
   return rows;
 }
+
+/*
+  UNA FACTURA SIN PAGO VINCULADO TAMBIEN CUENTA.
+
+  La cola miraba solo `i.payment_id = cp.id`. Pero una factura puede existir por
+  ese mismo dinero y tener el `payment_id` a NULL: pasa cuando se emite DESDE LA
+  VENTA en vez de desde la cola --`crearDesdeConversion` guarda la venta, no el
+  cobro--. El cobro seguia entonces en la cola con su boton de «Generar
+  factura», invitando a emitir una segunda por lo mismo.
+
+  Diego, 16/09: «en cola de facturacion esta INNOVACION VERDE INVER, SL
+  UNIPERSONAL, y ya se genero su factura» --la 2026/0080, 859,10, con
+  conversion_id puesto y payment_id nulo--.
+
+  Es la MISMA condicion con la que `emitirFacturaDePago` engancha una factura
+  huerfana a su cobro: misma venta, sin pago vinculado y por el mismo importe.
+  Si el CRM la considera suya para engancharla, la cola tiene que considerarla
+  suya para no volver a pedirla.
+*/
+/*
+  PERO UNA FACTURA HUERFANA CUBRE UN SOLO COBRO (13/10).
+
+  Diego: «esta factura del 12 que fue automatica no salio en facturacion». Mirna
+  Flores, venta 628 de Psiko Aprende: pago inicial de 150 € el 05/10, facturado
+  desde la venta (2026/0177, sin cobro enganchado), y cuota de 150 € por Stripe el
+  12/10. La regla de arriba daba la 0177 por buena para CUALQUIER cobro de 150 €
+  de esa venta, asi que la cuota desaparecia de la cola sin factura. Y «Generar
+  factura» le habria enganchado la 0177 en vez de emitir la suya.
+
+  Ahora la huerfana es de UN cobro: el del mismo importe, todavia sin factura
+  propia, con la fecha mas cercana a la de la factura (a igual distancia, el de id
+  mas bajo). En los dos casos reales sale bien: la 0177 (06/10) va con el cobro del
+  05/10, y la 2026/0004 de la venta 89 (19/07) con el del 19/07, no con los de
+  marzo a junio del mismo importe.
+*/
+const HUERFANA_ES_DE = (h, cp) => `NOT EXISTS (
+        SELECT 1 FROM conversion_payments q
+         WHERE q.conversion_id = ${cp}.conversion_id
+           AND q.id <> ${cp}.id
+           AND ABS(q.importe - ${h}.total) < 0.01
+           AND NOT EXISTS (SELECT 1 FROM invoices iq
+                            WHERE iq.payment_id = q.id AND iq.estado <> 'cancelada')
+           AND (ABS(q.fecha - ${h}.fecha_emision::date), q.id)
+             < (ABS(${cp}.fecha - ${h}.fecha_emision::date), ${cp}.id))`;
+
+const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
+        SELECT 1 FROM invoices h
+         WHERE h.conversion_id = cp.conversion_id
+           AND h.payment_id IS NULL
+           AND h.tipo = 'normal'
+           AND h.estado <> 'cancelada'
+           AND ABS(h.total - cp.importe) < 0.01
+           AND ${HUERFANA_ES_DE('h', 'cp')})`;
+
+/*
+  Y UNA FACTURA QUE YA CUBRE LA VENTA ENTERA, TAMBIEN (06/10).
+
+  Es el otro caso en que `emitirFacturaDePago` no emite nada: la venta ya tiene
+  una factura por su total y entre todas cubren lo cobrado. «Generar factura»
+  devuelve entonces esa misma... y el cobro seguia en la cola. Le paso a Dayana
+  con Delia Garcia Moratilla: pulsaba, salia la 0188 y Delia seguia ahi.
+
+  La misma condicion que alli, para que la cola y el boton digan lo mismo.
+*/
+const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
+        EXISTS (SELECT 1 FROM invoices t
+                 WHERE t.conversion_id = cp.conversion_id
+                   AND t.tipo = 'normal' AND t.estado <> 'cancelada'
+                   AND t.total >= (SELECT v.importe_total FROM conversions v
+                                    WHERE v.id = cp.conversion_id) - 0.01)
+        AND (SELECT COALESCE(SUM(s.total), 0) FROM invoices s
+              WHERE s.conversion_id = cp.conversion_id
+                AND s.tipo = 'normal' AND s.estado <> 'cancelada') + 0.01
+            >= (SELECT COALESCE(SUM(p.importe), 0) FROM conversion_payments p
+                 WHERE p.conversion_id = cp.conversion_id))`;
 
 // Cobros que estan esperando factura. Si se pasa hasta, solo los que ya entran
 // dentro del corte; sin hasta, todos los que no tienen factura.
@@ -1545,6 +2166,9 @@ export async function listPagosSinFactura(projectId, hasta = null) {
             cp.notas,
             l.nombre AS cliente, c.producto_contratado,
             COALESCE(uv.nombre, u.nombre) AS gestora,
+            -- De quién es el cobro (la misma regla que FACTURA_DE): para recortar
+            -- la cola a una líder de equipo comercial.
+            COALESCE(c.vendedora_id, l.responsable_id) AS gestora_id,
             EXISTS (SELECT 1 FROM stripe_payments sp
                      WHERE sp.conversion_payment_id = cp.id) AS de_stripe
        FROM conversion_payments cp
@@ -1558,6 +2182,8 @@ export async function listPagosSinFactura(projectId, hasta = null) {
         ${yaHecho}
         AND NOT EXISTS (SELECT 1 FROM invoices i
                          WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+        ${FACTURA_HUERFANA_LO_CUBRE}
+        ${VENTA_YA_FACTURADA_LO_CUBRE}
       ORDER BY cp.fecha ASC, cp.id ASC`,
     params
   );
@@ -1583,8 +2209,98 @@ export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
                    FROM invoice_sequences sq WHERE sq.project_id = $1), 1, 1)
           AND NOT EXISTS (SELECT 1 FROM invoices i
                            WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+          ${FACTURA_HUERFANA_LO_CUBRE}
+          ${VENTA_YA_FACTURADA_LO_CUBRE}
      ) AS hay`,
     [projectId, fecha, paymentId || 0]
   );
   return !!rows[0]?.hay;
+}
+
+/**
+ * Marcar a mano que una factura ya se entrego al cliente. NO ENVIA NADA.
+ *
+ * Diego, 14/09: «añadir: factura enviada o no». Y sigue en pie su regla de
+ * antes: «no enviemos NADA por correo». Las dos cosas conviven porque esto es
+ * un APUNTE, no un envio: las facturas salen por donde salgan --WhatsApp, el
+ * correo de cada uno-- y aqui solo queda constancia de cuales estan hechas.
+ *
+ * De 206 facturas, CERO tenian `sent_at`: el dato existia y no lo usaba nadie,
+ * porque lo unico que lo rellenaba era un envio que no se hace.
+ *
+ * El estado fiscal no se toca. «emitida» pasa a «enviada» y al revuelta vuelve,
+ * pero una PAGADA se queda pagada: que se la hayas mandado no cambia que este
+ * cobrada, y pisarlo seria falsear la contabilidad.
+ */
+export async function marcarEntregada(id, { entregada, userId }) {
+  const { rows } = await query(
+    `UPDATE invoices
+        SET sent_at = CASE WHEN $2 THEN COALESCE(sent_at, NOW()) ELSE NULL END,
+            sent_to_email = CASE WHEN $2 THEN sent_to_email ELSE NULL END,
+            estado = CASE
+                       WHEN $2 AND estado = 'emitida' THEN 'enviada'
+                       WHEN NOT $2 AND estado = 'enviada' THEN 'emitida'
+                       ELSE estado
+                     END,
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, codigo, estado, sent_at`,
+    [id, !!entregada]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Que numero saldria ahora, sin reservarlo.
+ *
+ * Para que la pantalla pueda decir «el siguiente disponible es el X» antes de
+ * emitir. No toca el contador: solo mira. Si entre que se consulta y se emite
+ * alguien coge ese numero, la reserva lo detecta y avisa --por eso la
+ * comprobacion de verdad vive en `reservarNumero`, no aqui--.
+ */
+export async function siguienteLibre({ projectId, issuerId = null, ano = null }) {
+  const y = ano || new Date().getFullYear();
+  const { rows: [cfg] } = await query(
+    // La columna es `factura_serie_default`, NO `serie_factura`. Con el nombre
+    // mal la consulta fallaba, el catch se lo tragaba y devolvia 'FAC': la
+    // pantalla decia «el siguiente disponible es 2026/0001» cuando la serie
+    // CEDIA iba por la 119. Un numero sugerido equivocado es peor que ninguno.
+    // Si no se ha elegido emisora todavia, se mira la POR DEFECTO del proyecto:
+    // es la que usaria la factura de verdad. Sin esto, la pantalla sugeria la
+    // serie generica del proyecto --«A», numero 1-- cuando esa factura iba a
+    // salir en la serie CEDIA por la 119. Un numero sugerido que no es el que
+    // va a salir engaña mas que ayuda.
+    `SELECT COALESCE(
+              (SELECT e.serie FROM invoice_issuers e WHERE e.id = $2),
+              (SELECT e2.serie FROM invoice_issuers e2
+                WHERE e2.project_id = p.id AND e2.es_default LIMIT 1),
+              (SELECT e3.serie FROM invoice_issuers e3 WHERE e3.id = p.sociedad_emisora_id),
+              p.factura_serie_default, 'FAC') AS serie
+       FROM projects p WHERE p.id = $1`,
+    [projectId, issuerId]
+  );
+  const serie = cfg?.serie || 'FAC';
+  const { rows: [t] } = await query(
+    `SELECT GREATEST(
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS usado`,
+    [y, serie]
+  );
+  const n = Number(t.usado) + 1;
+  // Los huecos: numeros que faltan por debajo del tope. Si alguien numero a
+  // mano saltandose uno, conviene verlo --una serie fiscal no deberia tenerlos--.
+  const { rows: huecos } = await query(
+    `SELECT g AS n FROM generate_series(1, $3) g
+      WHERE NOT EXISTS (SELECT 1 FROM invoices i WHERE i.ano = $1 AND i.serie = $2 AND i.numero = g)
+      ORDER BY g LIMIT 10`,
+    [y, serie, Number(t.usado)]
+  );
+  return {
+    ano: y,
+    serie,
+    siguiente: n,
+    codigo: `${y}/${String(n).padStart(4, '0')}`,
+    huecos: huecos.map((h) => Number(h.n)),
+  };
 }

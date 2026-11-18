@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import client from '@/shared/api/client';
+import { formatDate } from '@/shared/lib/format';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -12,6 +13,8 @@ import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { Receipt, PencilSimple, X, FloppyDisk, ArrowSquareOut } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
+import { rutaApp } from '@/shared/lib/rutaApp';
 
 interface Conversion {
   id: number;
@@ -38,18 +41,28 @@ const PAYMENT_METHODS = [
 ];
 
 function fmt(n: number | string): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+  // Con centimos: es el importe exacto que va a ir en una factura.
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(n || 0));
 }
 
+// Las fechas de venta llegan como DATE («2026-10-12»): `new Date()` las lee
+// en UTC y en Latinoamérica salían un día antes (#693). `formatDate` lee el día
+// tal cual y, si trae hora, la respeta.
 function fmtDate(d?: string | null): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDate(d);
 }
 
 const PER_PAGE = 50;
 
 export default function PendienteFacturarPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id?: number | null; nombre?: string };
+    activeIssuerId: number | null;
+  };
   const navigate = useNavigate();
   const [items, setItems] = useState<Conversion[]>([]);
   const [total, setTotal] = useState(0);
@@ -58,13 +71,15 @@ export default function PendienteFacturarPage() {
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
-    if (!activeProject?.id) return;
+    if (!activeProject?.id && !activeIssuerId) return;
     setLoading(true);
     try {
       // Paginado: antes pedia 100 y el contador mentia en cuanto habia mas.
-      const res = await client.get<Conversion[]>(
-        `/conversions?projectId=${activeProject.id}&pendingBilling=true&page=${page}&limit=${PER_PAGE}`
+      const p = ponerAmbito(
+        new URLSearchParams({ pendingBilling: 'true', page: String(page), limit: String(PER_PAGE) }),
+        { activeIssuerId, activeProject },
       );
+      const res = await client.get<Conversion[]>(`/conversions?${p.toString()}`);
       if (res.success) {
         setItems(res.data || []);
         setTotal(((res as { pagination?: { total?: number } }).pagination?.total) ?? (res.data?.length || 0));
@@ -73,10 +88,10 @@ export default function PendienteFacturarPage() {
       const e = err as { message?: string };
       toast({ title: 'Error', description: e?.message || 'No se pudo cargar la lista', variant: 'destructive' });
     } finally { setLoading(false); }
-  }, [activeProject?.id, page]);
+  }, [activeProject?.id, activeIssuerId, page]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [activeProject?.id]);
+  useEffect(() => { setPage(1); }, [activeProject?.id, activeIssuerId]);
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
@@ -87,8 +102,8 @@ export default function PendienteFacturarPage() {
         subtitle={`Ventas registradas sin importe — completar para que aparezcan en facturación${activeProject?.nombre ? ` (${activeProject.nombre})` : ''}`}
       />
 
-      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 text-sm">
-        <p className="text-amber-900 dark:text-amber-300">
+      <div className="bg-warning-soft border border-warning/30 rounded-lg p-3 text-sm">
+        <p className="text-warning-soft-foreground">
           <strong>¿Por qué aparecen aquí?</strong> Estas ventas existen porque el lead se marcó como "convertido" sin
           que se registrara el importe. Edita cada una para añadir el precio real y se reflejará en el dashboard
           financiero.
@@ -127,14 +142,14 @@ export default function PendienteFacturarPage() {
                 {items.map((c) => (
                   <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
-                      <button onClick={() => navigate(`/leads/${c.lead_id}`)} className="font-semibold text-primary hover:underline">
+                      <button onClick={() => navigate(`/prospectos/${c.lead_id}`)} className="font-semibold text-primary hover:underline">
                         {c.lead_nombre || `Lead #${c.lead_id}`}
                       </button>
                       {c.lead_email && <p className="text-xs text-muted-foreground">{c.lead_email}</p>}
                     </td>
                     <td className="px-4 py-3">{c.producto_contratado || <span className="italic text-muted-foreground">Sin programa</span>}</td>
                     <td className="px-4 py-3 text-muted-foreground">{fmtDate(c.fecha_conversion)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700 dark:text-amber-400">
+                    <td className="px-4 py-3 text-right tabular-nums font-bold text-warning-soft-foreground">
                       {fmt(c.importe_total)}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -156,14 +171,14 @@ export default function PendienteFacturarPage() {
             {items.map((c) => (
               <div key={c.id} className="bg-card border border-border rounded-lg p-3 space-y-2">
                 <div>
-                  <button onClick={() => navigate(`/leads/${c.lead_id}`)} className="font-semibold text-primary hover:underline">
+                  <button onClick={() => navigate(`/prospectos/${c.lead_id}`)} className="font-semibold text-primary hover:underline">
                     {c.lead_nombre || `Lead #${c.lead_id}`}
                   </button>
                   {c.lead_email && <p className="text-xs text-muted-foreground">{c.lead_email}</p>}
                 </div>
                 <p className="text-xs text-muted-foreground">{c.producto_contratado || 'Sin programa'} · {fmtDate(c.fecha_conversion)}</p>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold tabular-nums text-amber-700">{fmt(c.importe_total)}</span>
+                  <span className="text-sm font-bold tabular-nums text-warning-soft-foreground">{fmt(c.importe_total)}</span>
                   <button onClick={() => setEditing(c)} className="inline-flex items-center gap-1 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold">
                     <PencilSimple size={13} weight="bold" /> Completar
                   </button>
@@ -242,7 +257,7 @@ function EditDialog({ conversion, onClose, onSaved }: { conversion: Conversion; 
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative bg-card rounded-lg border border-border w-full max-w-md flex flex-col">
           <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-            <div className="w-9 h-9 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-md bg-success-soft text-success-soft-foreground flex items-center justify-center flex-shrink-0">
               <Receipt size={18} weight="regular" />
             </div>
             <div className="min-w-0 flex-1">
@@ -288,7 +303,7 @@ function EditDialog({ conversion, onClose, onSaved }: { conversion: Conversion; 
               </select>
             </div>
             <a
-              href={`/leads/${conversion.lead_id}`}
+              href={rutaApp(`/prospectos/${conversion.lead_id}`)}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               <ArrowSquareOut size={11} weight="bold" /> Ver perfil del cliente

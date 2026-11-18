@@ -4,8 +4,10 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
+import { tieneRol, ROLES_DE_TUTOR } from '@/shared/lib/roles';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
+import LoQueFactura from '../components/LoQueFactura';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import {
   tutoresApi, type Colaboracion, type ResumenComision, type ComisionReal, type CursoFicha,
@@ -53,9 +55,15 @@ function mesActual() {
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function MisCursosPage() {
+/**
+ * «Mis cursos»: sus cursos y lo que le corresponde. Desde el 11/11 (Diego: «que sea
+ * complemento dentro de Mi campus») va como pestaña de «Mi campus»; con `incrustada`
+ * no pinta su propia cabecera, solo el selector del mes.
+ */
+export default function MisCursosPage({ incrustada = false }: { incrustada?: boolean } = {}) {
   const { user } = useAuth() as { user: { role?: string; nombre?: string } | null };
-  const esTutor = user?.role === 'tutor';
+  // Tambien si lo es «ademas de»: sus cursos son suyos igual.
+  const esTutor = tieneRol(user, ...ROLES_DE_TUTOR);
 
   const [periodo, setPeriodo] = useState(mesActual());
   const [cursos, setCursos] = useState<Colaboracion[]>([]);
@@ -136,7 +144,12 @@ export default function MisCursosPage() {
     return m;
   }, [comisiones]);
 
-  const pendiente = comisiones.filter((c) => c.estado === 'pendiente').reduce((s, c) => s + Number(c.importe), 0);
+  // Todo lo que no esta pagado ni devuelto. Filtrar por 'pendiente' a secas
+  // hacia que, en cuanto se le marcaba como «notificada», el dinero
+  // desapareciera de SU pantalla --que es el peor sitio donde puede pasar eso--.
+  const pendiente = comisiones
+    .filter((c) => c.estado !== 'pagada' && c.estado !== 'revertida')
+    .reduce((s, c) => s + Number(c.importe), 0);
   const pagado = comisiones.filter((c) => c.estado === 'pagada').reduce((s, c) => s + Number(c.importe), 0);
   const base = comisiones.filter((c) => c.estado !== 'revertida').reduce((s, c) => s + Number(c.base_calculo), 0);
 
@@ -187,23 +200,38 @@ export default function MisCursosPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader
-        title="Mis cursos"
-        subtitle="Lo que te corresponde por lo que se ha cobrado de tus formaciones"
-        actions={(
-          <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
+      {incrustada ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">Lo que te corresponde por lo que se ha cobrado de tus formaciones</p>
+          <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)} aria-label="Mes"
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-        )}
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title="Mis cursos"
+          subtitle="Lo que te corresponde por lo que se ha cobrado de tus formaciones"
+          actions={(
+            <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          )}
+        />
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KpiCard icon={Coins} iconBg="bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+        <KpiCard icon={Coins} iconBg="bg-warning-soft text-warning-soft-foreground"
           label="Pendiente de cobro" value={euros(pendiente)} />
-        <KpiCard icon={Coins} iconBg="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+        <KpiCard icon={Coins} iconBg="bg-success-soft text-success-soft-foreground"
           label="Ya pagado este mes" value={euros(pagado)} />
-        <KpiCard icon={TrendUp} iconBg="bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
+        <KpiCard icon={TrendUp} iconBg="bg-info-soft text-info-soft-foreground"
           label="Total acumulado" value={euros(totalHistorico)} />
       </div>
+
+      {/* La cuenta que tiene que hacer para facturar. Estaba solo en la pantalla
+          de quien paga, que es justo quien no la necesita. Diego, 14/09: «el
+          tutor debe ver ese cuadro de él y sus recaudos». */}
+      {/* Con el mes ya pagado dice «Todo pagado» en vez de no enseñar nada,
+          que parecia un fallo: le paso a Sara en septiembre (Diego, 13/10). */}
+      <LoQueFactura base={pendiente} titulo="Lo que tienes que facturar" comisiones={comisiones} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
@@ -345,7 +373,7 @@ export default function MisCursosPage() {
               {ficha.brochure ? (
                 <button type="button" disabled={bajando} onClick={() => abrirBrochure(ficha.id)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md border border-border hover:bg-muted/50 transition-colors text-left">
-                  <FilePdf size={20} weight="fill" className="text-red-600 shrink-0" />
+                  <FilePdf size={20} weight="fill" className="text-destructive shrink-0" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium truncate">{ficha.brochure.filename_original}</span>
                     <span className="block text-[11px] text-muted-foreground">
@@ -444,10 +472,10 @@ export default function MisCursosPage() {
                     <td className="py-2 px-4">
                       <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                         v.estado === 'pagada'
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          ? 'bg-success-soft text-success-soft-foreground'
                           : v.estado === 'revertida'
                             ? 'bg-muted text-muted-foreground'
-                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                            : 'bg-warning-soft text-warning-soft-foreground'
                       }`}>
                         {v.estado === 'pagada' ? 'pagada' : v.estado === 'revertida' ? 'devuelta' : 'pendiente'}
                       </span>

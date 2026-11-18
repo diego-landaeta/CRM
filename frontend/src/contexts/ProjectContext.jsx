@@ -61,7 +61,7 @@ function applyThemeColor(hex) {
 }
 
 export function ProjectProvider({ children }) {
-  const { activeProject, projects, switchProject, isAllProjects } = useAuth();
+  const { activeProject, projects, switchProject, isAllProjects, activeIssuer, activeIssuerId, switchIssuer } = useAuth();
 
   // El icono de la pestaña es SIEMPRE el del CRM.
   //
@@ -85,6 +85,10 @@ export function ProjectProvider({ children }) {
       projects: projects || [],
       switchProject,
       isAllProjects: !!isAllProjects,
+      // La sociedad entera, cuando se ha elegido una (#120). Null si no.
+      activeIssuer,
+      activeIssuerId,
+      switchIssuer,
     }}>
       {children}
     </ProjectContext.Provider>

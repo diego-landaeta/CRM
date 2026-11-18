@@ -1,12 +1,19 @@
 import * as conversionService from './conversion.service.js';
+import * as conversionModel from './conversion.model.js';
 import * as installmentsModel from './installments.model.js';
 import {
   createConversionSchema,
   updateConversionSchema,
   createPaymentSchema,
   listConversionsSchema,
+  payInstallmentSchema,
+  editPaidInstallmentSchema,
 } from './conversion.validation.js';
+import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { opcionDeCompartidas } from './compartidas.js';
+import { alcanceComercial, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 
 export async function create(req, res, next) {
   try {
@@ -21,11 +28,13 @@ export async function list(req, res, next) {
   try {
     const parsed = listConversionsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const filters = { ...parsed.data };
+    // Un proyecto, una sociedad entera o todos. Se resuelve aqui y el modelo
+    // recibe ya la lista, igual que en Reportes.
+    const filters = { ...parsed.data, ...(await proyectosDelAmbito(req)) };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
-    if (req.user.role === 'gestor') {
-      filters.responsableId = req.user.userId;
-    }
+    // Quien lleva un equipo comercial (09/11/2026), las de su equipo.
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filters.responsableId = acotarAlAlcance(filters.responsableId, alcance);
     const result = await conversionService.list(filters);
     res.json({
       success: true,
@@ -33,6 +42,56 @@ export async function list(req, res, next) {
       totales: result.totales,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/cuotas?from=&to=&projectId=
+//
+// Las cuotas cobradas en ese periodo, una por una y con su factura. Un total sin
+// desglose no se puede comprobar, y sobre todo no dice QUE FALTA POR FACTURAR:
+// un cobro sin factura es dinero cobrado sin declarar.
+export async function cuotas(req, res, next) {
+  try {
+    const fecha = /^\d{4}-\d{2}-\d{2}$/;
+    const from = fecha.test(req.query.from || '') ? req.query.from : null;
+    const to = fecha.test(req.query.to || '') ? req.query.to : null;
+    if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
+
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
+    // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
+    responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
+
+    const data = await conversionModel.cuotasDelPeriodo({
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
+      // #163: el mismo «Reparto» que la lista. Solo vale 'solo' o 'enteras'.
+      compartidas: opcionDeCompartidas(req.query.compartidas),
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/filas?from=&to=&projectId=&issuerId=&page=&limit=
+//
+// La lista de Ventas con fechas: ventas del periodo + cuotas facturadas del
+// periodo, cada fila etiquetada. Es lo que se ve abajo cuando hay filtro.
+export async function filas(req, res, next) {
+  try {
+    const fecha = /^\d{4}-\d{2}-\d{2}$/;
+    const from = fecha.test(req.query.from || '') ? req.query.from : null;
+    const to = fecha.test(req.query.to || '') ? req.query.to : null;
+    if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
+    // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
+    responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const r = await conversionModel.filasDelPeriodo({
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
+      producto: req.query.producto ? String(req.query.producto) : null,
+      compartidas: req.query.compartidas || null, page, limit,
+    });
+    res.json({ success: true, data: r.filas,
+      pagination: { total: r.total, page, limit, totalPages: Math.max(1, Math.ceil(r.total / limit)) } });
   } catch (err) { next(err); }
 }
 
@@ -71,7 +130,7 @@ export async function addPayment(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const parsed = createPaymentSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const result = await conversionService.addPayment(id, parsed.data);
+    const result = await conversionService.addPayment(id, parsed.data, { userId: req.user.userId });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -80,12 +139,14 @@ export async function removePayment(req, res, next) {
   try {
     const paymentId = parseInt(req.params.paymentId);
     if (isNaN(paymentId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
-    // RBAC: gestor solo puede borrar pagos de leads asignados a él.
-    if (req.user.role === 'gestor') {
+    // RBAC: gestor solo puede borrar pagos de leads asignados a él (y quien
+    // lleva un equipo, de los de su equipo).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
       const { getPaymentOwnership } = await import('./conversion.model.js');
       const own = await getPaymentOwnership(paymentId);
       if (!own) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
-      if (own.responsable_id !== req.user.userId) {
+      if (!enElAlcance(alcance, own.responsable_id)) {
         throw new AppError('Solo puedes borrar pagos de tus propios clientes', 403, 'FORBIDDEN_PAYMENT');
       }
     }
@@ -111,11 +172,12 @@ export async function remove(req, res, next) {
     // RBAC: gestor solo puede borrar conversiones de sus propios leads
     const existing = await conversionService.getById(id);
     if (!existing) throw new AppError('Conversión no encontrada', 404, 'CONVERSION_NOT_FOUND');
-    if (req.user.role === 'gestor') {
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
       const { rows } = await (await import('../../shared/config/db.js')).query(
         `SELECT responsable_id FROM leads WHERE id = $1`, [existing.lead_id]
       );
-      if (rows[0]?.responsable_id !== req.user.userId) {
+      if (!enElAlcance(alcance, rows[0]?.responsable_id)) {
         throw new AppError('Solo puedes borrar conversiones de tus propios clientes', 403, 'FORBIDDEN_CONVERSION');
       }
     }
@@ -164,15 +226,18 @@ export async function updateInstallment(req, res, next) {
 export async function payInstallment(req, res, next) {
   try {
     const instId = parseInt(req.params.instId);
-    const { fecha_cobro, importe_cobrado, metodo, notas } = req.body;
-    if (!fecha_cobro) throw new AppError('fecha_cobro requerida', 400, 'INVALID');
-    const r = await installmentsModel.markPaid(instId, { fecha_cobro, importe_cobrado, metodo, notas });
+    const parsed = payInstallmentSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const { fecha_cobro, importe_cobrado, metodo, notas, referencia } = parsed.data;
+    const r = await installmentsModel.markPaid(instId, { fecha_cobro, importe_cobrado, metodo, notas, referencia });
     if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
     // Auto-factura POR PAGO: cobrar una cuota genera su factura por el importe
     // de ESA cuota (no una general por el total).
     if (r.conversion_id && r.payment_id) {
       conversionService.autoInvoice(r.conversion_id, req.user?.userId || null,
         { paymentId: r.payment_id, importe: Number(r.importe_cobrado) });
+      // Cuota cobrada por transferencia o depósito: el webhook (206).
+      conversionService.cobroApuntado(r.payment_id, { userId: req.user?.userId || null, metodo: r.metodo });
     }
     res.json({ success: true, data: r });
   } catch (err) {
@@ -189,17 +254,23 @@ export async function deleteInstallment(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// PATCH /installments/:instId/paid  { fecha_cobro?, importe_cobrado? }
+// PATCH /installments/:instId/paid  { fecha_cobro?, importe_cobrado?, metodo?, referencia? }
 // Edita un pago YA realizado (no marcar pagada de nuevo, eso es payInstallment).
 export async function editPaidInstallment(req, res, next) {
   try {
     const instId = parseInt(req.params.instId);
-    const { fecha_cobro, importe_cobrado } = req.body || {};
-    if (!fecha_cobro && importe_cobrado === undefined) {
-      throw new AppError('Indica fecha_cobro o importe_cobrado', 400, 'INVALID');
-    }
-    const r = await installmentsModel.editPaid(instId, { fecha_cobro, importe_cobrado });
+    const parsed = editPaidInstallmentSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const r = await installmentsModel.editPaid(instId, parsed.data);
     if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
+    // Si el cobro acaba de pasar A transferencia o depósito, el webhook (206).
+    // Cambiar solo el importe o la fecha de uno que ya lo era no avisa otra vez:
+    // lo avisado es que entró la transferencia, y eso no ha cambiado.
+    const pasaATransferencia = METODOS_QUE_DISPARAN.includes(r.metodo)
+      && !METODOS_QUE_DISPARAN.includes(r.metodo_antes);
+    if (r.payment_id && pasaATransferencia) {
+      conversionService.cobroApuntado(r.payment_id, { userId: req.user?.userId || null, metodo: r.metodo });
+    }
     res.json({ success: true, data: r });
   } catch (err) {
     if (err.message === 'Cuota no pagada') return next(new AppError(err.message, 400, 'NOT_PAID'));
@@ -223,10 +294,10 @@ export async function unpayInstallment(req, res, next) {
 
 export async function listProductos(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-    if (req.user.role === 'gestor') responsableId = req.user.userId;
-    const data = await conversionService.listProductos({ projectId, responsableId });
+    responsableId = acotarAlAlcance(responsableId, await alcanceComercial(req.user));
+    const data = await conversionService.listProductos({ projectId, projectIds, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

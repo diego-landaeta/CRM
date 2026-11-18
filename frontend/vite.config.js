@@ -2,6 +2,8 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
+import { comprobarEntornoDeProduccion } from './scripts/entornoDeProduccion.js';
+import { versionDeLaApp } from './scripts/versionDeLaApp.js';
 
 const modeIndex = process.argv.findIndex((arg) => arg === '--mode' || arg === '-m');
 const mode = modeIndex >= 0 ? process.argv[modeIndex + 1] : process.env.NODE_ENV || 'development';
@@ -33,7 +35,21 @@ const makeApiProxy = () => ({
   cookieDomainRewrite: { '*': '' },
 });
 
-export default defineConfig({
+// Diego, 22/10/2026: un build de producción sin `.env.production` (los worktrees
+// no lo traen) salió con VITE_BETA_MODE apagado y, en ISEIE, sin el ranking de
+// gestoras, sin avisar. Ahora se para. Ver scripts/entornoDeProduccion.js.
+export default defineConfig(({ command, mode: modoVite }) => {
+  comprobarEntornoDeProduccion({ command, mode: modoVite, cwd: __dirname });
+  return CONFIG;
+});
+
+// La versión que enseña el menú, de la etiqueta de Git (ver scripts/versionDeLaApp.js).
+const APP_VERSION = versionDeLaApp({ cwd: __dirname });
+
+const CONFIG = {
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -163,4 +179,4 @@ export default defineConfig({
       '/testeo2/api': makeApiProxy(),
     },
   },
-});
+};

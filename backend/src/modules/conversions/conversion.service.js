@@ -1,9 +1,31 @@
 import { AppError } from '../../shared/utils/AppError.js';
+import { nombreDeLasLineas } from './nombre-de-las-lineas.js';
+import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
+import * as leadModel from '../leads/lead.model.js';
+import { dispararCobro } from '../webhooks-salientes/webhooks-salientes.service.js';
+
+/**
+ * SE HA APUNTADO (O CAMBIADO) UN COBRO: el único sitio desde el que
+ * conversiones avisa al webhook de transferencias (Diego, 15/10; migración 206).
+ *
+ * Lo llaman los cuatro caminos que apuntan un cobro a mano —el alta de la venta
+ * con su primer pago, el abono, la proforma «Cobrada» (que entra por
+ * `addPayment`) y la cuota cobrada— y la edición de una cuota que pasa A
+ * transferencia o depósito. Siempre después del COMMIT, y sin esperar: el envío
+ * va por detrás, como la factura y la comisión.
+ *
+ * Qué sale y qué no lo decide `dispararCobro` con la forma de pago GUARDADA:
+ * solo transferencia y depósito. Tarjeta, Stripe, efectivo, Bizum o PayPal,
+ * nunca. Los cobros de Stripe ni pasan por aquí: entran por el modelo.
+ */
+export function cobroApuntado(paymentId, { userId = null, metodo } = {}) {
+  dispararCobro(paymentId, { userId, metodo });
+}
 
 async function triggerSequences(triggerEvent, leadId, projectId) {
   try {
@@ -26,7 +48,9 @@ async function triggerSequences(triggerEvent, leadId, projectId) {
 async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
   if (!leadId || !fechaConversion) return;
   const { rows } = await query(
-    `SELECT COALESCE(fecha_solicitud, created_at)::date AS entrada FROM leads WHERE id = $1`,
+    `SELECT COALESCE(fecha_solicitud, created_at)::date AS entrada,
+            to_jsonb(l) ->> 'landing_url' AS landing_url
+       FROM leads l WHERE id = $1`,
     [leadId]
   );
   const entrada = rows[0]?.entrada;
@@ -35,6 +59,19 @@ async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
   const alta = new Date(entrada);
   if (Number.isNaN(venta.getTime())) return;
   if (venta < alta) {
+    // UN ALTA A MANO NO TIENE «ENTRADA» DE VERDAD (Diego, 28/09). Ana dio de
+    // alta hoy a personas que compraron el 22 para registrarles la venta, y
+    // esto no la dejaba. Si el prospecto NO vino de la web (sin landing_url),
+    // su fecha de entrada es cuando alguien lo tecleó, no cuando pidió
+    // información: la que manda es la de la venta. Se lleva la entrada a ese
+    // día y se sigue. Si vino de la web, la entrada es real y la venta
+    // anterior es un error: eso se sigue parando.
+    if (!rows[0]?.landing_url) {
+      await query('UPDATE leads SET fecha_solicitud = $2::date, updated_at = NOW() WHERE id = $1', [leadId, fechaConversion]);
+      logger.info({ leadId, entradaAntes: entrada, venta: fechaConversion },
+        'venta anterior a un alta manual: la entrada pasa a la fecha de la venta');
+      return;
+    }
     const dia = (d) => new Date(d).toLocaleDateString('es-ES');
     throw new AppError(
       `La fecha de la venta (${dia(venta)}) es anterior a la fecha de entrada del prospecto ` +
@@ -54,6 +91,11 @@ export async function create(data, userId) {
   // fecha anterior a la entrada y las tasas de conversion salian sin sentido:
   // 220 fichas acabaron asi, con entrada de julio y venta de junio.
   await validarFechaNoAnteriorAlLead(data.lead_id, data.fecha_conversion);
+
+  // Con lineas, el nombre son sus cursos, sin «2x» (#223): ver nombre-de-las-lineas.js.
+  // Va antes de los cruces con el catalogo: «Curso A» cruza, «1x Curso A» no.
+  const deLasLineas = nombreDeLasLineas(data.items);
+  if (deLasLineas) data.producto_contratado = deLasLineas;
 
   // Auto-lookup de producto_contratado_id si llega el texto pero no el id.
   // Evita el bug histórico de tener `producto_contratado` (varchar) sin FK al
@@ -82,6 +124,32 @@ export async function create(data, userId) {
     } catch (err) {
       // No bloqueamos la creación si el lookup falla — solo dejamos NULL y log.
       logger.warn({ err: err.message }, 'auto-lookup producto_contratado_id falló (no bloqueante)');
+    }
+  }
+
+  /*
+    Y EL CAMINO CONTRARIO: con el id del catalogo, el nombre sale de ahi (#160).
+
+    `createSale` manda como `producto_contratado` el NOMBRE DEL CLIENTE
+    --«override por service si tiene lookup», dice su comentario-- contando con
+    que este bloque lo corrija. Pero el de arriba solo va de texto a id, y
+    cuando el id ya viene puesto no se ejecuta: el texto se quedaba tal cual.
+    Resultado, toda venta registrada desde el formulario guardaba al cliente
+    como producto, y la lista de Ventas enseñaba «Pedro Sanchez» en la columna
+    de programa.
+
+    El id manda sobre el texto libre, siempre: el texto es lo que alguien
+    tecleo, el id es lo que eligio de una lista.
+  */
+  if (data.producto_contratado_id) {
+    try {
+      const { rows } = await query(
+        `SELECT nombre FROM products WHERE id = $1 AND project_id = $2`,
+        [data.producto_contratado_id, data.project_id]
+      );
+      if (rows[0]?.nombre) data.producto_contratado = rows[0].nombre;
+    } catch (err) {
+      logger.warn({ err: err.message }, 'nombre del producto por id fallo (no bloqueante)');
     }
   }
 
@@ -117,6 +185,10 @@ export async function create(data, userId) {
   // Auto-factura del abono inicial: factura SOLO el monto pagado (no el total).
   if (conv._initial_payment_id) {
     autoInvoice(conv.id, userId, { paymentId: conv._initial_payment_id, importe: conv._initial_payment_importe });
+    // Si el primer pago fue por transferencia o depósito, el webhook (206).
+    // Una venta con forma de pago transferencia y NADA pagado no avisa: aún
+    // no ha entrado dinero; avisará el cobro cuando llegue.
+    cobroApuntado(conv._initial_payment_id, { userId, metodo: conv._initial_payment_metodo });
   }
 
   return conv;
@@ -128,6 +200,49 @@ export async function create(data, userId) {
 // - Con paymentInfo {paymentId, importe} → factura por ese abono.
 // - Sin paymentInfo (legacy) → factura por el total de la conversión.
 export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
+  /*
+    FACTURA AUTOMATICA CON FORMULARIO (#764). Solo con FACTURA_AUTOMATICA_ACTIVA
+    encendido y en los campus de FACTURA_AUTOMATICA_CAMPUS. No revive el camino
+    frenado de abajo: pide los datos fiscales al alumno y emite con ellos (ver
+    modules/factura-automatica). Apagado, o si la venta no le toca (ya se
+    facturaba a mano, tiene proforma), el cobro va a la cola como hasta ahora.
+  */
+  if (paymentInfo?.paymentId && facturaAutomaticaActiva()) {
+    import('../factura-automatica/factura-automatica.service.js')
+      .then((fa) => fa.alCobrar({ conversionId, paymentId: paymentInfo.paymentId }))
+      .then((tomado) => {
+        if (!tomado) {
+          logger.info({ conversionId, userId, paymentId: paymentInfo.paymentId },
+            'cobro a la cola de facturacion: la emision es manual (freno del 14/09)');
+        }
+      })
+      .catch((err) => logger.warn({ err: err.message, conversionId }, 'factura automatica: fallo (no bloqueante)'));
+    return;
+  }
+  /*
+    FRENADO A PROPOSITO. Ya no emite nada: el cobro se queda en la cola de
+    facturacion y alguien la emite a mano, poniendo el numero.
+
+    Diego, 14/09: «necesitamos meter mas freno, que sea todo manual alli, pase
+    a cola y se ponga con numero de factura».
+
+    POR QUE. Habia TRES caminos que emitian solos --registrar un cobro, marcar
+    cobrada una cuota, y crear la venta con un primer pago-- y los tres
+    entraban por aqui. Ademas la factura quedaba a nombre de quien registro el
+    cobro, asi que en pantalla no habia forma de saber que habia salido sola.
+
+    Eso produjo la 2026/0102: a las 14:14:07 entro el cobro de Stripe y el CRM
+    emitio la 0101 solo; 33 segundos despues la gestora emitio la 0102 a mano
+    sin ver la primera. Un cobro, dos facturas.
+
+    La funcion se deja viva --no se borran las tres llamadas-- para que quede
+    escrito por que no hace nada y no la reviva alguien sin leer esto.
+  */
+  logger.info({ conversionId, userId, paymentId: paymentInfo?.paymentId },
+    'cobro a la cola de facturacion: la emision es manual (freno del 14/09)');
+  return;
+
+  /* eslint-disable no-unreachable */
   (async () => {
     // El cobro se asocia siempre, pero la factura espera a que la facturacion
     // este al dia hasta esa fecha. Si no, la numeracion se adelantaria a quien
@@ -168,6 +283,13 @@ export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
       return;
     }
 
+    // Facturacion pausada por la auditoria (#765): el cobro espera en la cola
+    // de la pausa y se factura, en orden de cobro, al reanudar.
+    if (paymentInfo?.paymentId) {
+      const auditoria = await import('../facturacion-auditoria/facturacion-auditoria.service.js');
+      if (await auditoria.encolarSiPausada({ paymentId: paymentInfo.paymentId, conversionId, userId })) return;
+    }
+
     const inv = paymentInfo?.paymentId
       ? await m.emitirFacturaDePago(conversionId, paymentInfo, userId)
       : await m.autoEmitirPorPago(conversionId, userId);
@@ -175,7 +297,17 @@ export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
       logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo },
         'auto-factura por pago');
     }
-  })().catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)'));
+  })().catch((err) => {
+    // Posible duplicada (CRM#819 / CRM-ISEIE#500): la emision automatica no
+    // decide. No emite, y el cobro se queda en la cola con ese motivo.
+    if (err?.code === 'POSIBLE_DUPLICADA') {
+      logger.info({ conversionId, paymentId: paymentInfo?.paymentId, otra: err.data?.otra?.numero },
+        'factura automatica no emitida: posible duplicada; el cobro queda en la cola');
+      return;
+    }
+    logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)');
+  });
+  /* eslint-enable no-unreachable */
 }
 
 export async function getById(id) {
@@ -210,10 +342,11 @@ export async function update(id, fields) {
   return updated;
 }
 
-export async function addPayment(conversionId, data) {
+// `userId`: quien apunta el cobro (va como `registrado_por` en el webhook).
+export async function addPayment(conversionId, data, { userId = null } = {}) {
   const { permitir_duplicado, ...pago } = data || {};
   const result = await conversionModel.addPayment(conversionId, pago,
-    { allowDuplicate: !!permitir_duplicado });
+    { allowDuplicate: !!permitir_duplicado, manual: true });
   if (result.error === 'NOT_FOUND') throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
   if (result.error === 'OVERPAY') throw new AppError('El importe excede el pendiente', 400, 'OVERPAY');
   if (result.error === 'DUPLICATE') {
@@ -223,6 +356,14 @@ export async function addPayment(conversionId, data) {
       + 'Si de verdad son dos cobros distintos, marca la casilla de duplicado permitido.',
       409, 'DUPLICATE_PAYMENT');
   }
+  if (result.error === 'DUPLICATE_AUTOMATICO') {
+    const d = result.existing;
+    const deDonde = d.origen === 'paypal' ? 'PayPal' : 'el extracto del banco';
+    throw new AppError(
+      `Ese cobro ya entró solo desde ${deDonde}: ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)}. `
+      + 'No se puede apuntar otra vez a mano.',
+      409, 'DUPLICATE_AUTOMATIC_PAYMENT');
+  }
   // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
   commissionModel.recalculateCommission(conversionId).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
@@ -230,6 +371,9 @@ export async function addPayment(conversionId, data) {
   // Auto-factura al registrar el abono: una factura por ESTE pago (su monto).
   if (result.payment?.id) {
     autoInvoice(conversionId, null, { paymentId: result.payment.id, importe: Number(result.payment.importe) });
+    // Transferencia o depósito: el webhook (206). Aquí entran el abono y la
+    // proforma «Cobrada».
+    cobroApuntado(result.payment.id, { userId, metodo: result.payment.metodo });
   }
   return result;
 }
@@ -266,5 +410,43 @@ export async function remove(id, { reason, motivo, userId } = {}) {
   }
 
   await conversionModel.deleteConversion(id);
+  await devolverEstadoSiNoQuedanVentas(existing.lead_id, userId);
   return { message: 'Conversion eliminada', reason, motivo };
+}
+
+/*
+  BORRAR LA ULTIMA VENTA DEVUELVE LA FICHA A DONDE ESTABA (06/10).
+
+  Registrar una venta pone la ficha en «convertido»; borrarla la dejaba ahi. Con
+  ninguna venta, no salia ni en Prospectos (esconde los convertidos) ni en
+  Clientes (solo los que tienen venta). Le paso a Yolanda con Orlando
+  Villalobos: venta registrada a las 17:03, borrada a las 19:24 como «Error al
+  cargar», y al dia siguiente no lo encontraba.
+
+  Vuelve al ultimo estado que tuvo antes de «convertido» (el historial), y si no
+  hay ninguno, a «contactado»: si se le llego a vender, se hablo con el. Solo si
+  ya no le queda ninguna venta y sigue en «convertido» --si alguien lo cambio a
+  mano despues, eso manda--.
+
+  Con `updateStatus` (estado + historial) y no con `changeStatus`, que dispara
+  las secuencias de correo de «cambio de estado»: borrar una venta mal cargada
+  no puede escribirle a nadie. Y si falla, la venta ya esta borrada: se avisa en
+  el registro y ya.
+*/
+async function devolverEstadoSiNoQuedanVentas(leadId, userId) {
+  if (!leadId) return;
+  try {
+    const { rows: [l] } = await query(
+      `SELECT l.status,
+              EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS quedan_ventas,
+              (SELECT h.status_nuevo FROM lead_status_history h
+                WHERE h.lead_id = l.id AND h.status_nuevo <> 'convertido'
+                ORDER BY h.changed_at DESC, h.id DESC LIMIT 1) AS antes
+         FROM leads l WHERE l.id = $1`,
+      [leadId]);
+    if (!l || l.quedan_ventas || l.status !== 'convertido') return;
+    await leadModel.updateStatus(leadId, l.antes || 'contactado', 'convertido', userId || null);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId }, 'No se pudo devolver la ficha a su estado tras borrar su ultima venta');
+  }
 }

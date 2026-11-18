@@ -2,8 +2,11 @@ import { query } from '../../shared/config/db.js';
 
 const DEFAULT_CONFIG = {
   enabled: true,
-  welcome_text: '¡Hablamos? 👋',
-  message_template: 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
+  welcome_text: '¿Hablamos? 👋',
+  // Lo manda la persona que entra en la web: {{nombre}} es la GESTORA de la burbuja,
+  // así que se la saluda. «Hola, soy {{nombre}}» ponía a la persona a presentarse con
+  // el nombre de la gestora (Diego, 29/10).
+  message_template: 'Hola {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
   excluded_user_ids: [],
   show_bubble: true,
   bubble_delay_ms: 3000,
@@ -29,6 +32,8 @@ export async function getConfig(projectId) {
     excluded_user_ids: r.excluded_user_ids || [],
     show_bubble: r.show_bubble ?? DEFAULT_CONFIG.show_bubble,
     bubble_delay_ms: r.bubble_delay_ms ?? DEFAULT_CONFIG.bubble_delay_ms,
+    // Los otros idiomas (migración 200). Sin la columna todavía, vacío y no rompe.
+    traducciones: r.traducciones || {},
     updated_at: r.updated_at,
   };
 }
@@ -43,11 +48,12 @@ export async function upsertConfig(projectId, fields) {
     excluded_user_ids: fields.excluded_user_ids ?? cur.excluded_user_ids,
     show_bubble:       fields.show_bubble       ?? cur.show_bubble,
     bubble_delay_ms:   fields.bubble_delay_ms   ?? cur.bubble_delay_ms,
+    traducciones:      fields.traducciones      ?? cur.traducciones,
   };
   await query(
     `INSERT INTO project_widget_config
-       (project_id, enabled, welcome_text, message_template, excluded_user_ids, show_bubble, bubble_delay_ms, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       (project_id, enabled, welcome_text, message_template, excluded_user_ids, show_bubble, bubble_delay_ms, traducciones, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,NOW())
      ON CONFLICT (project_id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
        welcome_text = EXCLUDED.welcome_text,
@@ -55,14 +61,22 @@ export async function upsertConfig(projectId, fields) {
        excluded_user_ids = EXCLUDED.excluded_user_ids,
        show_bubble = EXCLUDED.show_bubble,
        bubble_delay_ms = EXCLUDED.bubble_delay_ms,
+       traducciones = EXCLUDED.traducciones,
        updated_at = NOW()`,
     [projectId, merged.enabled, merged.welcome_text, merged.message_template, merged.excluded_user_ids,
-     merged.show_bubble, merged.bubble_delay_ms]
+     merged.show_bubble, merged.bubble_delay_ms, JSON.stringify(merged.traducciones || {})]
   );
   return await getConfig(projectId);
 }
 
-// Lista usuarios candidatos al widget = SOLO los del proyecto activos
+// QUIEN PUEDE SALIR EN EL WHATSAPP DE LA WEB: gestoras y admin, nadie mas (#238).
+// El widget manda a un visitante a escribirle a esa persona; un tutor, soporte
+// o superadmin no atiende leads. Las dos consultas de abajo lo comparten: si la
+// lista del panel lo dijera y la rotacion publica no, marcar a un tutor por
+// error le mandaria los leads de la web.
+const ROLES_DEL_WIDGET = `u.role IN ('gestor', 'admin')`;
+
+// Lista usuarios candidatos al widget = gestoras y admin del proyecto, activos
 export async function listCandidateUsers(projectId) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active,
@@ -71,6 +85,7 @@ export async function listCandidateUsers(projectId) {
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
+       AND ${ROLES_DEL_WIDGET}
      ORDER BY u.whatsapp_widget_active DESC, u.nombre ASC`,
     [projectId]
   );
@@ -88,6 +103,7 @@ export async function listActiveWidgetUsers(projectId, excludedIds = []) {
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
+       AND ${ROLES_DEL_WIDGET}
        AND u.whatsapp_widget_active = true
        AND u.whatsapp_phone IS NOT NULL
        AND u.whatsapp_phone != ''

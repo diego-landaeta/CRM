@@ -1,5 +1,8 @@
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { lazy, Suspense, useState, useEffect } from 'react';
-import { Plus, Receipt, UsersThree } from '@phosphor-icons/react';
+import { Plus, Receipt, UsersThree, CaretDown, User, Users, Robot, GlobeHemisphereWest } from '@phosphor-icons/react';
+import { opcionesDePais } from '@/shared/lib/paises';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
@@ -14,18 +17,47 @@ const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
 const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 export default function SalesPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuerId, activeIssuer, projects } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string; type?: string } | null;
+    activeIssuerId: number | null;
+    activeIssuer?: { nombre?: string; campus?: unknown[] } | null;
+    projects?: Array<{ id: number; sociedad_emisora_id?: number | null; paises_por_subdominio?: Record<string, string> | null }>;
+  };
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
+  // CON QUE TIPO SE ABRE. Diego, 25/09: «registrar venta automatica (sin
+  // gestora) y venta propia como un desplegable dentro de ese boton», y luego
+  // «para el caso del admin tambien: registrar venta de otra gestora».
+  const [modoVenta, setModoVenta] = useState<'existing' | 'otra_gestora' | 'sin_gestora'>('existing');
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const { can } = usePermission();
+  const puedeSinGestora = can('conversions.sin_gestora');
+  // Registrar una venta a nombre de otra persona es reasignar dinero: lo mismo
+  // que hace falta para reasignar prospectos.
+  const puedeDeOtra = can('leads.assign');
+
+  function abrirVenta(modo: 'existing' | 'otra_gestora' | 'sin_gestora') {
+    setModoVenta(modo);
+    setMenuAbierto(false);
+    setOpen(true);
+  }
   // -1 = "Todos los proyectos" del header. En ese caso pasamos null al backend
   // para que agregue cross-proyecto. Si NO hay proyecto activo, ni siquiera el
   // header está listo todavía.
   const hasActiveCtx = !!activeProject?.id;
   const allProjects = activeProject?.id === -1;
+  // Con una EMPRESA puesta si se puede registrar: el dialogo pregunta el campus.
+  // Sin empresa y en «todos los proyectos» no, que ahi no hay de donde elegir.
+  const puedeRegistrar = !!activeProject?.id && (!allProjects || !!activeIssuerId);
   const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
+  // Con una sociedad elegida, Ventas enseña sus campus sumados —igual que
+  // Reportes—, en vez del muro de «elige un proyecto». El servidor traduce el
+  // `issuerId` a la lista de proyectos y las consultas no se enteran.
+  const issuerIdParam = activeIssuerId ?? null;
 
   // El periodo de la pantalla, elegido UNA vez: antes cada tarjeta traía el
   // suyo y en la misma vista convivían cuatro criterios distintos, así que los
@@ -34,6 +66,24 @@ export default function SalesPage() {
   // no tiene ventas en agosto— y la pantalla parecía rota. «Mes» está a un clic.
   const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('ytd');
 
+  /**
+   * En un proyecto IA esta pantalla enseña MENOS.
+   *
+   * Un proyecto IA no tiene equipo comercial: nadie vende, la gente se
+   * suscribe sola y los cobros entran de Stripe o de su propia base. Con la
+   * pantalla completa se veía «Mi meta del mes» a cero, «Equipo de ventas —
+   * 0 gestores», un filtro de gestoras vacío y un botón de registrar ventas a
+   * mano que nadie va a pulsar.
+   *
+   * Media pantalla diciendo que no hay nadie. Y lo que sí importa —cuánto
+   * entró y de quién— quedaba debajo de todo eso.
+   *
+   * No se esconde por ser IA porque sí: se esconde lo que en un proyecto sin
+   * equipo NO PUEDE tener contenido nunca.
+   */
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
+
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.
   const [gestores, setGestores] = useState<Array<{ id: number; nombre: string }>>([]);
@@ -41,24 +91,34 @@ export default function SalesPage() {
   useEffect(() => {
     if (!isAdmin) return;
     const pid = projectIdParam ? `&projectId=${projectIdParam}` : '';
-    client.get(`/users?limit=100${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
   }, [isAdmin, projectIdParam]);
+
+  // País de entrada (#221): el del prospecto de cada venta. Solo sale si algún
+  // campus de lo que se mira tiene tabla de países (Psiko y Fono Aprende).
+  const [paisEntrada, setPaisEntrada] = useState('');
+  const opcionesPais = opcionesDePais(
+    projectIdParam ? (projects || []).filter((p) => p.id === projectIdParam)
+      : issuerIdParam ? (projects || []).filter((p) => Number(p.sociedad_emisora_id) === issuerIdParam)
+        : projects,
+  );
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Ventas {allProjects && <span className="text-sm font-normal text-muted-foreground">· Todos los proyectos</span>}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {allProjects
-              ? 'Vista agregada de todos los proyectos. Para registrar una venta entra en un proyecto concreto.'
-              : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && !allProjects && (
+      <PageHeader
+        // Con una empresa arriba, id también es -1: el título decía «Todos los
+        // proyectos» aunque las cifras eran solo de esa empresa (#218).
+        title={!allProjects ? 'Ventas'
+          : activeIssuerId && activeIssuer?.nombre ? `Ventas · ${activeIssuer.nombre}` : 'Ventas · Todos los proyectos'}
+        subtitle={!allProjects
+          ? 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'
+          : activeIssuerId
+            ? 'Sus campus sumados. Al registrar una venta eliges el campus.'
+            : 'Vista agregada de todos los proyectos. Para registrar una venta entra en un proyecto concreto.'}
+        actions={(
+          <>
+          {isAdmin && !allProjects && !esIA && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
               <UsersThree size={14} className="text-muted-foreground" />
               <select
@@ -72,20 +132,102 @@ export default function SalesPage() {
               </select>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            disabled={!hasActiveCtx || allProjects}
-            title={allProjects ? 'Selecciona un proyecto concreto para registrar una venta' : ''}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Plus size={14} weight="bold" />
-            Nueva venta
-          </button>
-        </div>
-      </header>
+          {(opcionesPais.length > 0 || paisEntrada) && (
+            <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
+              <GlobeHemisphereWest size={14} className="text-muted-foreground" />
+              <select
+                value={paisEntrada}
+                onChange={(e) => setPaisEntrada(e.target.value)}
+                className="bg-transparent focus:outline-none max-w-[160px]"
+                title="País de entrada del prospecto de cada venta"
+                aria-label="País de entrada"
+              >
+                <option value="">Todos los países</option>
+                {opcionesPais.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+              </select>
+            </div>
+          )}
+          {/* NUEVA VENTA, con sus tipos dentro.
+              Quien no tiene mas que uno ve el boton de siempre: un desplegable
+              de una sola opcion es un clic de mas por nada. */}
+          {!esIA && ((puedeSinGestora || puedeDeOtra) ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuAbierto((v) => !v)}
+                disabled={!puedeRegistrar}
+                aria-haspopup="menu"
+                aria-expanded={menuAbierto}
+                title={!puedeRegistrar ? 'Elige un proyecto o una empresa para registrar una venta' : ''}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Plus size={14} weight="bold" />
+                Nueva venta
+                <CaretDown size={12} weight="bold" className={menuAbierto ? 'rotate-180 transition-transform' : 'transition-transform'} />
+              </button>
+              {menuAbierto && (
+                <>
+                  {/* Pulsar fuera lo cierra. Sin esto el menu se queda abierto
+                      encima de la tabla y hay que volver al boton. */}
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} aria-hidden="true" />
+                  <div role="menu" className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-md border border-border bg-card shadow-lg">
+                    <button
+                      type="button" role="menuitem" onClick={() => abrirVenta('existing')}
+                      className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-muted"
+                    >
+                      <User size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+                      <span>
+                        <span className="block text-sm font-semibold">Venta propia</span>
+                        <span className="block text-[11px] text-muted-foreground">La registras tú y cuenta para ti.</span>
+                      </span>
+                    </button>
+                    {puedeDeOtra && (
+                      <button
+                        type="button" role="menuitem" onClick={() => abrirVenta('otra_gestora')}
+                        className="flex w-full items-start gap-2.5 border-t border-border px-3 py-2.5 text-left hover:bg-muted"
+                      >
+                        <Users size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+                        <span>
+                          <span className="block text-sm font-semibold">Venta de otra gestora</span>
+                          <span className="block text-[11px] text-muted-foreground">Eliges el prospecto y la venta queda de quien lo lleva.</span>
+                        </span>
+                      </button>
+                    )}
+                    {puedeSinGestora && (
+                      <button
+                        type="button" role="menuitem" onClick={() => abrirVenta('sin_gestora')}
+                        className="flex w-full items-start gap-2.5 border-t border-border px-3 py-2.5 text-left hover:bg-muted"
+                      >
+                        <Robot size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+                        <span>
+                          <span className="block text-sm font-semibold">Venta automática (sin gestora)</span>
+                          <span className="block text-[11px] text-muted-foreground">La registra la plataforma, de cero: no cuenta para ninguna gestora.</span>
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => abrirVenta('existing')}
+              disabled={!puedeRegistrar}
+              title={!puedeRegistrar ? 'Elige un proyecto o una empresa para registrar una venta' : ''}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Plus size={14} weight="bold" />
+              Nueva venta
+            </button>
+          ))}
+          </>
+        )}
+      />
 
-      {hasActiveCtx && !allProjects && (
+      {/* También con una empresa o «Todos»: las cifras ya siguen el periodo,
+          y sin el filtro se quedaban fijas en el año en curso (#218). */}
+      {hasActiveCtx && (
         <FiltroPeriodo
           valor={periodo} onChange={setPeriodo}
           desde={desde} hasta={hasta} onFechas={onFechas}
@@ -93,25 +235,25 @@ export default function SalesPage() {
       )}
 
       {!hasActiveCtx ? (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
+        <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
           Cargando proyectos…
         </div>
       ) : (
         <>
           <Suspense fallback={null}>
-            <ResumenVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            <ResumenVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
           </Suspense>
 
           <Suspense fallback={null}>
-            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
+            <CursosVendidosCard projectId={projectIdParam} issuerId={issuerIdParam} responsableId={responsableId} paisEntrada={paisEntrada} from={rango.from} to={rango.to} />
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* «Mi meta» es de quien vende. Un admin o superadmin no tiene
                 ventas propias y la tarjeta le salia siempre a cero. */}
-            {!isAdmin && (
+            {!isAdmin && !esIA && (
               <Suspense fallback={null}>
-                <MyGoalCard projectId={projectIdParam} periodo={mes} />
+                <MyGoalCard projectId={projectIdParam} issuerId={issuerIdParam} periodo={mes} />
               </Suspense>
             )}
           </div>
@@ -120,31 +262,31 @@ export default function SalesPage() {
               también la gestora: el servidor le devuelve solo lo suyo. */}
           {!allProjects && (
             <Suspense fallback={null}>
-              <EvolucionVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <EvolucionVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <DesgloseVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <VentasPorPais projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <ClientesVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
-          {isAdmin && (
+          {isAdmin && !esIA && (
             <Suspense fallback={null}>
-              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} periodo={mes} />
+              <GestoresStatsTable projectId={projectIdParam} issuerId={issuerIdParam} canEdit={!allProjects} periodo={mes} />
             </Suspense>
           )}
 
@@ -165,6 +307,7 @@ export default function SalesPage() {
       <Suspense fallback={null}>
         <RegisterSaleDialog
           open={open}
+          modoInicial={modoVenta}
           project={activeProject}
           onClose={() => setOpen(false)}
           onSaved={() => setOpen(false)}

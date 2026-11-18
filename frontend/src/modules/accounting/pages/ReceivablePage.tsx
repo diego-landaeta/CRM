@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { accountingApi } from '../api/accounting.api';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import {
   CurrencyEur, WarningCircle, Wallet, Receipt, CaretLeft, CaretRight,
@@ -15,7 +17,8 @@ import {
 function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 }
-const fmt0 = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+// Con centimos: es dinero pendiente de cobro, tiene que cuadrar al centimo.
+const fmt0 = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 function formatDate(d: string | null) { return d ? new Date(d + (String(d).length <= 10 ? 'T00:00:00' : '')).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'; }
 // Fecha local YYYY-MM-DD sin desfase de huso.
 function ymd(dt: Date) { return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`; }
@@ -32,7 +35,9 @@ interface Row {
 
 export default function ReceivablePage() {
   const navigate = useNavigate();
-  const { activeProject, projects } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
+  // El filtro «Proyecto»: los campus de la empresa de arriba, o los suyos sin los de pruebas (#346).
+  const campusDelAmbito = useProyectosDelAmbito<{ id: number; nombre?: string }>();
   const { user } = useAuth() as { user: { role?: string } | null };
   const isGestor = user?.role === 'gestor';
 
@@ -53,9 +58,13 @@ export default function ReceivablePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const pid = projectId || activeProject?.id || undefined;
-      const params: Record<string, string | number> = {};
-      if (pid) params.projectId = Number(pid);
+      // El campus elegido a mano en esta pantalla manda sobre el de arriba;
+      // si no hay ninguno, vale el ambito general --una sociedad entera
+      // incluida--. Antes se mandaba `activeProject.id` tal cual, que con
+      // «todos» es -1 y el servidor no lo admite.
+      const params: Record<string, string | number> = projectId
+        ? { projectId: Number(projectId) }
+        : { ...ambitoComoObjeto({ activeIssuerId, activeProject }) } as Record<string, string | number>;
       if (gestoraId) params.responsableId = Number(gestoraId);
       // El calendario SIEMPRE trae todas las cuotas (se navega por mes visualmente);
       // el periodo Desde/Hasta solo aplica en la vista Lista.
@@ -68,7 +77,7 @@ export default function ReceivablePage() {
         setResumen(res.data.resumen || null);
       }
     } finally { setLoading(false); }
-  }, [projectId, gestoraId, from, to, view, activeProject?.id]);
+  }, [projectId, gestoraId, from, to, view, activeProject?.id, activeIssuerId]);
   useEffect(() => { load(); }, [load]);
 
   const visibles = useMemo(() => soloVencidas ? items.filter(r => r.vencido) : items, [items, soloVencidas]);
@@ -127,10 +136,10 @@ export default function ReceivablePage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" label="Cobros pendientes" numericValue={resumen?.count ?? visibles.length} />
-        <KpiCard icon={Wallet} iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400" label="Total pendiente" numericValue={totalPend} format={fmt} />
-        <KpiCard icon={WarningCircle} iconBg={(resumen?.count_vencidas || 0) > 0 ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400' : 'bg-muted text-muted-foreground'} label="Vencidas" numericValue={resumen?.count_vencidas ?? 0} />
-        <KpiCard icon={Coins} iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400" label="Importe vencido" numericValue={resumen?.total_vencido ?? 0} format={fmt} />
+        <KpiCard icon={Receipt} iconBg="bg-info-soft text-info-soft-foreground" label="Cobros pendientes" numericValue={resumen?.count ?? visibles.length} />
+        <KpiCard icon={Wallet} iconBg="bg-warning-soft text-warning-soft-foreground" label="Total pendiente" numericValue={totalPend} format={fmt} />
+        <KpiCard icon={WarningCircle} iconBg={(resumen?.count_vencidas || 0) > 0 ? 'bg-destructive-soft text-destructive-soft-foreground' : 'bg-muted text-muted-foreground'} label="Vencidas" numericValue={resumen?.count_vencidas ?? 0} />
+        <KpiCard icon={Coins} iconBg="bg-destructive-soft text-destructive-soft-foreground" label="Importe vencido" numericValue={resumen?.total_vencido ?? 0} format={fmt} />
       </div>
 
       {/* Filtros */}
@@ -139,7 +148,7 @@ export default function ReceivablePage() {
           <label className="text-[11px] font-medium text-muted-foreground">Proyecto</label>
           <select value={projectId} onChange={e => setProjectId(e.target.value)} className="h-9 px-2 rounded-md border border-border bg-card text-sm min-w-[160px]">
             <option value="">{activeProject?.nombre || 'Proyecto activo'}</option>
-            {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            {campusDelAmbito.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </select>
         </div>
         {!isGestor && (
@@ -205,7 +214,7 @@ export default function ReceivablePage() {
                   <div className={`text-[11px] font-semibold ${esHoy ? 'text-primary' : ''}`}>{c.date.getDate()}</div>
                   {b && (
                     <div className="mt-0.5 space-y-0.5">
-                      <div className={`text-[10px] font-bold tabular-nums leading-tight ${b.vencidas ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`}>{fmt0(b.total)}</div>
+                      <div className={`text-[10px] font-bold tabular-nums leading-tight ${b.vencidas ? 'text-destructive' : 'text-warning'}`}>{fmt0(b.total)}</div>
                       <div className="text-[9px] text-muted-foreground">{b.count} cobro{b.count !== 1 ? 's' : ''}</div>
                     </div>
                   )}
@@ -226,7 +235,7 @@ export default function ReceivablePage() {
                           <div className="text-sm font-semibold truncate">{r.cliente} {r.cuota_numero ? <span className="text-[10px] font-bold text-primary">· Cuota {r.cuota_numero}</span> : ''}</div>
                           <div className="text-[11px] text-muted-foreground truncate">{r.producto} · {r.proyecto_nombre}{r.gestora_nombre ? ` · ${r.gestora_nombre}` : ''}</div>
                         </div>
-                        <span className={`tabular-nums font-bold text-sm ${r.vencido ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`}>{fmt(r.importe)}</span>
+                        <span className={`tabular-nums font-bold text-sm ${r.vencido ? 'text-destructive' : 'text-warning'}`}>{fmt(r.importe)}</span>
                       </button>
                     </li>
                   ))}
@@ -266,10 +275,10 @@ export default function ReceivablePage() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{r.proyecto_nombre}</td>
                     <td className="px-4 py-3 text-muted-foreground">{r.gestora_nombre || '—'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-bold text-orange-600 dark:text-orange-400">{fmt(r.importe)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-bold text-warning">{fmt(r.importe)}</td>
                     <td className="px-4 py-3">
                       {r.vence ? (
-                        <span className={r.vencido ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>
+                        <span className={r.vencido ? 'text-destructive font-semibold' : ''}>
                           {r.vencido && <WarningCircle size={12} weight="fill" className="inline mr-1" />}
                           {formatDate(r.vence)}
                         </span>
@@ -290,12 +299,12 @@ export default function ReceivablePage() {
                     <div className="font-semibold truncate">{r.cliente} {r.cuota_numero ? <span className="text-[10px] font-bold text-primary">· Cuota {r.cuota_numero}</span> : ''}</div>
                     <div className="text-xs text-muted-foreground truncate">{r.producto} · {r.proyecto_nombre}</div>
                   </div>
-                  <span className="tabular-nums font-bold text-orange-600 dark:text-orange-400 flex-shrink-0">{fmt(r.importe)}</span>
+                  <span className="tabular-nums font-bold text-warning flex-shrink-0">{fmt(r.importe)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">{r.gestora_nombre || '—'}</span>
                   {r.vence ? (
-                    <span className={r.vencido ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-muted-foreground'}>
+                    <span className={r.vencido ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
                       {r.vencido && <WarningCircle size={11} weight="fill" className="inline mr-0.5" />}Vence {formatDate(r.vence)}
                     </span>
                   ) : <span className="text-muted-foreground">Sin fecha</span>}

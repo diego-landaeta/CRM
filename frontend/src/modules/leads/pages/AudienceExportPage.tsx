@@ -1,5 +1,7 @@
+import { cssDeEstado } from '../lib/estadoTono';
 import { useState } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { opcionesDePais } from '@/shared/lib/paises';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import Select from '@/shared/components/ui/Select';
@@ -30,14 +32,12 @@ const CANAL_OPTIONS = [
   { v: 'referido', label: 'Referido' },
 ];
 
-const STATUS_COLORS = {
-  nuevo: '#3b82f6',
-  por_contactar: '#f59e0b',
-  contactado: '#10b981',
-  en_seguimiento: '#eab308',
-  convertido: '#8b5cf6',
-  no_interesado: '#ef4444',
-};
+// El color sale de lib/estadoTono.ts, como en el resto del modulo. Aqui habia
+// una cuarta copia en hexadecimal, y no coincidia con ninguna de las otras.
+const STATUS_COLORS = Object.fromEntries(
+  ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']
+    .map((e) => [e, cssDeEstado(e)]),
+);
 
 const PRESETS = [
   { id: 'no-convertidos', label: 'No convertidos', desc: 'Ideal para retargeting', filter: { statuses: ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento'] } },
@@ -50,6 +50,7 @@ function fmtNum(n) { return new Intl.NumberFormat('es-ES').format(Number(n || 0)
 
 export default function AudienceExportPage() {
   const { activeProject } = useProjectContext();
+  const paisOptions = opcionesDePais(activeProject ? [activeProject] : []).map((o) => ({ v: o.valor, label: o.etiqueta }));
   const wizard = useAudienceWizard(activeProject?.id, activeProject?.slug);
   const meta = useMetaUpload(activeProject?.id);
   const { products } = useProducts(activeProject?.id);
@@ -160,6 +161,13 @@ export default function AudienceExportPage() {
                 <CheckList options={CANAL_OPTIONS} selected={wizard.filters.canales} onToggle={wizard.toggleCanal} />
               </FilterSection>
 
+              {/* País de entrada (#221): solo si el campus separa por país. */}
+              {paisOptions.length > 0 && (
+                <FilterSection title="País de entrada" count={(wizard.filters.paises || []).length}>
+                  <CheckList options={paisOptions} selected={wizard.filters.paises || []} onToggle={wizard.togglePais} />
+                </FilterSection>
+              )}
+
               {/* Fechas */}
               <FilterSection title="Fechas">
                 <div className="space-y-2">
@@ -200,7 +208,7 @@ export default function AudienceExportPage() {
                 />
               </FilterSection>
 
-              {(wizard.filters.statuses.length + wizard.filters.canales.length > 0 ||
+              {(wizard.filters.statuses.length + wizard.filters.canales.length + (wizard.filters.paises || []).length > 0 ||
                 wizard.filters.fechaDesde || wizard.filters.fechaHasta ||
                 wizard.filters.productoId || wizard.filters.importeMinimo) && (
                 <button

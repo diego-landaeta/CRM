@@ -9,6 +9,16 @@ const itemSchema = z.object({
 export const createInvoiceSchema = z.object({
   projectId: z.number().int().positive(),
   conversionId: z.number().int().positive().optional(),
+  // El numero lo puede poner quien emite (Diego, 14/09). Si no llega, se coge
+  // el siguiente libre. `permitirParecida` es el nombre viejo de
+  // `confirmar_duplicada` (abajo): se sigue aceptando.
+  numero: z.coerce.number().int().positive().optional().nullable(),
+  permitirParecida: z.coerce.boolean().optional(),
+  // Y este, cuando avisa de que la factura pasa de lo cobrado de la venta.
+  permitirMasDeLoCobrado: z.coerce.boolean().optional(),
+  // «Emitir igualmente» cuando el CRM avisa de que ya hay una factura del mismo
+  // cliente por el mismo importe en la misma semana (POSIBLE_DUPLICADA, CRM#819).
+  confirmar_duplicada: z.boolean().optional(),
   leadId: z.number().int().positive().optional(),
   // 'proforma' = presupuesto no fiscal. 'normal' = factura. (rectificativa va por su ruta)
   tipo: z.enum(['normal', 'proforma']).optional(),
@@ -41,8 +51,13 @@ export const createInvoiceSchema = z.object({
   ivaPct: z.number().min(0).max(100).optional(),
   ivaIncluido: z.boolean().optional(),
   notas: z.string().optional(),
-  leyendaIva: z.string().optional(),
-  metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']),
+  // Admite NULL a proposito: la pantalla manda `regimenSel?.coletilla || null`,
+  // y cuando la venta no cae en ningun regimen fiscal --Solvenic emitiendo en
+  // ICTESS, por ejemplo-- no hay coletilla que poner. Con solo `.optional()`
+  // eso reventaba con «Expected string, received null» y no se podia emitir la
+  // factura. El modelo ya guardaba `data.leyendaIva || null` sin problema.
+  leyendaIva: z.string().optional().nullable(),
+  metodoPago: z.enum(['transferencia', 'deposito', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),
   // Moneda de la factura (opcional). Importes manuales en esa divisa, SIN conversión
@@ -83,6 +98,8 @@ export const issuerSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal('')),
   telefono: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
+  // BIC/SWIFT: 8 u 11 caracteres (BSCHESMMXXX). Vacío = sin BIC.
+  bic: z.string().trim().max(20).optional().nullable(),
   serie: z.string().max(10).optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   pieDefault: z.string().optional().nullable(),
@@ -101,5 +118,16 @@ export const updateConfigSchema = z.object({
   projectId: z.number().int().positive(),
   piePagoDefault: z.string().optional(),
   serieDefault: z.string().max(10).optional(),
-  metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']).optional(),
+  metodoDefault: z.enum(['transferencia', 'deposito', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']).optional(),
+});
+
+// «Cobrada» en una proforma: el cobro que se apunta en la venta.
+export const cobrarProformaSchema = z.object({
+  importe: z.coerce.number().positive('El importe tiene que ser mayor que 0'),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha: YYYY-MM-DD'),
+  // 'deposito' (15/10): con 'transferencia', dispara el webhook de transferencias (206).
+  metodo: z.enum(['transferencia', 'deposito', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'otro']).optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+  // La referencia del banco (nº de operación), si la hay.
+  referencia: z.string().trim().max(120).optional().nullable(),
 });

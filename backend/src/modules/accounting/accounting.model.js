@@ -1,142 +1,81 @@
+import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
-
-// ============================================================
-// EXPENSES (egresos)
-// ============================================================
-
-export async function createExpense(data, userId) {
-  const { rows } = await query(
-    `INSERT INTO expenses (
-        project_id, concepto, importe, fecha, categoria, notas, registrado_por,
-        comprobante_url, comprobante_key, comprobante_mime, comprobante_size_bytes,
-        source_payable_id, source_stripe_payout_id
-     )
-     VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6, $7, $8, $9, $10, $11, $12, $13)
-     RETURNING *`,
-    [
-      data.project_id || null, data.concepto, data.importe, data.fecha, data.categoria, data.notas, userId,
-      data.comprobante_url || null, data.comprobante_key || null, data.comprobante_mime || null, data.comprobante_size_bytes || null,
-      data.source_payable_id || null, data.source_stripe_payout_id || null,
-    ]
-  );
-  return rows[0];
-}
-
-export async function findBySourcePayableId(payableId) {
-  const { rows } = await query(`SELECT * FROM expenses WHERE source_payable_id = $1`, [payableId]);
-  return rows[0] || null;
-}
-export async function findBySourceStripePayoutId(payoutId) {
-  const { rows } = await query(`SELECT * FROM expenses WHERE source_stripe_payout_id = $1`, [payoutId]);
-  return rows[0] || null;
-}
-
-export async function findExpenseById(id) {
-  const { rows } = await query(
-    `SELECT e.*, p.nombre as proyecto_nombre, u.nombre as registrado_por_nombre
-     FROM expenses e
-     LEFT JOIN projects p ON p.id = e.project_id
-     LEFT JOIN users u ON u.id = e.registrado_por
-     WHERE e.id = $1`,
-    [id]
-  );
-  return rows[0] || null;
-}
-
-export async function listExpenses({ projectId, categoria, from, to, page, limit }) {
-  const conditions = [];
-  const params = [];
-  let idx = 1;
-
-  if (projectId) { conditions.push(`e.project_id = $${idx++}`); params.push(projectId); }
-  if (categoria) { conditions.push(`e.categoria = $${idx++}`); params.push(categoria); }
-  if (from) { conditions.push(`e.fecha >= $${idx++}`); params.push(from); }
-  if (to) { conditions.push(`e.fecha <= $${idx++}`); params.push(to); }
-
-  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-  const offset = (page - 1) * limit;
-
-  const { rows: countRows } = await query(`SELECT COUNT(*) FROM expenses e ${where}`, params);
-  const total = parseInt(countRows[0].count);
-
-  const { rows } = await query(
-    `SELECT e.*, p.nombre as proyecto_nombre, u.nombre as registrado_por_nombre
-     FROM expenses e
-     LEFT JOIN projects p ON p.id = e.project_id
-     LEFT JOIN users u ON u.id = e.registrado_por
-     ${where}
-     ORDER BY e.fecha DESC, e.id DESC
-     LIMIT $${idx++} OFFSET $${idx++}`,
-    [...params, limit, offset]
-  );
-
-  return { expenses: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
-}
-
-export async function updateExpense(id, fields) {
-  const allowed = [
-    'project_id', 'concepto', 'importe', 'fecha', 'categoria', 'notas',
-    'comprobante_url', 'comprobante_key', 'comprobante_mime', 'comprobante_size_bytes',
-  ];
-  const sets = [];
-  const params = [];
-  let idx = 1;
-  for (const k of allowed) {
-    if (fields[k] !== undefined) {
-      sets.push(`${k} = $${idx++}`);
-      params.push(fields[k]);
-    }
-  }
-  if (!sets.length) return null;
-  sets.push(`updated_at = NOW()`);
-  params.push(id);
-  const { rows } = await query(`UPDATE expenses SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`, params);
-  return rows[0];
-}
-
-export async function deleteExpense(id) {
-  await query(`DELETE FROM expenses WHERE id = $1`, [id]);
-}
+import { comoIds } from '../../shared/utils/roles.js';
+import { condicionDeAmbito } from '../expenses/expense.model.js';
+import { FACTURA_DE } from '../invoices/invoices.model.js';
 
 // ============================================================
 // DASHBOARD ACCOUNTING
 // ============================================================
 
-export async function getDashboardStats({ projectId, from, to }) {
-  const projFilter = projectId ? 'AND c.project_id = $1' : '';
+/*
+  `personas` (QA del 09/11/2026): null = todo el ámbito, como siempre. Con una
+  lista —una administradora que lleva un equipo comercial— todo lo que es de
+  gestoras se recorta a ella y su equipo, con las mismas reglas que el resto de
+  pantallas:
+    · cobrado, contratado y por cobrar: la parte de la venta que es suya
+      (`conversion_reparto`, como Ventas: una venta compartida con alguien de
+      fuera cuenta solo su porcentaje);
+    · facturado: las facturas que ve en Facturas (`FACTURA_DE`).
+  Egresos y balance son de la empresa, no de ninguna gestora: con equipo no se
+  calculan (`solo_administracion`), y la pantalla los oculta.
+*/
+export async function getDashboardStats({ projectId, projectIds = null, from, to, personas = null }) {
+  // Un campus o los siete de una sociedad: aqui dentro son lo mismo, una lista.
+  // Antes solo se sabia acotar a UNO, asi que con CEDIA puesta la pantalla
+  // pedia el proyecto -1 --el «todos» del navegador-- y el servidor contestaba
+  // «Number must be greater than 0»: el panel de Finanzas salia en blanco.
+  const ids = comoLista(projectId, projectIds);
+  const projFilter = ids ? 'AND c.project_id = ANY($1::int[])' : '';
   const dateStart = from || '1970-01-01';
   const dateEnd = to || '2999-12-31';
-  const params = projectId ? [projectId, dateStart, dateEnd] : [dateStart, dateEnd];
-  const fromIdx = projectId ? 2 : 1;
-  const toIdx = projectId ? 3 : 2;
+  const params = ids ? [ids, dateStart, dateEnd] : [dateStart, dateEnd];
+  const fromIdx = ids ? 2 : 1;
+  const toIdx = ids ? 3 : 2;
+
+  // El recorte por persona va SIEMPRE el último parámetro de cada consulta.
+  const equipo = Array.isArray(personas) && personas.length ? personas.map(Number) : null;
+  const base = ids ? [ids] : [];
+  const conEquipo = (p) => (equipo ? [...p, equipo] : p);
+  // La parte de la venta `c` que es del equipo (sin equipo, entera).
+  const PESO = (n) => (equipo
+    ? `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                  WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${n}::int[])), 0)`
+    : '1');
+  const DEL_EQUIPO = (n) => (equipo
+    ? `AND EXISTS (SELECT 1 FROM conversion_reparto r
+                    WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${n}::int[]))`
+    : '');
+  const nP = params.length + 1;   // tras `params` (proyecto + fechas)
+  const nB = base.length + 1;     // tras `base` (solo proyecto)
 
   // Ingresos (via conversion_payments en rango)
-  const paymentsProjFilter = projectId ? 'AND c.project_id = $1' : '';
+  const paymentsProjFilter = projFilter;
   const { rows: ingresosRows } = await query(
     `SELECT
-       COALESCE(SUM(cp.importe), 0) AS total_cobrado,
+       COALESCE(SUM(cp.importe * ${PESO(nP)}), 0) AS total_cobrado,
        COUNT(DISTINCT cp.id) AS num_pagos
      FROM conversion_payments cp
      JOIN conversions c ON c.id = cp.conversion_id
-     WHERE cp.fecha BETWEEN $${fromIdx} AND $${toIdx} ${paymentsProjFilter}`,
-    params
+     WHERE cp.fecha BETWEEN $${fromIdx} AND $${toIdx} ${paymentsProjFilter} ${DEL_EQUIPO(nP)}`,
+    conEquipo(params)
   );
 
   // Facturado (total conversions en rango)
-  const convProjFilter = projectId ? 'AND c.project_id = $1' : '';
+  const convProjFilter = projFilter;
   const { rows: facturadoRows } = await query(
     `SELECT
-       COALESCE(SUM(c.importe_total), 0) AS total_facturado,
-       COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
+       COALESCE(SUM(c.importe_total * ${PESO(nP)}), 0) AS total_facturado,
+       COALESCE(SUM((c.importe_total - c.importe_pagado) * ${PESO(nP)}), 0) AS total_pendiente,
        COUNT(*) AS num_conversiones
      FROM conversions c
-     WHERE c.fecha_conversion BETWEEN $${fromIdx} AND $${toIdx} ${convProjFilter}`,
-    params
+     WHERE c.fecha_conversion BETWEEN $${fromIdx} AND $${toIdx} ${convProjFilter} ${DEL_EQUIPO(nP)}`,
+    conEquipo(params)
   );
 
   // Facturado de verdad: lo que se ha emitido con numero fiscal en el rango.
   // (lo de arriba es lo CONTRATADO, que casi nunca coincide con lo facturado)
-  const invProjFilter = projectId ? 'AND i.project_id = $1' : '';
+  const invProjFilter = ids ? 'AND i.project_id = ANY($1::int[])' : '';
   const { rows: emitidoRows } = await query(
     `SELECT
        COALESCE(SUM(i.total), 0) AS total_emitido,
@@ -144,27 +83,35 @@ export async function getDashboardStats({ projectId, from, to }) {
        COUNT(*) FILTER (WHERE i.tipo = 'proforma') AS num_proformas,
        COALESCE(SUM(i.total) FILTER (WHERE i.tipo = 'proforma'), 0) AS total_proformas
      FROM invoices i
+     ${equipo ? `LEFT JOIN conversions cv ON cv.id = i.conversion_id
+                 LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)` : ''}
      WHERE i.estado NOT IN ('borrador', 'cancelada')
-       AND i.fecha_emision BETWEEN $${fromIdx} AND $${toIdx} ${invProjFilter}`,
-    params
+       AND i.fecha_emision BETWEEN $${fromIdx} AND $${toIdx} ${invProjFilter}
+       ${equipo ? `AND ${FACTURA_DE(`$${nP}`)}` : ''}`,
+    conEquipo(params)
   );
 
-  // Egresos
-  const expProjFilter = projectId ? 'AND (e.project_id = $1 OR e.project_id IS NULL)' : '';
-  const { rows: egresosRows } = await query(
-    `SELECT
-       COALESCE(SUM(e.importe), 0) AS total_egresos,
-       COUNT(*) AS num_egresos
-     FROM expenses e
-     WHERE e.fecha BETWEEN $${fromIdx} AND $${toIdx} ${expProjFilter}`,
-    params
-  );
+  // Egresos. Que gasto entra en el ambito lo decide el modulo de egresos
+  // (`condicionDeAmbito`): los del campus, los de su EMPRESA y los generales.
+  // La misma regla que su listado, para que las dos pantallas den la misma cifra.
+  const expProjFilter = ids ? `AND ${condicionDeAmbito('e', 1)}` : '';
+  // Con equipo comercial no se miran: son de la empresa, no de las gestoras.
+  const { rows: egresosRows } = equipo
+    ? { rows: [{ total_egresos: 0, num_egresos: 0 }] }
+    : await query(
+      `SELECT
+         COALESCE(SUM(e.importe), 0) AS total_egresos,
+         COUNT(*) AS num_egresos
+       FROM expenses e
+       WHERE e.fecha BETWEEN $${fromIdx} AND $${toIdx} ${expProjFilter}`,
+      params
+    );
 
   // Cuentas por cobrar (conversions con pendiente, ordenadas por vencimiento)
   const { rows: receivables } = await query(
     `SELECT c.id, c.lead_id, c.producto_contratado,
             c.importe_total, c.importe_pagado,
-            (c.importe_total - c.importe_pagado) AS importe_pendiente,
+            (c.importe_total - c.importe_pagado) * ${PESO(nB)} AS importe_pendiente,
             c.fecha_compromiso_pago,
             c.fecha_conversion,
             l.nombre as lead_nombre, l.email as lead_email,
@@ -176,52 +123,52 @@ export async function getDashboardStats({ projectId, from, to }) {
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN projects p ON p.id = c.project_id
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter.replace('$1', projectId ? '$1' : '$1')}
+     WHERE c.importe_pagado < c.importe_total ${convProjFilter} ${DEL_EQUIPO(nB)}
      ORDER BY c.fecha_compromiso_pago ASC NULLS LAST
      LIMIT 50`,
-    projectId ? [projectId] : []
+    conEquipo(base)
   );
 
   // Totales REALES de por cobrar: el listado de arriba va con LIMIT 50, asi que
   // contar sobre el sale mal en cuanto hay mas de 50 pendientes.
   const { rows: recTotals } = await query(
     `SELECT COUNT(*)::int AS num,
-            COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total,
+            COALESCE(SUM((c.importe_total - c.importe_pagado) * ${PESO(nB)}), 0) AS total,
             COALESCE(SUM(CASE WHEN c.fecha_compromiso_pago IS NOT NULL
                                AND c.fecha_compromiso_pago < CURRENT_DATE
-                              THEN c.importe_total - c.importe_pagado ELSE 0 END), 0) AS total_vencido,
+                              THEN (c.importe_total - c.importe_pagado) * ${PESO(nB)} ELSE 0 END), 0) AS total_vencido,
             COUNT(*) FILTER (WHERE c.fecha_compromiso_pago IS NOT NULL
                                AND c.fecha_compromiso_pago < CURRENT_DATE)::int AS num_vencido
      FROM conversions c
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter}`,
-    projectId ? [projectId] : []
+     WHERE c.importe_pagado < c.importe_total ${convProjFilter} ${DEL_EQUIPO(nB)}`,
+    conEquipo(base)
   );
 
   // Evolucion mensual ultimos 12 meses
-  const trendProjFilter = projectId ? 'AND project_id = $1' : '';
-  const trendParams = projectId ? [projectId] : [];
+  const trendProjFilter = ids ? 'AND project_id = ANY($1::int[])' : '';
+  const trendParams = ids ? [ids] : [];
   const { rows: ingresosTrend } = await query(
     `SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
-            COALESCE(SUM(cp.importe), 0) AS total
+            COALESCE(SUM(cp.importe * ${PESO(nB)}), 0) AS total
      FROM conversion_payments cp
      JOIN conversions c ON c.id = cp.conversion_id
-     WHERE cp.fecha >= CURRENT_DATE - INTERVAL '12 months' ${trendProjFilter.replace('project_id', 'c.project_id')}
+     WHERE cp.fecha >= CURRENT_DATE - INTERVAL '12 months' ${trendProjFilter.replace('project_id', 'c.project_id')} ${DEL_EQUIPO(nB)}
      GROUP BY 1
      ORDER BY 1`,
-    trendParams
+    conEquipo(trendParams)
   );
-  const { rows: egresosTrend } = await query(
-    `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS mes,
-            COALESCE(SUM(importe), 0) AS total
-     FROM expenses
-     WHERE fecha >= CURRENT_DATE - INTERVAL '12 months' ${projectId ? 'AND (expenses.project_id = $1 OR expenses.project_id IS NULL)' : ''}
+  const { rows: egresosTrend } = equipo ? { rows: [] } : await query(
+    `SELECT to_char(date_trunc('month', e.fecha), 'YYYY-MM') AS mes,
+            COALESCE(SUM(e.importe), 0) AS total
+     FROM expenses e
+     WHERE e.fecha >= CURRENT_DATE - INTERVAL '12 months' ${expProjFilter}
      GROUP BY 1
      ORDER BY 1`,
     trendParams
   );
 
   // Egresos por categoria
-  const { rows: porCategoria } = await query(
+  const { rows: porCategoria } = equipo ? { rows: [] } : await query(
     `SELECT categoria, COALESCE(SUM(importe), 0) AS total
      FROM expenses e
      WHERE e.fecha BETWEEN $${fromIdx} AND $${toIdx} ${expProjFilter}
@@ -247,7 +194,10 @@ export async function getDashboardStats({ projectId, from, to }) {
       num_egresos: parseInt(egresosRows[0].num_egresos),
       por_categoria: porCategoria.map(r => ({ categoria: r.categoria, total: Number(r.total) })),
     },
-    balance: Number(ingresosRows[0].total_cobrado) - Number(egresosRows[0].total_egresos),
+    // Con equipo comercial no hay balance: sin egresos sería solo lo cobrado,
+    // y leído como «balance» engaña. null + la marca, y la pantalla lo oculta.
+    balance: equipo ? null : Number(ingresosRows[0].total_cobrado) - Number(egresosRows[0].total_egresos),
+    solo_administracion: equipo ? ['egresos', 'balance'] : [],
     cuentas_por_cobrar: receivables.map(r => ({ ...r, importe_pendiente: Number(r.importe_pendiente) })),
     cuentas_por_cobrar_resumen: {
       num: recTotals[0].num,
@@ -268,12 +218,14 @@ export async function getDashboardStats({ projectId, from, to }) {
 // plan de cuotas (importe pendiente de la conversión). Cada fila trae su fecha de
 // vencimiento, cliente, producto, proyecto y gestora responsable.
 // ============================================================
-export async function getReceivable({ projectId = null, responsableId = null, from = null, to = null } = {}) {
+export async function getReceivable({ projectId = null, projectIds = null, responsableId = null, from = null, to = null } = {}) {
   const conds = [];
   const params = [];
   let i = 1;
-  if (projectId)     { conds.push(`c.project_id = $${i++}`); params.push(projectId); }
-  if (responsableId) { conds.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+  const idsCobro = comoLista(projectId, projectIds);
+  if (idsCobro)      { conds.push(`c.project_id = ANY($${i++}::int[])`); params.push(idsCobro); }
+  // Una gestora o varias (las de un equipo comercial, 09/11/2026).
+  if (responsableId) { conds.push(`l.responsable_id = ANY($${i++}::int[])`); params.push(comoIds(responsableId)); }
   const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';
   // Rango de vencimiento (opcional). Se aplica a la fecha de cada fila (vence).
   const fromCond = from ? ` AND vence >= $${i++}` : '';

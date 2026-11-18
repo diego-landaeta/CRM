@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react';
 import { PencilSimple, X, Check, PhoneCall, WhatsappLogo } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
-import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
+import { telefonoParaWhatsapp, telefonoImposible } from '@/shared/lib/telefono';
 import { toast } from '@/shared/hooks/useToast';
 import InfoField, { inputClass } from './InfoField';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import Select from '@/shared/components/ui/Select';
 import type { Lead } from '@/shared/types';
 
 interface LeadInfoCardProps {
@@ -133,7 +136,7 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
       toast({ title: 'Lead actualizado' });
       setEditMode(false);
     } catch (err: unknown) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+      toast({ title: 'No se pudo guardar el prospecto', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -142,7 +145,7 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
   return (
     <div className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">Información del lead</h3>
+        <h3 className="font-semibold">Información del prospecto</h3>
         {!editMode ? (
           <button onClick={() => setEditMode(true)} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5">
             <PencilSimple size={12} weight="bold" /> Editar
@@ -192,19 +195,59 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
                   <button type="button" onClick={abrirWhatsapp} disabled={abriendoWa}
                     title="Abrir la conversacion en el CRM"
                     className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border
-                               text-xs text-muted-foreground hover:text-green-700 dark:hover:text-green-400 hover:bg-muted">
+                               text-xs text-muted-foreground hover:text-success hover:bg-muted">
                     <WhatsappLogo size={12} />
                     {abriendoWa ? 'Abriendo…' : 'WhatsApp'}
                   </button>
                 )}
               </span>
             ) : 'Sin teléfono'}
+            {/* Un número que no puede ser de nadie (#42). En producción hay
+                doce así —«+340», «+5823232»—: el chat se abre, no contesta
+                nadie, y la gestora apunta «no responde». Se avisa, no se
+                bloquea: la regla es de longitud y hay países que no
+                conocemos. */}
+            {telefonoImposible(lead.telefono) && (
+              <p className="mt-1 text-[11px] font-medium text-warning" role="status">
+                {telefonoImposible(lead.telefono) === 'corto'
+                  ? 'Este número tiene muy pocos dígitos para ser real. Compruébalo antes de escribirle: el chat se abre igual y no le llega a nadie.'
+                  : 'Este número tiene más dígitos de los que existen. Compruébalo antes de escribirle.'}
+              </p>
+            )}
           </InfoField>
           <InfoField label="Producto de interés">{lead.producto_nombre || lead.producto_interes || 'Sin producto'}</InfoField>
           <InfoField label="Gestor asignado">{lead.responsable_nombre || 'Sin asignar'}</InfoField>
           <InfoField label="Fecha de solicitud">
             {lead.fecha_solicitud ? new Date(lead.fecha_solicitud).toLocaleString('es-ES') : '--'}
           </InfoField>
+          {/* Las etiquetas que la gestora tiene puestas en SU WhatsApp (#138).
+              «Quien mira la ficha del prospecto no ve lo que la gestora ya
+              sabe» — es literal del ticket, y este es el sitio del que habla.
+
+              NO se mezclan con el estado del prospecto, que está arriba: son de
+              otro sitio y las decide otra persona. El ticket lo dice: «se
+              enseñan las dos, no se pisa ninguna». Por eso van con borde y sin
+              relleno, como en el chat.
+
+              Si no hay ninguna no se pinta el campo: una fila «Sin etiquetas»
+              en cada ficha es ruido en el 95 % de los casos. */}
+          {(lead.etiquetas_wa || []).length > 0 && (
+            <div className="sm:col-span-2">
+              <InfoField label="Etiquetas de WhatsApp">
+                <span className="flex flex-wrap gap-1.5">
+                  {(lead.etiquetas_wa || []).map((e) => (
+                    <span
+                      key={`${e.instancia}-${e.waId}`}
+                      title="Puesta desde WhatsApp, no desde el CRM"
+                      className="inline-flex items-center px-2 py-0.5 rounded-full border border-border text-secundario text-muted-foreground"
+                    >
+                      {e.nombre}
+                    </span>
+                  ))}
+                </span>
+              </InfoField>
+            </div>
+          )}
           {lead.notas && (
             <div className="sm:col-span-2">
               <InfoField label="Notas">{lead.notas}</InfoField>
@@ -212,41 +255,37 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Nombre</p>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Email</p>
-            <input
+        // Las piezas comunes, como en «Nuevo prospecto» (#106).
+        <FilaCampos>
+          <Field label="Nombre" htmlFor="ficha-nombre">
+            <input autoComplete="off" id="ficha-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Email" htmlFor="ficha-email">
+            <input autoComplete="off"
+              id="ficha-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="correo@ejemplo.com"
               className={inputClass}
             />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Teléfono</p>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Canal</p>
-            <select value={canal} onChange={(e) => setCanal(e.target.value)} className={inputClass}>
-              {CANAL_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-muted-foreground mb-1.5">Notas</p>
-            <textarea
+          </Field>
+          <Field label="Teléfono" htmlFor="ficha-telefono">
+            <input autoComplete="off" id="ficha-telefono" value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Canal" htmlFor="ficha-canal">
+            <Select<string> id="ficha-canal" value={canal} onChange={setCanal} ariaLabel="Canal" options={CANAL_OPTIONS} placeholder={canal} />
+          </Field>
+          <Field label="Notas" htmlFor="ficha-notas" className="sm:col-span-2">
+            <textarea autoComplete="off"
+              id="ficha-notas"
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               rows={3}
-              className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+              className={`${inputClass} h-auto py-2 resize-none`}
             />
-          </div>
-        </div>
+          </Field>
+        </FilaCampos>
       )}
     </div>
   );

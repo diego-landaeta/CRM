@@ -7,7 +7,11 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { getLocal } from '../../shared/services/localStorage.service.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
+import { duplicadasDeLaCola, MOTIVO_EN_COLA } from './posible-duplicada.js';
 import { query } from '../../shared/config/db.js';
+import { alcanceComercial } from '../../shared/utils/roles.js';
+// La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
+import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -47,12 +51,38 @@ export function getDefaultIvaPct(/* pais */) {
   return 0;
 }
 
+// Lo que suman los conceptos (cantidad × precio), antes de IVA.
+//
+// Las dos claves, como en el PDF. Con solo `precio_unitario`, unos conceptos
+// guardados a la antigua daban subtotal 0 y la factura se guardaba en cero sin
+// avisar de nada — un cero silencioso es peor que un error.
+export function subtotalDeConceptos(items) {
+  return (items || []).reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario ?? it.precio ?? 0), 0);
+}
+
+/*
+  LA FACTURA DE UN COBRO VA POR LO COBRADO: EL IVA, DENTRO (15/10).
+
+  Venta 643 de Psiko Aprende. Stripe cobro 412,25 € y la cola saco la factura
+  2026/0196 exenta, por 412,25. Al corregirla para ponerle el 21 %, la pantalla
+  dejo «El precio ya incluye IVA» sin marcar —una factura exenta lo tiene asi—,
+  y el IVA se sumo ENCIMA: 412,25 + 86,57 = 498,82. Y como la correccion
+  sincroniza el cobro con la factura, el cobro paso a 498,82 € y la venta a
+  498,82 cobrados. Un dinero que el cliente no pago.
+
+  Si lo que se teclea en los conceptos es justo lo cobrado, ese es el bruto que
+  pago el cliente: el IVA va dentro (412,25 = 340,70 + 71,55), nunca encima.
+  Quien quiera otro importe lo teclea distinto, y entonces esto no se mete.
+*/
+export function ivaDentroSiEsLoCobrado({ items, ivaPct, ivaIncluido, cobrado }) {
+  if (ivaIncluido) return true;
+  if (!(Number(ivaPct) > 0) || cobrado == null || !Number.isFinite(Number(cobrado))) return false;
+  return Math.abs(subtotalDeConceptos(items) - Number(cobrado)) <= 0.01;
+}
+
 // Calcula importes con o sin IVA incluido
 export function calcularImportes({ items, ivaPct, ivaIncluido }) {
-  // Las dos claves, como en el PDF. Con solo `precio_unitario`, unos conceptos
-  // guardados a la antigua daban subtotal 0 y la factura se guardaba en cero sin
-  // avisar de nada — un cero silencioso es peor que un error.
-  const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario ?? it.precio ?? 0), 0);
+  const subtotal = subtotalDeConceptos(items);
   let baseImponible, ivaImporte, total;
   if (ivaIncluido) {
     // El total ya incluye IVA → desglosar
@@ -94,7 +124,8 @@ const SIMBOLOS_NO_WINANSI = {
   '₿': 'BTC ', '₵': 'GHS ', '₾': 'GEL ',
 };
 function winAnsi(t) {
-  let out = String(t ?? '');
+  // «n⁰», «n°»: el cero volado (U+2070) se escribe como «º», que WinAnsi sí tiene.
+  let out = String(t ?? '').replace(/⁰/g, 'º');
   for (const [sym, iso] of Object.entries(SIMBOLOS_NO_WINANSI)) out = out.split(sym).join(iso);
   // OJO: WinAnsi (CP1252) SI admite caracteres fuera de Latin-1 — el euro entre
   // ellos. Filtrar solo por Latin-1 se cargaba el simbolo de TODOS los importes.
@@ -107,6 +138,21 @@ function winAnsi(t) {
     if (cp <= 0xFF || EXTRAS.has(cp)) res += ch;
   }
   return res;
+}
+
+/**
+ * La fuente del PDF, con el texto limpio SIEMPRE (02/11/2026). Muchos `drawText`
+ * no pasaban por winAnsi(): la dirección de un cliente con «n⁰» (cero volado,
+ * U+2070) hacía reventar la factura ICTESS 2026/0111 de Yosbely, que no se podía
+ * descargar, generar ni enviar. Limpiando dentro de la fuente vale para todo lo
+ * que se dibuje con ella, también lo que se añada después.
+ */
+export function fuenteSegura(f) {
+  const codificar = f.encodeText.bind(f);
+  const ancho = f.widthOfTextAtSize.bind(f);
+  f.encodeText = (t) => codificar(winAnsi(t));
+  f.widthOfTextAtSize = (t, size) => ancho(winAnsi(t), size);
+  return f;
 }
 
 // Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
@@ -156,9 +202,28 @@ function wrapToLines(font, text, size, maxWidth) {
 }
 
 // Genera PDF de factura usando pdf-lib
+/**
+ * El banco al que se paga, para las facturas por transferencia (Carlos, 30/09:
+ * «debe de aparecer el IBAN y abajo el código BIC/SWIFT»). Se lee de la sociedad
+ * que emite AHORA y no de la copia guardada en la factura: es a donde hay que
+ * pagar, y las facturas de antes no guardaban el BIC. Sin nada, null.
+ */
+async function datosDelBanco(inv) {
+  let iss = null;
+  if (inv.issuer_id) {
+    const { rows } = await query('SELECT iban, bic FROM invoice_issuers WHERE id = $1', [inv.issuer_id]);
+    iss = rows[0] || null;
+  }
+  const iban = String(iss?.iban || inv.issuer_iban || '').trim();
+  const bic = String(iss?.bic || '').trim();
+  return iban || bic ? { iban, bic } : null;
+}
+
 export async function generatePDF(invoiceId, { preliminar = false, vistaGestor = false, enEuros = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
+  // Por transferencia o por depósito bancario (15/10): en los dos se paga a la cuenta.
+  inv.banco = ['transferencia', 'deposito'].includes(inv.metodo_pago) ? await datosDelBanco(inv) : null;
   // COPIA DE GESTIÓN de un cobro por Stripe: el alumno recibe la factura por el
   // BRUTO (lo que pagó) y gestión necesita el NETO liquidado (bruto − comisión).
   // Se sustituyen los importes solo para este PDF; en la base de datos no se toca
@@ -203,8 +268,8 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([595, 842]); // A4
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const font = fuenteSegura(await pdfDoc.embedFont(StandardFonts.Helvetica));
+  const bold = fuenteSegura(await pdfDoc.embedFont(StandardFonts.HelveticaBold));
   const black = rgb(0, 0, 0);
   const gray = rgb(0.4, 0.4, 0.4);
   const lightGray = rgb(0.92, 0.92, 0.92);
@@ -384,6 +449,7 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   y -= 30;
   const metodoLabels = {
     transferencia: 'Transferencia bancaria',
+    deposito: 'Depósito bancario',
     tarjeta: 'Tarjeta',
     tarjeta_stripe: 'Tarjeta',   // forma de pago = Tarjeta; Stripe es el ORIGEN, no el método
     efectivo: 'Efectivo',
@@ -394,6 +460,9 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   };
   page.drawText(`Forma de pago: ${metodoLabels[inv.metodo_pago] || inv.metodo_pago || '—'}`,
     { x: left, y, size: 10, font: bold, color: black });
+  // Por transferencia: a dónde. El IBAN y, debajo, el BIC/SWIFT.
+  if (inv.banco?.iban) { y -= 14; page.drawText(`IBAN: ${inv.banco.iban}`, { x: left, y, size: 10, font, color: black }); }
+  if (inv.banco?.bic) { y -= 14; page.drawText(`BIC/SWIFT: ${inv.banco.bic}`, { x: left, y, size: 10, font, color: black }); }
 
   // Sello del emisor al pie (abajo-derecha) — SOLO si logo_en_pie (p.ej. ISEIE).
   if (logoImg && logoEnPie) {
@@ -483,7 +552,7 @@ export function rotuloNombreCliente(inv) {
 }
 
 const METODO_LABELS = {
-  transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta',
+  transferencia: 'Transferencia bancaria', deposito: 'Depósito bancario', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta',
   efectivo: 'Efectivo', bizum: 'Bizum', paypal: 'PayPal', fraccionado: 'Pago fraccionado', otro: 'Otro',
 };
 
@@ -559,7 +628,9 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             { text: [inv.issuer_cp, inv.issuer_ciudad].filter(Boolean).join(' ') + (inv.issuer_pais ? `, ${inv.issuer_pais}` : '') },
             { text: inv.issuer_email },
             { text: inv.issuer_telefono ? `Tel: ${inv.issuer_telefono}` : '' },
-            { text: inv.issuer_iban ? `IBAN: ${inv.issuer_iban}` : '' },
+            // El IBAN ya no va aquí: sale debajo de la forma de pago, y solo en las
+            // facturas por transferencia (Carlos, 30/09). Hasta hoy la sociedad no
+            // tenía IBAN, así que esta línea nunca se había visto.
           ]);
           break;
         case 'cliente':
@@ -604,6 +675,9 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
         case 'pie':
           drawLines(b, [
             { text: `Forma de pago: ${METODO_LABELS[inv.metodo_pago] || inv.metodo_pago || '—'}`, bold: true },
+            // Por transferencia: el IBAN y, debajo, el BIC/SWIFT (ver datosDelBanco).
+            ...(inv.banco?.iban ? [{ text: `IBAN: ${inv.banco.iban}` }] : []),
+            ...(inv.banco?.bic ? [{ text: `BIC/SWIFT: ${inv.banco.bic}` }] : []),
             ...String(inv.pie_pago || '').split('\n').map((t) => ({ text: t })),
           ]);
           break;
@@ -719,18 +793,42 @@ export async function sendByEmail(invoiceId, customEmail = null) {
 // ---------------------------------------------------------------------------
 // Corte de facturacion
 // ---------------------------------------------------------------------------
-export async function getFacturacionAlDia(projectId) {
+/*
+  `personas` (QA del 09/11/2026): una administradora que lleva un equipo
+  comercial ve en la cola solo los cobros de ella y de su equipo (y los que no
+  son de nadie, como en Facturas: FACTURA_DE). Antes veía los de todas las
+  gestoras del campus. «El siguiente» se decide con la cola ENTERA: es el turno
+  real de la numeración, no el primero de los que ella ve.
+*/
+const cobroDelEquipo = (personas) => (p) =>
+  !personas || p.gestora_id == null || personas.includes(Number(p.gestora_id));
+
+export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const estado = await model.getFacturacionAlDia(projectId);
   // La cola: todo cobro posterior a lo ya hecho que aun no tiene factura.
-  const cola = await model.listPagosSinFactura(projectId);
+  const entera = await model.listPagosSinFactura(projectId);
+  const primero = entera[0]?.payment_id;
+  const cola = entera.filter(cobroDelEquipo(personas));
+  // Los que se pararian por posible duplicada si se emitieran ahora (CRM#819):
+  // la emision automatica no los emite, y aqui se dice por que siguen.
+  let duplicadas = new Map();
+  try {
+    duplicadas = await duplicadasDeLaCola(cola.slice(0, 200).map((p) => p.payment_id));
+  } catch (err) {
+    logger.warn({ err: err.message, projectId }, 'no se pudo mirar si la cola tiene posibles duplicadas');
+  }
+  // Factura automática (#764): qué pasa con los datos fiscales de cada venta.
+  // Apagada, el mapa viene vacío y la cola sale como siempre.
+  const { estadosParaCola } = await import('../factura-automatica/factura-automatica.service.js');
+  const datosFiscales = await estadosParaCola([...new Set(cola.slice(0, 200).map((p) => Number(p.conversion_id)))]);
   return {
     ...estado,
     pagos_sin_factura: cola.length,
     importe_sin_factura: cola.reduce((s, p) => s + Number(p.importe || 0), 0),
     // El primero de la cola es el unico que puede emitirse sin saltarse a nadie.
     listos_para_emitir: cola.length ? 1 : 0,
-    proformas_pendientes: await model.listProformasPendientes(projectId),
-    cola: cola.slice(0, 200).map((p, i) => ({
+    proformas_pendientes: await model.listProformasPendientes(projectId, { personas }),
+    cola: cola.slice(0, 200).map((p) => ({
       payment_id: p.payment_id,
       conversion_id: p.conversion_id,
       fecha: p.fecha,
@@ -740,7 +838,13 @@ export async function getFacturacionAlDia(projectId) {
       gestora: p.gestora,
       origen: p.de_stripe ? 'stripe' : 'manual',
       // El primero es el que toca; los demas esperan a que salgan los anteriores.
-      es_el_siguiente: i === 0,
+      es_el_siguiente: p.payment_id === primero,
+      motivo: duplicadas.has(Number(p.payment_id)) ? MOTIVO_EN_COLA : null,
+      posible_duplicada: duplicadas.get(Number(p.payment_id)) || null,
+      datos_fiscales: (() => {
+        const d = datosFiscales.get(Number(p.conversion_id));
+        return d ? { estado: d.estado, caduca_at: d.caduca_at, motivo: d.motivo_revision || d.ultimo_error || null } : null;
+      })(),
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);
@@ -760,20 +864,27 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 
 // Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
 // antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
-export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false } = {}) {
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, numero = null, personas = null, confirmarDuplicada = false } = {}) {
   const cola = await model.listPagosSinFactura(projectId);
   const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
   if (!pg) {
     throw new AppError('Ese cobro ya no está en la cola: o ya tiene factura, o queda fuera del periodo.',
       404, 'NOT_IN_QUEUE');
   }
+  // Una líder de equipo comercial solo emite los cobros que ve en su cola.
+  if (!cobroDelEquipo(personas)(pg)) {
+    throw new AppError('Ese cobro es de una gestora que no está en tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
+  }
+  // Con la facturacion pausada por la auditoria (#765), la cola no emite. Se
+  // mira antes que el orden para que el motivo que se lee sea el de verdad.
+  await exigirFacturacionActiva({ paymentId: pg.payment_id });
   if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
     throw new AppError(
       'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.',
       409, 'HAY_ANTERIORES');
   }
   const inv = await model.emitirFacturaDePago(
-    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar }, userId
+    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar, numero, confirmarDuplicada }, userId
   );
   // Que no diga "generada" si no se genero nada.
   //
@@ -794,6 +905,68 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
   return inv;
 }
 
+/*
+  «COBRADA» EN UNA PROFORMA.
+
+  Yolanda, 29/09: tenia dos proformas cobradas y no encontraba como pasarlas a
+  pagadas. El boton «Pagada» no sale en las proformas, y esta bien que no salga:
+  una proforma no es una factura, y marcarla pagada la dejaria cobrada sin
+  factura. Lo que toca es apuntar el cobro en la venta y generar la factura
+  desde la cola, que convierte la proforma --mismo numero-- en la factura. Eran
+  dos pantallas y nada lo decia.
+
+  Esto hace los dos pasos de una vez, por los mismos caminos: el cobro entra por
+  conversionService.addPayment (comision, anti-duplicado, tope del pendiente) y
+  la factura sale de emitirFacturaDePago, como desde la cola. No se salta el
+  orden de la cola porque no gasta numero: el de la proforma ya estaba puesto.
+*/
+export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas, referencia }, user) {
+  const prof = await model.findById(invoiceId);
+  if (!prof) throw new AppError('Esa proforma no existe', 404, 'NOT_FOUND');
+  if (prof.tipo !== 'proforma') {
+    throw new AppError('Solo las proformas se cobran así; una factura se marca con «Pagada».', 400, 'NOT_PROFORMA');
+  }
+  if (prof.estado === 'cancelada') throw new AppError('Esa proforma está cancelada.', 400, 'CANCELADA');
+  if (prof.estado === 'borrador' || prof.numero == null) {
+    throw new AppError('Esta proforma espera aprobación y aún no tiene número: apruébala primero.', 400, 'SIN_NUMERO');
+  }
+  if (!prof.conversion_id) {
+    throw new AppError('Asóciala antes a la venta del cliente («Asociar a venta»): el cobro se apunta en la venta.',
+      400, 'SIN_VENTA');
+  }
+  // Los mismos que emiten desde la cola: «Emitir desde la cola» (#423).
+  if (!(await model.tieneLaClave(user.userId, 'facturas.cola'))) {
+    throw new AppError('Solo quien gestiona la facturación puede pasar una proforma a factura.', 403, 'FORBIDDEN');
+  }
+  // Una gestora, las suyas; quien lleva un equipo comercial, las de su equipo.
+  const alcance = await alcanceComercial(user);
+  if (alcance && !(await model.esProformaDe(alcance, invoiceId))) {
+    throw new AppError('Solo puedes cobrar tus propias proformas.', 403, 'FORBIDDEN');
+  }
+  const motivo = await model.motivoParaNoCobrarProforma(prof, { importe, fecha });
+  if (motivo) throw new AppError(motivo.texto, 409, motivo.code);
+  // Antes de apuntar el cobro: con la facturacion pausada (#765) la proforma no
+  // pasaria a factura y el cobro quedaria a medias.
+  await exigirFacturacionActiva();
+
+  // Import dinamico: conversion.service ya importa este modulo de la misma forma.
+  const conversionService = await import('../conversions/conversion.service.js');
+  // Con `userId`: si es por transferencia o depósito, el webhook (206) dice quién lo apuntó.
+  const { payment } = await conversionService.addPayment(
+    prof.conversion_id, { importe, fecha, metodo, notas, referencia }, { userId: user.userId });
+  const inv = await model.emitirFacturaDePago(
+    prof.conversion_id, { paymentId: payment.id, importe: Number(payment.importe) }, user.userId);
+  if (!inv || inv.id !== prof.id) {
+    logger.error({ invoiceId, paymentId: payment.id, devuelta: inv?.id || null },
+      'proforma cobrada pero no convertida');
+    throw new AppError('El cobro quedó apuntado en la venta, pero la proforma no pasó a factura. '
+      + 'Genérala desde la cola de facturación.', 409, 'NO_CONVERTIDA');
+  }
+  logger.info({ invoiceId, codigo: inv.codigo, estado: inv.estado, paymentId: payment.id, userId: user.userId },
+    'proforma cobrada: ya es factura');
+  return inv;
+}
+
 // Emite de golpe, en orden de fecha, todo lo que quede en la cola hasta esa fecha.
 export async function emitirColaHasta(projectId, hasta, userId) {
   const pendientes = await model.listPagosSinFactura(projectId, hasta);
@@ -808,6 +981,9 @@ export async function emitirColaHasta(projectId, hasta, userId) {
     } catch (err) {
       fallidas.push({ payment_id: pg.payment_id, cliente: pg.cliente, error: err.message });
       logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura de la cola');
+      // Facturacion pausada por la auditoria (#765): los que siguen tampoco
+      // saldrian, y van en orden. Se para aqui.
+      if (err?.code === 'FACTURACION_PAUSADA') break;
     }
   }
   return { emitidas: emitidas.length, detalle: emitidas, fallidas };

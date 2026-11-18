@@ -1,5 +1,12 @@
+import SaludComercial from '../components/SaludComercial';
+import CifrasProspectos from '../components/CifrasProspectos';
+import SiguientesAcciones from '../components/SiguientesAcciones';
+import AccesosClave from '@/shared/components/ui/AccesosClave';
+import BarraFiltros from '@/shared/components/ui/BarraFiltros';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import ComoVoy from '@/modules/reports/components/ComoVoy';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -8,10 +15,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import client from '@/shared/api/client';
-import {
+import { Gear, ArrowCounterClockwise, ListChecks,
   MagnifyingGlass,
   Plus,
-  Export,
+
   CaretLeft,
   CaretRight,
   Users,
@@ -32,6 +39,9 @@ import {
   Flag,
   ChartLineUp,
   Receipt,
+  Kanban,
+  Export,
+  GitMerge,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -44,29 +54,38 @@ const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
-import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import StatusBadge, { STATUS_LABELS, STATUS_KEYS } from '@/shared/components/ui/StatusBadge';
 import QuickStatusChange from '../components/QuickStatusChange';
-import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
 import DateRangeFilter from '../components/DateRangeFilter';
 import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import LeadsViewToggle from '../components/LeadsViewToggle';
 import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
+// Las dos formas de abrir a una persona, a la vista y no escondidas.
+import AtajosDeFicha from '../components/AtajosDeFicha';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
+import { yaPaso } from '@/shared/lib/fechas';
+import { etiquetaCampusPais, nombreDelPais } from '@/shared/lib/paises';
 import {
   getInitials,
   getAvatarColor,
   formatRelative,
   formatFecha,
 } from '../lib/leadFormat';
-import ProximoGestor from '../components/ProximoGestor';
+import BloquePlegable from '@/shared/components/ui/BloquePlegable';
+// El panel de «proximo gestor» se retiro: predecia con el round-robin del CRM
+// y quien reparte es Make. Se cambio por el de abajo, que enseña lo que ha
+// pasado en vez de lo que va a pasar. El componente viejo sigue en el repo.
+import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
+import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
+import { useIdsDelAmbito, useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 
 
 function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
@@ -83,14 +102,14 @@ type ChipTone = 'default' | 'danger' | 'warning';
 
 function QuickChip({ active, onClick, label, count, tone = 'default' }: { active: boolean; onClick: () => void; label: string; count?: number; tone?: ChipTone }) {
   const toneActive: string = {
-    default: 'bg-primary text-white',
-    danger: 'bg-red-600 text-white',
-    warning: 'bg-amber-600 text-white',
+    default: 'bg-primary text-primary-foreground',
+    danger: 'bg-destructive text-destructive-foreground',
+    warning: 'bg-warning text-warning-foreground',
   }[tone];
   const toneIdleCount: string = {
     default: 'bg-primary/15 text-primary',
-    danger: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
-    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    danger: 'bg-destructive-soft text-destructive-soft-foreground',
+    warning: 'bg-warning-soft text-warning-soft-foreground',
   }[tone];
   return (
     <button
@@ -129,11 +148,19 @@ export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
+  // Eliminar: admin y superadmin, y desde el 01/10 la gestora con el permiso
+  // «leads.delete» (#204) en SUS leads sin venta. El servidor lo vuelve a mirar.
+  const puedeEliminar = (l: { responsable_id?: number | null; status?: string }) =>
+    ((user?.role === 'superadmin' || user?.role === 'admin') && can('leads.delete'))
+    || (can('leads.delete') && l.responsable_id === user?.id && l.status !== 'convertido');
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
+    filterSeguimiento, setFilterSeguimiento,
+    filterPaso, setFilterPaso,
     filterOrigen, setFilterOrigen,
+    filterPais, setFilterPais,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
     selectedProjectIds, setSelectedProjectIds,
@@ -146,7 +173,24 @@ export default function LeadsPage() {
     loading, error, refetch,
   } = useLeads();
 
-  const { activeProject, projects } = useProjectContext();
+  const { activeProject, projects, activeIssuerId } = useProjectContext();
+  /**
+   * El ámbito para la cola: un campus, o los de la empresa.
+   *
+   * `-1` es «todos los proyectos», un valor interno del CRM: mandarlo pediría
+   * el proyecto número menos uno. Con una empresa puesta van sus campus, que
+   * es lo que el servidor sabe sumar.
+   */
+  const idsDelAmbito = useIdsDelAmbito();
+  // Los campus que ofrece el filtro «Proyecto» y el export: los de la empresa
+  // elegida arriba, o todos los suyos sin los de pruebas (#346). Antes era la
+  // lista entera: con CEDIA salían ICTESS, Academia IA y Pruebas.
+  const campusDelAmbito = useProyectosDelAmbito<{ id: number; nombre?: string; sociedad_emisora_id?: number | null; es_prueba?: boolean }>();
+  const proyectoDeLaCola = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const campusCsv = !proyectoDeLaCola && activeIssuerId && idsDelAmbito.length
+    ? idsDelAmbito.join(',')
+    : null;
+
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
@@ -207,7 +251,7 @@ export default function LeadsPage() {
   const [expScope, setExpScope] = useState('filtros'); // 'filtros' | 'todos'
 
   // Proyectos elegibles para el export (con nombre).
-  const exportableProjects = (projects || []).filter((p) => p.id > 0);
+  const exportableProjects = campusDelAmbito;
 
   // Token para evitar que respuestas lentas de un cálculo anterior pisen al
   // último (al cambiar rápido de proyecto/alcance se combinaban datos).
@@ -365,7 +409,8 @@ export default function LeadsPage() {
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
     const pidParam = activeProject?.id && activeProject.id > 0 ? `&projectId=${activeProject.id}` : '';
-    client.get(`/users?limit=100${pidParam}`)
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${pidParam}`)
       .then((res) => {
         if (res.success) setGestores(res.data || []);
       })
@@ -450,6 +495,93 @@ export default function LeadsPage() {
     toast({ title: `${selected.length} prospectos exportados` });
   }
 
+/**
+   * Apunta el contacto a TODOS los seleccionados.
+   *
+   * Diego, 23/09: las opciones del envio masivo tambien aqui. Se va uno a uno
+   * contra el servidor --no hay endpoint de interacciones en bloque-- y se
+   * cuenta lo que sale bien y lo que no: con cuarenta personas, un «hecho» a
+   * secas no se puede comprobar a ojo.
+   */
+  async function marcarContactadosEnBloque() {
+    if (!selectedIds.length) return;
+    setBulkLoading(true);
+    let bien = 0;
+    let mal = 0;
+    for (const id of selectedIds) {
+      try {
+        await client.post(`/leads/${id}/interactions`, {
+          tipo: 'whatsapp',
+          nota: 'Contacto en bloque',
+          fecha: new Date().toISOString(),
+        });
+        bien += 1;
+      } catch { mal += 1; }
+    }
+    setBulkLoading(false);
+    clearSelection();
+    refetch?.();
+    toast(mal === 0
+      ? { title: `${bien} contactos apuntados` }
+      : {
+        title: `${bien} apuntados, ${mal} no`,
+        description: 'Los que fallaron siguen sin contacto apuntado.',
+        variant: 'destructive',
+      });
+  }
+
+  /** Los telefonos o los correos de los seleccionados, al portapapeles. */
+  async function copiarContactosEnBloque(que: 'telefono' | 'email') {
+    const elegidos = filteredLeads.filter((l) => selectedIds.includes(l.id));
+    const datos = elegidos
+      .map((l) => (que === 'telefono' ? l.telefono : l.email))
+      .filter(Boolean) as string[];
+    if (!datos.length) {
+      toast({
+        title: que === 'telefono' ? 'Ninguno tiene teléfono' : 'Ninguno tiene correo',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(datos.join('\n'));
+    toast(ok
+      ? {
+        title: `${datos.length} ${que === 'telefono' ? 'teléfonos' : 'correos'} copiados`,
+        // Se dice cuantos se quedan fuera: pegar 38 cuando se marcaron 40 y no
+        // enterarse es quedarse con dos personas sin avisar.
+        description: datos.length < elegidos.length
+          ? `${elegidos.length - datos.length} de los seleccionados no tienen ese dato.`
+          : undefined,
+      }
+      : { title: 'No se ha podido copiar', variant: 'destructive' });
+  }
+
+  /**
+   * Los pasos del proceso, para poder filtrar por ellos con su nombre.
+   *
+   * Se piden al servidor y no se escriben aquí: cada campus puede renombrarlos
+   * desde «Proceso comercial», y un filtro que diga «Día 2» cuando la pantalla
+   * de pasos dice «Prueba social» no lo entiende nadie.
+   */
+  const [pasosDelProceso, setPasosDelProceso] = useState<Array<{ clave: string; nombre: string; orden: number }>>([]);
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (activeIssuerId) p.set('issuerId', String(activeIssuerId));
+    else if (activeProject?.id && activeProject.id !== -1) p.set('projectId', String(activeProject.id));
+    else { setPasosDelProceso([]); return; }
+    let vivo = true;
+    client.get(`/proceso/pasos?${p.toString()}`)
+      .then((r: any) => {
+        if (!vivo) return;
+        const filas = r?.success ? (r.data || []) : [];
+        setPasosDelProceso(filas.map((x: any) => ({ clave: x.clave, nombre: x.nombre, orden: x.orden })));
+      })
+      // Sin proceso montado no hay filtro, y ya está: no es un error que enseñar.
+      .catch(() => { if (vivo) setPasosDelProceso([]); });
+    return () => { vivo = false; };
+  }, [activeProject?.id, activeIssuerId]);
+
   // Auto-log de interaccion al usar acciones rapidas (WhatsApp/Email)
   async function handleLogInteraction(lead, tipo) {
     try {
@@ -516,6 +648,12 @@ export default function LeadsPage() {
         nombre: data.nombre,
         email: data.email,
         telefono: data.telefono || '',
+        // El usuario de WhatsApp tambien va: hay gente que solo da eso.
+        //
+        // Faltaba en la peticion y el servidor rechazaba el lead con «hace
+        // falta al menos una forma de contacto», aunque la gestora lo hubiera
+        // escrito. El formulario lo recogia y lo perdia aqui, al armar el envio.
+        whatsapp_usuario: data.whatsapp_usuario || null,
         producto_interes_id: productoInteresId,
         canal: data.origen || 'directo',
         notas: data.notas || '',
@@ -570,47 +708,83 @@ export default function LeadsPage() {
       {/* A quién le toca el siguiente (#11). Va arriba porque es lo que se mira
           de pasada, no algo que se busca: enterarse de que te toca a ti es
           justo lo que hoy no pasa hasta que el lead ya está asignado. */}
-      <ProximoGestor
-        projectId={activeProject?.id}
-        recargarSenal={colaSenal}
-        onReasignado={refetch}
-      />
+      {/* Lo que ha recibido cada gestora de verdad (#11).
+          Solo para quien manda: es una vista de como esta repartiendo Make
+          entre todo el equipo, no algo que una gestora necesite de sus
+          compañeras. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <UltimoLeadAsignado projectId={activeProject?.id} issuerId={activeIssuerId} />
+      )}
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold leading-tight">Prospectos</h1>
-          <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
+      <PageHeader
+        title="Prospectos"
+        subtitle="Explora y gestiona tus clientes potenciales"
+        actions={can('leads.create') ? (
+          <button
+            onClick={() => setFormOpen(true)}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
+          >
+            <Plus size={14} weight="bold" />
+            <span className="hidden sm:inline">Nuevo prospecto</span>
+            <span className="sm:hidden">Nuevo</span>
+          </button>
+        ) : null}
+      />
+
+      {/* Cómo va quien está mirando: su puesto en ventas y su tasa de
+          conversión del mes. Va aquí y no escondido en Informes porque es la
+          pantalla donde pasa el día. */}
+      <ComoVoy compacto />
+
+      {/* LA COLA DEL DÍA, AQUÍ TAMBIÉN. Diego, 23/09: «la cola del día debe
+          de estar en prospectos también con atajos y todo».
+
+          Es el mismo bloque del dashboard, no una copia: los cuatro números
+          salen de `GET /proceso/cola/resumen`, que ya recorta por rol. Contar
+          aquí por mi cuenta sería una segunda contabilidad de la misma cola, y
+          el día que discrepen nadie sabría cuál creer.
+
+          Cada número abre la cola con ese tramo ya puesto, y debajo van los
+          atajos a las tres pantallas del proceso. */}
+      <div className="space-y-2">
+        <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/prospectos/cola"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
+          >
+            <ListChecks size={14} weight="bold" className="text-primary" />
+            La cola del día
+          </Link>
+          <Link
+            to="/prospectos/seguimiento"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
+          >
+            <ArrowCounterClockwise size={14} weight="bold" className="text-primary" />
+            Seguimiento de fin de mes
+          </Link>
+          <Link
+            to="/prospectos/proceso"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Gear size={14} weight="bold" />
+            Proceso comercial
+          </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => { setNewCount(0); refetch(); }}
-            title="Refrescar lista de prospectos"
-            aria-label="Refrescar"
-            className={`relative h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
-              newCount > 0
-                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 animate-pulse'
-                : 'border-border bg-card hover:bg-muted'
-            }`}
-          >
-            <ArrowsClockwise size={14} weight="bold" className={loading ? 'animate-spin' : undefined} />
-            <span className="hidden md:inline">Refrescar</span>
-            {newCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
-                {newCount > 9 ? '9+' : newCount}
-              </span>
-            )}
-          </button>
-          <LeadsViewToggle active="list" />
-          <button
-            onClick={() => navigate('/prospectos/audiencias')}
-            title="Audiencias para Meta/Google"
-            aria-label="Audiencias"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <Export size={14} weight="bold" />
-            <span className="hidden md:inline">Audiencias</span>
-          </button>
+      </div>
+
+
+      {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
+          arriba, en la cabecera del marco, igual que en todas las demas. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+          {/* Aqui habia un «Refrescar». Hacia lo mismo que el «Actualizar» de
+              la fila de filtros —dos botones de recargar en la misma pantalla,
+              #125— y lo unico que aportaba de mas, el aviso de cuantos han
+              entrado, se ha mudado alli. */}
+          {/* Aqui habia un «Lista / Kanban» y un «Audiencias» que llevaban a
+              las mismas tres pantallas que las pestanas de arriba. Dos sitios
+              para lo mismo, uno encima del otro. */}
           {filteredLeads.length > 0 && can('leads.export') && (
             <button
               onClick={abrirExport}
@@ -623,22 +797,13 @@ export default function LeadsPage() {
               <span className="hidden md:inline">{exportLoading ? 'Preparando…' : 'Exportar'}</span>
             </button>
           )}
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/informes')}
-              title="Ir a Reportes (descargables)"
-              aria-label="Reportes"
-              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <ChartLineUp size={14} weight="bold" />
-              <span className="hidden md:inline">Reportes</span>
-            </button>
-          )}
+          {/* Y aqui un «Reportes», que llevaba al mismo sitio que el acceso
+              «Reportes» del bloque de arriba. Se queda el del bloque. */}
           <button
             onClick={() => setWasapiOpen(true)}
             title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
             aria-label="Wasapi"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <WhatsappLogo size={14} weight="bold" />
             <span className="hidden md:inline">Wasapi</span>
@@ -655,7 +820,7 @@ export default function LeadsPage() {
                 <CaretDown size={11} weight="bold" />
               </button>
               {moreOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-popover z-30 w-max py-1">
                   {can('leads.create') && (
                   <button
                     onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
@@ -687,24 +852,115 @@ export default function LeadsPage() {
               )}
             </div>
           )}
-          {can('leads.create') && (
-          <button
-            onClick={() => setFormOpen(true)}
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
-          >
-            <Plus size={14} weight="bold" />
-            <span className="hidden sm:inline">Nuevo prospecto</span>
-            <span className="sm:hidden">Nuevo</span>
-          </button>
-          )}
-        </div>
       </div>
 
-      {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
-              Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
+      {/* Los tres bloques de arriba, como la maqueta: que pasa, que toca hacer,
+          y a donde se va desde aqui. Los numeros ya venian del servidor; solo
+          se usaban para unas pildoras dentro del desplegable de filtros, donde
+          no los ve nadie.
+
+          Las proporciones son las de la maqueta: la salud manda porque es lo
+          que mas se mira, y los accesos son la columna estrecha. */}
+      <CifrasProspectos
+        stats={stats}
+        urgencias={quickCounts}
+        filtroRapido={quickFilter}
+        onFiltroRapido={(clave) => setQuickFilter(clave || '')}
+      />
+
+      {/* Plegable y con memoria (#125): «esta super bien, pero que se pueda
+          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
+          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
+          organizarse el dia le hace falta. */}
+      <BloquePlegable
+        clave="prospectos-resumen"
+        // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado»
+        // (rescatado de la PR #153). Quien ya lo dejó abierto lo sigue viendo
+        // abierto: lo guardado manda sobre el arranque.
+        abiertoPorDefecto={false}
+        titulo="Resumen del dia"
+        resumen={
+          quickCounts.urgent > 0
+            ? `${quickCounts.urgent} piden atención`
+            : 'Nada urgente'
+        }
+      >
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
+        <SaludComercial
+          stats={stats}
+          onFiltroEstado={setFilterEstadoSafe}
+          onVerPipeline={() => navigate('/prospectos/pipeline')}
+        />
+        <SiguientesAcciones
+          leads={leads}
+          // El PANEL, no la ficha entera. Diego, 24/09: «y abra el panel, no la
+          // ficha completa». Desde aquí se entra a ver qué toca con alguien y
+          // se vuelve a la lista; irse a otra pantalla obliga a volver atrás
+          // por cada persona.
+          onAbrir={(id) => setDrawerLeadId(id)}
+          // «Esto debe funcionar directamente, tuve que tocarlo para verlo.»
+          // Llevaba a «Necesitan acción hoy», que es UN tramo, y los demás
+          // estaban escondidos dentro del panel de Filtros. Ahora quita el
+          // filtro --se ven todos, los vencidos arriba-- y baja a la lista,
+          // que ya lleva los tramos a la vista.
+          onVerTodos={() => {
+            setQuickFilter('');
+            document.getElementById('lista-de-prospectos')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        />
+        <AccesosClave
+          // Cada acceso, solo a quien puede entrar: la gestora veía Duplicados,
+          // Reportes y Audiencias y al pulsarlos acababa en «sin permiso». Los
+          // mismos roles que el menú y el servidor (y que ISEIE, 02/10).
+          accesos={[
+            { label: 'Pipeline', detail: 'Arrastrar por estados', icon: Kanban, to: '/prospectos/pipeline' },
+            ...(['admin', 'superadmin', 'soporte'].includes(user?.role || '')
+              ? [{ label: 'Audiencias', detail: 'Exportar a Meta y Google', icon: Export, to: '/prospectos/audiencias' }]
+              : []),
+            ...(['admin', 'superadmin'].includes(user?.role || '')
+              ? [
+                { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/prospectos/revision-duplicados' },
+                { label: 'Reportes', detail: 'Números descargables', icon: ChartLineUp, to: '/informes' },
+              ]
+              : []),
+          ]}
+        />
+      </section>
+      </BloquePlegable>
+
+      {/* Arriba solo el buscador. Estado, canal y orden se han ido DENTRO del
+          desplegable «Filtros» —Diego, 23/09: «mete esos filtros allí»—, con
+          los otros siete. Un solo sitio donde mirar; lo que haya puesto lo
+          canta el número del botón y las píldoras de al lado. */}
+      <BarraFiltros
+        busqueda={search}
+        onBusqueda={setSearch}
+        placeholder="Buscar por nombre, email o teléfono"
+        desplegables={[]}
+        hayFiltros={!!(search || filterEstado || filterOrigen || filterPais || filterResponsable || filterProducto || dateFrom || dateTo || filterDup || filterReincidente || quickFilter)}
+        onLimpiar={() => {
+          setSearch('');
+          setFilterEstado('');
+          setFilterOrigen('');
+          setFilterPais('');
+          setFilterResponsable('');
+          setFilterProducto('');
+          setDateRange('', '');
+          setFilterDup(false);
+          setFilterReincidente(false);
+          setQuickFilter('');
+        }}
+        nuevos={newCount}
+        onActualizar={() => { setNewCount(0); refetch(); }}
+        actualizando={loading}
+      />
+
+      {/* Lo que no cabe arriba: el resto de filtros, las píldoras de lo que está
+          puesto ahora mismo, y «Asignar pendientes». */}
       <LeadsFiltersBar
         activeProject={activeProject}
-        projects={projects}
+        projects={campusDelAmbito}
         selectedProjectIds={selectedProjectIds}
         setSelectedProjectIds={setSelectedProjectIds}
         gestores={gestores}
@@ -712,7 +968,11 @@ export default function LeadsPage() {
         user={user}
         search={search} setSearch={setSearch}
         filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
+        filterSeguimiento={filterSeguimiento} setFilterSeguimiento={setFilterSeguimiento}
+        filterPaso={filterPaso} setFilterPaso={setFilterPaso}
+        pasosDelProceso={pasosDelProceso}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
+        filterPais={filterPais} setFilterPais={setFilterPais}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
         dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
@@ -746,11 +1006,49 @@ export default function LeadsPage() {
 
       {/* Error state */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
-          <WarningCircle size={32} className="text-red-500 mx-auto mb-2" weight="regular" />
-          <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
+        <div className="bg-destructive-soft border border-destructive/30 rounded-lg p-6 text-center">
+          <WarningCircle size={32} className="text-destructive mx-auto mb-2" weight="regular" />
+          <p className="text-sm text-destructive font-medium">{error}</p>
         </div>
       )}
+
+      {/* LOS TRAMOS, A LA VISTA.
+          Estos cuatro botones existían, pero vivían dentro del panel «Filtros»,
+          plegado. Diego, 24/09: «esto debe funcionar directamente, tuve que
+          tocarlo para verlo [...] sí o sí mostrar todos y atrasados, con
+          filtros hoy, mañana, vencidos». Un filtro que hay que descubrir no lo
+          usa nadie, y este es el que ordena la mañana. Siguen estando también
+          dentro del panel, con el resto: aquí se sacan los que se pulsan a
+          diario, no se mudan. */}
+      <div id="lista-de-prospectos" className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mr-1">
+          Cuándo toca
+        </span>
+        {([
+          ['', 'Todos', undefined],
+          ['overdue', 'Vencidos', quickCounts?.overdue],
+          ['today', 'Hoy', quickCounts?.today],
+          ['tomorrow', 'Mañana', quickCounts?.tomorrow],
+        ] as Array<[string, string, number | undefined]>).map(([valor, texto, cuantos]) => (
+          <button
+            key={valor || 'todos'}
+            type="button"
+            onClick={() => setQuickFilter(valor)}
+            aria-pressed={quickFilter === valor}
+            className={'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors '
+              + (quickFilter === valor
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card hover:bg-muted')}
+          >
+            {texto}
+            {typeof cuantos === 'number' && cuantos > 0 && (
+              <span className={'tabular-nums text-[11px] ' + (quickFilter === valor ? 'opacity-80' : 'text-muted-foreground')}>
+                {cuantos}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
       {/* Table */}
       <div className="bg-card rounded-lg border border-border">
@@ -793,7 +1091,7 @@ export default function LeadsPage() {
                   key={lead.id}
                   onClick={() => setDrawerLeadId(lead.id)}
                   title={isPorContactar ? 'Por contactar — pendiente de primer contacto' : `Prioridad: ${pStyle.label}`}
-                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${isPorContactar ? 'bg-orange-50/60 dark:bg-orange-950/20 ring-1 ring-orange-300/60 dark:ring-orange-800/60' : ''}`}
+                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${isPorContactar ? 'bg-warning-soft ring-1 ring-warning/40 dark:ring-warning/40' : ''}`}
                 >
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
@@ -831,7 +1129,8 @@ export default function LeadsPage() {
                           // Limpiar: convertir guiones a espacios + capitalizar primera letra
                           label = `Desde: ${last.replace(/-/g, ' ').replace(/^(.)/, (c) => c.toUpperCase())}`;
                         } catch { /* mantener fallback */ }
-                        return (
+
+  return (
                           <span className="inline-block px-2 py-0.5 bg-muted text-muted-foreground rounded font-medium italic" title={lead.landing_url}>
                             {label.length > 40 ? label.slice(0, 38) + '…' : label}
                           </span>
@@ -843,13 +1142,13 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.valor_oportunidad === 'alto' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" title="Producto de valor alto">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Alto
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-success-soft text-success-soft-foreground" title="Producto de valor alto">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />Alto
                       </span>
                     )}
                     {lead.valor_oportunidad === 'medio' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" title="Producto de valor medio">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Medio
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-warning-soft text-warning-soft-foreground" title="Producto de valor medio">
+                        <span className="w-1.5 h-1.5 rounded-full bg-warning" />Medio
                       </span>
                     )}
                     {lead.valor_oportunidad === 'bajo' && (
@@ -860,10 +1159,14 @@ export default function LeadsPage() {
                     {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
                   </td>
                   {showProjectColumn && (
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{etiquetaCampusPais(lead.proyecto_nombre, lead.pais_origen) || '—'}</td>
                   )}
                   <td className="px-5 py-3.5">
                     <ChannelBadge channel={lead.origen} />
+                    {/* Con un solo campus no hay columna de campus: el país va aquí (#221). */}
+                    {!showProjectColumn && lead.pais_origen && (
+                      <span className="block mt-0.5 text-secundario text-muted-foreground">{nombreDelPais(lead.pais_origen)}</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <QuickStatusChange
@@ -886,14 +1189,17 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.next_reminder_at ? (
-                      <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-red-600 font-medium' : 'text-foreground'}>
+                      <span className={yaPaso(lead.next_reminder_at) ? 'text-destructive font-medium' : 'text-foreground'}>
                         {formatRelative(lead.next_reminder_at, { future: true })}
                       </span>
                     ) : <span className="text-muted-foreground/60">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    <div className="flex items-center justify-end gap-1.5">
+                    <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    </div>
                   </td>
                 </tr>
                 );
@@ -950,14 +1256,17 @@ export default function LeadsPage() {
                   <span className="text-muted-foreground">Último: <span className="text-foreground">{formatFecha(lead.last_interaction_at)}</span></span>
                 )}
                 {lead.next_reminder_at && (
-                  <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-red-600 font-semibold' : 'text-muted-foreground'}>
+                  <span className={yaPaso(lead.next_reminder_at) ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
                     Próximo: <span className="font-medium">{formatRelative(lead.next_reminder_at, { future: true })}</span>
                   </span>
                 )}
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                <span className="flex items-center gap-1.5">
+                <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                </span>
               </div>
             </div>
           ))}
@@ -990,7 +1299,7 @@ export default function LeadsPage() {
                   onClick={() => setPage(p)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                     p === page
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'border border-border bg-card hover:bg-muted'
                   }`}
                 >
@@ -1040,6 +1349,8 @@ export default function LeadsPage() {
           onChangeStatus={can('leads.edit') ? (status => handleBulkStatusChange(status)) : undefined}
           onReassign={can('leads.assign') ? (gestorId => handleBulkReassign(gestorId)) : undefined}
           onExport={can('leads.export') ? handleBulkExportCsv : undefined}
+          onMarcarContactado={can('leads.edit') ? marcarContactadosEnBloque : undefined}
+          onCopiarContactos={copiarContactosEnBloque}
           gestores={gestores}
           isAdmin={can('leads.assign')}
           loading={bulkLoading}
@@ -1124,7 +1435,7 @@ export default function LeadsPage() {
           scope={
             <section className="rounded-md border border-border bg-muted/20 p-3 space-y-3">
               <div>
-                <p className="text-xs font-semibold text-foreground mb-1.5">¿Qué leads exportar?</p>
+                <p className="text-xs font-semibold text-foreground mb-1.5">¿Qué prospectos exportar?</p>
                 <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
                   <button type="button" onClick={() => setExportScope('filtros')}
                     className={`flex-1 h-8 ${expScope === 'filtros' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
@@ -1158,7 +1469,7 @@ export default function LeadsPage() {
                     })}
                   </div>
                   {expProjectIds.length === 0 && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Elige al menos un proyecto.</p>
+                    <p className="text-[11px] text-warning mt-1">Elige al menos un proyecto.</p>
                   )}
                 </div>
               )}

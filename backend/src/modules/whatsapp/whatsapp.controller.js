@@ -1,6 +1,12 @@
 import * as model from './whatsapp.model.js';
 import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { query } from '../../shared/config/db.js';
+import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { actividadEnWhatsapp } from './actividad.model.js';
+import { usuarioObjetivo } from './chat.controller.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceComercial, alcanceDeLider, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -9,7 +15,30 @@ function proyecto(req) {
   return n;
 }
 
-const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
+
+/**
+ * De quien son las plantillas PERSONALES que se ven o se guardan aqui.
+ *
+ * Diego, 23/09: «tambien que cada whatsapp tenga sus propias plantillas
+ * personalizadas». Iban por la persona que entra al CRM, no por el numero: si
+ * un administrador abria el WhatsApp de una gestora para echarle una mano, veia
+ * las SUYAS --que no le sirven de nada alli-- y una nueva se la guardaba a el.
+ * Las plantillas son del numero desde el que se escribe.
+ *
+ * SIN `usuarioId` no cambia nada: sigue siendo quien pregunta. Eso importa
+ * porque la pantalla de Plantillas llama a este mismo endpoint sin sesion, y
+ * `usuarioObjetivo` exige tener WhatsApp encendido --alli no viene a cuento--.
+ *
+ * CON otro numero puesto manda el MISMO candado que el chat, el de
+ * `usuarioObjetivo`: superadmin cualquiera, admin solo quien comparta proyecto,
+ * el resto la suya y punto. No se copia la regla aqui; se llama a la que hay,
+ * que ademas deja apuntado que alguien ha entrado a mirar.
+ */
+async function duenoDeLasPersonales(req) {
+  const pedido = parseInt(req.query?.usuarioId ?? req.body?.usuarioId ?? '', 10);
+  if (!Number.isInteger(pedido) || pedido === req.user.userId) return req.user.userId;
+  return usuarioObjetivo(req);
+}
 
 // GET /api/whatsapp/templates?projectId=N
 /**
@@ -35,8 +64,24 @@ function siFaltaLaTabla(err) {
 
 export async function listTemplates(req, res, next) {
   try {
+    const ambito = await proyectosDelAmbito(req);
+    // Con una EMPRESA puesta llegan sus campus y no hace falta uno concreto.
+    // Antes se pedia igualmente (`?? proyecto(req)`) y, al no venir, esto
+    // contestaba «projectId requerido»: la pantalla lo pintaba como «este
+    // proyecto no tiene plantillas». Diego, 28/09, con CEDIA en /testeo.
+    let { projectIds } = ambito;
+    // «Todos los proyectos» de super admin o soporte (#218): sin campus y sin
+    // empresa, las de todos los campus, sin los de pruebas. Antes, «projectId
+    // requerido», y el Seguimiento se quedaba sin plantillas.
+    if (!ambito.projectId && !projectIds) {
+      const { rows } = await query('SELECT id FROM projects WHERE active AND NOT COALESCE(es_prueba, false)');
+      projectIds = rows.map((r) => Number(r.id));
+    }
+    const deLaEmpresa = Array.isArray(projectIds) && projectIds.length > 0;
     res.json({ success: true, data: await model.listTemplates({
-      projectId: proyecto(req), userId: req.user.userId,
+      projectId: deLaEmpresa ? null : (ambito.projectId ?? proyecto(req)),
+      projectIds,
+      userId: await duenoDeLasPersonales(req),
     })});
   } catch (err) { next(err); }
 }
@@ -46,15 +91,18 @@ export async function createTemplate(req, res, next) {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
-    const { projectId, label, body, ambito } = parsed.data;
+    const { projectId, label, body, ambito, paso_clave: pasoClave } = parsed.data;
     // Una compartida la ve todo el equipo, asi que la crea quien manda. Las
     // personales, cualquiera: son suyas.
-    if (ambito === 'compartida' && !esAdmin(req)) {
+    if (ambito === 'compartida' && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) {
       throw new AppError('Solo un administrador crea plantillas compartidas', 403, 'FORBIDDEN');
     }
     const row = await model.createTemplate({
       projectId, label, body, ambito,
-      ownerId: req.user.userId, createdBy: req.user.userId,
+      // La plantilla es del NUMERO; quien la escribio queda en `created_by`,
+      // que es lo que hace falta para saber de donde salio.
+      ownerId: await duenoDeLasPersonales(req), createdBy: req.user.userId,
+      pasoClave,
     });
     res.status(201).json({ success: true, data: row });
   } catch (err) { next(siFaltaLaTabla(err)); }
@@ -65,7 +113,7 @@ async function permitida(req, id) {
   const t = await model.getTemplate(id);
   if (!t) throw new AppError('Plantilla no encontrada', 404, 'NOT_FOUND');
   const propia = t.ambito === 'personal' && t.owner_id === req.user.userId;
-  if (!propia && !esAdmin(req)) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
+  if (!propia && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
   return t;
 }
 
@@ -75,7 +123,12 @@ export async function updateTemplate(req, res, next) {
     await permitida(req, parseInt(req.params.id));
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
-    res.json({ success: true, data: await model.updateTemplate(parseInt(req.params.id), parsed.data) });
+    // El esquema lo llama `paso_clave`, como viaja por la red; el modelo,
+    // `pasoClave`. Se traduce aqui y no en el modelo para que `undefined`
+    // siga significando «no lo toques».
+    const { paso_clave: pasoClave, ...resto } = parsed.data;
+    res.json({ success: true, data: await model.updateTemplate(parseInt(req.params.id),
+      'paso_clave' in parsed.data ? { ...resto, pasoClave } : resto) });
   } catch (err) { next(siFaltaLaTabla(err)); }
 }
 
@@ -89,13 +142,33 @@ export async function deleteTemplate(req, res, next) {
 }
 
 // GET /api/whatsapp/cola?projectId=N&responsableId=&estado=&productoId=&sinContactar=
+// GET /api/whatsapp/actividad?[projectId|issuerId]&from&to (30/10)
+// Por gestora: si responde en WhatsApp (chats, respondidos, sin responder,
+// tiempo de respuesta) y los contactos que apunta. Ver actividad.model.js.
+export async function actividad(req, res, next) {
+  try {
+    const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+    const hasta = fecha(req.query.to) || hoy;
+    const desde = fecha(req.query.from) || hasta;
+    const ambito = await proyectosDelAmbito(req);
+    const projectIds = comoLista(ambito.projectId, ambito.projectIds);
+    const datos = await actividadEnWhatsapp({ projectIds, desde, hasta });
+    // Quien lleva un equipo comercial (QA del 09/11/2026): ella y su equipo.
+    const lider = await alcanceDeLider(req.user);
+    if (lider) datos.filas = datos.filas.filter((f) => enElAlcance(lider, f.id));
+    res.json({ success: true, data: datos });
+  } catch (e) { next(e); }
+}
+
 export async function cola(req, res, next) {
   try {
     // Una gestora ve SU cola, ignorando lo que pida por query. Un admin puede
-    // mirar la de quien quiera, o la de todos si no pide a nadie.
-    const responsableId = req.user.role === 'gestor'
-      ? req.user.userId
-      : (req.query.responsableId ? parseInt(req.query.responsableId) : null);
+    // mirar la de quien quiera, o la de todos si no pide a nadie. Quien lleva un
+    // equipo comercial (09/11/2026), la de su equipo o la de una de ellas.
+    const responsableId = acotarAlAlcance(
+      req.query.responsableId ? parseInt(req.query.responsableId) : null,
+      await alcanceComercial(req.user));
 
     res.json({ success: true, data: await model.cola({
       projectId: proyecto(req),

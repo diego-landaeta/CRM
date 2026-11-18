@@ -9,7 +9,12 @@ interface Props {
 }
 
 function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Local YYYY-MM-DD (NO usar toISOString — convierte a UTC y rompe presets
+  // como "Hoy" cuando el usuario esta en TZ negativa por la noche). Como en CRM-ISEIE.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function presetRange(preset: string): [string, string] {
@@ -106,7 +111,7 @@ export default function DateRangeFilter({ from, to, onChange, className = '' }: 
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-card border border-border rounded-md shadow-lg z-40 w-64 p-2">
+        <div className="absolute top-full left-0 mt-1 bg-card border border-border rounded-md shadow-popover z-40 w-64 p-2">
           <div className="grid grid-cols-2 gap-1 mb-2">
             <button type="button" onClick={() => pick('hoy')} className="h-8 rounded text-xs font-medium border border-border bg-card hover:bg-muted">Hoy</button>
             <button type="button" onClick={() => pick('ayer')} className="h-8 rounded text-xs font-medium border border-border bg-card hover:bg-muted">Ayer</button>

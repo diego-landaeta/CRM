@@ -14,6 +14,7 @@
  *
  * Es la tarea #68.
  */
+import { explicarPermisosRecordados } from '../permissions/permissions.service.js';
 
 /**
  * Los roles que llevan WhatsApp.
@@ -42,6 +43,48 @@ export function porQueNoPuede(usuario) {
 
 /** Lo contrario, para leerlo mejor donde toca. */
 export const puedeTenerWhatsapp = (usuario) => porQueNoPuede(usuario) === null;
+
+/**
+ * «Usar su WhatsApp» del catálogo (#423): su rol, su rol a medida o una
+ * excepción suya. Sustituye a la casilla `usa_whatsapp` de la ficha, que la
+ * migración 222 convirtió en una excepción (apagada = «no»). Se recuerda medio
+ * minuto (`explicarPermisosRecordados`) y se olvida en cuanto alguien cambia lo
+ * de esa persona: el chat pregunta cada tres segundos.
+ */
+export async function tienePermisoDeUsar(usuarioId) {
+  return (await explicarPermisosRecordados(usuarioId))?.mapa['whatsapp.usar'] === true;
+}
+
+/**
+ * Por que esta persona NO usa el WhatsApp del CRM. null si lo usa.
+ *
+ * Son dos preguntas distintas y conviene no mezclarlas (#128, punto 1):
+ *
+ *   · `porQueNoPuede` — si le CORRESPONDE tener WhatsApp. Va por rol y es de la
+ *     casa: un tutor no atiende prospectos. Cuando esto deja de cumplirse se le
+ *     desvincula el numero (`alPerderAcceso`).
+ *   · `porQueNoUsa` — si ADEMAS lo usa: «Usar su WhatsApp» (#423; antes, la
+ *     casilla de su ficha). Lo decide quien manda. Quitarlo NO desvincula nada:
+ *     deja de salir en el panel y de poder entrar, y punto.
+ *
+ * Colgar lo segundo de lo primero seria un fallo caro: `user.controller` compara
+ * `puedeTenerWhatsapp` antes y despues de cada cambio, asi que quitarle el
+ * permiso soltaria la sesion de esa persona y habria que volver a enlazar el
+ * movil con ella delante. Por eso el permiso no entra en `porQueNoPuede`.
+ *
+ * `usuario` necesita su `id` (para el permiso) y lo de `porQueNoPuede`.
+ */
+export async function porQueNoUsa(usuario) {
+  const noPuede = porQueNoPuede(usuario);
+  if (noPuede) return noPuede;
+  if (!(await tienePermisoDeUsar(usuario.id))) {
+    return 'No tiene activado el WhatsApp del CRM. Se enciende en su ficha de usuario.';
+  }
+  return null;
+}
+
+/** Lo contrario, para leerlo mejor donde toca. */
+export const usaWhatsapp = async (usuario) => (await porQueNoUsa(usuario)) === null;
 
 /**
  * Alguien deja de poder tener WhatsApp: se le desvincula el numero, pero sus

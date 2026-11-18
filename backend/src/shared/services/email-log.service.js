@@ -27,12 +27,13 @@ export async function yaSeEnvio(clave) {
 }
 
 /** Anota el intento, saliera o no. */
-export async function registrar({ clave, destinatarios, asunto, etiquetas, projectId, estado, intentos, brevoMsgId, error }) {
+export async function registrar({ clave, destinatarios, asunto, etiquetas, projectId, estado, intentos, brevoMsgId, error, cuerpoHtml, remitente }) {
   try {
     await query(
       `INSERT INTO email_envios
-         (clave, destinatarios, asunto, etiquetas, project_id, estado, intentos, brevo_msg_id, error)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (clave, destinatarios, asunto, etiquetas, project_id, estado, intentos, brevo_msg_id, error,
+          cuerpo_html, remitente)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (clave) WHERE clave IS NOT NULL DO NOTHING`,
       [clave || null, destinatarios, (asunto || '').slice(0, 500),
        Array.isArray(etiquetas) && etiquetas.length ? etiquetas : null,
@@ -42,7 +43,12 @@ export async function registrar({ clave, destinatarios, asunto, etiquetas, proje
          // hace creer que Brevo lo rechazo cuando ni se le pregunto.
          intentos ?? 1,
          brevoMsgId || null,
-       error ? String(error).slice(0, 2000) : null]
+       error ? String(error).slice(0, 2000) : null,
+       // El correo entero, tal y como salio. Sin recortar: recortarlo lo
+       // convierte en un resumen, y un resumen no contesta «¿que leyo esta
+       // persona?», que es para lo unico que se guarda.
+       cuerpoHtml || null,
+       remitente || null]
     );
   } catch (err) {
     logger.warn({ err: err.message, destinatarios, asunto }, 'Registro de correo: no se pudo anotar');
@@ -79,7 +85,9 @@ export async function ultimos({ limite = 100, estado = null, etiqueta = null } =
  * `estado` filtra por enviado / fallido / bloqueado, que es la pregunta que uno
  * se hace de verdad: «¿que NO salio?».
  */
-export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
+// `campus`: los de esos campus y los de ninguno; null, todos (Diego, 04/11:
+// quien no ve el CRM entero, los de los suyos).
+export async function ultimosEnvios({ estado = null, limite = 50, campus = null } = {}) {
   try {
     const tope = Math.min(Math.max(parseInt(limite, 10) || 50, 1), 200);
     const { rows } = await query(
@@ -87,9 +95,10 @@ export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
               estado, intentos, error, created_at
          FROM email_envios
         WHERE ($1::text IS NULL OR estado = $1)
+          AND ($3::int[] IS NULL OR project_id = ANY($3::int[]) OR project_id IS NULL)
         ORDER BY created_at DESC, id DESC
         LIMIT $2`,
-      [estado || null, tope]
+      [estado || null, tope, campus]
     );
     return rows;
   } catch (err) {
@@ -99,13 +108,14 @@ export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
 }
 
 /** Cuantos de cada estado en las ultimas 24 horas, para el resumen de arriba. */
-export async function resumenEnvios() {
+export async function resumenEnvios({ campus = null } = {}) {
   try {
     const { rows } = await query(
       `SELECT estado, count(*)::int AS n
          FROM email_envios
         WHERE created_at > NOW() - INTERVAL '24 hours'
-        GROUP BY estado`
+          AND ($1::int[] IS NULL OR project_id = ANY($1::int[]) OR project_id IS NULL)
+        GROUP BY estado`, [campus]
     );
     const r = { enviado: 0, fallido: 0, bloqueado: 0 };
     for (const f of rows) r[f.estado] = f.n;

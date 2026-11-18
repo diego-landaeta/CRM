@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -8,16 +12,23 @@ import { toast } from '@/shared/hooks/useToast';
 import {
   Users, CurrencyEur, Wallet, TrendUp, ChartBar, Package, Megaphone, UserList, DownloadSimple,
   FilePdf, ChartLineUp, Sparkle,
+  Buildings,
 } from '@phosphor-icons/react';
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
 import { exportReportPDF } from '../lib/exportPdf';
 import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
+import DondePonerElDinero from '../components/DondePonerElDinero';
+import PaisesDeEntrada from '../components/PaisesDeEntrada';
 import PanelResumen from '@/shared/components/PanelResumen';
-import ReportesDisponibles from '@/shared/components/ReportesDisponibles';
+import TasaDeCierre from '../components/TasaDeCierre';
+import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
+import FeedbackEnReportes, { feedbackEnCsv } from '@/modules/feedback/components/FeedbackEnReportes';
+import ActividadPorComercial from '../components/ActividadPorComercial';
+import InformeMensual from '../components/InformeMensual';
 
-function exportReportCSV(data, project, range) {
+function exportReportCSV(data, project, range, panel, seguimiento, feedback = null) {
   const sections = [];
   const sep = row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
 
@@ -53,6 +64,24 @@ function exportReportCSV(data, project, range) {
     sections.push('');
   }
 
+  // Va justo detras de los KPI, en el mismo orden que la pantalla: lo que se
+  // baja tiene que poder leerse al lado de lo que se ve.
+  if ((data.por_proyecto || []).length > 1) {
+    sections.push(sep(['Cuánto pone cada proyecto']));
+    sections.push(sep(['Proyecto', 'Prospectos', 'Ventas', 'Facturado (€)', 'Cobrado (€)']));
+    data.por_proyecto.forEach(f => sections.push(sep([
+      f.nombre, f.leads, f.ventas, Number(f.facturado).toFixed(2), Number(f.cobrado).toFixed(2),
+    ])));
+    sections.push(sep([
+      'TOTAL',
+      data.por_proyecto.reduce((a, f) => a + Number(f.leads || 0), 0),
+      data.por_proyecto.reduce((a, f) => a + Number(f.ventas || 0), 0),
+      data.por_proyecto.reduce((a, f) => a + Number(f.facturado || 0), 0).toFixed(2),
+      data.por_proyecto.reduce((a, f) => a + Number(f.cobrado || 0), 0).toFixed(2),
+    ]));
+    sections.push('');
+  }
+
   if ((data.top_productos || []).length) {
     sections.push(sep(['Top productos']));
     sections.push(sep(['Producto', 'Ventas', 'Facturado (€)', 'Cobrado (€)']));
@@ -60,10 +89,82 @@ function exportReportCSV(data, project, range) {
     sections.push('');
   }
 
+  // El Resumen del periodo y las metricas de seguimiento. Vienen de otros dos
+  // endpoints, asi que los paneles los pasan hacia arriba (`onDatos`) en vez de
+  // pedirlos por segunda vez.
+  if (panel?.kpis) {
+    const k = panel.kpis;
+    const v = (x) => Number(k?.[x]?.value ?? 0);
+    sections.push(sep(['Resumen del periodo']));
+    sections.push(sep(['Métrica', 'Valor', 'Periodo anterior', 'Variación (%)']));
+    for (const [campo, etiqueta] of [
+      ['prospectos', 'Prospectos'], ['ventas', 'Ventas'], ['vendido', 'Vendido (€)'],
+      ['ingresos', 'Ingresos — dinero que entró (€)'],
+      ['ingresos_venta', '· de ventas (€)'], ['ingresos_cuotas', '· de cuotas (€)'],
+      ['mensualidades', 'Cobros de cuotas'], ['tasa', 'Tasa conversión (%)'],
+    ]) {
+      if (!k[campo]) continue;
+      sections.push(sep([etiqueta, v(campo), Number(k[campo].prev ?? 0), k[campo].trend ?? '—']));
+    }
+    sections.push('');
+    if ((panel.serie || []).length) {
+      sections.push(sep(['Resumen del periodo · serie']));
+      sections.push(sep(['Periodo', 'Prospectos', 'Ventas', 'Vendido (€)', 'Ingresos (€)', 'Tasa (%)']));
+      panel.serie.forEach(r => sections.push(sep([
+        r.periodo, r.prospectos, r.ventas, Number(r.vendido).toFixed(2),
+        Number(r.ingresos).toFixed(2), r.tasa,
+      ])));
+      sections.push('');
+    }
+  }
+
+  if (seguimiento?.cohorte) {
+    const co = seguimiento.cohorte;
+    const ac = seguimiento.actividad || {};
+    sections.push(sep(['Seguimiento y tiempos · de los que ENTRARON en el periodo']));
+    sections.push(sep(['Métrica', 'Valor']));
+    sections.push(sep(['Entraron', co.entraron]));
+    sections.push(sep(['Con seguimiento', `${co.con_seguimiento} (${co.pct_con_seguimiento}%)`]));
+    sections.push(sep(['Contactados (sin notas internas)', `${co.contactados} (${co.pct_contactados}%)`]));
+    sections.push(sep(['Compraron', `${co.compraron} (${co.pct_compraron}%)`]));
+    sections.push(sep(['Mediana hasta el 1er contacto (segundos)', co.mediana_primer_contacto_seg ?? '—']));
+    sections.push(sep(['Mediana hasta la venta (días)', co.mediana_dias_venta ?? '—']));
+    sections.push('');
+    if ((co.embudo || []).length) {
+      sections.push(sep(['Hasta qué seguimiento llega cada uno']));
+      sections.push(sep(['Seguimiento', 'Llegaron', '% de los que entraron', 'Compraron', 'Tasa (%)', 'Desde el anterior (segundos)']));
+      co.embudo.forEach(f => sections.push(sep([
+        f.nivel, f.personas, f.pct, f.compraron, f.tasa, f.mediana_desde_anterior_seg ?? '—',
+      ])));
+      sections.push('');
+    }
+    sections.push(sep(['Trabajo hecho en el periodo']));
+    sections.push(sep(['Contactos', 'Personas', 'Por persona', 'WhatsApp', 'Llamadas', 'Correos', 'Notas']));
+    const t = ac.por_tipo || {};
+    sections.push(sep([ac.toques, ac.personas, ac.toques_por_persona, t.whatsapp, t.llamada, t.email, t.nota]));
+    // Escrito contra voz (#128). Va en su propia fila y no en la de arriba: no
+    // son toques, son mensajes, y sumarlos con las llamadas seria mezclar dos
+    // unidades en la misma linea.
+    const vs = ac.whatsapp_saliente;
+    if (vs) {
+      sections.push('');
+      sections.push(sep(['De lo que sale por WhatsApp']));
+      sections.push(sep(['Escrito', 'De voz', '% de voz', 'Con archivo']));
+      sections.push(sep([vs.escrito, vs.voz, vs.pct_voz, vs.adjunto]));
+    }
+    sections.push('');
+  }
+
   if ((data.ingresos_mensual || []).length) {
     sections.push(sep(['Ingresos mensuales']));
     sections.push(sep(['Mes', 'Ingresos (€)']));
     data.ingresos_mensual.forEach(r => sections.push(sep([r.mes, Number(r.ingresos).toFixed(2)])));
+  }
+
+  // El feedback: las mismas cifras que su panel, con este rango y este ámbito.
+  if (feedback?.totales) {
+    sections.push('');
+    sections.push(...feedbackEnCsv(feedback, sep));
   }
 
   const csv = sections.join('\n');
@@ -76,6 +177,9 @@ function exportReportCSV(data, project, range) {
   URL.revokeObjectURL(url);
 }
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+
+import { ponerAmbito, ambitoComoObjeto, sociedadSinCampus } from '@/shared/lib/ambitoInforme';
+import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -92,22 +196,67 @@ const PIPELINE_COLORS = {
 };
 
 
+/**
+ * Reportes es de quien tiene `reports.view` (el menú solo se lo enseña a él, y
+ * `/informes/overview` le responde 403 a los demás). Una gestora que llegaba
+ * por la dirección veía la página en blanco y dos avisos de «No tienes
+ * permiso» (prueba de Diana, 30/10): ahora va al Dashboard, donde está su
+ * actividad. Sin el mapa de permisos todavía, no se pinta ni se pide nada.
+ */
 export default function ReportsPage() {
-  const { activeProject } = useProjectContext();
+  const { permissions } = useAuth();
+  const { can } = usePermission();
+  if (!permissions) return null;
+  if (!can('reports.view')) return <Navigate to="/" replace />;
+  return <PantallaDeReportes />;
+}
+
+function PantallaDeReportes() {
+  const { activeProject, activeIssuerId, activeIssuer, projects } = useProjectContext();
+
+  // ARRANCA EN LA SOCIEDAD, no en el campus (#125 · 5).
+  //
+  // Es local a esta pantalla a proposito: `switchIssuer` cambia el ambito de
+  // TODO el CRM, y entrar en Reportes no puede dejarte en «todos los
+  // proyectos» al salir. Aqui solo cambia lo que este informe pide.
+  const [soloCampus, setSoloCampus] = useState(false);
+  const socDelProyecto = activeProject?.sociedad_emisora_id
+    ? Number(activeProject.sociedad_emisora_id) : null;
+  // La sociedad elegida a mano manda sobre el arranque automatico.
+  const issuerEfectivo = activeIssuerId ?? (soloCampus ? null : socDelProyecto);
+  // Con una sociedad por medio, el proyecto no acota: acota la sociedad.
+  const proyectoEfectivo = issuerEfectivo && !activeIssuerId ? { id: -1 } : activeProject;
+  // Cuantos campus tiene, para poder decirlo sin recontar.
+  const campusDeLaSociedad = issuerEfectivo
+    ? (projects || []).filter((x) => Number(x.sociedad_emisora_id) === issuerEfectivo)
+    : [];
+  const nombreDeLaSociedad = activeIssuer?.nombre
+    || campusDeLaSociedad[0]?.sociedad_nombre
+    || 'la sociedad';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState({
-    from: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
-    to: new Date().toISOString().slice(0, 10),
-  });
+  // Arranca en el MES en curso. Antes era el ano entero, que es lo que casi
+  // nadie quiere mirar al abrir: se venia a ver como va el mes y habia que
+  // acotar a mano cada vez.
+  const [range, setRange] = useState(() => rangoPorDefecto());
+  const atajoActivo = atajoDe(range);
   const [tab, setTab] = useState('crm');
+  // Lo que traen los dos paneles que piden sus datos aparte. Se guarda aqui
+  // solo para que la descarga se lo pueda llevar: sin esto, el CSV enseñaba
+  // los KPI y el desglose pero no el Resumen ni las metricas de seguimiento,
+  // que es media pantalla.
+  const [panelResumen, setPanelResumen] = useState(null);
+  const [panelSeguimiento, setPanelSeguimiento] = useState(null);
+  const [panelFeedback, setPanelFeedback] = useState(null);
+
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const params = { ...(activeProject?.id ? { projectId: activeProject.id } : {}), from: range.from, to: range.to };
-        const qs = new URLSearchParams(params).toString();
+        const p = new URLSearchParams({ from: range.from, to: range.to });
+        ponerAmbito(p, { activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo });
+        const qs = p.toString();
         const res = await client.get(`/informes/overview?${qs}`);
         if (res.success) setData(res.data);
       } catch (err) {
@@ -115,7 +264,30 @@ export default function ReportsPage() {
       } finally { setLoading(false); }
     }
     load();
-  }, [activeProject?.id, range.from, range.to]);
+  }, [activeProject?.id, issuerEfectivo, range.from, range.to]);
+
+  // Una sociedad sin campus asignados da un informe vacio A PROPOSITO. Sin
+  // decirlo, una tabla en blanco se lee como una averia y alguien acaba
+  // buscando el fallo donde no esta.
+  if (sociedadSinCampus(activeIssuer)) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Reportes" subtitle={activeIssuer.nombre} />
+        <EmptyState
+          icon={Buildings}
+          title={`${activeIssuer.nombre} no tiene campus asignados`}
+          description="Por eso no hay cifras que enseñar. En cuanto se le asigne alguno, el informe las sumará todas."
+        />
+      </div>
+    );
+  }
+
+  // Como se llama lo que se esta mirando. Con una sociedad elegida el informe
+  // decia «Todos los proyectos» mientras enseñaba las cifras de CEDIA, que es
+  // la peor combinacion posible: cifras de una cosa con el nombre de otra.
+  const nombreAmbito = issuerEfectivo
+    ? `${nombreDeLaSociedad} · ${campusDeLaSociedad.length} campus`
+    : (activeProject?.nombre || 'Todos los proyectos');
 
   if (loading && !data) {
     return (
@@ -144,10 +316,52 @@ export default function ReportsPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Reportes"
-        subtitle={activeProject ? `${activeProject.nombre}` : 'Todos los proyectos'}
+        subtitle={nombreAmbito}
         actions={
           tab === 'crm' ? (
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Los atajos por calendario. «La semana pasada» es la semana
+                  pasada, de lunes a domingo — no los siete dias anteriores,
+                  que pedidos un martes mezclan media semana con media de la
+                  otra y no cuadran con lo que dice nadie. */}
+              {/* Se puede bajar al campus, pero hay que pedirlo: el que
+                  manda es el conjunto. Solo sale cuando hay mas de uno. */}
+              {socDelProyecto && !activeIssuerId && campusDeLaSociedad.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setSoloCampus((v) => !v)}
+                  className={
+                    'h-8 px-2.5 rounded-md border text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ' +
+                    (soloCampus
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+                  }
+                  title={soloCampus
+                    ? `Ver ${nombreDeLaSociedad} entera`
+                    : `Ver solo ${activeProject?.nombre}`}
+                >
+                  {soloCampus ? `Solo ${activeProject?.nombre}` : 'Solo este campus'}
+                </button>
+              )}
+              <div className="inline-flex items-center gap-1 flex-wrap" role="group" aria-label="Periodos rapidos">
+                {ATAJOS.map((a) => (
+                  <button
+                    key={a.clave}
+                    type="button"
+                    onClick={() => setRange(a.calcular(new Date()))}
+                    aria-pressed={atajoActivo === a.clave}
+                    className={
+                      'h-8 px-2.5 rounded-md border text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ' +
+                      (atajoActivo === a.clave
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+                    }
+                  >
+                    {a.etiqueta}
+                  </button>
+                ))}
+              </div>
+              <RangoRapido valor={range} alElegir={(r) => setRange(r)} />
               <input
                 type="date"
                 value={range.from}
@@ -167,7 +381,7 @@ export default function ReportsPage() {
                 <>
                   <button
                     type="button"
-                    onClick={() => exportReportCSV(data, activeProject?.nombre, range)}
+                    onClick={() => exportReportCSV(data, nombreAmbito, range, panelResumen, panelSeguimiento, panelFeedback)}
                     aria-label="Exportar reporte a CSV"
                     title="Exportar CSV"
                     className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -178,7 +392,7 @@ export default function ReportsPage() {
                     type="button"
                     onClick={async () => {
                       try {
-                        await exportReportPDF(data, activeProject?.nombre, range);
+                        await exportReportPDF({ ...data, _panel: panelResumen, _seguimiento: panelSeguimiento }, nombreAmbito, range);
                       } catch (err) {
                         toast({ title: 'Error generando PDF', description: err?.message || 'Inesperado', variant: 'destructive' });
                       }
@@ -195,6 +409,21 @@ export default function ReportsPage() {
           ) : null
         }
       />
+
+      {/* Qué periodo se está viendo, dicho con palabras (#325): las cifras de esta pantalla
+          no coincidían con «el mes en curso» ni con «los últimos 30 días» porque nadie decía
+          cuál usaba. Arranca en «Este mes» y cada cifra de abajo es de este periodo. */}
+      {range.from && range.to && (
+        <p className="text-xs text-muted-foreground" data-testid="periodo-del-informe">
+          Periodo que estás viendo: <strong className="text-foreground">
+            {new Date(`${range.from}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' – '}
+            {new Date(`${range.to}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </strong>
+          {atajoActivo ? ` (${ATAJOS.find((a) => a.clave === atajoActivo)?.etiqueta})` : ' (a medida)'}.
+          {' '}Al abrir Reportes empieza en «Este mes»; las cifras de abajo son de este periodo, no del histórico.
+        </p>
+      )}
 
       {/* Tabs — solo mostrar Análisis IA si es proyecto IA */}
       {isIaProject && (
@@ -221,22 +450,151 @@ export default function ReportsPage() {
       {tab === 'ia' && isIaProject && <ReportsIAView project={activeProject} />}
 
       {tab === 'crm' && <>
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
-        <KpiCard icon={TrendUp} label="Tasa conversión" value={`${data.tasa_conversion}%`} tone="success" />
-        <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
-        <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
-      </div>
+      {/* Actividad por comercial (#203, parte B): arriba del todo, «es lo
+          primero que se mira por la mañana». Con sus propios atajos (Ayer por
+          defecto), aparte del periodo del resto del informe. */}
+      <ActividadPorComercial ambito={ambitoComoObjeto({ activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo })} />
 
-      {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
-          periodo anterior y la grafica con selector de serie. */}
-      <PanelResumen
-        projectId={activeProject?.id}
-        projectName={activeProject?.nombre}
+      {/* La tasa de cierre (#39). Justo debajo de la actividad: es la pregunta
+          que se hace al abrir Reportes, y lleva su propio «¿de dónde sale?»:
+          el número se puede comprobar sin salir de aquí. */}
+      <TasaDeCierre
+        activeProject={proyectoEfectivo}
+        activeIssuerId={issuerEfectivo}
         from={range.from}
         to={range.to}
       />
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
+        {/* Aquí había una tarjeta «Tasa conversión» con `data.tasa_conversion`,
+            que es OTRA cuenta: los leads en estado «convertido», un campo que
+            se pone a mano. Al lado de la tasa de cierre daban dos porcentajes
+            distintos de lo que el lector entiende como lo mismo, y el #39 lo
+            señala como la razón de que no se crea ninguno de los dos.
+            Se queda uno solo, el verificado, y aquí va el dato que faltaba:
+            cuántos están marcados como convertidos —que es un recuento, no un
+            porcentaje, y no compite con nada—. */}
+        <KpiCard icon={TrendUp} label="Marcados convertidos" value={data.leads.convertido} tone="success" />
+        <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
+        <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
+      </div>
+      {/* Que cuenta esta fila, escrito.
+          La misma pantalla daba tres cifras de «ingresos» sin decir que cada
+          una cuenta una cosa: aqui las ventas cerradas en el periodo, en
+          «Resumen del periodo» el dinero que entro, y en «Asesoras» lo que
+          diga su propio interruptor. Las tres pueden ser correctas a la vez;
+          lo que no puede es no saberse cual es cual. */}
+      <p className="text-xs text-muted-foreground -mt-1">
+        Cuenta las <strong className="text-foreground">ventas cerradas en el periodo</strong>, por su fecha de
+        venta. «Ventas cobradas» es lo que se ha cobrado <em>de esas</em> ventas — no el dinero que entró en el
+        periodo, que es lo que mide «Resumen del periodo» más abajo.
+      </p>
+
+      {/* Cuanto pone cada campus (#120).
+          Con una sociedad elegida, «82.395 EUR» no dice de donde salen. Solo
+          aparece cuando el ambito abarca mas de un proyecto: con uno solo, la
+          tabla seria una fila repitiendo el KPI de arriba. */}
+      {(data.por_proyecto || []).length > 1 && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+            <Buildings size={16} /> Cuánto pone cada proyecto
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <div className="lg:col-span-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Proyecto</th>
+                  <th className="py-2 px-3 font-medium text-right">Prospectos</th>
+                  <th className="py-2 px-3 font-medium text-right">Ventas</th>
+                  <th className="py-2 px-3 font-medium text-right">Facturado</th>
+                  <th className="py-2 pl-3 font-medium text-right">Cobrado</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {data.por_proyecto.map((f) => (
+                  <tr key={f.project_id} className="border-b border-border/50 last:border-0">
+                    {/* Un campus sin ventas sale igual, con ceros y apagado: si
+                        no apareciera se leeria como que no existe, y lo que
+                        pasa es que no vendio. */}
+                    <td className={'py-2 pr-3' + (Number(f.ventas) === 0 ? ' text-muted-foreground' : '')}>{f.nombre}</td>
+                    <td className="py-2 px-3 text-right text-muted-foreground">{Number(f.leads).toLocaleString('es-ES')}</td>
+                    <td className="py-2 px-3 text-right">{Number(f.ventas).toLocaleString('es-ES')}</td>
+                    <td className="py-2 px-3 text-right text-muted-foreground">{fmt(f.facturado)}</td>
+                    <td className="py-2 pl-3 text-right font-semibold">{fmt(f.cobrado)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {/* El total va escrito para que se pueda comprobar contra los
+                    KPI de arriba: si no cuadra, no se cree ninguno de los dos. */}
+                <tr className="border-t-2 border-border font-semibold tabular-nums">
+                  <td className="py-2 pr-3">Total</td>
+                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.leads || 0), 0).toLocaleString('es-ES')}</td>
+                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.ventas || 0), 0).toLocaleString('es-ES')}</td>
+                  <td className="py-2 px-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.facturado || 0), 0))}</td>
+                  <td className="py-2 pl-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.cobrado || 0), 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {/* La tarta solo con los que han cobrado algo: un trozo de 0 EUR no
+              se ve y solo ensucia la leyenda. Si no ha cobrado nadie, no hay
+              tarta que pintar. */}
+          {data.por_proyecto.some((f) => Number(f.cobrado) > 0) && (
+            <div>
+              <ResponsiveContainer width="100%" height={230} minHeight={200}>
+                <PieChart>
+                  <Pie
+                    data={data.por_proyecto.filter((f) => Number(f.cobrado) > 0)}
+                    dataKey="cobrado"
+                    nameKey="nombre"
+                    cx="50%" cy="45%" innerRadius={45} outerRadius={78} paddingAngle={2}
+                  >
+                    {data.por_proyecto.filter((f) => Number(f.cobrado) > 0).map((f, i) => (
+                      <Cell key={f.project_id} fill={CANAL_COLORS[i % CANAL_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                  <Legend verticalAlign="bottom" height={36} iconSize={9}
+                    wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          </div>
+        </div>
+      )}
+
+      <PanelSeguimiento projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo}
+        from={range.from} to={range.to} onDatos={setPanelSeguimiento} />
+
+      {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
+          periodo anterior y la grafica con selector de serie. */}
+      {/* AQUÍ ESTABA «De dónde vienen estas cifras», y se ha ido.
+          Diego, 24/09: «en informes está esto duplicado, hay muchos datos
+          duplicados y llamados varias veces».
+
+          Era la misma tabla que «Cuánto pone cada proyecto», de arriba: mismas
+          columnas, mismas cifras. Y la de arriba sale gratis --`por_proyecto`
+          viene en la respuesta del informe-- mientras que esta pedía
+          `/informes/overview` UNA VEZ POR CAMPUS: con CEDIA, siete peticiones
+          para recomponer algo que ya estaba servido.
+
+          Lo único suyo que no está arriba es el aviso de descuadre, que
+          comparaba la suma de los campus con el cobrado de la sociedad. El
+          componente sigue en el repo sin montar, por si se quiere recuperar esa
+          comprobación dentro de la tabla que se queda. */}
+
+      <PanelResumen
+        projectId={activeProject?.id}
+        issuerId={issuerEfectivo}
+        projectName={nombreAmbito}
+        from={range.from}
+        to={range.to}
+      onDatos={setPanelResumen} />
 
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
       {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
@@ -245,10 +603,25 @@ export default function ReportsPage() {
       {/* Paises y formaciones: en pantalla, no solo descargables. */}
       <RankingsPanel from={range.from} to={range.to} />
 
-      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={range.from} to={range.to} />
+      {/* Por campus y país de entrada (#221): solo si algún campus separa por país. */}
+      <PaisesDeEntrada from={range.from} to={range.to} issuerId={issuerEfectivo} project={proyectoEfectivo} />
 
-      {/* El catálogo de reportes por tema, igual que en el CRM hermano. */}
-      <ReportesDisponibles />
+      {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
+      <DondePonerElDinero from={range.from} to={range.to} />
+
+      {/* Por qué no compran: las cifras de «Análisis → Feedback», con este rango y ámbito. */}
+      <FeedbackEnReportes from={range.from} to={range.to} issuerId={issuerEfectivo}
+        project={proyectoEfectivo} onDatos={setPanelFeedback} />
+
+      <ReportsDownloadSection projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo} projectName={nombreAmbito} from={range.from} to={range.to} />
+
+      {/* El informe del mes por equipo y comercial, y el ZIP de facturas para la gestoría (#772). */}
+      <InformeMensual issuerId={issuerEfectivo} />
+
+      {/* AQUI ESTABA «Reportes disponibles», el catalogo de reportes PREVISTOS.
+          No descargaba nada y repetia los temas de «Reportes descargables», que
+          esta justo encima y si funciona. Diego, 28/09: «siguen saliendo varias
+          tablas repetidas». */}
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -308,124 +681,13 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2"><Users size={16} /> Prospectos por gestor</h3>
-          {(data.leads_por_gestor || []).length === 0 ? (
-            <EmptyState icon={Users} title="Sin datos" description="No hay prospectos asignados." />
-          ) : (
-            <>
-              {/* Desktop table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-[11px] text-muted-foreground">
-                    <tr>
-                      <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide">Gestor</th>
-                      <th className="text-right px-4 py-3 font-semibold uppercase tracking-wide">Prospectos</th>
-                      <th className="text-right px-4 py-3 font-semibold uppercase tracking-wide">Convertidos</th>
-                      <th className="text-right px-4 py-3 font-semibold uppercase tracking-wide">Tasa</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.leads_por_gestor.map(g => {
-                      const tasa = g.total > 0 ? Math.round((g.convertidos / g.total) * 100) : 0;
-                      return (
-                        <tr key={g.gestor} className="border-b border-border last:border-0">
-                          <td className="px-4 py-3 font-semibold">{g.gestor}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{g.total}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{g.convertidos}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{tasa}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile cards */}
-              <div className="md:hidden space-y-2">
-                {data.leads_por_gestor.map(g => {
-                  const tasa = g.total > 0 ? Math.round((g.convertidos / g.total) * 100) : 0;
-                  return (
-                    <div key={g.gestor} className="bg-muted/30 border border-border rounded-lg p-3">
-                      <p className="text-sm font-semibold mb-2 truncate">{g.gestor}</p>
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <p className="text-muted-foreground text-[10px]">Prospectos</p>
-                          <p className="tabular-nums font-semibold">{g.total}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-[10px]">Convertidos</p>
-                          <p className="tabular-nums font-semibold text-green-600 dark:text-green-400">{g.convertidos}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-[10px]">Tasa</p>
-                          <p className="tabular-nums font-semibold">{tasa}%</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
+        {/* AQUI ESTABA «Prospectos por gestor»: prospectos, convertidos y tasa por
+            gestora, que es lo que ya da el panel «Asesoras» de arriba, mes a mes y
+            con el detalle de cada numero. (28/09) */}
       </div>
 
-      {/* Top productos */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="font-semibold text-sm mb-3 flex items-center gap-2"><Package size={16} /> Top productos por ventas</h3>
-        {(data.top_productos || []).length === 0 ? (
-          <EmptyState icon={Package} title="Sin ventas" description="No hay conversiones en el rango seleccionado." />
-        ) : (
-          <>
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-[11px] text-muted-foreground">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide">Producto</th>
-                    <th className="text-right px-4 py-3 font-semibold uppercase tracking-wide">Ventas</th>
-                    <th className="text-right px-4 py-3 font-semibold uppercase tracking-wide">Facturado</th>
-                    <th className="text-right px-4 py-3 font-semibold uppercase tracking-wide">Cobrado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.top_productos.map((p, i) => (
-                    <tr key={i} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3 font-semibold">{p.producto}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{p.ventas}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{fmt(p.total)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{fmt(p.cobrado)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile cards */}
-            <div className="md:hidden space-y-2">
-              {data.top_productos.map((p, i) => (
-                <div key={i} className="bg-muted/30 border border-border rounded-lg p-3">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className="text-sm font-semibold truncate">{p.producto}</p>
-                    <span className="text-xs tabular-nums text-muted-foreground flex-shrink-0">{p.ventas} venta{p.ventas !== 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <p className="text-muted-foreground text-[10px]">Facturado</p>
-                      <p className="tabular-nums font-semibold">{fmt(p.total)}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-[10px]">Cobrado</p>
-                      <p className="tabular-nums font-semibold text-green-600 dark:text-green-400">{fmt(p.cobrado)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      {/* AQUI ESTABA «Top productos por ventas»: el mismo ranking que
+          «Formaciones más vendidas», en el panel de rankings de arriba. (28/09) */}
       </>}
     </div>
   );

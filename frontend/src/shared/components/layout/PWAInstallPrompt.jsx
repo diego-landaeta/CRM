@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DeviceMobile, X, DownloadSimple } from '@phosphor-icons/react';
 import usePwaInstall from '@/shared/hooks/usePwaInstall';
+import { MARCA } from '@/shared/config/marca';
 
 export default function PWAInstallPrompt() {
   const { canInstall, promptInstall } = usePwaInstall();
@@ -30,13 +31,13 @@ export default function PWAInstallPrompt() {
   return (
     <div
       role="alert"
-      className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-5 sm:w-80 z-50 bg-card border border-border rounded-xl shadow-xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300"
+      className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-5 sm:w-80 z-50 bg-card border border-border rounded-xl shadow-popover p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300"
     >
       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
         <DeviceMobile size={20} weight="duotone" className="text-primary" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-foreground">Instalar MultiCRM</p>
+        <p className="text-sm font-semibold text-foreground">Instalar {MARCA}</p>
         <p className="text-xs text-muted-foreground mt-0.5">Accede más rápido desde tu escritorio o móvil.</p>
         <button
           onClick={promptInstall}

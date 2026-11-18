@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from '@/shared/hooks/useToast';
 import client from '@/shared/api/client';
+import usePermission from '@/shared/hooks/usePermission';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,38 +21,81 @@ import {
   Trash,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import { inputClass } from '@/shared/lib/ui';
+import Field from '@/shared/components/ui/Field';
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 // Proyectos ahora vienen del AuthContext via ProjectContext
 
+// El correo no se cambia desde aqui: es con lo que se entra, y el servidor
+// solo acepta el nombre.
 const profileSchema = z.object({
-  nombre: z.string().min(2, 'Mínimo 2 caracteres'),
-  email: z.string().email('Email no válido'),
+  nombre: z.string().trim().min(2, 'Mínimo 2 caracteres'),
+  email: z.string().optional(),
 });
 
+// Las mismas reglas que aplica el servidor, para avisar antes de enviar.
 const passwordSchema = z.object({
   current: z.string().min(1, 'Requerido'),
-  nueva: z.string().min(8, 'Mínimo 8 caracteres'),
+  nueva: z.string()
+    .min(8, 'Mínimo 8 caracteres')
+    .regex(/[A-Z]/, 'Al menos una mayúscula')
+    .regex(/[0-9]/, 'Al menos un número'),
   confirmar: z.string().min(1, 'Requerido'),
-}).refine((d) => d.nueva === d.confirmar, { message: 'Las contraseñas no coinciden', path: ['confirmar'] });
+}).refine((d) => d.nueva === d.confirmar, { message: 'Las contraseñas no coinciden', path: ['confirmar'] })
+  .refine((d) => d.nueva !== d.current, { message: 'Tiene que ser distinta de la actual', path: ['nueva'] });
 
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:bg-card placeholder:text-muted-foreground';
 
 const primaryBtn = 'inline-flex items-center justify-center h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40';
-
-function Field({ label, error, children }) {
-  return (
-    <div>
-      <label className="text-xs text-muted-foreground mb-1.5 block px-1">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-500 mt-1 px-1" role="alert">{error}</p>}
-    </div>
-  );
-}
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' };
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
+  const { logout } = useAuth();
+  // El propio correo (#211), en dos pasos: con su contraseña, un código a la
+  // dirección NUEVA; con el código, el cambio. Quien tenga «Cambiar su correo».
+  const { can } = usePermission();
+  const puedeCambiarCorreo = can('cuenta.cambiar_correo');
+  const [correoNuevo, setCorreoNuevo] = useState('');
+  const [claveActual, setClaveActual] = useState('');
+  const [codigo, setCodigo] = useState('');
+  // null hasta que se manda el código; luego, a qué dirección fue.
+  const [codigoEnviadoA, setCodigoEnviadoA] = useState(null);
+  // A un tutor, mientras siga el freno de correos a tutores, no le sale el código
+  // (Diego, 06/11, #688): se le explica en vez del formulario. Lo dice /auth/me
+  // de entrada, y por si acaso también la respuesta al pedirlo.
+  const [frenadoAlPedir, setFrenado] = useState(null);
+  const frenado = frenadoAlPedir || user?.correo_propio_frenado || null;
+  const [cambiandoCorreo, setCambiandoCorreo] = useState(false);
+  const mismoCorreo = correoNuevo.trim().toLowerCase() === String(user?.email || '').toLowerCase();
+  async function onPedirCodigo(e) {
+    e.preventDefault();
+    const nuevo = correoNuevo.trim().toLowerCase();
+    if (!nuevo || mismoCorreo || !claveActual) return;
+    setCambiandoCorreo(true);
+    try {
+      const r = await client.post('/auth/me/email/codigo', { email: nuevo, password: claveActual });
+      setClaveActual('');
+      if (r?.data?.frenado) { setFrenado(r.data.motivo); return; }
+      setCodigoEnviadoA(nuevo);
+      toast({ title: 'Te hemos mandado un código', description: `Míralo en ${nuevo}. Caduca en ${r?.data?.minutos || 15} minutos.` });
+    } catch (err) {
+      toast({ title: 'No se pudo mandar el código', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setCambiandoCorreo(false); }
+  }
+  async function onConfirmarCodigo(e) {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(codigo.trim())) return;
+    setCambiandoCorreo(true);
+    try {
+      await client.patch('/auth/me/email', { codigo: codigo.trim() });
+      // Es con lo que se entra: el servidor cierra las sesiones, hay que volver a entrar.
+      toast({ title: 'Correo cambiado', description: `Vuelve a entrar con ${codigoEnviadoA}.` });
+      setTimeout(() => { logout?.(); }, 2500);
+    } catch (err) {
+      toast({ title: 'No se pudo cambiar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setCambiandoCorreo(false); }
+  }
   const { projects: allProjects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
@@ -124,19 +168,34 @@ export default function ProfilePage() {
     defaultValues: { current: '', nueva: '', confirmar: '' },
   });
 
-  async function onSaveProfile(_data) {
-    await new Promise((r) => setTimeout(r, 500));
-    toast({ title: 'Perfil actualizado', description: 'Los cambios se han guardado' });
+  // Hasta el 01/10 estos dos esperaban medio segundo y decian «guardado» sin
+  // llamar a nada: la contraseña no cambiaba aunque la pantalla dijera que si.
+  async function onSaveProfile(data) {
+    try {
+      await client.patch('/auth/me', { nombre: data.nombre.trim() });
+      toast({ title: 'Perfil actualizado', description: 'Tu nombre se ha guardado.' });
+      refreshUser?.();
+    } catch (err) {
+      toast({ title: 'No se pudo guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    }
   }
 
-  async function onChangePassword(_data) {
-    await new Promise((r) => setTimeout(r, 500));
-    resetPass();
-    toast({ title: 'Contraseña actualizada', description: 'Tu contraseña se ha cambiado correctamente' });
+  async function onChangePassword(data) {
+    try {
+      await client.post('/auth/change-password', {
+        currentPassword: data.current,
+        newPassword: data.nueva,
+        confirmPassword: data.confirmar,
+      });
+      resetPass();
+      toast({ title: 'Contraseña actualizada', description: 'La próxima vez entra con la nueva.' });
+    } catch (err) {
+      toast({ title: 'No se pudo cambiar', description: err?.data?.error || err?.message || 'Revisa la contraseña actual.', variant: 'destructive' });
+    }
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-2xl mx-auto">
       <PageHeader
         title="Mi Perfil"
         subtitle="Gestiona tu información personal y seguridad"
@@ -189,7 +248,7 @@ export default function ProfilePage() {
                 type="button"
                 onClick={() => setConfirmDeleteAvatar(true)}
                 aria-label="Eliminar foto de perfil"
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-xs font-medium text-destructive hover:bg-destructive-soft transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"
               >
                 <Trash size={14} weight="regular" /> Eliminar
               </button>
@@ -223,8 +282,10 @@ export default function ProfilePage() {
             <Field label="Nombre *" error={errProfile.nombre?.message}>
               <input {...regProfile('nombre')} className={inputClass} />
             </Field>
-            <Field label="Email *" error={errProfile.email?.message}>
-              <input {...regProfile('email')} type="email" className={inputClass} />
+            <Field label="Email" error={errProfile.email?.message}>
+              <input {...regProfile('email')} type="email" readOnly aria-readonly="true"
+                title={puedeCambiarCorreo && !frenado ? "Es con lo que entras. Cámbialo abajo." : "Es con lo que entras. Para cambiarlo, pídeselo a un administrador."}
+                className={inputClass + ' bg-muted/40 text-muted-foreground cursor-not-allowed'} />
             </Field>
           </div>
           <div className="flex justify-end">
@@ -233,6 +294,55 @@ export default function ProfilePage() {
             </button>
           </div>
         </form>
+        {puedeCambiarCorreo && frenado && (
+          <p role="status" className="mt-5 pt-4 border-t border-border text-sm text-muted-foreground">
+            {frenado}
+          </p>
+        )}
+        {puedeCambiarCorreo && !frenado && !codigoEnviadoA && (
+          <form onSubmit={onPedirCodigo} aria-label="Cambiar mi correo" className="mt-5 pt-4 border-t border-border space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Mi correo nuevo" htmlFor="correo-nuevo">
+                <input id="correo-nuevo" value={correoNuevo} onChange={(e) => setCorreoNuevo(e.target.value)} type="email" maxLength={255}
+                  placeholder="tu.correo.nuevo@ejemplo.com" className={inputClass} />
+              </Field>
+              <Field label="Mi contraseña actual" htmlFor="correo-clave">
+                <input id="correo-clave" value={claveActual} onChange={(e) => setClaveActual(e.target.value)} type="password"
+                  autoComplete="current-password" className={inputClass} />
+              </Field>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Es con lo que entras. Te mandamos un código de 6 cifras a la dirección nueva; hasta que lo metas, sigues entrando con la de siempre.
+            </p>
+            <div className="flex justify-end">
+              <button type="submit" className={primaryBtn}
+                disabled={cambiandoCorreo || !correoNuevo.trim() || mismoCorreo || !claveActual}>
+                {cambiandoCorreo ? 'Mandando…' : 'Mandarme el código'}
+              </button>
+            </div>
+          </form>
+        )}
+        {puedeCambiarCorreo && !frenado && codigoEnviadoA && (
+          <form onSubmit={onConfirmarCodigo} aria-label="Confirmar mi correo nuevo" className="mt-5 pt-4 border-t border-border space-y-2">
+            <Field label={`El código que te ha llegado a ${codigoEnviadoA}`} htmlFor="correo-codigo">
+              <input id="correo-codigo" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric" autoComplete="one-time-code" placeholder="000000" maxLength={6}
+                className={inputClass + ' tracking-[0.3em] font-mono'} />
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              Caduca a los 15 minutos y admite 5 intentos. Al confirmarlo se cierra tu sesión y entras con el correo nuevo.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="inline-flex items-center h-9 px-3 rounded-md border border-border text-sm hover:bg-muted"
+                onClick={() => { setCodigoEnviadoA(null); setCodigo(''); }} disabled={cambiandoCorreo}>
+                Pedir otro
+              </button>
+              <button type="submit" className={primaryBtn} disabled={cambiandoCorreo || !/^\d{6}$/.test(codigo)}>
+                {cambiandoCorreo ? 'Cambiando…' : 'Cambiar mi correo'}
+              </button>
+            </div>
+          </form>
+        )}
       </section>
 
       {/* Change password */}
@@ -248,7 +358,7 @@ export default function ProfilePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Nueva contraseña *" error={errPass.nueva?.message}>
               <div className="relative">
-                <input {...regPass('nueva')} type={showPassword ? 'text' : 'password'} placeholder="Mínimo 8 caracteres" className={inputClass + ' pr-10'} />
+                <input {...regPass('nueva')} type={showPassword ? 'text' : 'password'} placeholder="8 caracteres, una mayúscula y un número" className={inputClass + ' pr-10'} />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}

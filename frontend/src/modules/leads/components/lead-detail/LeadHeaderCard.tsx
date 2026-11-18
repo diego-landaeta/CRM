@@ -1,12 +1,17 @@
 import { useState, lazy, Suspense } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CaretRight, Lightning, WarningCircle, Link as LinkIcon, GitMerge, ChatCircle, FileText } from '@phosphor-icons/react';
 import StatusBadge from '@/shared/components/ui/StatusBadge';
 import { getLeadPriority, getPriorityStyle } from '../../lib/leadPriority';
 import { avatarColor, getInitials } from './InfoField';
 import type { Lead } from '@/shared/types';
+import { etiquetaCampusPais } from '@/shared/lib/paises';
+import usePermission from '@/shared/hooks/usePermission';
 
 const MergeLeadDialog = lazy(() => import('../MergeLeadDialog'));
+// Repartir la venta de este prospecto entre dos gestoras. Se carga aparte
+// porque solo lo ven admin y superadmin.
+const CompartirVentaBoton = lazy(() => import('@/modules/sales/components/CompartirVentaBoton'));
 
 interface LeadHeaderCardProps {
   lead: Lead;
@@ -17,19 +22,23 @@ interface LeadHeaderCardProps {
 }
 
 export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMerged }: LeadHeaderCardProps) {
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const [mergeOpen, setMergeOpen] = useState(false);
   const navigate = useNavigate();
+  // Sin página anterior dentro del CRM (enlace pegado, pestaña nueva), a Prospectos.
+  const hayAnterior = useLocation().key !== 'default';
   return (
     <>
       {lead.lead_duplicado_de && (
-        <div role="alert" className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200">
-          <WarningCircle size={20} weight="bold" className="flex-shrink-0 text-amber-600 dark:text-amber-400" />
+        <div role="alert" className="flex items-center gap-3 p-4 rounded-xl bg-warning-soft border border-warning/30 text-warning dark:text-warning">
+          <WarningCircle size={20} weight="bold" className="flex-shrink-0 text-warning" />
           <div className="text-sm flex-1">
             <span className="font-bold">Prospecto duplicado</span> — este email ya existe en el sistema.
           </div>
           <Link
             to={`/prospectos/${lead.lead_duplicado_de}`}
-            className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+            className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-warning-soft hover:bg-warning transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-warning/40"
           >
             <LinkIcon size={12} weight="bold" /> Ver original #{lead.lead_duplicado_de}
           </Link>
@@ -37,6 +46,16 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
       )}
 
       <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {/* Volver a la página de la que se viene (Reportes, el Dashboard…), no siempre a Prospectos. */}
+        <button
+          type="button"
+          onClick={() => (hayAnterior ? navigate(-1) : navigate('/prospectos'))}
+          aria-label="Volver a la página anterior"
+          title="Volver a la página anterior"
+          className="p-1 -ml-1 rounded-md hover:bg-muted hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <ArrowLeft size={14} weight="bold" />
+        </button>
         <Link to="/prospectos" className="hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded px-1">
           Prospectos
         </Link>
@@ -52,17 +71,27 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg sm:text-xl font-semibold truncate">{lead.nombre}</h1>
+                <h2 className="text-lg sm:text-xl font-semibold truncate">{lead.nombre}</h2>
                 <StatusBadge status={lead.estado} showIcon />
               </div>
               <p className="text-muted-foreground text-xs mt-0.5">
                 Prospecto #{lead.id} · creado {lead.created_at ? new Date(lead.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--'}
-                {lead.proyecto_nombre && <> · {lead.proyecto_nombre}</>}
+                {/* «Fono Aprende · Chile»: el campus y el país por el que entró (#221). */}
+                {lead.proyecto_nombre && <> · {etiquetaCampusPais(lead.proyecto_nombre, lead.pais_origen)}</>}
               </p>
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            {isAdmin && (
+            {/* «Compartir» va antes de «Reasignar» porque son la misma familia:
+                reasignar es pasarsela a otra, compartir es atenderla entre dos.
+                Diego: «no es nada intuitivo» — la funcion existia pero habia que
+                entrar a la ficha de la venta para encontrarla. */}
+            {isAdmin && can('conversions.reparto') && (
+              <Suspense fallback={null}>
+                <CompartirVentaBoton leadId={lead.id} />
+              </Suspense>
+            )}
+            {isAdmin && can('leads.assign') && (
               <button
                 onClick={onReassign}
                 aria-label="Reasignar"
@@ -76,7 +105,7 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
                 onClick={() => navigate(`/mensajes?chatWith=${lead.responsable_id}&leadId=${lead.id}`)}
                 aria-label="Enviar mensaje al responsable"
                 title={`Chatear con el responsable sobre este prospecto`}
-                className="h-9 px-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors flex items-center gap-2"
+                className="h-9 px-3 rounded-lg border border-success/30 bg-success-soft text-success text-sm font-medium hover:bg-success-soft transition-colors flex items-center gap-2"
               >
                 <ChatCircle size={14} weight="bold" /> <span className="hidden sm:inline">Mensaje</span>
               </button>
@@ -85,15 +114,15 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
               onClick={() => navigate(`/finanzas/facturas/nueva?tipo=proforma&leadId=${lead.id}`)}
               aria-label="Emitir proforma"
               title="Emitir una proforma (presupuesto) para este prospecto, sin convertir"
-              className="h-9 px-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-sm font-medium hover:bg-sky-100 dark:hover:bg-sky-950/50 transition-colors flex items-center gap-2"
+              className="h-9 px-3 rounded-lg border border-info/30 bg-info-soft text-info text-sm font-medium hover:bg-info-soft transition-colors flex items-center gap-2"
             >
               <FileText size={14} weight="bold" /> <span className="hidden sm:inline">Proforma</span>
             </button>
             <button
               onClick={() => setMergeOpen(true)}
               aria-label="Fusionar duplicado"
-              title="Fusionar con otro lead duplicado"
-              className="h-9 px-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors flex items-center gap-2"
+              title="Fusionar con otro prospecto duplicado"
+              className="h-9 px-3 rounded-lg border border-info/30 bg-info-soft text-info text-sm font-medium hover:bg-info-soft transition-colors flex items-center gap-2"
             >
               <GitMerge size={14} weight="bold" /> <span className="hidden sm:inline">Fusionar</span>
             </button>

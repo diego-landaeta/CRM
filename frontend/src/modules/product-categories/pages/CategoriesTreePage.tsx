@@ -1,5 +1,9 @@
+import usePermission from '@/shared/hooks/usePermission';
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { useEffect, useState, useMemo } from 'react';
 import { useProject } from '@/shared/hooks/useProject';
+import { useVistaGeneral } from '@/shared/hooks/useVistaGeneral';
+import ArbolesDeLosCampus from '../components/ArbolesDeLosCampus';
 import {
   getTree,
   createCategory,
@@ -13,7 +17,6 @@ import {
 import {
   CaretDown,
   CaretRight,
-  Tree,
   Plus,
   Pencil,
   Trash,
@@ -228,7 +231,12 @@ function FormModal({
 }
 
 export default function CategoriesTreePage() {
-  const { activeProject } = useProject();
+  const { activeProject: cabecera } = useProject();
+  // Con «Todos» o una empresa (#218, Diego 04/11): el árbol de cada campus,
+  // solo para ver (`ArbolesDeLosCampus`). Sin campus arriba, nada de aquí pide.
+  const { general, ambito } = useVistaGeneral();
+  const activeProject = general ? null : cabecera;
+  const { can } = usePermission();
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -246,8 +254,10 @@ export default function CategoriesTreePage() {
   const [sync, setSync] = useState<WcRunStatus | null>(null);
   const [syncStarting, setSyncStarting] = useState(false);
 
+  // Sin «Ver WooCommerce» el servidor da 403 cada 30 s: no se pregunta (#631).
+  const veWoo = can('woocommerce.view');
   useEffect(() => {
-    if (!activeProject?.id) return;
+    if (!activeProject?.id || !veWoo) return;
     let cancel = false;
     async function tick() {
       try {
@@ -264,7 +274,7 @@ export default function CategoriesTreePage() {
     const interval = setInterval(tick, sync?.status === 'running' ? 3000 : 30000);
     return () => { cancel = true; clearInterval(interval); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProject?.id, sync?.status]);
+  }, [activeProject?.id, sync?.status, veWoo]);
 
   async function handleStartSync() {
     if (!activeProject?.id) return;
@@ -356,18 +366,25 @@ export default function CategoriesTreePage() {
     return { total, productos };
   }, [tree]);
 
+  if (general) {
+    return (
+      <div className="container mx-auto py-6 max-w-5xl">
+        <PageHeader
+          title="Árbol de categorías"
+          subtitle="El de cada campus, solo para ver. Para crear, cambiar o sincronizar categorías, entra en el campus."
+        />
+        <ArbolesDeLosCampus ambito={ambito} />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto py-6 max-w-5xl">
-      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Tree size={28} className="text-primary" />
-          <div>
-            <h1 className="text-2xl font-semibold">Árbol de categorías</h1>
-            <p className="text-sm text-muted-foreground">
-              Jerarquía N niveles · pasa el ratón sobre un nodo para ver acciones
-            </p>
-          </div>
-        </div>
+      <PageHeader
+        title="Árbol de categorías"
+        subtitle="Jerarquía N niveles · pasa el ratón sobre un nodo para ver acciones"
+      />
+      <div className="flex items-start justify-end gap-4 mb-6 flex-wrap">
         <div className="flex items-center gap-2">
           <button
             onClick={handleStartSync}

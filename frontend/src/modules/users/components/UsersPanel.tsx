@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, WarningCircle, Lock } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -7,20 +8,26 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import Card from '@/shared/components/ui/Card';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  createUser, deactivateUser, reactivateUser, setUserPassword, updateUser, type CrmUser,
+  avisoCambioCorreo, createUser, deactivateUser, desbloquearBrevo, listBrevoBloqueos, listEmpresas, reactivateUser,
+  setUserPassword, updateUser, type BrevoBloqueo, type CrmUser, type Empresa,
 } from '../api/users.api';
+import { porPersona } from '../lib/brevoBloqueo';
 import useUsers from '../hooks/useUsers';
 import useAvailabilityMap from '../hooks/useAvailabilityMap';
 import UsersToolbar from './UsersToolbar';
 import UsersTable from './UsersTable';
 import TablePagination from './TablePagination';
 import UserFormDialog, { type UserFormValues } from './UserFormDialog';
+import { mensajeNoLoTienes } from '../lib/rolesAsignables';
 import InviteLinkBanner from './InviteLinkBanner';
 import AvailabilityDialog from './AvailabilityDialog';
+import usePermission from '@/shared/hooks/usePermission';
 
 export default function UsersPanel() {
   const { projects, user: me } = useAuth();
   const { activeProject } = useProjectContext();
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const esSuperadmin = me?.role === 'superadmin';
 
   // Mientras nadie toque el filtro vale el proyecto activo; en cuanto se elige
@@ -38,6 +45,18 @@ export default function UsersPanel() {
   const lista = useUsers(projectId);
   const disponibilidad = useAvailabilityMap();
 
+  // Llegando desde el buscador (Ctrl K, #591) con `?buscar=`: esa persona en el
+  // buscador de la lista, y en todos los proyectos, que la cabecera puede estar
+  // en un campus que no es el suyo. Sin el parámetro, nada cambia.
+  const [params] = useSearchParams();
+  const { setFilter } = lista;
+  useEffect(() => {
+    const buscar = params.get('buscar');
+    if (!buscar) return;
+    setElegido('all');
+    setFilter('search', buscar);
+  }, [params, setFilter]);
+
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [dialogo, setDialogo] = useState<{ modo: 'crear' } | { modo: 'editar'; user: CrmUser } | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -45,6 +64,39 @@ export default function UsersPanel() {
   const [desactivando, setDesactivando] = useState(false);
   const [invitacion, setInvitacion] = useState<{ email: string; url: string } | null>(null);
   const [porAusencias, setPorAusencias] = useState<CrmUser | null>(null);
+
+  // Las empresas, para dar una entera a un admin (#220). Solo el super admin:
+  // al resto el servidor no se lo deja guardar, así que ni se piden.
+  const [empresas, setEmpresas] = useState<Empresa[] | undefined>(undefined);
+  useEffect(() => {
+    if (!esSuperadmin) return;
+    listEmpresas().then(setEmpresas).catch(() => setEmpresas(undefined));
+  }, [esSuperadmin]);
+  // Correos que Brevo no entrega (migración 290). Si falla o está apagado, sin marcas:
+  // la lista sigue funcionando igual.
+  const [bloqueosBrevo, setBloqueosBrevo] = useState<Map<number, BrevoBloqueo>>(new Map());
+  const cargarBloqueosBrevo = useCallback(() => {
+    listBrevoBloqueos()
+      .then((r) => setBloqueosBrevo(porPersona(r.bloqueos)))
+      .catch(() => setBloqueosBrevo(new Map()));
+  }, []);
+  useEffect(() => { cargarBloqueosBrevo(); }, [cargarBloqueosBrevo]);
+
+  async function desbloquearEnBrevo(user: CrmUser) {
+    try {
+      await desbloquearBrevo(user.id);
+      toast({
+        title: 'Desbloqueado en Brevo',
+        description: `Los correos del CRM vuelven a salir hacia ${user.email}. Si el buzón no existe, Brevo lo volverá a bloquear.`,
+      });
+      cargarBloqueosBrevo();
+    } catch (err: any) {
+      toast({ title: 'No se pudo desbloquear', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  // Sin la migración 203 el listado trae `empresa_ids: null` en todos.
+  const faltaMigracionEmpresas = lista.visibles.length > 0 && lista.visibles.every((u) => u.empresa_ids === null);
 
   async function guardar(values: UserFormValues) {
     setGuardando(true);
@@ -54,7 +106,11 @@ export default function UsersPanel() {
           nombre: values.nombre,
           email: values.email,
           role: values.role,
+          roles_extra: values.roles_extra,
           projects: values.projects,
+          ...(values.empresaIds?.length ? { empresaIds: values.empresaIds } : {}),
+          // #694: sus excepciones, en la misma operación que el alta.
+          ...(values.excepciones && Object.keys(values.excepciones).length ? { excepciones: values.excepciones } : {}),
         });
         if (setPasswordToken) {
           const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
@@ -67,35 +123,54 @@ export default function UsersPanel() {
           toast({ title: 'Usuario creado', description: `Email de bienvenida enviado a ${values.email}` });
         }
       } else if (dialogo?.modo === 'editar') {
-        const sinProyectos = values.projects.length === 0;
+        const sinProyectos = values.projects.length === 0 && !values.empresaIds?.length;
+        // El correo solo si ha cambiado, y solo lo cambia el super admin (#248):
+        // a cualquier otro el servidor le contesta 403.
+        const correoNuevo = values.email.trim().toLowerCase();
+        const cambiaCorreo = esSuperadmin && correoNuevo !== dialogo.user.email.toLowerCase();
         await updateUser(dialogo.user.id, {
           nombre: values.nombre,
+          // Al momento y sin código (Diego, 06/11, #688).
+          ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: values.reenviarEnlace } : {}),
           role: values.role,
+          // Se manda SIEMPRE, aunque venga vacia: una lista vacia significa
+          // «quitale los de mas», y omitirla dejaria imposible volver atras.
+          roles_extra: values.roles_extra,
           // Desmarcarlos todos tiene que quitarlos de verdad, y para eso hay que
           // mandar el formato viejo: `projects: []` el backend lo ignora.
           ...(sinProyectos ? { projectIds: [] } : { projects: values.projects }),
           whatsapp_phone: values.whatsapp_phone,
+          // Facturación, fechas y WhatsApp ya no van aquí: son permisos y se
+          // dan en «Ver permisos» de la ficha (#423).
+          // Las empresas enteras (#220): solo viajan si las ha podido tocar.
+          ...(values.empresaIds !== undefined ? { empresaIds: values.empresaIds } : {}),
         });
         toast(sinProyectos
           ? {
             title: 'Usuario actualizado, sin proyectos',
             description: `${values.nombre} ya no tiene ningún proyecto asignado: al entrar no verá nada.`,
           }
-          : { title: 'Usuario actualizado', description: values.nombre });
+          : cambiaCorreo
+            ? { title: 'Usuario actualizado', description: `${values.nombre} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+            : { title: 'Usuario actualizado', description: values.nombre });
       }
       setDialogo(null);
       lista.recargar();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+      // Un rol que quien guarda no puede dar (Tony, 03/11): qué rol quitar, no solo el «no».
+      const sinPermiso = mensajeNoLoTienes(err, values);
+      toast(sinPermiso
+        ? { title: 'Ese rol no lo puedes dar', description: sinPermiso, variant: 'destructive' }
+        : { title: 'Error', description: err?.message, variant: 'destructive' });
     } finally {
       setGuardando(false);
     }
   }
 
-  async function reiniciarPassword(password: string) {
+  async function reiniciarPassword(password: string, repetida: string) {
     if (dialogo?.modo !== 'editar') return;
     try {
-      await setUserPassword(dialogo.user.id, password);
+      await setUserPassword(dialogo.user.id, password, repetida);
       toast({
         title: 'Contraseña actualizada',
         description: `${dialogo.user.nombre} deberá entrar con la nueva. Sus sesiones se han cerrado.`,
@@ -193,15 +268,15 @@ export default function UsersPanel() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-seccion">Gestión de usuarios</h2>
           <p className="text-normal text-muted-foreground mt-0.5">Quién entra al CRM, con qué rol y en qué proyectos</p>
         </div>
         <button
           onClick={() => setDialogo({ modo: 'crear' })}
           aria-label="Crear usuario"
-          className="flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+          className="flex-shrink-0 flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Crear usuario</span>
         </button>
@@ -238,6 +313,7 @@ export default function UsersPanel() {
           users={lista.visibles}
           projects={projects || []}
           disponibilidad={disponibilidad.porUsuario}
+          bloqueosBrevo={bloqueosBrevo}
           openMenuId={openMenuId}
           onOpenMenu={setOpenMenuId}
           onEdit={(u) => { setOpenMenuId(null); setDialogo({ modo: 'editar', user: u }); }}
@@ -262,11 +338,19 @@ export default function UsersPanel() {
           key={dialogo.modo === 'editar' ? dialogo.user.id : 'nuevo'}
           user={dialogo.modo === 'editar' ? dialogo.user : null}
           projects={projects || []}
-          canResetPassword={esSuperadmin}
+          canResetPassword={esSuperadmin && can('users.contrasena')}
+          canChangeEmail={esSuperadmin && can('users.empresas')}
+          onCheckEmail={() => (dialogo.modo === 'editar' ? avisoCambioCorreo(dialogo.user.id) : Promise.resolve(null))}
           loading={guardando}
           onClose={() => setDialogo(null)}
           onSubmit={guardar}
           onResetPassword={reiniciarPassword}
+          empresas={esSuperadmin && can('users.empresas') ? empresas : undefined}
+          faltaMigracionEmpresas={faltaMigracionEmpresas}
+          bloqueoBrevo={dialogo.modo === 'editar' ? bloqueosBrevo.get(dialogo.user.id) ?? null : null}
+          onDesbloquearBrevo={dialogo.modo === 'editar' && can('users.brevo_desbloquear')
+            ? () => desbloquearEnBrevo(dialogo.user)
+            : undefined}
         />
       )}
 

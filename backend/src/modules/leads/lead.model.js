@@ -1,5 +1,11 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
+import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
+import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
+import { logger } from '../../shared/utils/logger.js';
 import { gestoresDelReparto } from './reparto.js';
+import { comoIds } from '../../shared/utils/roles.js';
+import { paisDeEntrada, sqlPaisDelLead } from './pais.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -39,6 +45,45 @@ const claveTelefono = (col) => {
       ELSE ${d}
     END`;
 };
+
+/**
+ * La condición de búsqueda de un prospecto por texto (#591), la misma en la
+ * lista (`findAll`) y en los totales de su cabecera (`getStats`): si no, con
+ * «gonzalez» la lista salía más larga que el total (revisión del 02/11).
+ * Nombre y usuario de WhatsApp sin acentos (`unaccent`, migración 235), correo
+ * y teléfono tal cual, y el teléfono también por sus cifras si lo escrito es
+ * un teléfono («626 27 64 14» encuentra «+34626276414»).
+ * `col` pone delante de cada columna su tabla («l.» o nada); `idx`, el primer
+ * número de parámetro libre. Devuelve la condición, sus parámetros y el
+ * siguiente número libre; sin término, null.
+ */
+export function condicionDeBusqueda(search, { col = '', idx }) {
+  // El termino se recorta SIEMPRE. Los nombres se pegan desde WhatsApp y vienen
+  // con un espacio delante o detras; sin recortarlo el patron queda
+  // "% Javier Alfonso%", que no casa con un nombre que empieza en "Javier", y la
+  // pantalla sale vacia como si el cliente no existiera. Paso el 16/09 en ISEIE
+  // con la ficha de Javier Cifuentes.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (!termino) return null;
+  const params = [`%${termino}%`];
+  const conds = [
+    `unaccent(COALESCE(${col}nombre, '')) ILIKE unaccent($${idx})`,
+    `${col}email ILIKE $${idx}`,
+    `${col}telefono ILIKE $${idx}`,
+    `unaccent(COALESCE(${col}whatsapp_usuario, '')) ILIKE unaccent($${idx})`,
+  ];
+  let siguiente = idx + 1;
+  // Diego, 02/11: teléfonos con espacios. Solo si lo escrito es un teléfono
+  // (cifras, espacios, +, guiones, paréntesis): «F-2026/123» o «Ana 3» no deben
+  // acabar buscando por las cifras sueltas.
+  const soloDigitos = termino.replace(/\D/g, '');
+  if (/^[\d\s+().-]+$/.test(termino) && soloDigitos.length >= 3) {
+    conds.push(`regexp_replace(COALESCE(${col}telefono, ''), '\\D', '', 'g') LIKE $${siguiente}`);
+    params.push(`%${soloDigitos}%`);
+    siguiente += 1;
+  }
+  return { sql: `(${conds.join(' OR ')})`, params, siguiente };
+}
 
 // Detecta si esta ficha ya existe: por correo, por telefono O por usuario de
 // WhatsApp. Cualquiera de los tres vale, porque muchos prospectos entran sin
@@ -522,6 +567,15 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     );
     const lead = leadRows[0];
 
+    // El país de entrada (#221): el subdominio por el que entró y la tabla de su
+    // campus. Va aquí porque por aquí pasan TODAS las altas (webhook, Make,
+    // formularios, alta manual, admisión). Sin dirección o sin tabla, nada.
+    const pais = await paisDeEntrada(client, projectId, landingUrl || utms?.landing_url || null);
+    if (pais) {
+      await client.query('UPDATE leads SET pais_origen = $2 WHERE id = $1', [lead.id, pais]);
+      lead.pais_origen = pais;
+    }
+
     // Guardar UTMs si hay datos relevantes. Antes esto SOLO insertaba si había
     // utm_source/medium/campaign, ignorando canal_detectado. Resultado: al crear
     // manualmente con "WhatsApp" el canal no se guardaba. Ahora también dispara
@@ -529,13 +583,13 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     if (
       utms && (
         utms.utm_source || utms.utm_medium || utms.utm_campaign ||
-        utms.canal_detectado || utms.landing_url
+        utms.canal_detectado || utms.landing_url || utms.referrer
       )
     ) {
       await client.query(
-        `INSERT INTO lead_utms (lead_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_url, canal_detectado)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [lead.id, utms.utm_source, utms.utm_medium, utms.utm_campaign, utms.utm_content, utms.utm_term, utms.landing_url, utms.canal_detectado]
+        `INSERT INTO lead_utms (lead_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_url, canal_detectado, referrer)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [lead.id, utms.utm_source, utms.utm_medium, utms.utm_campaign, utms.utm_content, utms.utm_term, utms.landing_url, utms.canal_detectado, utms.referrer || null]
       );
     }
 
@@ -671,11 +725,27 @@ const ULTIMO_CONTACTO = `(SELECT MAX(i.fecha) FROM lead_interactions i WHERE i.l
 // «Sin tocar» = ni una interaccion Y todavia en la entrada del embudo.
 const SIN_TOCAR = `(${ULTIMO_CONTACTO} IS NULL AND l.status IN ('nuevo', 'por_contactar'))`;
 
+/*
+  QUE ES UN PROSPECTO Y NO UN CLIENTE (06/10).
+
+  Prospectos escondia todo lo que estuviera en «convertido», y Clientes solo
+  enseña lo que tiene al menos una venta. Una ficha en «convertido» SIN venta
+  no salia en ninguna de las dos. Le paso a Yolanda con Orlando Villalobos: se
+  le registro la venta, se borro como «Error al cargar», la ficha se quedo en
+  «convertido» y desaparecio; al dia siguiente intento darlo de alta otra vez.
+  En ICTESS habia dos mas (Eric Garcia, Tomas Franco).
+
+  Asi que un «convertido» sin ninguna venta sigue siendo prospecto: sale en la
+  lista, con su estado, para que alguien lo vea y lo arregle.
+*/
+const NO_ES_CLIENTE = `(l.status <> 'convertido'
+     OR NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = l.id))`;
+
 /**
  * «Sin revisar este mes» (#132, el repaso de fin de mes).
  *
  * Va aparte de `FILTROS_RAPIDOS` porque es el unico que depende de una tabla
- * que puede no estar —`lead_revisiones`, migracion 149—. Metido con los demas,
+ * que puede no estar —`lead_revisiones`, migracion 155—. Metido con los demas,
  * la falta de esa tabla tumbaria el listado ENTERO con un 42P01, y el listado
  * es la pantalla principal del CRM.
  *
@@ -693,7 +763,7 @@ let hayTablaDeRevisiones = null;
 /** Para las pruebas: vuelve a mirar si la tabla existe. */
 export function _olvidarRevisiones() { hayTablaDeRevisiones = null; }
 
-/** `true` si la migracion 149 esta aplicada. Se mira una vez. */
+/** `true` si la migracion 155 esta aplicada. Se mira una vez. */
 export async function sePuedeRevisar() {
   if (hayTablaDeRevisiones !== null) return hayTablaDeRevisiones;
   try {
@@ -707,20 +777,28 @@ export async function sePuedeRevisar() {
   return hayTablaDeRevisiones;
 }
 
+// LA BARRA DE VENCIDOS CUENTA DESDE EL 01/09, como la cola. Diego, 30/09:
+// «los atrasados y eso también que sean a partir de esa fecha». Los prospectos
+// de antes siguen en el listado y se pueden buscar y filtrar por todo lo demas;
+// lo que no hacen es inflar «Vencidos», «Sin contacto» o «Urgente» con fichas
+// de meses atras (ver enElProceso.js). Getters y no cadenas fijas: la fecha se
+// lee en cada consulta, como en el resto del proceso.
+const desdeElInicio = (cond) => `(${EN_EL_PROCESO('l')} AND ${cond})`;
+
 export const FILTROS_RAPIDOS = {
   // Ojo: `NULL < CURRENT_DATE` es NULL, o sea que no pasa el filtro. Es lo que
   // se quiere —«sin recordatorio» no es «atrasado»— y coincide con el `next &&`
   // que hacia el frontend.
-  overdue: `${PROXIMO} < CURRENT_DATE`,
-  today: `${PROXIMO} = CURRENT_DATE`,
-  tomorrow: `${PROXIMO} = CURRENT_DATE + 1`,
-  week: `${PROXIMO} BETWEEN CURRENT_DATE AND CURRENT_DATE + 7`,
-  'no-reminder': `${PROXIMO} IS NULL`,
-  'no-contact': SIN_TOCAR,
-  urgent: `(${PROXIMO} <= CURRENT_DATE OR ${SIN_TOCAR})`,
+  get overdue() { return desdeElInicio(`${PROXIMO} < CURRENT_DATE`); },
+  get today() { return desdeElInicio(`${PROXIMO} = CURRENT_DATE`); },
+  get tomorrow() { return desdeElInicio(`${PROXIMO} = CURRENT_DATE + 1`); },
+  get week() { return desdeElInicio(`${PROXIMO} BETWEEN CURRENT_DATE AND CURRENT_DATE + 7`); },
+  get 'no-reminder'() { return desdeElInicio(`${PROXIMO} IS NULL`); },
+  get 'no-contact'() { return desdeElInicio(SIN_TOCAR); },
+  get urgent() { return desdeElInicio(`(${PROXIMO} <= CURRENT_DATE OR ${SIN_TOCAR})`); },
 };
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf }) {
+export async function findAll({ projectId, projectIds, status, seguimiento, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -768,17 +846,63 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
   } else if (!includeConverted && !conConversion) {
-    conditions.push(`l.status <> 'convertido'`);
+    conditions.push(NO_ES_CLIENTE);
+  }
+  // POR QUE SEGUIMIENTO VA (#100).
+  //
+  // Diego: «sería seguimiento 1, 2, y eso en el estado de seguimiento, como un
+  // submenú del seguimiento en los filtros».
+  //
+  // El numero es CUANTAS VECES se ha contactado de verdad: la misma regla que
+  // usan la cola del dia y el embudo de Reportes —el contacto n.º N cierra el
+  // paso n.º N—, para que las tres pantallas digan lo mismo. Una nota interna
+  // no cuenta: no es haber hablado con nadie.
+  //
+  // `5` significa «cinco o mas»: a partir de ahi da igual el numero exacto, lo
+  // que dice es que lleva muchos y no cierra.
+  if (seguimiento) {
+    const n = parseInt(seguimiento, 10);
+    if (Number.isInteger(n) && n > 0) {
+      const CUANTOS = `(SELECT count(*) FROM lead_interactions li
+                         WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+      conditions.push(n >= 5 ? `${CUANTOS} >= $${paramIdx++}` : `${CUANTOS} = $${paramIdx++}`);
+      params.push(n);
+    }
+  }
+  /*
+    EN QUE PASO DEL PROCESO VA.
+
+    El paso «en el que va» es el PRIMERO que tiene pendiente y todavia no ha
+    cerrado, que es exactamente lo que enseña la cola del dia: el contacto n.º N
+    cierra el paso n.º N. Se calcula igual aqui para que la lista y la cola no
+    puedan decir cosas distintas de la misma persona.
+
+    Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
+    elegido, y es lo correcto: no estan en el proceso. Tampoco quien entro antes
+    del 01/09 aunque le quede agenda escrita de antes (ver enElProceso.js).
+  */
+  if (pasoProceso) {
+    conditions.push(`${EN_EL_PROCESO('l')} AND (SELECT ls.clave FROM lead_steps ls
+                       WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'
+                         AND NOT ${PASO_CERRADO('ls')}
+                       ORDER BY ls.orden LIMIT 1) = $${paramIdx++}`);
+    params.push(pasoProceso);
   }
   if (unassigned) {
     conditions.push(`l.responsable_id IS NULL`);
   } else if (responsableId) {
-    conditions.push(`l.responsable_id = $${paramIdx++}`);
-    params.push(responsableId);
+    // Una persona o varias: las de un equipo comercial (09/11/2026).
+    conditions.push(`l.responsable_id = ANY($${paramIdx++}::int[])`);
+    params.push(comoIds(responsableId));
   }
   if (canal) {
     conditions.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = l.id AND lu.canal_detectado = $${paramIdx++})`);
     params.push(canal);
+  }
+  // País de entrada (#221): un código ISO o `sin_pais`.
+  if (paisEntrada) {
+    conditions.push(`${sqlPaisDelLead('l')} = $${paramIdx++}`);
+    params.push(paisEntrada);
   }
   if (productId) {
     conditions.push(conConversion
@@ -794,10 +918,11 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     paramIdx++;
     params.push(productId);
   }
-  if (search) {
-    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx} OR l.whatsapp_usuario ILIKE $${paramIdx})`);
-    params.push(`%${search}%`);
-    paramIdx++;
+  const busqueda = condicionDeBusqueda(search, { col: 'l.', idx: paramIdx });
+  if (busqueda) {
+    conditions.push(busqueda.sql);
+    params.push(...busqueda.params);
+    paramIdx = busqueda.siguiente;
   }
 
   // Filtro por rango de fechas (sobre fecha_solicitud, fallback created_at).
@@ -909,6 +1034,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
+            l.pais_origen,
             l.project_id,
             l.responsable_id,
             proj.nombre AS proyecto_nombre,
@@ -968,11 +1094,11 @@ export async function contarFiltrosRapidos({ projectId, projectIds, responsableI
     params.push(projectId);
   }
   if (responsableId) {
-    cond.push(`l.responsable_id = $${i++}`);
-    params.push(responsableId);
+    cond.push(`l.responsable_id = ANY($${i++}::int[])`);
+    params.push(comoIds(responsableId));
   }
   // Igual que el listado: los convertidos no cuentan salvo que se pidan.
-  if (!includeConverted) cond.push(`l.status <> 'convertido'`);
+  if (!includeConverted) cond.push(NO_ES_CLIENTE);
 
   const cuenta = (clave) => `COUNT(*) FILTER (WHERE ${FILTROS_RAPIDOS[clave]})::int`;
   const { rows } = await query(
@@ -1002,11 +1128,11 @@ export async function comoVaLaRevision({ projectId, responsableId }) {
   if (!(await sePuedeRevisar())) {
     return { disponible: false, total: 0, revisadas: 0, pendientes: 0 };
   }
-  const cond = ['l.deleted_at IS NULL', `l.status <> 'convertido'`];
+  const cond = ['l.deleted_at IS NULL', NO_ES_CLIENTE];
   const params = [];
   let i = 1;
   if (projectId) { cond.push(`l.project_id = $${i++}`); params.push(projectId); }
-  if (responsableId) { cond.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+  if (responsableId) { cond.push(`l.responsable_id = ANY($${i++}::int[])`); params.push(comoIds(responsableId)); }
 
   const { rows } = await query(
     `SELECT COUNT(*)::int AS total,
@@ -1042,7 +1168,13 @@ export async function findById(id) {
             pr.nombre as producto_nombre,
             pr.nombre as producto_interes,
             pr.precio as producto_precio,
-            pr.moneda as producto_moneda
+            pr.moneda as producto_moneda,
+            -- Huecos de las plantillas del proceso (#88): la ficha ofrece el
+            -- mensaje del paso ya escrito y estos dos salen del catalogo.
+            -- fecha_inicio_texto llego de WordPress como «marzo 2026» y se
+            -- manda tal cual: es lo que dice la web.
+            pr.fecha_inicio_texto,
+            pr.fecha_cierre_convocatoria
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
@@ -1146,7 +1278,19 @@ export async function createInteraction(leadId, tipo, nota, createdBy, fecha) {
      RETURNING id, lead_id, tipo, nota, fecha, created_by`,
     [leadId, tipo, nota, createdBy, fecha || null]
   );
+  // Un contacto puede cerrar el paso que toca: los que quedan se cuentan desde
+  // él, no desde la entrada (Diego, 10/10; ver recolocarPasos.js).
+  if (tipo !== 'nota') await recolocarSinRomper(leadId);
   return rows[0];
+}
+
+async function recolocarSinRomper(leadId) {
+  try {
+    await recolocarPasos([leadId]);
+  } catch (err) {
+    // La agenda se puede recolocar más tarde; el contacto no se puede perder.
+    logger.warn({ err: err.message, leadId }, 'No se pudo recolocar la agenda tras el contacto');
+  }
 }
 
 export async function findInteractionById(interactionId) {
@@ -1310,10 +1454,21 @@ export async function getLeadProjectId(leadId) {
 // ============================================================
 
 // Panel "Hoy" - actividad del dia, reminders pendientes, alertas
-export async function getTodaySummary({ userId, role, projectId }) {
+export async function getTodaySummary({ userId, role, soloSuyo, alcanceIds, projectId, projectIds = null }) {
   // Usamos parametros para evitar SQL injection
-  const userIdParam = role === 'gestor' ? userId : null;
-  const pidParam = projectId || null;
+  // De quién: `alcanceIds` (09/11/2026, `alcanceComercial`) es la gestora sola o
+  // la líder con su equipo; null, todo el campus. Quien aún pase `soloSuyo`
+  // (02/11) o nada (por el rol, como antes) sigue funcionando igual.
+  const userIdParam = alcanceIds !== undefined
+    ? comoIds(alcanceIds)
+    : ((soloSuyo ?? role === 'gestor') ? comoIds(userId) : null);
+  // Uno o varios campus en la MISMA consulta (#224). Con una empresa elegida
+  // el Dashboard pedia esto una vez por campus —siete con CEDIA, cada una con
+  // seis consultas seguidas— y sumaba en el navegador. Ahora es una sola
+  // peticion con la lista y la suma la hace Postgres.
+  const pidParam = Array.isArray(projectIds) && projectIds.length
+    ? projectIds.map(Number)
+    : (projectId ? [Number(projectId)] : null);
 
   const { rows: remRows } = await query(
     `SELECT lr.id, lr.lead_id, lr.fecha_recordatorio, lr.nota,
@@ -1323,8 +1478,8 @@ export async function getTodaySummary({ userId, role, projectId }) {
      JOIN leads l ON l.id = lr.lead_id
      WHERE lr.completado = false
        AND lr.fecha_recordatorio <= CURRENT_DATE
-       AND ($1::int IS NULL OR lr.created_by = $1)
-       AND ($2::int IS NULL OR l.project_id = $2)
+       AND ($1::int[] IS NULL OR lr.created_by = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))
      ORDER BY lr.fecha_recordatorio ASC, lr.id DESC
      LIMIT 20`,
     [userIdParam, pidParam]
@@ -1333,16 +1488,16 @@ export async function getTodaySummary({ userId, role, projectId }) {
   const { rows: nuevosHoy } = await query(
     `SELECT COUNT(*) FROM leads l
      WHERE l.fecha_solicitud::date = CURRENT_DATE
-       AND ($1::int IS NULL OR l.responsable_id = $1)
-       AND ($2::int IS NULL OR l.project_id = $2)`,
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
 
   const { rows: nuevosSemana } = await query(
     `SELECT COUNT(*) FROM leads l
      WHERE l.fecha_solicitud >= CURRENT_DATE - INTERVAL '7 days'
-       AND ($1::int IS NULL OR l.responsable_id = $1)
-       AND ($2::int IS NULL OR l.project_id = $2)`,
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
 
@@ -1352,8 +1507,8 @@ export async function getTodaySummary({ userId, role, projectId }) {
      LEFT JOIN projects p ON p.id = l.project_id
      WHERE l.status NOT IN ('convertido', 'no_interesado')
        AND EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at))) > p.dias_alerta_inactividad
-       AND ($1::int IS NULL OR l.responsable_id = $1)
-       AND ($2::int IS NULL OR l.project_id = $2)`,
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
 
@@ -1364,8 +1519,8 @@ export async function getTodaySummary({ userId, role, projectId }) {
      WHERE c.importe_pagado < c.importe_total
        AND c.fecha_compromiso_pago IS NOT NULL
        AND c.fecha_compromiso_pago < CURRENT_DATE
-       AND ($1::int IS NULL OR l.responsable_id = $1)
-       AND ($2::int IS NULL OR c.project_id = $2)`,
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR c.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
 
@@ -1375,8 +1530,8 @@ export async function getTodaySummary({ userId, role, projectId }) {
      JOIN conversions c ON c.id = cp.conversion_id
      LEFT JOIN leads l ON l.id = c.lead_id
      WHERE cp.fecha = CURRENT_DATE
-       AND ($1::int IS NULL OR l.responsable_id = $1)
-       AND ($2::int IS NULL OR c.project_id = $2)`,
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR c.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
 
@@ -1390,13 +1545,15 @@ export async function getTodaySummary({ userId, role, projectId }) {
   };
 }
 
-export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, search = null } = {}) {
+export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, paisEntrada = null, search = null } = {}) {
   // Los chips de stats deben reflejar los mismos filtros que el listado, no el
   // total global del proyecto. WHERE incremental igual que findAll.
-  const params = [projectId];
+  // `projectId` puede ser una LISTA de campus (#224): el Dashboard con una
+  // empresa pide todos de una vez en vez de uno por uno.
+  const params = [Array.isArray(projectId) ? projectId.map(Number) : [Number(projectId)]];
   let idx = 2;
   const extra = [];
-  if (responsableId) { extra.push(`responsable_id = $${idx++}`); params.push(responsableId); }
+  if (responsableId) { extra.push(`responsable_id = ANY($${idx++}::int[])`); params.push(comoIds(responsableId)); }
   if (productId)     { extra.push(`producto_interes_id = $${idx++}`); params.push(productId); }
   const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
   if (dateFrom) {
@@ -1411,10 +1568,13 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
     extra.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = leads.id AND lu.canal_detectado = $${idx++})`);
     params.push(canal);
   }
-  if (search) {
-    extra.push(`(nombre ILIKE $${idx} OR email ILIKE $${idx} OR telefono ILIKE $${idx})`);
-    params.push(`%${search}%`);
-    idx++;
+  if (paisEntrada) { extra.push(`${sqlPaisDelLead('')} = $${idx++}`); params.push(paisEntrada); }
+  // La misma búsqueda que la lista (#591): sin acentos y el teléfono por cifras.
+  const busqueda = condicionDeBusqueda(search, { idx });
+  if (busqueda) {
+    extra.push(busqueda.sql);
+    params.push(...busqueda.params);
+    idx = busqueda.siguiente;
   }
   const where = extra.length ? ` AND ${extra.join(' AND ')}` : '';
   const { rows } = await query(
@@ -1428,7 +1588,7 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
        COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
-     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${where}`,
+     FROM leads WHERE project_id = ANY($1::int[]) AND deleted_at IS NULL${where}`,
     params
   );
   return rows[0];

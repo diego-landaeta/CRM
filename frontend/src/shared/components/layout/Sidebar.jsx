@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  CalendarCheck,
+  ArrowCounterClockwise,
   SquaresFour,
   Users,
   Package,
@@ -23,6 +25,7 @@ import {
   Envelope,
   Globe,
   PlugsConnected,
+  CloudArrowDown,
   WarningCircle,
   ShoppingBag,
   BookOpen,
@@ -43,6 +46,7 @@ import {
   Lightning,
   WebhooksLogo,
   Tree,
+  ListBullets,
   GraduationCap,
   CurrencyEur,
   TrendUp,
@@ -53,19 +57,33 @@ import {
   CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning, Key } from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning, Key, ListChecks, Kanban, ClockCounterClockwise, SlidersHorizontal, Code, Certificate,
+  // Los de los encabezados de seccion (#105). Ninguno repite el de una
+  // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
+  // que una de sus filas, deja de ordenar y pasa a confundir.
+  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, Shuffle, ChartPieSlice, EnvelopeSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
+import { rolesDe, soloEsColaborador, soloEsTutor } from '@/shared/lib/roles';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
+import { ProjectAvatar, EmpresaAvatar } from '@/shared/components/ui/ProjectAvatar';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
-import { getLocalLogo } from '@/shared/lib/projectLogos';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { moduloApagado } from '@/shared/lib/modulos';
+import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
+// Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
+import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -75,23 +93,70 @@ const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
 
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
-const NAV_SECTIONS = [
+// Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend.
+// El tutor redactor (CRM#708) tiene su tablero como un colaborador.
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
+
+// Ninguna entrada puede llevar a «Página no encontrada» (#226). Diego, 10/10:
+// lo que no existe se marca «Próximamente» (sin enlace, `comingSoon: true`); lo
+// que existe, que funcione y esté en el menú. Lo vigila
+// `test/menuSinRutasRotas.test.jsx`: cada `to` tiene su <Route> en App.jsx, o
+// lleva `comingSoon`. Las de `href` salen a otra compilación y no cuentan.
+export const NAV_SECTIONS = [
   {
     label: 'Testeo',
+    icon: Flask,
     items: [
-      { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
-      { label: 'SUITE DASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
+      { label: 'TESTEO2', to: '/testeo2', detail: 'Maqueta del rediseño', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
+      { label: 'SUITE DASH', to: '/suite-dash', detail: 'La referencia', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
+      // El muestrario de primitivas. Sin esta entrada existe pero no lo
+      // encuentra nadie: hay que escribir /dev/components a mano, que es
+      // exactamente lo que hacía que «no existiera».
+      { label: 'Las 22 primitivas', to: '/dev/components', detail: 'Las piezas, juntas', icon: Sparkle, previewOnly: true },
     ],
   },
   {
     label: 'Principal',
+    icon: House,
     items: [
-      { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
+      { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista, la cola del dia
+      // y el proceso son el mismo sitio. La cola dice a quien le toca hoy y el
+      // proceso es lo que la cola aplica; de «Sistema» o «Configuracion» no lo
+      // encontraba nadie.
+      //
+      // `defaultOpen` porque esta es la pantalla del dia: si el grupo arrancara
+      // cerrado, la gestora pagaria un clic de mas cada manana para llegar a lo
+      // que mas usa.
+      //
+      // Leerlo lo puede hacer cualquiera —la gestora necesita ver en que paso
+      // va cada prospecto—; editarlo, solo administradores, y eso lo decide la
+      // propia pantalla y el servidor.
+      {
+        label: 'Prospectos',
+        salvoTipo: ['ia'],
+        icon: Users,
+        module: 'leads',
+        defaultOpen: true,
+        children: [
+          // `end` porque si no, estando en la cola o en el proceso este
+          // tambien se marcaria activo: el resaltado diria que estas en dos
+          // sitios a la vez.
+          { label: 'Lista de prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, end: true, permiso: 'leads.view' },
+          { label: 'La cola del día', to: '/prospectos/cola', detail: 'A quién le toca hoy', icon: CalendarCheck, permiso: 'proceso.view' },
+          // El quinto paso no cabe en la cola del dia: es toda la base que no
+          // compro, y se repasa cuando se puede, no cada mañana.
+          { label: 'Seguimiento de fin de mes', to: '/prospectos/seguimiento', detail: 'La base que no compró', icon: ArrowCounterClockwise, permiso: 'proceso.view' },
+          { label: 'Proceso comercial', to: '/prospectos/proceso', detail: 'Los cinco pasos', icon: ListChecks, permiso: 'proceso.view' },
+          // Sin aprobar para producción (07/10): solo en /testeo.
+          { label: 'Convocatorias', to: '/prospectos/convocatorias', detail: 'Las becas y su embudo', icon: GraduationCap, permiso: 'convocatorias.view' },
+        ],
+      },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
         label: 'WhatsApp',
+        salvoTipo: ['ia'],
         icon: WhatsappLogo,
         module: 'whatsapp',
         apagable: 'whatsapp',
@@ -102,13 +167,17 @@ const NAV_SECTIONS = [
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
           // que puede pasarle a su numero— ya esta, con su casilla y su registro
           // de quien lo acepto (tarea #45).
-          { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
-          { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          { label: 'Chat', to: '/whatsapp/chat', detail: 'Conversaciones', icon: ChatText, permiso: 'whatsapp.usar' },
+          { label: 'Plantillas', to: '/whatsapp/plantillas', detail: 'Mensajes preparados', icon: ChatText, permiso: 'whatsapp.plantillas' },
           // El banco de mensajes (#101). Va aqui y no dentro del chat porque no
           // es el chat: uno sirve para conversar y este para buscar, auditar y
           // llevarse una copia. El servidor recorta lo que ve cada cual — un
           // admin lo ve entero, una gestora solo su numero.
-          { label: 'Banco de mensajes', to: '/whatsapp/banco', icon: ChatText },
+          // El servidor pide usarlo, supervisarlo o verlo (#631; `whatsapp.banco`, el project
+          // manager, Diego 04/11: «el project manager ve todo», con las líneas de sus campus).
+          { label: 'Banco de mensajes', to: '/whatsapp/banco', detail: 'Buscar y auditar', icon: ChatText, permiso: ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'] },
+          // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
+          { label: 'Actividad', to: '/whatsapp/actividad', detail: 'Quién responde', icon: ChartBar, permiso: 'reports.view' },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
           // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
           // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
@@ -118,119 +187,290 @@ const NAV_SECTIONS = [
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
-          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
+          { label: 'Conexión', to: '/whatsapp/conexion', detail: 'Enlazar tu número', icon: QrCode, permiso: 'whatsapp.usar' },
           // La guia, en el menu y no escondida: si hay que preguntar donde esta,
           // ya se ha perdido a quien tenia que leerla.
-          { label: 'Cómo se usa', to: '/whatsapp/ayuda', icon: BookOpen },
+          { label: 'Cómo se usa', to: '/whatsapp/ayuda', detail: 'La guía, paso a paso', icon: BookOpen },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
+      { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions', permiso: 'ventas.view' },
+    ],
+  },
+  // El tablero del equipo (#210 y mejoras del 07/10). Es lo único que ve quien
+  // es solo colaborador. «Configurar tablero» se enseña por permiso (`permiso`),
+  // no por rol: lo que se cambie en Configuración › Roles manda también aquí.
+  // «Por revisar» pasó a «Historial de tareas» (CRM#707): quien hace la tarea la
+  // cierra él mismo y nadie tiene una bandeja de «por aprobar» (tampoco Carlos).
+  // Aprobada para producción en la 2.2.0 (Diego, 16/10).
+  {
+    label: 'Equipo de Desarrollo',
+    icon: Code,
+    items: [
+      // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
+      { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
+      { label: 'Historial de tareas', to: '/tareas/historial', detail: 'Lo hecho: quién y cuándo', icon: ClockCounterClockwise, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
+      { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
+      // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
+      { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /testeo y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'Actividad', to: '/equipo/actividad', detail: 'Horas de Monitask y cotejo', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'monitask.view' }]
+        : []),
     ],
   },
   {
     label: 'Captación',
+    salvoTipo: ['ia'],
+    icon: Funnel,
     items: [
-      { label: 'Email', to: '/secuencias-email', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
-      { label: 'Formularios', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
-      { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
-      { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
-      // Conectores (#6). El backend existia desde `bcf9c3e` y no habia forma de
-      // llegar: sin pantalla y sin entrada. Los mismos roles que el resto de
-      // Captacion.
-      { label: 'Conectores', to: '/captacion/conectores', icon: PlugsConnected, roles: ['superadmin', 'admin'], module: 'connectors' },
-      { label: 'Widget web', to: '/captacion/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
-      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
-      { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
+      { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences', permiso: 'email_sequences.view' },
+      { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms', permiso: 'forms.view' },
+      { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make', permiso: 'make.view' },
+      { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks', permiso: 'webhooks.view' },
+      { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'], permiso: 'widget.view' },
+      // Próximamente (#216): enseñaban datos de ejemplo. El gasto real de Meta, en Publicidad.
+      { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'], comingSoon: true },
+      { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'], comingSoon: true },
     ],
   },
   {
     label: 'Publicidad',
+    salvoTipo: ['ia'],
+    icon: Megaphone,
     items: [
-      { label: 'Meta Ads', to: '/meta-ads', icon: ChartBar, roles: ['superadmin', 'admin'] },
-      { label: 'Google Ads', to: '/google-ads', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true, statusTag: 'Próx.' },
+      // Meta Ads: administración por su rol; y en solo lectura a quien se le da
+      // `meta_ads.view` (26/10/2026: el equipo de desarrollo), también si es solo colaborador.
+      { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
+      // `comingSoon` no hacía nada aquí: el menú solo miraba la lista de la beta,
+      // así que fuera de ella Google Ads era un enlace a /google-ads, que no
+      // tiene pantalla, y acababa en «Página no encontrada» (#226).
+      { label: 'Google Ads', to: '/google-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true },
     ],
   },
   {
     label: 'Catálogo',
+    salvoTipo: ['ia'],
+    icon: Books,
     items: [
-      { label: 'Productos', to: '/productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Cursos pendientes', to: '/productos/pendientes', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'WooCommerce', to: '/productos/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
-      { label: 'Árbol de categorías', to: '/productos/arbol', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Certificados', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
+      { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
+      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Por campus, con tutora y fecha', icon: Clock, roles: ['superadmin', 'admin', 'gestor', 'tutor'], module: 'products', permiso: 'products.view' },
+      { label: 'WooCommerce', to: '/productos/woocommerce', detail: 'Sincronía de tienda', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce', permiso: 'woocommerce.view' },
+      // Cada entrada se llama como la pantalla que abre (#79). «Árbol de
+      // categorías» apuntaba a /productos/arbol, que es OTRA pantalla, y el
+      // árbol de verdad no tenía entrada en ningún sitio.
+      { label: 'Productos por categoría', to: '/productos/arbol', detail: 'Productos agrupados', icon: ListBullets, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
+      { label: 'Árbol de categorías', to: '/productos/categorias', detail: 'Jerarquía de categorías', icon: Tree, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.categorias' },
+      // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
+      // ahora los emite Certifex desde Matrículas → Certificaciones (Diego, 30/09).
     ],
   },
   {
     label: 'Tutores',
+    salvoTipo: ['ia'],
+    icon: ChalkboardTeacher,
     items: [
-      { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
-      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { label: 'Mis cursos', to: '/mis-cursos', icon: GraduationCap, roles: ['tutor'] },
-      { label: 'Sin tutor', to: '/tutores/sin-tutor', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
-      { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
+      { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
+      // «Mis cursos» (sus cursos y su parte) ya no va en el menú (05/11): la tutora trabaja
+      // desde «Mi campus». La pantalla sigue en /mis-cursos para los enlaces de los correos.
+      // #681: sus cursos en Moodle, con lo que tiene por corregir y contestar.
+      { label: 'Mi campus', to: '/mis-cursos/campus', detail: 'Por corregir, dudas y alumnos', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      // Consultas de alumnos (#188): el tutor, su bandeja; administración, todas.
+      { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor', 'tutor_redactor'], module: 'tutores', statusTag: 'Pruebas', permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
+      { label: 'Sin tutor', to: '/tutores/sin-tutor', detail: 'Formaciones sin asignar', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
+      { label: 'Comisiones', to: '/tutores/comisiones', detail: 'Lo que se les debe', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
+    ],
+  },
+  {
+    // EL APARTADO DE LOS PROYECTOS IA.
+    //
+    // Angel: «deberias hacer un apartado especifico para los proyectos IA,
+    // estos no estan muy cargados, por ende la cantidad de apartados son
+    // menores». Un proyecto IA es una suscripcion: quien paga, cuanto entra
+    // y por que se va. No hay embudo, ni equipo, ni catalogo.
+    //
+    // Cuatro entradas y se acabo. El resto del menu se esconde solo, porque
+    // sus secciones no aplican a este tipo.
+    label: 'Proyecto IA',
+    icon: Robot,
+    items: [
+      // Lleva al panel de Contabilidad, que en IA YA trae lo suyo: MRR,
+      // activas, altas, bajas y por que se van, ademas de cobrado, gastos y
+      // balance. Antes eran dos pantallas de resumen del mismo proyecto, que
+      // es como se llega a que digan cifras distintas.
+      { label: 'Resumen', to: '/finanzas', detail: 'Lo que entra y lo que se va', icon: ChartBar, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'accounting.view' },
+      { label: 'Cobros', to: '/finanzas/pagos-stripe', detail: 'Lo que ha entrado', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'stripe.view' },
+      { label: 'Suscriptores', to: '/clientes', detail: 'Quien paga', icon: UserCheck, projectType: 'ia', permiso: 'clients.view' },
+      { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
+      { label: 'Conexión', to: '/finanzas/integraciones', detail: 'Stripe y Supabase', icon: PlugsConnected, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'integrations.view' },
     ],
   },
   {
     label: 'Finanzas',
+    // En IA no: sus doce entradas se resumen en las cinco de «Proyecto IA»,
+    // que estan justo encima. Doce apartados para un proyecto que solo
+    // cobra suscripciones es lo que hacia que no se encontrara ninguno.
+    salvoTipo: ['ia'],
+    icon: Bank,
     items: [
-      { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
-      { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
-      { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
-      { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
-      { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
-      { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
-      { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
-      { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
-      { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
-      { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
+      { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'accounting.view' },
+      { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions', statusTag: 'Pruebas', permiso: 'ventas.view' },
+      { label: 'Ingresos', to: '/finanzas/ingresos', detail: 'Entradas de dinero', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas', permiso: 'conversions.view' },
+      { label: 'Conversiones', to: '/finanzas/conversiones', detail: 'Los que compraron', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas', permiso: 'conversions.view' },
+      { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas', permiso: 'expenses.view' },
+      { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', detail: 'Pendiente de cobro', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'accounting.por_cobrar' },
+      { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', detail: 'Pendiente de pago', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas', permiso: 'accounts_payable.view' },
+      { label: 'Comisiones', salvoTipo: ['ia'], to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas', permiso: 'commissions.view' },
+      { label: 'Nóminas', salvoTipo: ['ia'], to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
+      { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
+      { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'stripe.view' },
+      // Registro automático de cobros (#766): solo en /testeo y en local hasta que
+      // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'PayPal y banco', to: '/finanzas/cobros-externos', detail: 'Cobros de PayPal y extractos', icon: Wallet, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }]
+        : []),
+      { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
+      // Facturas de colaboradores (#202): en evaluación, solo en /testeo y en local.
+      { label: 'Facturas de colaboradores', to: '/finanzas/facturas-colaboradores', detail: 'Las que suben cada mes', icon: Receipt, roles: ['superadmin', 'admin'], permiso: 'facturas_colaborador.ver_todas' },
+      { label: 'Integraciones', to: '/finanzas/integraciones', detail: 'Servicios conectados', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'integrations.view' },
     ],
   },
   {
     label: 'Análisis',
+    icon: ChartPieSlice,
     items: [
-      { label: 'Reportes', to: '/informes', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
-      { label: 'Análisis IA', to: '/informes/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
-      { label: 'Chat IA', to: '/chat-ia', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+      { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports.view' },
+      // Por que no compran: enviados, respondidos y motivos (#170).
+      { label: 'Feedback', to: '/informes/feedback', detail: 'Por qué no compran', icon: ChatCircleText, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'feedback.view' },
+      // Las pantallas de IA del CRM (#30) —Análisis IA, Pregunta a tus datos y
+      // Chat IA— están APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP).
+      // Se encienden las tres juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
+      ...(PANTALLAS_IA
+        ? [
+          // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
+          { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
+          // Preguntarle a los datos (#30): además, solo en pruebas hasta que haya clave y tope (#22).
+          ...(SOLO_EN_PRUEBAS
+            ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+            : []),
+          { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+        ]
+        : []),
     ],
   },
   {
     // Clientes = consulta de datos de clientes (no ventas). Va al final.
     label: 'Clientes',
+    icon: UsersThree,
     items: [
-      { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
-      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
-      { label: 'Buscar duplicados', to: '/prospectos/duplicados', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
-      { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
+      { label: 'Clientes', to: '/clientes', detail: 'Quién ya compró', icon: UserCheck, module: 'clients', permiso: 'clients.view' },
+      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
+      { label: 'Buscar duplicados', to: '/prospectos/duplicados', detail: 'Buscarlos a mano', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
+      { label: 'Matrículas', to: '/clientes/matriculas', detail: 'Altas en cada curso', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
+      // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
+      // enviarlo y revocarlo. Los mismos roles que la API (`soloRoles` admin/superadmin),
+      // y además, para VERLO en solo lectura, quien tenga `diplomas.view` (#384,
+      // `oPermiso`), y para emitir, quien tenga `diplomas.emit` (Diego, 22/10/2026:
+      // «que Dayana pueda emitir»). Se enciende por configuración, como
+      // Certificaciones (VITE_CERTIFEX_PANEL).
+      ...(CERTIFEX_PANEL ? [{ label: 'Diplomas', to: '/clientes/matriculas/diplomas', detail: 'Solicitudes y enviados', icon: Certificate, roles: ['superadmin', 'admin'], permiso: ['diplomas.view', 'diplomas.emit'], oPermiso: ['diplomas.view', 'diplomas.emit'] }] : []),
+    ],
+  },
+  // Conexión (MCP de Claude). Diego: «estará en el menú en la sección de
+  // conexión y pondrás algo como MCP». «Roles únicamente que tendrán acceso a
+  // Claude: super admin, admin, personas que se le puedes colocar».
+  // `accesoMcp` y no `roles`/`permiso`: soporte se salta esos dos, y aquí no
+  // puede. Es la misma regla que el servidor (`puedeUsarMcp` en mcp.acceso.js).
+  //
+  // Y los Conectores (#6), que estaban en Captación. Diego, 29/09: «todo lo que
+  // sea conexión con WordPress y eso pase allí, a la sección de conexión del
+  // menú». Lo que conecta el CRM con fuera, junto.
+  {
+    label: 'Conexión',
+    icon: PlugsConnected,
+    items: [
+      { label: 'MCP', to: '/conexion/mcp', detail: 'Consultar desde Claude', icon: Robot, accesoMcp: true },
+      // #335: los cursos, alumnos y recursos de los Moodle de cada campus.
+      { label: 'Moodle', to: '/conexion/moodle', detail: 'Cursos y alumnos de cada campus', icon: GraduationCap, roles: ['superadmin', 'admin'], permiso: 'moodle.view' },
+      { label: 'Conectores', to: '/conexion/conectores', detail: 'WordPress, tiendas y APIs', icon: CloudArrowDown, roles: ['superadmin', 'admin'], module: 'connectors', permiso: 'connectors.view' },
+      // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
+      // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
+      { label: 'Webhook de transferencias', to: '/conexion/webhook-transferencias', detail: 'Avisar de transferencias y depósitos', icon: Bank, roles: ['superadmin', 'admin'], permiso: 'webhooks_salientes.view' },
+      { label: 'Asignación de leads', to: '/conexion/asignacion-leads', detail: 'A quién va cada formulario', icon: Shuffle, roles: ['superadmin', 'admin'], permiso: 'webhooks_salientes.view' },
     ],
   },
   {
     label: 'Sistema',
+    icon: Gear,
     items: [
-      { label: 'Mensajes', to: '/mensajes', icon: ChatsCircle },
-      { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
-      { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
+      // Lo que trae cada versión del CRM (Diego, 28/09). Para todo el equipo.
+      { label: 'Novedades', to: '/novedades', detail: 'Lo nuevo de cada versión', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' },
+      { label: 'Mensajes', to: '/mensajes', detail: 'Del equipo', icon: ChatsCircle, permiso: 'mensajes.usar' },
+      { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge, permiso: 'change_requests.view' },
+      { label: 'Notificaciones', to: '/notificaciones', detail: 'Lo que ha pasado', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
-      { label: 'Soporte', to: '/soporte', icon: Headset },
-      // Claves y variables (#80). Los mismos roles que exige el servidor con
-      // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
-      // no ofrecerlo.
-      { label: 'Claves y variables', to: '/configuracion/claves', icon: Key, roles: ['superadmin', 'soporte'] },
+      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
+      { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
+      // Claves y variables (#80). Desde CRM#632 (03/11) también el admin, que
+      // ve las de sus campus; guardar y revelar siguen siendo de soporte.
+      { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'admin', 'soporte'], permiso: 'credentials.view' },
       // El registro (#111). Los mismos roles que exige el servidor con
       // `roleGuard('admin', 'superadmin')`: cruza todas las fichas y a todos
-      // los companeros, y ofrecerlo a quien la API va a negar es peor que no
+      // los compañeros, y ofrecerlo a quien la API va a negar es peor que no
       // ofrecerlo.
-      { label: 'Registro', to: '/registro', icon: ClipboardText, roles: ['superadmin', 'admin'] },
-      { label: 'Status', to: '/status', icon: Activity },
-      { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
+      { label: 'Registro', to: '/registro', detail: 'Todo lo que ha pasado', icon: ClipboardText, roles: ['superadmin', 'admin'], permiso: 'registro.view' },
+      // Los correos que salen del CRM (#146). Mismos roles que el Registro, y
+      // aqui pesa mas: esto enseña el TEXTO de correos a personas.
+      { label: 'Correos', to: '/correos', detail: 'Lo que ha mandado el CRM', icon: EnvelopeSimple, roles: ['superadmin', 'admin'], permiso: 'correos.view' },
+      // Lo que enseña pide `status.view` (piezas y correos), `credentials.view` o
+      // `woocommerce.view`: sin ninguno, la pantalla era solo 403 (#631).
+      { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity, permiso: ['status.view', 'credentials.view', 'woocommerce.view'] },
+      { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
     ],
   },
 ];
+
+/**
+ * Cuál de las entradas está encendida. Gana la más concreta (#131).
+ *
+ * `NavLink` sin `end` enciende una entrada en cualquier ruta que cuelgue de la
+ * suya. Como `/captacion` es la de Formularios y Conectores vive en
+ * `/captacion/conectores`, al abrir Conectores el menú marcaba **Formularios**.
+ * Pasaba igual en todo el Catálogo: estando en WooCommerce —`/productos/
+ * woocommerce`— se encendía «Productos».
+ *
+ * Y no es un detalle de pintura: el #131 va de que cinco entradas parecidas no
+ * se distinguen. Que el menú señale la equivocada es la misma confusión, pero
+ * afirmada por el propio CRM.
+ *
+ * No vale con exigir coincidencia exacta: la ficha de un producto vive en
+ * `/productos/123`, no está en el menú, y ahí «Productos» SÍ tiene que
+ * encenderse. La regla es la de siempre en un menú: coincide la que encaja, y
+ * si encajan varias, gana la más larga.
+ */
+const RUTAS_DEL_MENU = NAV_SECTIONS.flatMap((s) =>
+  s.items.flatMap((it) => [it.to, ...(it.children || []).map((c) => c.to)]),
+).filter(Boolean);
+
+const encaja = (camino, ruta) => camino === ruta || camino.startsWith(`${ruta}/`);
+
+/**
+ * ¿Hay en el menú otra entrada más concreta que también encaje aquí?
+ *
+ * Se le pasa a `NavLink` como `end`, en vez de decidir el encendido por fuera:
+ * así el `aria-current="page"` que pone el router coincide con lo que se ve.
+ * Pintar una cosa y anunciar otra es peor que no pintar nada.
+ */
+export function hayRutaMasConcreta(camino, ruta, rutas = RUTAS_DEL_MENU) {
+  // «Más concreta QUE ESTA» solo significa algo si esta encaja. Sin esta línea
+  // devolvía true para una entrada que no pinta nada en la ruta actual: da
+  // igual para el `end` —esa entrada no se enciende de ninguna manera— pero
+  // hace que la función mienta, y alguien la va a leer para otra cosa.
+  if (!ruta || !encaja(camino, ruta)) return false;
+  return rutas.some((otra) => otra.length > ruta.length && encaja(camino, otra));
+}
 
 // CRM-217: catálogo de labels personalizables del sidebar para el editor de
 // "Etiquetas sidebar" en ProjectSettingsDialog. Cada label original sirve de
@@ -265,24 +505,181 @@ export function applyLabel(original, overrides) {
 // aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
 // que si y el otro que no.
 
-function canSeeItem(item, role, modules, projectType, soloColaboraciones, permisos) {
+// «Usar el MCP» del catálogo (#423), como el servidor (`puedeUsarMcp`).
+export function tieneAccesoMcp(can) {
+  return typeof can === 'function' && can('mcp.usar') === true;
+}
+
+/**
+ * Que entradas del menu ve alguien.
+ *
+ * Recibe TODOS sus roles, no uno: desde que se puede tener mas de uno, «es
+ * gestor» dejo de ser una pregunta de igualdad. Quien es gestora y ademas
+ * tutora ve lo de las dos.
+ *
+ * `can` es el de usePermission: lo usa `oPermiso`, una entrada que se ve por
+ * su rol O por un permiso del sistema de Roles (Diplomas, #384).
+ */
+/**
+ * El `permiso` de una entrada del menú puede ser dos cosas distintas.
+ *
+ * - Una clave del sistema de Roles, con punto: `tasks.close`, `tasks.manage`.
+ *   Esa la contesta `can`.
+ * - Una casilla de la propia persona, sin punto (antes, la de facturar). Esa NO
+ *   está en el mapa de Roles, así que `can` da siempre false; la mira
+ *   `canSeeItem` en el usuario.
+ *
+ * Desde el 07/10 (#210) las dos pasaban por `can` y la entrada «Facturación»
+ * dejó de salirle a TODA gestora que factura: Yolanda (ICTESS), Ana, Dayana…
+ * Diego, 23/10: «a Yolanda no le salen las funciones de facturación». En ISEIE
+ * no pasaba: allí solo se le pregunta a `can` por las de `tasks.`.
+ *
+ * Con #423 la casilla de facturar es una excepción de la persona
+ * (`facturas.emitir`, migración 222) y la entrada pide esa clave: ya pasa por
+ * `can`. Esto se queda para que una entrada sin punto no vuelva a esconderse.
+ */
+export function pasaPermisoDeRoles(item, can) {
+  if (!item?.permiso) return true;
+  // `permiso` puede ser una lista: basta con una.
+  return [].concat(item.permiso).some((p) => !String(p).includes('.') || (typeof can === 'function' && can(p) === true));
+}
+
+/**
+ * ¿Puede abrir esta pantalla, por la dirección? (#631)
+ *
+ * El menú ya esconde lo que no se puede usar cuando la entrada declara su
+ * `permiso`, pero escribiendo la dirección la pantalla se abría igual y luego
+ * llegaba el 403. Esta es la misma regla, para la ruta: todas las entradas del
+ * menú que llevan a ella (Clientes sale dos veces); si alguna pide `permiso` y
+ * ninguna lo cumple, está cerrada. Solo el permiso, nunca el rol (#423): los
+ * `roles` de cada entrada dicen a quién se le enseña de serie, no quién entra.
+ * Lo que no está en el menú (fichas de detalle…) no se toca.
+ */
+const SIN_ENTRADA = {
+  // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
+  '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+  // La pestaña Tutores de Consultas: la del panel de tutores en el servidor
+  // (`/api/consultas/tutores-panel`). Escrita a mano por una tutora decía «No
+  // hay tutores aquí» en vez de que no tiene acceso (#188).
+  '/consultas/tutores': 'consultas.view',
+};
+
+export function rutaPermitida(pathname, can) {
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const suyas = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta) suyas.push(it);
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  // Rutas sin entrada propia en el menú: su permiso, aquí.
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length) return true;
+  return suyas.some((it) => !it.permiso || pasaPermisoDeRoles(it, can)
+    || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true)));
+}
+
+/**
+ * La clave del permiso que le falta para abrir esta pantalla (CRM#820), para
+ * que «No tienes acceso» ofrezca pedir ESE. Con la misma regla que
+ * `rutaPermitida`: la primera clave del catálogo que pide su entrada del menú y
+ * no tiene. `null` si la puede abrir o no se sabe cuál es.
+ */
+export function permisoQueFalta(pathname, can) {
+  if (rutaPermitida(pathname, can)) return null;
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const claves = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta && it.permiso) claves.push(...[].concat(it.permiso));
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
+}
+
+export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {
+  const suyos = Array.isArray(roles) ? roles.filter(Boolean) : [roles].filter(Boolean);
+  const es = (...r) => r.some((x) => suyos.includes(x));
+  // «Por su rol o porque se le ha dado»: quien tiene el permiso la ve aunque su
+  // rol no esté en `roles`. Lo que ve dentro lo recorta la pantalla (y la API).
+  // `oPermiso` puede ser una lista: basta con uno (Diplomas: ver O emitir).
+  const porPermiso = Boolean(item.oPermiso && typeof can === 'function'
+    && [].concat(item.oPermiso).some((p) => can(p) === true));
   if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
+  // El permiso de la pantalla (#423): sin él no sale, sea quien sea. Es el mismo
+  // mapa que mira el servidor; quitarle a alguien «Ver prospectos» le quita
+  // también la entrada. Los `roles` de cada entrada siguen diciendo a quién se
+  // le enseña de serie.
+  // `permiso` también puede ser una lista: basta con uno (Diplomas: ver O emitir).
+  const tienePermisoDeLaPantalla = !item.permiso || (typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true));
+  if (!tienePermisoDeLaPantalla) return false;
+  // Y al reves: lo que en un tipo de proyecto NO EXISTE.
+  //
+  // Un proyecto IA no tiene tutores, ni comisiones, ni nominas, ni campañas
+  // ni catalogo de veinte cursos: tiene suscriptores y cobros. Enseñarle ocho
+  // apartados vacios es lo que hace que no encuentre los dos que si tienen
+  // algo. Angel, mirando Tarot: «estos no estan muy cargados, por ende la
+  // cantidad de apartados son menores».
+  if (Array.isArray(item.salvoTipo) && item.salvoTipo.includes(projectType)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
-  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // El recorte del tutor es para quien es SOLO tutor. Con otro rol encima ya
+  // no se le esconde el CRM: se le suma lo suyo.
+  if (suyos.length === 1 && suyos[0] === 'tutor') {
+    return Array.isArray(item.roles) && item.roles.includes('tutor');
+  }
+  // Lo mismo para quien es SOLO colaborador (#210, fase 5): Tareas y sus
+  // preferencias. El servidor le responde 403 en todo lo demas.
+  if (suyos.length > 0 && suyos.every((r) => r === 'colaborador')) {
+    // Lo que no es de su rol, solo si se le ha dado a propósito para él (Meta
+    // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
+    if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
+    return Array.isArray(item.roles) && item.roles.includes('colaborador');
+  }
+  // Y para quien es SOLO tutor redactor (CRM#708): su tablero, su factura, sus
+  // consultas y sus cursos. El servidor le responde 403 en todo lo demas.
+  if (suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor')) {
+    return Array.isArray(item.roles) && item.roles.includes('tutor_redactor');
+  }
+  // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
+  // Va ANTES del atajo de soporte: «roles únicamente», dijo Diego.
+  if (item.accesoMcp) return tieneAccesoMcp(can);
   // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
+    // «Sin tutor» faltaba, y era un olvido de la lista, no una decisión: el
+    // servidor ya la dejaba entrar —`formacionesSinTutor` pasa por
+    // `exigirGestion`, que acepta la casilla de colaboraciones— y era la
+    // pantalla la que se la escondía. Y es justo la que dice qué formaciones
+    // están sin cubrir, o sea el trabajo de quien lleva las colaboraciones.
+    //
+    // Van las TRES del apartado. «Mis cursos» no: esa es la de un tutor
+    // mirando lo suyo, no la de quien los organiza.
+    // Y lo que se le haya dado a propósito (`oPermiso`, #384).
+    return ['/tutores', '/tutores/sin-tutor', '/tutores/comisiones', '/preferencias']
+      .includes(item.to) || porPermiso;
   }
 
   // soporte ve todo (rol generico tipo dev)
-  if (role === 'soporte' || role === 'superadmin') {
+  if (es('soporte', 'superadmin')) {
+    if (item.module && modules && modules[item.module] === false) return false;
+    return true;
+  }
+  // El project manager ve todo (Diego, 04/11): cada pantalla cuyo permiso tiene,
+  // aunque su rol no esté en `roles` (que dicen a quién se le enseña de serie).
+  // Lo que no pide permiso sigue la regla de siempre. Lo que ve dentro, de sus
+  // campus: lo recorta el servidor.
+  if (es('project_manager') && item.permiso && !item.comingSoon) {
     if (item.module && modules && modules[item.module] === false) return false;
     return true;
   }
@@ -295,21 +692,76 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   //
   // Se comprueba solo para gestor: un admin puede facturar por su rol, y a
   // soporte y superadmin se les ha dejado pasar justo arriba.
-  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
-  if (item.roles && !item.roles.includes(role)) return false;
+  // Se comprueba a quien NO tiene un rol de mando: si ademas es admin, puede
+  // por ese otro rol y esconderselo seria quitarle lo que se le acaba de dar.
+  if (item.roles && !item.roles.some((r) => suyos.includes(r)) && !porPermiso) return false;
   if (item.module && modules && modules[item.module] === false) return false;
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+/** Vanessa y quien lleve las colaboraciones: solo tutores. Un admin con la casilla NO se recorta. */
+export function esSoloColaboraciones(user) {
+  return user?.gestor_colaboraciones === true
+    && !['superadmin', 'admin', 'soporte'].includes(user?.role);
+}
+
+/**
+ * Las entradas de una sección que ve alguien (#423: sacado del componente para
+ * poder probar qué menú ve cada perfil sin montarlo). Los hijos de un grupo se
+ * filtran luego en `NavGroup`, con `canSeeItem`.
+ */
+export function entradasDeSeccion(section, { user, can, modules, projectType, soloColab }) {
+  return section.items
+    .filter((item) => !item.permiso || [].concat(item.permiso).some((p) => pasaPermisoDeRoles({ permiso: p }, can)))
+    .filter((item) => canSeeItem(item, rolesDe(user), modules, projectType, soloColab, user, can));
+}
+
+/**
+ * Una entrada del menú que todavía no lleva a ninguna parte (#226).
+ *
+ * Diego, 10/10: lo que no existe, «Próximamente» y sin enlace. Es un <div> y
+ * no un enlace: no navega, el tabulador no se para en ella y no hay forma de
+ * acabar en «Página no encontrada». La etiqueta dice siempre «Próximamente»:
+ * antes salía «Próx.» o el `statusTag` —«Pruebas»—, y «Pruebas» es otra cosa,
+ * esa SÍ se abre.
+ *
+ * El mismo aspecto que en CRM-ISEIE. `compacta` es la de dentro de un grupo,
+ * que va sin icono y en letra más pequeña, como sus hermanas.
+ */
+export function EntradaProximamente({ label, icon: Icon, collapsed = false, compacta = false }) {
+  return (
+    <div
+      aria-disabled="true"
+      data-proximamente=""
+      title={`${label} — Próximamente`}
+      aria-label={`${label} — Próximamente`}
+      className={cn(
+        'relative flex items-center text-muted-foreground/50 cursor-not-allowed select-none',
+        compacta ? 'gap-2 px-3 py-1.5 rounded-lg text-[12px]' : 'rounded-md text-[13px]',
+        !compacta && (collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5'),
+      )}
+    >
+      {!compacta && Icon && <Icon size={18} weight="regular" />}
+      {!collapsed && (
+        <>
+          <span className="truncate">{label}</span>
+          <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, projectType, soloColab, permisos, can, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
-    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
-    .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
+    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos, can))  // `role` ya llega como lista
+    // Lo marcado en el propio menú cuenta, no solo la lista de la beta (#226).
+    .map((c) => ({ ...c, comingSoon: c.comingSoon || !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
-  const [open, setOpen] = useState(hasActiveChild);
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
   // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
   // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
   // quedaria escondido. Cerrarlo a mano se respeta.
@@ -327,7 +779,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
         title={displayLabel}
         aria-label={displayLabel}
         className={cn(
-          'w-full flex items-center justify-center h-10 rounded-md transition-colors',
+          'w-full flex items-center justify-center h-9 rounded-md transition-colors',
           hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -341,7 +793,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
+          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-all',
           hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -353,19 +805,16 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
         <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
           {visible.map((child) => (
             child.comingSoon ? (
-              <div
-                key={child.to}
-                title={child.statusTag ? `${applyLabel(child.label, labelOverrides)} — ${child.statusTag}` : 'Próximamente'}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground/50 cursor-not-allowed select-none"
-              >
-                <span className="truncate">{applyLabel(child.label, labelOverrides)}</span>
-                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">{child.statusTag || 'Próximamente'}</span>
-              </div>
+              <EntradaProximamente key={child.to} label={applyLabel(child.label, labelOverrides)} compacta />
             ) : (
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.to === '/accounting'}
+                // El `end` explicito del menu manda —lo lleva «Lista de
+                // prospectos»—; donde no lo hay, se deduce. Ver
+                // `hayRutaMasConcreta`: es lo que impedia que Conectores se
+                // encendiera al abrirlo.
+                end={child.end ?? (child.to === '/accounting' || hayRutaMasConcreta(location.pathname, child.to))}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
@@ -411,7 +860,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
         aria-label={collapsed ? panel.label : panel.label}
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
         )}
       >
         <Icon size={18} weight="regular" />
@@ -434,7 +883,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
           isActive
             ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -454,29 +903,29 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
   );
 }
 
-function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, collapsed, featured }) {
+/**
+ * Los subtitulos del menu, de momento solo en /testeo.
+ *
+ * Diego, 14/09: «cambiaste todo de las interfaces, eso se queda en testeo».
+ * Tenia razon: el despliegue de hoy metio 13 subtitulos nuevos en produccion
+ * sin que nadie los hubiera aprobado, y el menu es lo primero que ve todo el
+ * equipo cada mañana. Un cambio asi se enseña antes, no se cuela dentro de un
+ * despliegue que iba de facturacion.
+ *
+ * No se BORRAN --son de Fabian y estan bien--: se quedan visibles en testeo
+ * hasta que Diego los vea y diga. Quitar la bandera es una linea.
+ */
+const MOSTRAR_SUBTITULOS = import.meta.env.MODE !== 'production';
+
+// Exportada para la prueba del menú (#226): una entrada marcada no puede ser un enlace.
+export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, onClick, collapsed, featured, comingSoon: marcadaProximamente }) {
   const displayLabel = applyLabel(label, labelOverrides);
   const location = useLocation();
-  const comingSoon = !href && !isBetaAllowed(to);
+  // La marca del propio menú (`comingSoon: true`) o la lista de la beta. Antes
+  // solo contaba la beta, y Google Ads, marcada, seguía siendo un enlace (#226).
+  const comingSoon = !href && (marcadaProximamente || !isBetaAllowed(to));
   if (comingSoon) {
-    return (
-      <div
-        title={`${displayLabel} — Próximamente`}
-        aria-label={`${displayLabel} — Próximamente`}
-        className={cn(
-          'relative flex items-center rounded-md text-[13px] text-muted-foreground/50 cursor-not-allowed select-none',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
-        )}
-      >
-        <Icon size={18} weight="regular" />
-        {!collapsed && (
-          <>
-            <span className="truncate">{displayLabel}</span>
-            <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
-          </>
-        )}
-      </div>
-    );
+    return <EntradaProximamente label={displayLabel} icon={Icon} collapsed={collapsed} />;
   }
   if (href) {
     const hrefPath = href.replace(/\/$/, '');
@@ -488,14 +937,16 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
     return (
       <a
         href={href}
+        target={href.startsWith('http') ? '_blank' : undefined}
+        rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
         onClick={onClick}
         title={collapsed ? displayLabel : undefined}
         aria-label={collapsed ? displayLabel : undefined}
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -519,7 +970,17 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
             </span>
           )}
         </span>
-        {!collapsed && displayLabel}
+        {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{displayLabel}</span>
+            {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
+                de una pantalla no dice si es la que buscas —«Captacion» puede
+                ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
+            {MOSTRAR_SUBTITULOS && detail && (
+              <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
+            )}
+          </span>
+        )}
         {!collapsed && badge && (
           <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
             {badge}
@@ -531,7 +992,9 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      // Exacta solo cuando otra entrada del menú cubre esta ruta mejor. Ver
+      // `hayRutaMasConcreta`: es lo que impedía que Conectores se encendiera.
+      end={to === '/' || hayRutaMasConcreta(location.pathname, to)}
       onClick={onClick}
       title={collapsed ? displayLabel : undefined}
       aria-label={collapsed ? displayLabel : undefined}
@@ -539,8 +1002,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -567,7 +1030,17 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
               </span>
             )}
           </span>
-          {!collapsed && displayLabel}
+          {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{displayLabel}</span>
+            {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
+                de una pantalla no dice si es la que buscas —«Captacion» puede
+                ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
+            {MOSTRAR_SUBTITULOS && detail && (
+              <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
+            )}
+          </span>
+        )}
           {!collapsed && badge && (
             <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
               {badge}
@@ -579,123 +1052,29 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
   );
 }
 
-// Las iniciales con las que se reconoce una marca sin logo.
-//
-// Casi todas empiezan por «IS» —ISECD, ISEF, ISSLOGG, ISAEG, ISEIH—, asi que
-// coger las dos primeras letras las deja a todas igual: «IS, IS, IS». Se quita
-// ese prefijo comun y se cogen las dos siguientes: EC, EF, SL, AE, EI. Cada una
-// distinta, y siguen siendo su nombre.
-function inicialesDe(nombre = '') {
-  const limpio = String(nombre).trim();
-  if (!limpio) return '··';
-  const palabras = limpio.split(/\s+/).filter(Boolean);
-  if (palabras.length > 1) {
-    return (palabras[0][0] + palabras[1][0]).toUpperCase();
-  }
-  const sola = palabras[0].toUpperCase();
-  const sinPrefijo = sola.length > 4 && sola.startsWith('IS') ? sola.slice(2) : sola;
-  return sinPrefijo.slice(0, 2);
-}
-
-// El color sale del propio nombre, siempre el mismo para la misma marca. Asi
-// ISECD es verde hoy y verde mañana: la memoria visual funciona porque el color
-// no cambia, no porque sea bonito.
-const TONOS = [
-  'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
-  'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
-  'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
-];
-function tonoDe(nombre = '') {
-  let n = 0;
-  for (const ch of String(nombre)) n = (n * 31 + ch.charCodeAt(0)) % 9973;
-  return TONOS[n % TONOS.length];
-}
-
-function ProjectAvatar({ project, size = 'md' }) {
-  const { theme } = useTheme();
-  const [falloImagen, setFalloImagen] = useState(false);
-  const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
-
-  // «Todos los proyectos» va primero: no es una marca, es una vista.
-  if (project?.isAll) {
-    return (
-      <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
-        ALL
-      </div>
-    );
-  }
-
-  const externo = project?.logo_url && /^https?:\/\//i.test(project.logo_url);
-  const src = project?.logo_url
-    ? (externo
-        ? project.logo_url
-        : `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${project.id}/logo`)
-    : getLocalLogo(project?.slug, theme);
-
-  if (src && !falloImagen) {
-    return (
-      // Fondo claro SIEMPRE, tambien en modo oscuro: estos logos vienen de las
-      // webs y muchos son de tinta oscura sobre transparente. Sin el fondo
-      // desaparecen en el panel oscuro y queda un cuadro vacio.
-      <span className={`${dim} rounded-lg bg-white ring-1 ring-black/5 dark:ring-white/10 flex items-center justify-center overflow-hidden flex-shrink-0`}>
-        <img
-          src={src}
-          alt=""
-          width={24}
-          height={24}
-          loading="lazy"
-          decoding="async"
-          className="w-full h-full object-contain p-[3px]"
-          // Si el logo no carga —una web caida, una direccion cambiada— se
-          // enseñan las iniciales. Antes se escondia la imagen y quedaba un
-          // hueco, que parece que la pantalla esta rota.
-          onError={() => setFalloImagen(true)}
-        />
-      </span>
-    );
-  }
-
-  if (project?.emoji) {
-    return (
-      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 ${size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-lg'}`}>
-        {project.emoji}
-      </div>
-    );
-  }
-
-  // Sin logo y sin emoji: iniciales con su color. Antes las tres marcas sin
-  // logo compartian el mismo icono de cajita y no habia forma de distinguirlas
-  // de un vistazo, que es justo para lo que sirve un icono.
-  return (
-    <div
-      className={`${dim} rounded-lg ${tonoDe(project?.nombre)} flex items-center justify-center flex-shrink-0 font-bold ${size === 'lg' ? 'text-base' : size === 'sm' ? 'text-[10px]' : 'text-[11px]'} tracking-tight`}
-      title={project?.nombre || ''}
-    >
-      {inicialesDe(project?.nombre)}
-    </div>
-  );
-}
 
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { activeProject, switchProject, projects } = useProjectContext();
+  const { activeProject, switchProject, projects, activeIssuer, switchIssuer } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerPos, setPickerPos] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuPos, setUserMenuPos] = useState(null);
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
   const [dockHidden, setDockHidden] = useState(() => isFloatingDockHidden());
   const [newLeadsBadge, setNewLeadsBadge] = useState(0);
+  // Los campus de «Todos» o de la empresa de arriba, para el contador (#218).
+  const idsDelAmbito = useIdsDelAmbito();
+  const idsDelAmbitoCsv = idsDelAmbito.join(',');
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
   const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
+  const { can } = usePermission();
+  // Para los contadores: un sí o un no, no la función `can`, que es nueva en
+  // cada render y, en las dependencias de un efecto, lo relanzaría sin parar.
+  const veProspectosNuevos = can('leads.view');
+  const veReportesDeSpam = can('leads.spam');
+  const usaMensajes = can('mensajes.usar');
 
   // Estado de secciones colapsadas (Captación, Catálogo, Finanzas, etc.).
   // Persistido en localStorage. Por defecto, abierto: Principal + la sección
@@ -773,51 +1152,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       duration: 6000,
     });
   }
-  const pickerRef = useRef(null);
-  const pickerBtnRef = useRef(null);
-  const pickerPopRef = useRef(null);
   const userBtnRef = useRef(null);
   const userMenuRef = useRef(null);
 
-  useEffect(() => {
-    if (!pickerOpen) return;
-    function compute() {
-      const btn = pickerBtnRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const margin = 8;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const width = Math.max(rect.width, 220);
-      const maxH = Math.min(320, vh - rect.bottom - margin * 2);
-      let left = rect.left;
-      if (left + width + margin > vw) left = vw - width - margin;
-      if (left < margin) left = margin;
-      // Si no hay espacio abajo, abrir hacia arriba
-      let top = rect.bottom + 6;
-      if (top + maxH + margin > vh && rect.top > maxH) {
-        top = rect.top - 6 - maxH;
-      }
-      setPickerPos({ top, left, width, maxHeight: maxH });
-    }
-    compute();
-    function onDocClick(e) {
-      if (pickerBtnRef.current?.contains(e.target)) return;
-      if (pickerPopRef.current?.contains(e.target)) return;
-      setPickerOpen(false);
-    }
-    function onKey(e) { if (e.key === 'Escape') setPickerOpen(false); }
-    window.addEventListener('resize', compute);
-    window.addEventListener('scroll', compute, true);
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('resize', compute);
-      window.removeEventListener('scroll', compute, true);
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [pickerOpen]);
 
   // User menu: posicionamiento + click fuera
   useEffect(() => {
@@ -853,14 +1190,23 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   useEffect(() => { setUserMenuOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    if (!activeProject?.id) return;
+    // El tutor tampoco: no ve prospectos y el servidor se los niega (#187). Y quien
+    // no tiene «Ver prospectos», tampoco: el servidor se lo niega (#631).
+    if (!activeProject?.id || !veProspectosNuevos || soloEsColaborador(user) || soloEsTutor(user)) return;
     let cancelled = false;
     let interval = null;
 
     async function fetchBadge() {
       if (typeof document !== 'undefined' && document.hidden) return;
       try {
-        const res = await client.get(`/leads?projectId=${activeProject.id}&status=nuevo&limit=1`);
+        // -1 = «Todos» o una empresa: cuenta los nuevos de sus campus. Sin
+        // campus el servidor lo rechaza (`projectId o projectIds requerido`),
+        // y así fallaba con 400 cada 5 minutos (#218, /testeo 05/11).
+        const ambito = activeProject.id > 0
+          ? `projectId=${activeProject.id}&`
+          : (idsDelAmbitoCsv ? `projectIds=${idsDelAmbitoCsv}&` : null);
+        if (ambito === null) return;
+        const res = await client.get(`/leads?${ambito}status=nuevo&limit=1`);
         if (!cancelled && res.success) setNewLeadsBadge(res.pagination?.total || 0);
       } catch {}
     }
@@ -889,11 +1235,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         document.removeEventListener('visibilitychange', onVisibilityChange);
       }
     };
-  }, [activeProject?.id]);
+  }, [activeProject?.id, user, veProspectosNuevos, idsDelAmbitoCsv]);
 
-  // Badge de reportes de spam pendientes — solo superadmin
+  // Badge de reportes de spam pendientes: quien puede verlos (`leads.spam`), por
+  // permiso y no por rol (#423, #631).
   useEffect(() => {
-    if (user?.role !== 'superadmin') return;
+    if (!veReportesDeSpam) return;
     let cancelled = false;
     async function fetchSpamCount() {
       try {
@@ -904,10 +1251,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     fetchSpamCount();
     const interval = setInterval(fetchSpamCount, 60000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user?.role]);
+  }, [veReportesDeSpam]);
 
-  // Badge de mensajes no leidos
+  // Badge de mensajes no leidos: solo a quien puede usar Mensajes. A quien se lo
+  // han quitado (la tutora de prueba de /testeo) el servidor le daba un 403 en
+  // cada página (#188).
   useEffect(() => {
+    if (soloEsColaborador(user) || !usaMensajes) return;
     let cancelled = false;
     async function fetchMsgCount() {
       try {
@@ -918,19 +1268,18 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     fetchMsgCount();
     const interval = setInterval(fetchMsgCount, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  }, [user, usaMensajes]);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   // Vanessa y quien lleve las colaboraciones: solo tutores, nada mas.
   // Un admin con la casilla NO se recorta: ya lo ve todo por su rol.
-  const soloColab = user?.gestor_colaboraciones === true
-    && !['superadmin', 'admin', 'soporte'].includes(user?.role);
+  const soloColab = esSoloColaboraciones(user);
 
   // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
   // que es dar de alta profesores y ajustarles el porcentaje.
   const rolLabel = user?.gestor_colaboraciones
     ? 'Colaboraciones'
-    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '');
+    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' }[user?.role] || '');
 
   async function handleLogout() {
     await logout();
@@ -953,7 +1302,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           entero. */}
       <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
         <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
-          {activeProject && activeProject.id !== -1 ? (
+          {/* Con una EMPRESA elegida, la marca de la empresa (11/11): su logo o
+              su nombre corto. Antes caía en el primer campus (Fono Aprende). */}
+          {activeIssuer ? (
+            <EmpresaAvatar empresa={activeIssuer} size={collapsed ? 'md' : 'lg'} />
+          ) : activeProject && activeProject.id !== -1 ? (
             <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
           ) : (
             <div className={cn(
@@ -979,148 +1332,39 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         {!collapsed && (
           <div className="mt-2 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
+              <span className="font-semibold text-sm text-foreground truncate">{MARCA}</span>
               {BETA_MODE && (
-                <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
-                  BETA {BETA_VERSION}
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
+                  BETA{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
                 </span>
               )}
             </div>
-            {/* La marca, ya con toda la anchura para ella: aqui si cabe entera. */}
-            <span className="block text-[11px] text-muted-foreground truncate">
-              {activeProject?.id === -1
-                ? 'todas las marcas'
-                : (activeProject?.nombre || 'sin marca elegida')}
-            </span>
+            {/* Aqui salia el nombre de la marca. Se ha quitado: salia TRES veces
+                en la misma pantalla —aqui, en el selector de abajo y en la
+                cabecera— y con eso no se sabe cual manda (#79, punto 2). Ahora
+                vive solo en la cabecera, y ademas desde alli se cambia. */}
           </div>
         )}
       </div>
 
-      {/* Project Selector */}
-      <div className={cn('mb-6', collapsed ? 'px-0' : 'px-1')}>
-        {!collapsed && (
-          <label className="text-xs font-medium text-muted-foreground px-2 mb-1.5 block">
-            Proyecto
-          </label>
-        )}
-        <div className={cn('flex items-center', collapsed ? 'flex-col gap-1.5' : 'gap-2')}>
-          <div className={cn('relative', collapsed ? 'w-full' : 'flex-1')} ref={pickerRef}>
-            <button
-              type="button"
-              ref={pickerBtnRef}
-              onClick={() => setPickerOpen((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={pickerOpen}
-              aria-label="Selector de proyecto"
-              title={collapsed ? activeProject?.nombre : undefined}
-              className={cn(
-                'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
-                collapsed
-                  ? 'w-full h-10 justify-center'
-                  : 'w-full h-9 pl-1 pr-8 gap-2'
-              )}
-            >
-              <ProjectAvatar project={activeProject} size="sm" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 truncate text-left">{activeProject?.nombre || 'Selecciona proyecto'}</span>
-                  <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                </>
-              )}
-            </button>
-            {pickerOpen && pickerPos && (
-              <Portal>
-                <ul
-                  ref={pickerPopRef}
-                  role="listbox"
-                  aria-label="Lista de proyectos"
-                  style={{
-                    position: 'fixed',
-                    top: pickerPos.top,
-                    left: pickerPos.left,
-                    width: pickerPos.width,
-                    maxHeight: pickerPos.maxHeight,
-                  }}
-                  className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-2xl py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
-                >
-                  {(() => {
-                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al
-                    // final) y, dentro de cada una, por antiguedad.
-                    //
-                    // Antes iba por orden alfabetico y eso mezclaba las marcas
-                    // con las que se trabaja todos los dias con las que aun no
-                    // tienen ni web: ISEIH quedaba la quinta, detras de ISAEG,
-                    // ISECD e ISEF. Por antiguedad, lo que mas se usa queda
-                    // arriba, que es donde se busca sin leer.
-                    const sorted = [...projects].sort((a, b) => {
-                      const sA = a.sociedad_nombre || 'zzz';
-                      const sB = b.sociedad_nombre || 'zzz';
-                      if (sA !== sB) return sA.localeCompare(sB, 'es');
-                      return (a.id || 0) - (b.id || 0);
-                    });
-                    const allEntry = projects.length > 1 ? (
-                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
-                        <button
-                          type="button"
-                          onClick={() => { switchProject(-1); setPickerOpen(false); }}
-                          className={cn(
-                            'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
-                            activeProject?.id === -1 && 'bg-secondary font-semibold'
-                          )}
-                        >
-                          <ProjectAvatar project={{ isAll: true }} size="sm" />
-                          <span className="flex-1 truncate">Todos los proyectos</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-bold">vista global</span>
-                        </button>
-                      </li>
-                    ) : null;
-                    let lastSoc = undefined;
-                    const items = sorted.map((p) => {
-                      const isActive = p.id === activeProject?.id;
-                      const soc = p.sociedad_nombre || null;
-                      const showHeader = soc !== lastSoc;
-                      lastSoc = soc;
-                      return (
-                        <div key={p.id}>
-                          {showHeader && (
-                            <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
-                              {soc || 'Sin sociedad'}
-                            </div>
-                          )}
-                          <li role="option" aria-selected={isActive}>
-                            <button
-                              type="button"
-                              onClick={() => { switchProject(Number(p.id)); setPickerOpen(false); }}
-                              className={cn(
-                                'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors',
-                                isActive && 'bg-secondary font-semibold'
-                              )}
-                            >
-                              <ProjectAvatar project={p} size="sm" />
-                              <span className="flex-1 truncate">{p.nombre}</span>
-                            </button>
-                          </li>
-                        </div>
-                      );
-                    });
-                    return <>{allEntry}{items}</>;
-                  })()}
-                </ul>
-              </Portal>
-            )}
-          </div>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
-            <button
-              onClick={() => setConfigOpen(true)}
-              className="w-9 h-9 rounded-lg border border-border bg-secondary hover:bg-muted flex items-center justify-center flex-shrink-0 transition-colors"
-              title={`Configurar ${activeProject.nombre}`}
-              aria-label="Configurar proyecto activo"
-            >
-              <Gear size={14} weight="bold" className="text-muted-foreground" />
-            </button>
-          )}
+      {/* Aqui vivia el selector de proyecto. Se ha ido a la cabecera (#79,
+          punto 2): el nombre de la marca salia tres veces en la misma pantalla
+          y para cambiarla habia que bajar hasta aqui. El engranaje de
+          configurar la marca se queda, pero suelto: es cosa de administradores
+          y no hace falta tenerlo al lado del selector. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
+        <div className="mb-6 px-1">
+          <button
+            onClick={() => setConfigOpen(true)}
+            className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-secondary px-2 text-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title={`Configurar ${activeProject.nombre}`}
+            aria-label="Configurar proyecto activo"
+          >
+            <Gear size={14} weight="bold" />
+            Configurar esta marca
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Buscador (oculto en collapsed; sigue accesible via Ctrl+K) */}
       {!collapsed && (
@@ -1152,24 +1396,36 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       {/* Navigation */}
       <nav className={cn(
         'flex-1 overflow-y-auto min-h-0 sidebar-scroll',
-        collapsed ? 'space-y-2 -mr-1 pr-1' : 'space-y-4 -mr-2 pr-2'
+        collapsed ? 'space-y-1.5 -mr-1 pr-1' : 'space-y-3 -mr-2 pr-2'
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, user));
+          // Una seccion entera puede no aplicar a un tipo de proyecto (en IA no hay
+          // campañas, ni catalogo, ni tutores).
+          const seccionAplica = !(Array.isArray(section.salvoTipo)
+            && section.salvoTipo.includes(tipoDelMenu(activeProject?.type)));
+          const visibleItems = seccionAplica
+            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type), soloColab })
+            : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
+          // El icono del encabezado (#105). Mismo tamano y peso que los de las
+          // entradas —18 y `regular`—: la idea es que ordenen, no que compitan.
+          const SectionIcon = section.icon;
           const renderItems = () => visibleItems.map((item) =>
             item.children ? (
               <NavGroup
                 key={item.label}
                 {...item}
-                role={user?.role}
+                // Todos sus roles, no solo el principal: desde que se puede
+                // tener mas de uno, el menu tiene que sumar lo de cada uno.
+                role={rolesDe(user)}
                 modules={activeProject?.modules}
-                projectType={activeProject?.type}
+                projectType={tipoDelMenu(activeProject?.type)}
                 soloColab={soloColab}
                 permisos={user}
+                can={can}
                 labelOverrides={activeProject?.sidebar_labels}
                 onNavigate={onNavigate}
                 collapsed={collapsed}
@@ -1196,7 +1452,19 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           if (collapsed) {
             return (
               <div key={section.label} className="space-y-1">
-                {sIdx > 0 && <div className="mx-2 my-1.5 border-t border-border" aria-hidden="true" />}
+                {sIdx > 0 && <div className="mx-2 mt-2 border-t border-border" aria-hidden="true" />}
+                {/* Plegado solo habia una raya: se veia que empezaba otra cosa,
+                    pero no cual. El icono lo dice, y al pasar por encima da el
+                    nombre. No es pulsable: una seccion no lleva a ningun sitio,
+                    y fingirlo aqui seria peor que no ponerlo. */}
+                {SectionIcon && (
+                  <div
+                    className="flex h-6 items-center justify-center text-muted-foreground/50"
+                    title={sectionLabel}
+                  >
+                    <SectionIcon size={18} weight="regular" />
+                  </div>
+                )}
                 {renderItems()}
               </div>
             );
@@ -1209,7 +1477,10 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 aria-expanded={isOpen}
                 className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
               >
-                <span>{sectionLabel}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {SectionIcon && <SectionIcon size={18} weight="regular" className="shrink-0" />}
+                  <span className="truncate">{sectionLabel}</span>
+                </span>
                 <CaretDown
                   size={10}
                   weight="bold"
@@ -1283,9 +1554,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             </>
           )}
         </button>
-        <Suspense fallback={<div className="w-9 h-9 rounded-lg bg-secondary flex-shrink-0" />}>
-          <NotificationsBell />
-        </Suspense>
+        {/* La campana subió a la cabecera (Topbar): arriba a la derecha es
+            donde se busca, y desde ahí se ve sin desplegar el menú. */}
       </div>
 
       {/* User menu (Portal — escapa del sidebar) */}
@@ -1296,7 +1566,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             role="menu"
             aria-label="Acciones de usuario"
             style={{ position: 'fixed', bottom: userMenuPos.bottom, left: userMenuPos.left, minWidth: userMenuPos.minWidth }}
-            className="w-max max-w-[90vw] bg-card border border-border rounded-lg shadow-xl ring-1 ring-black/5 dark:ring-white/5 z-[60] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-1 duration-150"
+            className="w-max max-w-[90vw] bg-card border border-border rounded-lg shadow-dialog ring-1 ring-black/5 dark:ring-white/5 z-[60] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-1 duration-150"
           >
             {userMenuView === 'main' ? (
               <div className="py-1.5">
@@ -1305,13 +1575,23 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   label="Mi perfil"
                   onClick={() => { setUserMenuOpen(false); navigate('/perfil'); onNavigate?.(); }}
                 />
-                {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                {/* Y el project manager, que ve todo (Diego, 04/11): Usuarios y Roles, en solo lectura. */}
+                {(user?.role === 'admin' || user?.role === 'superadmin' || rolesDe(user).includes('project_manager')) && (
+                  // «del CRM»: desde el menú personal se esperaba llegar a lo
+                  // suyo, y esto son los proyectos, usuarios y APIs de todo el
+                  // CRM (#208). Lo personal es «Mi perfil», justo encima.
                   <UserMenuItem
                     icon={Gear}
-                    label="Configuración"
+                    label="Configuración del CRM"
                     onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}
+                {/* CRM#820: un alta, un permiso, un campus o Claude, a soporte como ticket. Para todos. */}
+                <UserMenuItem
+                  icon={Key}
+                  label="Pedir acceso o permiso"
+                  onClick={() => { setUserMenuOpen(false); abrirPedirAcceso(); onNavigate?.(); }}
+                />
                 <UserMenuItem
                   icon={theme === 'dark' ? Sun : Moon}
                   label={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
@@ -1377,7 +1657,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
 
 function UserMenuItem({ icon: Icon, label, onClick, tone = 'default' }) {
   const toneClasses = tone === 'danger'
-    ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
+    ? 'text-destructive hover:bg-destructive-soft'
     : 'text-foreground hover:bg-muted';
   return (
     <button

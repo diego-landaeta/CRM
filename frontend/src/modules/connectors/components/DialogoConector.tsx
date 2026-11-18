@@ -1,11 +1,36 @@
 import { useState } from 'react';
-import { X, Warning, CheckCircle } from '@phosphor-icons/react';
+import {
+  X, Warning, ShoppingBag, Receipt, Article, Code, BracketsCurly, ArrowLeft,
+  type Icon,
+} from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Field from '@/shared/components/ui/Field';
+import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
+import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  conectoresApi, TIPOS, DESTINOS, CAMPOS_POR_TIPO,
-  type Conector, type TipoConector, type DestinoConector,
+  conectoresApi, TIPOS, DESTINOS, CAMPOS_POR_TIPO, opcionesDeAlcance,
+  type Conector, type TipoConector, type DestinoConector, type AlcanceConector, type Campus,
 } from '../api/connectors.api';
+
+/**
+ * El primer paso de «Nuevo conector»: cuál. Diego, 29/09: «es mejor que
+ * separemos: nuevo conector, y antes salga su formulario preguntando cuál es,
+ * y cuando lo selecciones sea personalizado».
+ *
+ * Claude ya no está aquí: desde el 29/09 tiene su propio formulario en
+ * Conexión → MCP («lo de Claude MCP, ese formulario pasa a esa parte de MCP en
+ * conexión»). Aquí solo queda traer datos de fuera.
+ */
+const TIPOS_DE_DATOS: Array<{ id: TipoConector; icono: Icon; que: string }> = [
+  { id: 'woocommerce_products', icono: ShoppingBag, que: 'Los cursos de una tienda WooCommerce, al catálogo.' },
+  { id: 'woocommerce_orders', icono: Receipt, que: 'Los pedidos de una tienda WooCommerce.' },
+  { id: 'wp_rest', icono: Article, que: 'Entradas o páginas de un WordPress, por su API.' },
+  { id: 'acf', icono: BracketsCurly, que: 'Lo mismo, con los campos personalizados de ACF.' },
+  { id: 'custom_api', icono: Code, que: 'Cualquier dirección que devuelva una lista en JSON.' },
+];
+const nombreDelTipo = (t: TipoConector) => TIPOS.find((x) => x.id === t)?.label || t;
 
 /**
  * Alta y cambio de un conector (#6).
@@ -20,34 +45,83 @@ import {
  * dialogo, que es justo lo que se quito.
  */
 
+/**
+ * Lo que hay que advertir al elegir el tipo (#131).
+ *
+ * Dos de los cinco tipos —los de WooCommerce— hacen algo que ya tiene su propia
+ * pantalla en Catálogo, y esa hace más: sincroniza sola cada X minutos y saca el
+ * temario de la ficha del curso. Un conector no. Elegir aquí uno de esos sin
+ * saberlo es montar la mitad de algo que ya existe entero.
+ *
+ * No se quitan de la lista: el servidor los admite y siguen siendo útiles para
+ * una tienda que no es la del proyecto. Pero se dice.
+ */
+function avisoDelTipo(tipo: TipoConector): string | undefined {
+  if (tipo === 'woocommerce_products' || tipo === 'woocommerce_orders') {
+    return 'La tienda del proyecto ya tiene su pantalla en Catálogo → WooCommerce, y esa además sincroniza sola. Esto es para una tienda distinta.';
+  }
+  return undefined;
+}
+
 interface Props {
   /** `null` = alta. Un conector = cambio. */
   conector: Conector | null;
-  projectId: number;
+  /** El campus puesto arriba (si hay uno). */
+  projectId: number | null;
+  /** La empresa puesta arriba (si hay una). */
+  issuerId?: number | null;
+  /** Todos los campus de la persona, con su empresa. */
+  proyectos?: Campus[];
+  esSuperadmin?: boolean;
   onCerrar: () => void;
-  onGuardado: () => void;
+  onGuardado: (datos?: Conector) => void;
 }
 
-export default function DialogoConector({ conector, projectId, onCerrar, onGuardado }: Props) {
+export default function DialogoConector({
+  conector, projectId, issuerId = null, proyectos = [], esSuperadmin = false, onCerrar, onGuardado,
+}: Props) {
   const esAlta = conector === null;
 
-  const [tipo, setTipo] = useState<TipoConector>(conector?.type || 'woocommerce_products');
+  // «Para quién»: `sistema`, `e:<empresa>` o `c:<campus>`. Al abrir, lo que
+  // está puesto arriba —o lo que ya tenía el conector—.
+  const [para, setPara] = useState<string>(() => {
+    if (conector?.alcance === 'sistema') return 'sistema';
+    if (conector?.alcance === 'empresa' && conector.issuer_id) return `e:${conector.issuer_id}`;
+    if (conector) return `c:${conector.project_id}`;
+    if (issuerId) return `e:${issuerId}`;
+    return projectId ? `c:${projectId}` : '';
+  });
+  const alcance: AlcanceConector = para === 'sistema' ? 'sistema' : para.startsWith('e:') ? 'empresa' : 'campus';
+  const empresaId = alcance === 'empresa' ? Number(para.slice(2)) : null;
+  // Los campus donde puede caer lo importado. El «por defecto» recibe lo que no
+  // diga su campus; si el conector es de un campus, es ese.
+  const campusDelAlcance = alcance === 'sistema' ? proyectos
+    : alcance === 'empresa' ? proyectos.filter((p) => Number(p.sociedad_emisora_id) === empresaId) : [];
+  const [porDefecto, setPorDefecto] = useState<number | null>(conector && conector.alcance !== 'campus' ? conector.project_id : null);
+  const defectoValido = porDefecto && campusDelAlcance.some((p) => p.id === porDefecto)
+    ? porDefecto
+    : (campusDelAlcance.find((p) => p.id === projectId)?.id ?? campusDelAlcance[0]?.id ?? null);
+  const proyecto = alcance === 'campus' ? (para ? Number(para.slice(2)) : null) : defectoValido;
+
+
+  // Sin tipo todavía = el primer paso, elegir cuál. Al editar ya viene y no se cambia.
+  const [tipo, setTipo] = useState<TipoConector | null>(conector?.type ?? null);
   const [destino, setDestino] = useState<DestinoConector>(conector?.destination || 'product');
   const [etiqueta, setEtiqueta] = useState(conector?.label || '');
   // Solo lo que NO es secreto viene relleno: es lo unico que el servidor manda.
   const [campos, setCampos] = useState<Record<string, string>>({ ...(conector?.config || {}) });
   const [guardando, setGuardando] = useState(false);
 
-  const definicion = CAMPOS_POR_TIPO[tipo] || [];
+  const definicion = tipo ? CAMPOS_POR_TIPO[tipo] || [] : [];
   const yaGuardado = conector?.secretos_guardados || {};
 
   // Al cambiar de tipo en un alta, los campos del anterior no valen.
-  const cambiarTipo = (t: TipoConector) => {
+  const elegirTipo = (t: TipoConector | null) => {
     setTipo(t);
     if (esAlta) setCampos({});
   };
 
-  const falta = definicion.some((c) => {
+  const falta = !tipo || !proyecto || definicion.some((c) => {
     if (!c.requerido) return false;
     if (c.secreto) return esAlta ? !campos[c.clave] : !(campos[c.clave] || yaGuardado[c.clave]);
     return !campos[c.clave];
@@ -66,16 +140,17 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
         if (v) config[c.clave] = v;
       }
 
+      const deQuien = { project_id: proyecto!, alcance, issuer_id: empresaId };
       const r = esAlta
-        ? await conectoresApi.crear({ project_id: projectId, type: tipo, label: etiqueta.trim(), destination: destino, config })
-        : await conectoresApi.cambiar(conector!.id, { label: etiqueta.trim(), destination: destino, config });
+        ? await conectoresApi.crear({ ...deQuien, type: tipo!, label: etiqueta.trim(), destination: destino, config })
+        : await conectoresApi.cambiar(conector!.id, { ...deQuien, label: etiqueta.trim(), destination: destino, config });
 
       if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo guardar');
       toast({
         title: esAlta ? 'Conector creado' : 'Conector guardado',
         description: esAlta ? 'Ahora puedes probar la conexión y ver qué trae.' : undefined,
       });
-      onGuardado();
+      onGuardado(r.data);
     } catch (e: any) {
       toast({ title: 'No se pudo guardar', description: e?.message, variant: 'destructive' });
     } finally { setGuardando(false); }
@@ -90,62 +165,123 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-            <h2 className="font-semibold">{esAlta ? 'Nuevo conector' : 'Editar conector'}</h2>
+            <h2 className="flex items-center gap-2 font-semibold">
+              {esAlta && tipo && (
+                <button type="button" onClick={() => elegirTipo(null)} aria-label="Elegir otro tipo" title="Elegir otro tipo"
+                  className="p-1 -ml-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted">
+                  <ArrowLeft size={15} />
+                </button>
+              )}
+              {!tipo ? 'Nuevo conector · ¿cuál quieres crear?' : `${esAlta ? 'Nuevo' : 'Editar'} · ${nombreDelTipo(tipo)}`}
+            </h2>
             <button type="button" onClick={onCerrar} aria-label="Cerrar"
               className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted">
               <X size={16} />
             </button>
           </div>
 
-          <div className="p-5 space-y-4">
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground">Nombre</span>
-              <input value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)}
-                placeholder="Tienda de Psiko Aprende"
-                className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background" />
-              <span className="text-[11px] text-muted-foreground">Para reconocerlo en la lista.</span>
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">De dónde trae</span>
-                <select value={tipo} onChange={(e) => cambiarTipo(e.target.value as TipoConector)}
-                  disabled={!esAlta}
-                  title={esAlta ? undefined : 'El tipo no se cambia: crea otro conector'}
-                  className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background disabled:opacity-60">
-                  {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Dónde acaba</span>
-                <select value={destino} onChange={(e) => setDestino(e.target.value as DestinoConector)}
-                  className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background">
-                  {DESTINOS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-                </select>
-              </label>
+          {/* `space-y-3`, que es lo que usan los demas dialogos ya convertidos
+              —FiscalDataDialog, LeadFormDialog—. La gracia del #106 es que se
+              parezcan, asi que el espaciado se copia en vez de elegirse. */}
+          {/* PASO 1 · cuál. */}
+          {!tipo && (
+            <div className="p-5 space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Traer datos de fuera al CRM</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {TIPOS_DE_DATOS.map(({ id, icono: Icono, que }) => (
+                  <button key={id} type="button" onClick={() => elegirTipo(id)}
+                    className="flex items-start gap-3 rounded-md border border-border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-muted">
+                    <Icono size={20} weight="duotone" className="mt-0.5 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{nombreDelTipo(id)}</span>
+                      <span className="block text-xs text-muted-foreground">{que}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                Para consultar el CRM desde Claude, ve a <strong>Conexión → MCP</strong>.
+              </p>
             </div>
+          )}
 
-            <div className="space-y-3 pt-1">
+          {/* PASO 2 · el formulario de ese tipo, y solo lo suyo. */}
+          {tipo && (
+          <div className="p-5 space-y-3">
+            {tipo && avisoDelTipo(tipo) && esAlta && (
+              <p className="text-xs text-muted-foreground">{avisoDelTipo(tipo)}</p>
+            )}
+            <Field label="Para quién" required
+              hint={alcance === 'campus'
+                ? 'Trae los datos a este campus.'
+                : 'Un solo conector para todos sus campus: cada dato va al campus que diga (campo «Campus» al mapear).'}>
+              <Select
+                value={para}
+                onChange={setPara}
+                options={[{ value: '', label: 'Elige campus, empresa o todo el sistema' }, ...opcionesDeAlcance(proyectos, esSuperadmin)]}
+                ariaLabel="Para quién"
+              />
+            </Field>
+            {alcance !== 'campus' && (
+              <Field label="Campus por defecto" required hint="Adónde va lo que no diga de qué campus es.">
+                <Select
+                  value={proyecto ? String(proyecto) : ''}
+                  onChange={(v: string) => setPorDefecto(v ? Number(v) : null)}
+                  options={campusDelAlcance.map((p) => ({ value: String(p.id), label: p.nombre }))}
+                  ariaLabel="Campus por defecto"
+                />
+              </Field>
+            )}
+            <Field label="Nombre" required hint="Para reconocerlo en la lista." htmlFor="conector-nombre">
+              <input
+                id="conector-nombre"
+                value={etiqueta}
+                onChange={(e) => setEtiqueta(e.target.value)}
+                placeholder="Tienda de Psiko Aprende"
+                className={inputClass}
+              />
+            </Field>
+
+            {/* El tipo ya se eligió en el primer paso (y al editar no se cambia). */}
+            <Field label="Dónde acaba" hint="A qué parte del CRM van los datos.">
+              <Select
+                value={destino}
+                onChange={setDestino}
+                options={DESTINOS.map((d) => ({ value: d.id as DestinoConector, label: d.label }))}
+                ariaLabel="Dónde acaba"
+              />
+            </Field>
+
+            <div className="space-y-3">
               {definicion.map((c) => (
-                <label key={c.clave} className="block">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {c.label}{c.requerido && ' *'}
-                  </span>
+                <Field
+                  key={c.clave}
+                  label={c.label}
+                  required={c.requerido}
+                  htmlFor={`conector-${c.clave}`}
+                  // Un secreto ya guardado manda sobre la ayuda: es lo único que
+                  // hay que saber en ese momento —que dejarlo vacío no lo borra—.
+                  hint={c.secreto && yaGuardado[c.clave]
+                    ? 'Ya hay uno guardado. Déjalo vacío para no cambiarlo.'
+                    : c.ayuda}
+                >
                   <input
+                    id={`conector-${c.clave}`}
                     type={c.secreto ? 'password' : 'text'}
                     value={campos[c.clave] ?? ''}
                     onChange={(e) => setCampos((p) => ({ ...p, [c.clave]: e.target.value }))}
-                    placeholder={c.secreto && yaGuardado[c.clave] ? '•••••••• guardado' : (c.ayuda || '')}
+                    // La ayuda va debajo, en el Field, y no tambien aqui: antes
+                    // salia dos veces —«https://mitienda.com» de marcador y otra
+                    // vez de pista— y leer lo mismo dos veces hace dudar de si
+                    // dicen cosas distintas. El marcador se guarda para lo unico
+                    // que la pista no puede decir: que ya hay un secreto puesto.
+                    placeholder={c.secreto && yaGuardado[c.clave] ? '•••••••• guardado' : ''}
                     autoComplete="off"
-                    className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background font-mono" />
-                  {c.secreto && yaGuardado[c.clave] ? (
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1 mt-0.5">
-                      <CheckCircle size={11} weight="fill" /> Ya hay uno guardado. Déjalo vacío para no cambiarlo.
-                    </span>
-                  ) : c.ayuda ? (
-                    <span className="text-[11px] text-muted-foreground">{c.ayuda}</span>
-                  ) : null}
-                </label>
+                    // Una dirección o una clave se leen carácter a carácter: un
+                    // ck_ de un c k _ mal copiado no se ve en tipografía normal.
+                    className={cn(inputClass, 'font-mono')}
+                  />
+                </Field>
               ))}
             </div>
 
@@ -159,17 +295,20 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
               </span>
             </p>
           </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
             <button type="button" onClick={onCerrar}
               className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-bold hover:bg-muted">
               Cancelar
             </button>
-            <button type="button" onClick={guardar} disabled={guardando || falta || !etiqueta.trim()}
-              title={falta ? 'Faltan campos obligatorios' : undefined}
-              className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50">
-              {guardando ? 'Guardando…' : esAlta ? 'Crear' : 'Guardar'}
-            </button>
+            {tipo && (
+              <button type="button" onClick={guardar} disabled={guardando || falta || !etiqueta.trim()}
+                title={falta ? 'Faltan campos obligatorios' : undefined}
+                className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                {guardando ? 'Guardando…' : esAlta ? 'Crear' : 'Guardar'}
+              </button>
+            )}
           </div>
         </div>
       </div>

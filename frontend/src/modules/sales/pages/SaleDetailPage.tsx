@@ -4,11 +4,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import client from '@/shared/api/client';
+import { formatDate } from '@/shared/lib/format';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
+import RepartoVentaCard from '../components/RepartoVentaCard';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -19,8 +21,12 @@ function fmt(n: unknown) {
     style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(Number(n || 0));
 }
+// La fecha de la venta es un DATE («2026-10-12»). `new Date('2026-10-12')` es
+// medianoche UTC y, en un navegador de Latinoamérica, el 11 por la tarde: la
+// lista (Finanzas › Ventas) decía 12 y este detalle 11 (#693). Mismo
+// formateador que la lista, que lee el día tal cual.
 function fecha(d: unknown) {
-  return d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  return d ? formatDate(String(d)) : '—';
 }
 
 type Cuota = {
@@ -37,6 +43,9 @@ type Pago = {
 type Venta = {
   id: number; lead_id: number; producto_contratado: string;
   importe_total: string | number; importe_pagado: string | number; importe_pendiente: string | number;
+  // #692: `importe_pagado` ya es la suma de los pagos; el guardado en la venta
+  // viene aparte para avisar si no cuadra. Opcionales: un servidor anterior no los manda.
+  importe_pagado_guardado?: string | number | null; cobrado_de_mas?: string | number | null;
   fecha_conversion: string; fecha_compromiso_pago: string | null; metodo_pago: string | null;
   notas_pago: string | null; lead_nombre: string; lead_email: string; proyecto_nombre: string;
   payments?: Pago[]; installments?: Cuota[]; items?: Array<{ id: number; descripcion: string; cantidad: number; precio_unitario: string | number }>;
@@ -44,9 +53,9 @@ type Venta = {
 
 function Chip({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'mute'; children: React.ReactNode }) {
   const tones = {
-    ok: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-    warn: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-    bad: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
+    ok: 'bg-success-soft text-success-soft-foreground',
+    warn: 'bg-warning-soft text-warning-soft-foreground',
+    bad: 'bg-destructive-soft text-destructive-soft-foreground',
     mute: 'bg-muted text-muted-foreground',
   };
   return <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${tones[tone]}`}>{children}</span>;
@@ -92,6 +101,9 @@ export default function SaleDetailPage() {
   const cuotasPend = cuotas.filter((c) => !c.fecha_cobro);
   const cuotasVenc = cuotasPend.filter((c) => new Date(c.fecha_vencimiento) < new Date());
   const deAnteriores = cuotas.filter((c) => (c.notas || '').toLowerCase().includes('facturacion anterior'));
+  const cobradoDeMas = Number(venta.cobrado_de_mas || 0);
+  const guardado = venta.importe_pagado_guardado;
+  const noCuadra = guardado != null && Math.abs(Number(guardado) - Number(venta.importe_pagado || 0)) > 0.005;
 
   return (
     <div className="space-y-5 pb-8">
@@ -118,27 +130,60 @@ export default function SaleDetailPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={CurrencyEur} iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+        <KpiCard icon={CurrencyEur} iconBg="bg-primary/10 text-primary"
           label="Importe de la venta" value={fmt(venta.importe_total)} />
-        <KpiCard icon={CheckCircle} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+        <KpiCard icon={CheckCircle} iconBg="bg-success-soft text-success-soft-foreground"
           label="Cobrado" value={fmt(venta.importe_pagado)}
           badge={pagos.length ? `${pagos.length} pago${pagos.length === 1 ? '' : 's'}` : null}
-          badgeColor="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400" />
+          badgeColor="bg-success-soft text-success-soft-foreground" />
         <KpiCard icon={Wallet} iconBg={pendiente > 0
-          ? 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400'
+          ? 'bg-warning-soft text-warning-soft-foreground'
           : 'bg-muted text-muted-foreground'}
           label="Pendiente" value={fmt(pendiente)}
           badge={cuotasPend.length ? `${cuotasPend.length} cuota${cuotasPend.length === 1 ? '' : 's'}` : null}
-          badgeColor="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400" trend="down" />
+          badgeColor="bg-warning-soft text-warning-soft-foreground" trend="down" />
         <KpiCard icon={WarningCircle} iconBg={cuotasVenc.length
-          ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+          ? 'bg-destructive-soft text-destructive-soft-foreground'
           : 'bg-muted text-muted-foreground'}
           label="Cuotas vencidas" value={String(cuotasVenc.length)} trend="down" />
       </div>
 
+      {/* #692: «Cobrado» es lo que suman los pagos de abajo. Si el importe que
+          guardaba la venta dice otra cosa, se avisa: se corrige venta a venta. */}
+      {noCuadra && (
+        <p role="alert" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+          El cobrado que tenía apuntado la venta ({fmt(guardado)}) no coincide con sus pagos registrados
+          ({fmt(venta.importe_pagado)}). Aquí se cuenta lo de los pagos. Hay que revisarla: o falta apuntar un pago o sobra el importe.
+        </p>
+      )}
+      {cobradoDeMas > 0.005 && (
+        <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+          Sus pagos suman {fmt(cobradoDeMas)} más que el importe de la venta. Suele ser un cobro repetido o un importe mal puesto.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Primera columna: los datos y quien la vendio, uno debajo del otro. */}
+        <div className="space-y-4">
         <div className="bg-card border border-border rounded-lg p-4 space-y-2.5 text-sm">
           <h3 className="font-semibold mb-1">Datos de la venta</h3>
+          {/* Con varias líneas, sus cursos en una lista con su cantidad, en vez
+              del «1x A + 2x B» que se guardaba en el nombre (#223). */}
+          {(venta.items?.length ?? 0) > 1 && (
+            <div className="pb-2.5 border-b border-border">
+              <span className="text-muted-foreground">Cursos</span>
+              <ul className="mt-1 space-y-1" aria-label="Cursos de la venta">
+                {venta.items!.map((it) => (
+                  <li key={it.id} className="flex justify-between gap-3">
+                    <span className="font-medium">{it.descripcion}</span>
+                    <span className="text-muted-foreground whitespace-nowrap">
+                      {Number(it.cantidad) > 1 ? `${it.cantidad} × ` : ''}{fmt(it.precio_unitario)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Fecha</span>
             <span className="font-medium">{fecha(venta.fecha_conversion)}</span>
@@ -158,7 +203,7 @@ export default function SaleDetailPage() {
             </div>
           )}
           {deAnteriores.length > 0 && (
-            <p className="pt-2 text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+            <p className="pt-2 text-[11px] text-warning-soft-foreground flex items-start gap-1.5">
               <ClockCounterClockwise size={13} weight="bold" className="mt-0.5 flex-shrink-0" />
               {deAnteriores.length} cuota{deAnteriores.length === 1 ? '' : 's'} de esta venta se cobraron bajo la facturación anterior.
             </p>
@@ -166,6 +211,10 @@ export default function SaleDetailPage() {
           {venta.notas_pago && (
             <p className="pt-2 text-[11px] text-muted-foreground whitespace-pre-line border-t border-border">{venta.notas_pago}</p>
           )}
+        </div>
+
+        {/* Quien vendio, y si la venta esta repartida entre dos gestoras. */}
+        <RepartoVentaCard conversionId={venta.id} />
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4 lg:col-span-2">
@@ -241,7 +290,7 @@ export default function SaleDetailPage() {
                 {pagos.map((pg) => (
                   <tr key={pg.id} className="border-b border-border/50 last:border-0">
                     <td className="py-2 text-muted-foreground whitespace-nowrap">{fecha(pg.fecha)}</td>
-                    <td className="py-2 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">{fmt(pg.importe)}</td>
+                    <td className="py-2 text-right tabular-nums font-semibold text-success">{fmt(pg.importe)}</td>
                     <td className="py-2 pl-4">{pg.cuota_numero ? <Chip tone="mute">Cuota {pg.cuota_numero}</Chip> : <span className="text-muted-foreground">—</span>}</td>
                     <td className="py-2">
                       {pg.pagado_por_stripe ? <Chip tone="mute">Stripe</Chip> : (pg.metodo || '—')}

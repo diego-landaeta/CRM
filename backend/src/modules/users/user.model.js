@@ -1,4 +1,57 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { limpiaRolesExtra } from '../../shared/utils/roles.js';
+import { logger } from '../../shared/utils/logger.js';
+import { existeTablaEmpresas, ponerEmpresas } from './user.empresas.js';
+import { registrarCambio } from '../permissions/permissions.model.js';
+
+/**
+ * Si la columna del #128 ya existe.
+ *
+ * Mientras la migracion 156 no este aplicada —y la aprueba Diego, no yo— guardar
+ * un usuario NO puede fallar por eso: el formulario manda la casilla siempre, y
+ * un `column "usa_whatsapp" does not exist` tumbaria el guardado entero, nombre
+ * y proyectos incluidos. Es la leccion del panel de claves (#113).
+ *
+ * Se pregunta una vez por proceso: una columna no aparece a mitad de la tarde, y
+ * cuando se aplique la migracion el servidor se reinicia.
+ */
+let hayUsaWhatsapp = null;
+async function existeUsaWhatsapp() {
+  if (hayUsaWhatsapp !== null) return hayUsaWhatsapp;
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'usa_whatsapp'`
+  );
+  hayUsaWhatsapp = rows.length > 0;
+  if (!hayUsaWhatsapp) {
+    logger.warn('Usuarios: falta la migracion 156; la casilla de WhatsApp no se guarda todavia');
+  }
+  return hayUsaWhatsapp;
+}
+
+/**
+ * Buscar personas del equipo por nombre o correo, sin acentos (#591).
+ *
+ * `campus` null es «todos» (superadmin y soporte); si no, solo quien tiene
+ * alguno de esos campus. Como la lista por defecto, sin tutores ni gente de
+ * colaboraciones: esos tienen su propia pantalla.
+ */
+export async function buscar({ q, campus, limit = 5 }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.role, u.active
+       FROM users u
+      WHERE (unaccent(COALESCE(u.nombre, '')) ILIKE unaccent($1) OR u.email ILIKE $1)
+        AND u.role <> 'tutor'
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+        AND ($2::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($2::int[])))
+      ORDER BY u.active DESC, u.nombre
+      LIMIT $3`,
+    [`%${q}%`, campus, limit],
+  );
+  return rows;
+}
 
 // Esta lista es «quien puede llevar un prospecto», porque es para lo que la usa
 // casi todo el CRM: el filtro de Prospectos, asignar responsable, la exportacion
@@ -16,7 +69,7 @@ import { query, getClient } from '../../shared/config/db.js';
 // Quien necesita a TODO el personal —la pantalla de Usuarios, las nominas— lo
 // pide con incluirTodos. Es al reves de como estaba: lo seguro es lo de por
 // defecto, y ver a todos es lo que hay que pedir.
-export async function findAll({ active, role, projectId, page, limit, incluirTodos = false }) {
+export async function findAll({ active, role, projectId, page, limit, incluirTodos = false, campus = null, soloIds = null }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -40,6 +93,17 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
     conditions.push(`EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = $${paramIdx++})`);
     params.push(projectId);
   }
+  // Solo quien está en uno de esos campus (`campus`, Diego 04/11: quien solo ve
+  // la lista, la de los suyos). EXISTS y no JOIN: un JOIN repetiría a quien está en varios.
+  if (Array.isArray(campus)) {
+    conditions.push(`EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($${paramIdx++}::int[]))`);
+    params.push(campus);
+  }
+  // Solo esas personas (`alcance=comercial`: la líder y su equipo).
+  if (Array.isArray(soloIds)) {
+    conditions.push(`u.id = ANY($${paramIdx++}::int[])`);
+    params.push(soloIds.map(Number));
+  }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
   const offset = (page - 1) * limit;
@@ -47,8 +111,15 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
   const countResult = await query(`SELECT COUNT(*) FROM users u ${where}`, params);
   const total = parseInt(countResult.rows[0].count);
 
+  // Las empresas enteras de cada admin (#220). Sin la migracion 203 vale null:
+  // la pantalla no enseña una casilla que no se puede guardar.
+  const empresasSql = (await existeTablaEmpresas())
+    ? `COALESCE((SELECT json_agg(ue.issuer_id ORDER BY ue.issuer_id)
+                   FROM user_empresas ue WHERE ue.user_id = u.id), '[]'::json)`
+    : 'NULL::json';
+
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
+    `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
             u.whatsapp_phone, u.whatsapp_display_name,
             -- Los permisos acotados viajan en el listado: sin esto la pantalla no
             -- puede enseñar quien los tiene, que es como se paso por alto que a Ana
@@ -59,6 +130,11 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
             COALESCE(u.factura_manager, false) AS factura_manager,
             COALESCE(u.editar_fechas_factura, false) AS editar_fechas_factura,
             COALESCE(u.gestor_colaboraciones, false) AS gestor_colaboraciones,
+            -- La casilla del #128. Se pide con to_jsonb y SIN coalesce a
+            -- proposito: mientras la 156 no este aplicada la columna no existe y
+            -- esto vale null, que es lo que la pantalla necesita para enseñar la
+            -- casilla apagada y sin poder tocarla en vez de fingir que guarda.
+            (to_jsonb(u) ->> 'usa_whatsapp')::boolean AS usa_whatsapp,
             COALESCE(
               (SELECT json_agg(up.project_id ORDER BY up.project_id)
                FROM user_projects up
@@ -73,7 +149,8 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
                FROM user_projects up
                WHERE up.user_id = u.id AND up.active = true),
               '[]'::json
-            ) AS projects
+            ) AS projects,
+            ${empresasSql} AS empresa_ids
      FROM users u ${where}
      ORDER BY u.created_at DESC
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
@@ -85,16 +162,52 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
 
 export async function findById(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key
+    `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key
      FROM users u WHERE u.id = $1`,
     [id]
   );
   return rows[0] || null;
 }
 
+// Sin distinguir mayúsculas, como el login y como Make: hay correos guardados con
+// mayúsculas («Albertoj@iseie.com») y con `email = $1` otro podía quedarse con el
+// mismo cambiando solo una letra (#248).
 export async function findByEmail(email) {
-  const { rows } = await query(`SELECT id FROM users WHERE email = $1`, [email]);
+  const { rows } = await query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [email]);
   return rows[0] || null;
+}
+
+/**
+ * Si cambiarle el correo a alguien puede dejarle sin prospectos (#248).
+ *
+ * Make asigna el responsable de un prospecto por su correo (`responsable_email`,
+ * cabecera X-Asesora-Email): si se cambia aquí y no en Make, ese prospecto ya no
+ * le llega y se reparte a otra, sin error. Se mira si la persona:
+ *   · entra en el reparto de algún campus (mismas reglas que `reparto.js`);
+ *   · tiene prospectos asignados;
+ *   · aparece por su correo en los envíos de Make.
+ */
+export async function avisoCambioCorreo(id) {
+  const { rows: [r] } = await query(
+    `SELECT u.email,
+            (SELECT COUNT(*)::int FROM user_projects up
+              WHERE up.user_id = u.id AND up.active = true
+                AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+                AND NOT COALESCE(u.gestor_colaboraciones, false)) AS campus_en_reparto,
+            (SELECT COUNT(*)::int FROM leads l WHERE l.responsable_id = u.id) AS prospectos_asignados,
+            (SELECT COUNT(*)::int FROM make_webhook_deliveries d
+              WHERE LOWER(d.mapped->>'responsable_email') = LOWER(u.email)) AS envios_de_make
+       FROM users u WHERE u.id = $1`,
+    [id]
+  );
+  if (!r) return null;
+  return {
+    email: r.email,
+    campusEnReparto: r.campus_en_reparto,
+    prospectosAsignados: r.prospectos_asignados,
+    enviosDeMake: r.envios_de_make,
+    recibeProspectos: r.campus_en_reparto > 0 || r.prospectos_asignados > 0 || r.envios_de_make > 0,
+  };
 }
 
 export async function getUserProjects(userId) {
@@ -108,15 +221,16 @@ export async function getUserProjects(userId) {
   return rows;
 }
 
-export async function create({ nombre, email, passwordHash, role, projectIds, projects, setPasswordToken, setPasswordExpires }) {
+export async function create({ nombre, email, passwordHash, role, roles_extra: rolesExtra = [], projectIds, projects, empresaIds = [], porUserId = null, setPasswordToken, setPasswordExpires }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO users (nombre, email, password_hash, role, set_password_token, set_password_expires)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nombre, email, role, active, created_at`,
-      [nombre, email, passwordHash, role, setPasswordToken, setPasswordExpires]
+      `INSERT INTO users (nombre, email, password_hash, role, roles_extra, set_password_token, set_password_expires)
+       VALUES ($1, $2, $3, $4, $5::user_role[], $6, $7)
+       RETURNING id, nombre, email, role, roles_extra::text[] AS roles_extra, active, created_at`,
+      [nombre, email, passwordHash, role, limpiaRolesExtra(rolesExtra, role), setPasswordToken, setPasswordExpires]
     );
     const user = rows[0];
 
@@ -132,6 +246,10 @@ export async function create({ nombre, email, passwordHash, role, projectIds, pr
       );
     }
 
+    // La empresa entera (#220), en la misma transacción: sus campus de hoy
+    // entran aquí, y si uno ya venía marcado arriba no se duplica.
+    if (empresaIds?.length) await ponerEmpresas(client, user.id, empresaIds, porUserId);
+
     await client.query('COMMIT');
     return user;
   } catch (err) {
@@ -142,12 +260,14 @@ export async function create({ nombre, email, passwordHash, role, projectIds, pr
   }
 }
 
-export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key,
+export async function update(id, { nombre, role, roles_extra: rolesExtra, projectIds, projects, avatar_url, avatar_key,
   whatsapp_phone, whatsapp_display_name,
-  factura_manager, editar_fechas_factura, gestor_colaboraciones }) {
+  factura_manager, editar_fechas_factura, gestor_colaboraciones, usa_whatsapp, empresaIds, porUserId = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
+    // Cómo estaba, para el registro de permisos (#423).
+    const previo = await quePermisosDecide(client, id, true);
 
     const sets = [];
     const params = [];
@@ -155,6 +275,16 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
 
     if (nombre) { sets.push(`nombre = $${paramIdx++}`); params.push(nombre); }
     if (role) { sets.push(`role = $${paramIdx++}`); params.push(role); }
+    // Los roles de mas. Se compara con undefined y no por verdadero: una lista
+    // vacia SIGNIFICA «quitaselos todos», y con `if (rolesExtra)` no se podria
+    // dejar a nadie con un solo rol otra vez.
+    if (rolesExtra !== undefined) {
+      // Contra el rol que va a quedar, no contra el que tenia: si en el mismo
+      // guardado pasa de gestora a tutora, el añadido 'tutora' sobra.
+      const principal = role || (await query('SELECT role FROM users WHERE id = $1', [id])).rows[0]?.role;
+      sets.push(`roles_extra = $${paramIdx++}::user_role[]`);
+      params.push(limpiaRolesExtra(rolesExtra, principal));
+    }
     if (avatar_url !== undefined) { sets.push(`avatar_url = $${paramIdx++}`); params.push(avatar_url); }
     if (avatar_key !== undefined) { sets.push(`avatar_key = $${paramIdx++}`); params.push(avatar_key); }
     // Teléfono WhatsApp del gestor (cadena vacía → NULL para limpiar).
@@ -165,6 +295,11 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
     if (factura_manager !== undefined) { sets.push(`factura_manager = $${paramIdx++}`); params.push(!!factura_manager); }
     if (editar_fechas_factura !== undefined) { sets.push(`editar_fechas_factura = $${paramIdx++}`); params.push(!!editar_fechas_factura); }
     if (gestor_colaboraciones !== undefined) { sets.push(`gestor_colaboraciones = $${paramIdx++}`); params.push(!!gestor_colaboraciones); }
+    // El WhatsApp del CRM (#128). Se guarda aparte del rol: dos personas del
+    // mismo rol pueden estar una encendida y la otra no, que es justo el caso.
+    if (usa_whatsapp !== undefined && await existeUsaWhatsapp()) {
+      sets.push(`usa_whatsapp = $${paramIdx++}`); params.push(!!usa_whatsapp);
+    }
 
     if (sets.length > 0) {
       sets.push(`updated_at = NOW()`);
@@ -191,6 +326,24 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
       }
     }
 
+    // Las empresas enteras (#220). DESPUÉS de los campus a propósito: si la
+    // lista de arriba desmarcó uno de una empresa que sigue entera, aquí vuelve,
+    // que es lo que dice la casilla. Quitar la empresa no quita sus campus.
+    if (empresaIds !== undefined) await ponerEmpresas(client, id, empresaIds, porUserId);
+
+    // Registro de permisos (#423): rol, roles de más y casillas, quién y cuándo.
+    // En la misma transacción: si no se apunta, no se guarda.
+    const ahora = await quePermisosDecide(client, id, false);
+    for (const campo of Object.keys(ahora)) {
+      if (JSON.stringify(previo?.[campo]) === JSON.stringify(ahora[campo])) continue;
+      await registrarCambio(client, {
+        quienId: porUserId, destino: 'usuario', usuarioId: id, clave: campo,
+        antes: Array.isArray(previo?.[campo]) ? previo[campo].join(', ') : previo?.[campo],
+        despues: Array.isArray(ahora[campo]) ? ahora[campo].join(', ') : ahora[campo],
+        origen: 'usuarios',
+      });
+    }
+
     await client.query('COMMIT');
 
     return await findById(id);
@@ -200,6 +353,20 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
   } finally {
     client.release();
   }
+}
+
+/** Lo de una persona que decide qué puede hacer: su rol, sus roles de más y las casillas. */
+async function quePermisosDecide(db, id, bloquear) {
+  const { rows: [u] } = await db.query(
+    `SELECT u.role::text AS role, COALESCE(u.roles_extra::text[], '{}') AS roles_extra,
+            COALESCE(u.factura_manager, false) AS factura_manager,
+            COALESCE(u.editar_fechas_factura, false) AS editar_fechas_factura,
+            COALESCE(u.gestor_colaboraciones, false) AS gestor_colaboraciones,
+            COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
+       FROM users u WHERE u.id = $1 ${bloquear ? 'FOR UPDATE' : ''}`, [id]);
+  if (!u) return null;
+  return { rol: u.role, roles_extra: [...u.roles_extra].sort(), factura_manager: u.factura_manager,
+    editar_fechas_factura: u.editar_fechas_factura, gestor_colaboraciones: u.gestor_colaboraciones, usa_whatsapp: u.usa_whatsapp };
 }
 
 export async function deactivate(id) {

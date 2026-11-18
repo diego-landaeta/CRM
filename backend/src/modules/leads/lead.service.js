@@ -8,6 +8,11 @@ import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins, notifyUsers } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
+import { deducirCanal } from './canal.js';
+import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
+import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
+import { avanzarPorContacto } from '../../shared/services/estado-prospecto.service.js';
+import { soloLoSuyo, ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 
 // Dispara secuencias de email activas que tengan el trigger indicado
 async function triggerSequences(triggerEvent, leadId, projectId) {
@@ -26,24 +31,11 @@ async function triggerSequences(triggerEvent, leadId, projectId) {
 }
 
 // ============================================================
-// DETECCION DE CANAL POR UTMs
+// DETECCION DE CANAL
 // ============================================================
-
-function detectChannel(utmSource, utmMedium) {
-  if (!utmSource && !utmMedium) return 'directo';
-
-  const source = (utmSource || '').toLowerCase();
-  const medium = (utmMedium || '').toLowerCase();
-
-  if (source.includes('facebook') || source.includes('instagram') || source.includes('fb') || source.includes('meta')) return 'meta_ads';
-  if (source.includes('google') && (medium === 'cpc' || medium === 'ppc')) return 'google_ads';
-  if (source.includes('tiktok')) return 'tiktok_ads';
-  if (source.includes('chatgpt') || source.includes('openai')) return 'chatgpt_ia';
-  if (medium === 'referral' || source.includes('referido')) return 'referido';
-  if (medium === 'organic' || source.includes('google') || source.includes('bing')) return 'organico';
-
-  return 'directo';
-}
+//
+// La regla vive en ./canal.js (#48): una sola para el alta de un prospecto y
+// para el script que la aplica hacia atrás. Aquí solo se llama.
 
 /**
  * Saca las UTM de dentro de la propia direccion.
@@ -116,6 +108,12 @@ async function _createLeadCore(project, leadData) {
   // llego con `utm_source=fb` dentro de la direccion y se guardo como «directo».
   //
   // Este es el sitio por el que pasan las dos.
+  //
+  // La página también puede llegar como `page_url` (Elementor, Make): sin
+  // `landing_url`, se usa esa. De ella salen el canal, el producto y el país (#221).
+  if (!leadData.landing_url && typeof leadData.page_url === 'string' && leadData.page_url.trim()) {
+    leadData.landing_url = leadData.page_url.trim();
+  }
   for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
     if (!leadData[k]) {
       const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
@@ -196,7 +194,12 @@ async function _createLeadCore(project, leadData) {
   // devuelve, y `const` no se puede leer antes de su linea: daba
   // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
   // sea un 500 cada vez que entraba esa rama.
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
+  const canalDetectado = leadData.canal || deducirCanal({
+    utm_source: leadData.utm_source,
+    utm_medium: leadData.utm_medium,
+    referrer: leadData.referrer,
+    landing_url: leadData.landing_url,
+  });
 
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
@@ -267,6 +270,7 @@ async function _createLeadCore(project, leadData) {
       utm_content: leadData.utm_content || null,
       utm_term: leadData.utm_term || null,
       landing_url: leadData.landing_url || null,
+      referrer: leadData.referrer || null,
       canal_detectado: canalDetectado,
     },
   });
@@ -289,6 +293,21 @@ async function _createLeadCore(project, leadData) {
       spam_previous_lead_id: spamHistory.id,
       canal: canalDetectado,
     };
+  }
+
+  // La agenda de esta persona: sus pasos del proceso comercial, con la fecha
+  // contada desde que entro (#89 · #90).
+  //
+  // Se AWAITA a proposito, no como el correo: son cuatro filas de una sola
+  // consulta, y si se dispara y se olvida, un fallo deja al prospecto sin
+  // agenda y nadie se entera hasta que no aparece en la cola de nadie.
+  //
+  // Y va envuelto: que la planificacion falle NO puede tumbar el alta de un
+  // lead. Sin agenda se puede trabajar —se replanifica—, sin lead no.
+  try {
+    await planificarPasosDeLead(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id }, 'No se pudo planificar la agenda del prospecto');
   }
 
   // AVISAR A QUIEN LE HA TOCADO (#111).
@@ -356,7 +375,7 @@ async function _createLeadCore(project, leadData) {
           await sendLeadAssignedEmail({
             gestor: rows[0],
             lead: { id: lead.id, nombre: lead.nombre, email: lead.email, telefono: lead.telefono },
-            proyecto: { nombre: project.nombre },
+            proyecto: { id: project.id, nombre: project.nombre, slug: project.slug, logo_url: project.logo_url, emoji: project.emoji },
             baseUrl,
           });
         }
@@ -507,7 +526,7 @@ export async function getTodaySummary(ctx) {
 // OPERACIONES
 // ============================================================
 
-export async function changeStatus(leadId, newStatus, motivo, userId) {
+export async function changeStatus(leadId, newStatus, motivo, userId, opts = {}) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
   if (lead.status === newStatus) throw new AppError('El lead ya tiene ese status', 400, 'SAME_STATUS');
@@ -527,14 +546,116 @@ export async function changeStatus(leadId, newStatus, motivo, userId) {
   // Disparar email sequences con trigger status_changed (async)
   triggerSequences('status_changed', leadId, lead.project_id);
 
+  // «¿POR QUE HAS DESISTIDO?» (#169): YA NO SALE AL DESCARTAR. Diego, 09/10:
+  // «mandarlo solamente a los 7 días que no haya interacción». Lo manda solo
+  // `feedbackDia7Scheduler`, cuando la persona lleva 7 días sin ninguna.
+
   return { previous: lead.status, current: newStatus };
 }
 
-export async function addInteraction(leadId, tipo, nota, userId, fecha) {
+/**
+ * El texto que pone la cola cuando se pulsa «Contactado, al siguiente» sin
+ * escribir nada (ColaDelDiaPage y SeguimientoPage).
+ *
+ * Diego, 29/10: a las gestoras «se les ponen interacciones sin ellas ponerlas».
+ * Salían por dos caminos: la gestora escribía su nota en la ficha y luego
+ * pulsaba el botón para pasar a la siguiente —una «llamada» que nunca hizo—, y
+ * ráfagas de 20 a 40 en unos segundos, una cada 0,2–0,4 s, con el botón
+ * repetido. Se mira aquí y no solo en la pantalla porque el navegador puede
+ * tener guardada la versión de antes.
+ */
+export const NOTA_DE_LA_COLA = /^(Contacto del seguimiento \d+|Seguimiento de fin de mes)$/;
+
+async function contactoDeLaColaSobra(leadId, userId) {
+  const { rows } = await query(
+    `SELECT
+       (SELECT id FROM lead_interactions
+         WHERE lead_id = $1 AND created_by = $2
+           AND created_at > NOW() - INTERVAL '12 hours'
+           AND nota NOT LIKE 'Copiado el mensaje%'
+         ORDER BY created_at DESC LIMIT 1) AS ya_apuntado,
+       EXISTS (SELECT 1 FROM lead_interactions
+         WHERE created_by = $2 AND created_at > NOW() - INTERVAL '2 seconds'
+           AND nota ~ '^(Contacto del seguimiento [0-9]+|Seguimiento de fin de mes)$') AS rafaga`,
+    [leadId, userId]
+  );
+  return rows[0] || {};
+}
+
+/**
+ * «Contactar» en la cola del día cierra el paso que la cola enseñaba (#259).
+ *
+ * Diego, 07/10: «si en la cola del día hice el seguimiento 3 y le doy a
+ * contactar, se guarda pero aún se mantiene, y la checklist no lo guarda. Si lo
+ * hago luego en la checklist, sí sale». Pasaba porque la cola solo apuntaba el
+ * contacto y dejaba que la regla de los contactos (pasoCerrado.js) dedujera el
+ * paso. Esa regla cierra UN paso por día de contacto: si esa mañana ya se había
+ * hablado con la persona (el contacto cerró el seguimiento 2), el seguimiento 3
+ * se quedaba abierto y la persona volvía a la cola. Y la checklist, que desde
+ * el 09/10 es manual, lo enseñaba «por hacer» siempre.
+ *
+ * Ahora el paso se marca hecho por el MISMO camino que la checklist
+ * (`ajustarPaso`, que recoloca los que quedan). Solo un paso de esta persona y
+ * que siga pendiente: un id de otra persona o uno ya hecho no se tocan.
+ */
+async function marcarPasoDeLaCola(leadId, pasoId, userId) {
+  const { rows } = await query(
+    `SELECT id FROM lead_steps WHERE id = $1 AND lead_id = $2 AND estado = 'pendiente'`,
+    [pasoId, leadId]);
+  if (!rows[0]) return null;
+  return ajustarPaso(pasoId, { estado: 'hecho' }, userId);
+}
+
+export async function addInteraction(leadId, tipo, nota, userId, fecha, { pasoId = null } = {}) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
-  return await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
+  // Una nota interna no es haber hablado con nadie: no cierra ningún paso.
+  const cierraPaso = pasoId && tipo !== 'nota';
+
+  if (NOTA_DE_LA_COLA.test(nota || '')) {
+    const { ya_apuntado, rafaga } = await contactoDeLaColaSobra(leadId, userId);
+    if (rafaga) {
+      throw new AppError('Más despacio: un contacto por persona. Este no se ha apuntado.', 429, 'DEMASIADO_RAPIDO');
+    }
+    // Ya apuntó algo suyo en esta persona: no se crea otro contacto, pero el
+    // paso que la cola enseñaba sí se cierra; si no, volvía a salir (#259).
+    if (ya_apuntado) {
+      const paso = cierraPaso ? await marcarPasoDeLaCola(leadId, pasoId, userId) : null;
+      if (paso) {
+        avanzarPorContacto(leadId, userId).catch((err) =>
+          logger.warn({ err: err.message, leadId }, 'No se pudo mover el estado tras el paso de la cola'));
+      }
+      const r = { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+      return cierraPaso ? { ...r, paso_hecho: paso ? paso.id : null } : r;
+    }
+  }
+
+  const interaccion = await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
+
+  // Antes que mover la etiqueta: `avanzarPorContacto` cuenta los pasos marcados.
+  // Si falla, el contacto se queda apuntado; el paso se puede marcar en la ficha.
+  let pasoHecho = null;
+  if (cierraPaso) {
+    pasoHecho = await marcarPasoDeLaCola(leadId, pasoId, userId).catch((err) => {
+      logger.warn({ err: err.message, leadId, pasoId }, 'No se pudo marcar el paso de la cola');
+      return null;
+    });
+  }
+
+  // Apuntar un contacto ES contactar: hasta ahora la etiqueta habia que moverla
+  // ademas a mano, y por eso en la cola hay gente marcada «Contactado» con cero
+  // contactos hechos y gente al reves. Una nota interna no cuenta: no se ha
+  // hablado con nadie.
+  //
+  // Si falla, la interaccion se queda igualmente. Perder el apunte por no poder
+  // mover una etiqueta seria cambiar un problema pequeño por uno grande.
+  if (tipo !== 'nota') {
+    avanzarPorContacto(leadId, userId).catch((err) =>
+      logger.warn({ err: err.message, leadId }, 'No se pudo mover el estado tras el contacto'));
+  }
+
+  return cierraPaso ? { ...interaccion, paso_hecho: pasoHecho ? pasoHecho.id : null } : interaccion;
 }
 
 // Edición de una interacción existente. Gestor solo puede editar las suyas;
@@ -544,7 +665,7 @@ export async function updateInteractionFn(leadId, interactionId, fields, request
   const interaction = await leadModel.findInteractionById(interactionId);
   if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
   if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
-  if (requestUser?.role === 'gestor' && interaction.created_by !== requestUser.userId) {
+  if (soloLoSuyo(requestUser) && interaction.created_by !== requestUser.userId) {
     throw new AppError('No tienes permiso para editar esta interacción', 403, 'FORBIDDEN');
   }
   const updated = await leadModel.updateInteraction(interactionId, fields);
@@ -556,7 +677,7 @@ export async function deleteInteractionFn(leadId, interactionId, requestUser) {
   const interaction = await leadModel.findInteractionById(interactionId);
   if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
   if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
-  if (requestUser?.role === 'gestor' && interaction.created_by !== requestUser.userId) {
+  if (soloLoSuyo(requestUser) && interaction.created_by !== requestUser.userId) {
     throw new AppError('No tienes permiso para eliminar esta interacción', 403, 'FORBIDDEN');
   }
   await leadModel.deleteInteraction(interactionId);
@@ -587,7 +708,9 @@ export async function reassign(leadId, newResponsableId, userId) {
     `SELECT nombre, role, COALESCE(gestor_colaboraciones, false) AS colaboraciones
        FROM users WHERE id = $1 AND active = true`, [newResponsableId]);
   if (!destino.length) throw new AppError('Esa persona no existe o está desactivada', 400, 'DESTINO_INVALIDO');
-  if (destino[0].role === 'tutor') {
+  const quien = destino[0];
+  // El tutor redactor (CRM#708) tampoco lleva prospectos.
+  if (ROLES_DE_TUTOR.includes(quien.role)) {
     throw new AppError(`${destino[0].nombre} es profesor: no lleva prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
   }
   if (destino[0].colaboraciones) {
@@ -834,11 +957,43 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
   // Si el creador es gestor/admin (no superadmin/soporte), el lead se le asigna
   // a el/ella aunque venga por formulario manual — el round-robin avanza igual,
   // asi que la siguiente asignacion automatica no le vuelve a tocar.
+  // Un lead que entra por WhatsApp no es un lead repartido: es una conversacion
+  // que ya llego a alguien. Se queda con quien la atiende y NO mueve la rueda,
+  // asi que el reparto de los formularios sigue su orden intacto.
+  //
+  // Diego, 18/09: «si llega por whatsapp no afecta el robin lead».
+  //
+  // Antes se avanzaba el puntero una posicion sin asignar a nadie, con la idea
+  // de que a quien se quedaba el lead no le tocara otro enseguida. Pero el
+  // puntero no apunta a ella, apunta a la SIGUIENTE: el turno saltado se lo
+  // comia una tercera, que perdia un lead de formulario sin haber recibido
+  // nada a cambio. Con 176 leads de WhatsApp en 30 dias, eran 176 turnos
+  // saltados a personas que no tenian nada que ver.
+  //
+  // Esto vale mientras reparta el CRM. Cuando Make decida, manda el
+  // responsable en el webhook y este camino ni se usa.
   let forcedResponsableId = null;
-  let advanceRoundRobin = false;
+  const advanceRoundRobin = false;
   if (creatorUser && (creatorUser.role === 'gestor' || creatorUser.role === 'admin')) {
     forcedResponsableId = creatorUser.userId;
-    advanceRoundRobin = true;
+  }
+
+  // SIN DUENO, A PROPOSITO (venta sin gestora).
+  //
+  // No es lo mismo que no pasarle creador: sin creador el round-robin le
+  // encaja el lead a la gestora que toque, y esa persona no ha vendido nada.
+  // Aqui se pide expresamente que no sea de nadie, asi que tampoco se avanza
+  // la cola: el siguiente lead de verdad le toca a quien le tocaba.
+  //
+  // `advanceRoundRobin` ya es `false` siempre, y es `const` desde el 18/09:
+  // reasignarlo aqui tiraba «Assignment to constant variable» y rompia TODA
+  // venta sin gestora con cliente nuevo. Ana, 28/09, refs 6TY103 y CDC8R9.
+  //
+  // Y volvio el 29/09: la fusion de la 2.0.0 con produccion trajo de vuelta el
+  // bloque viejo junto al bueno. Ana, 01/10, refs T0JQXT y 27M1G9. La prueba
+  // `ventaSinGestoraClienteNuevo.test.js` lo para si vuelve a pasar.
+  if (opts.sinResponsable) {
+    forcedResponsableId = null;
   }
 
   const lead = await leadModel.createLeadWithRoundRobin({
@@ -855,6 +1010,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
     esPropuesto,
     propuestoDe,
     forcedResponsableId,
+    skipRoundRobin: Boolean(opts.sinResponsable),
     advanceRoundRobinAnyway: advanceRoundRobin,
     utms: {
       utm_source: null,
@@ -895,6 +1051,39 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
       ]);
     } catch (err) {
       logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado (no crítico)');
+    }
+  }
+
+  // LA AGENDA DEL PROCESO, TAMBIEN AQUI.
+  //
+  // Esto faltaba, y se notaba en todo: un prospecto dado de alta desde el boton
+  // «Nuevo prospecto» --o por carga masiva, que pasa por aqui-- se quedaba SIN
+  // agenda. Sin agenda no sale en la cola del dia, la pestaña «Proceso» esta
+  // vacia y Recordatorios dice que no hay nada. Solo la montaba el camino del
+  // webhook (`_createLeadCore`), asi que el proceso comercial funcionaba con
+  // los leads que entraban solos y no con los que damos de alta nosotros.
+  //
+  // Diego, 23/09: «sigo registrando un prospecto y aun no pasa eso».
+  //
+  // Se AWAITA y va envuelto, igual que en el otro camino: son cuatro filas de
+  // una consulta, pero que falle la agenda NO puede tumbar el alta. Sin agenda
+  // se puede trabajar --se replanifica--; sin lead, no.
+  try {
+    await planificarPasosDeLead(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id },
+      'No se pudo planificar la agenda del prospecto (alta manual)');
+  }
+
+  // EL BOTÓN DE WHATSAPP DE LA WEB (Diego, 29/10: «tocan y ellas cargan»). Si la
+  // gestora lo da de alta con origen WhatsApp, se le cruza su última pulsación
+  // del botón de las 24 h anteriores: así se mide cuántos de los que pulsan pasan
+  // a la conversación. No puede tumbar el alta.
+  if ((canal || '') === 'whatsapp' && lead.responsableId) {
+    try {
+      await cruzarConPulsacion({ leadId: lead.id, projectId: project_id, userId: lead.responsableId });
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: lead.id }, 'No se pudo cruzar el alta con una pulsación del botón');
     }
   }
 

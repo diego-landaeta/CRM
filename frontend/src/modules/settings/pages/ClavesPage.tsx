@@ -8,6 +8,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 import { credencialesApi, type Credencial, type Hueco } from '../api/credenciales.api';
 import DialogoClave from '../components/DialogoClave';
 import RegistroClaves from '../components/RegistroClaves';
@@ -32,22 +33,23 @@ import RegistroClaves from '../components/RegistroClaves';
 
 const ICONO: Record<string, { Icon: typeof Key; color: string; que: string }> = {
   brevo:       { Icon: EnvelopeSimple, color: 'bg-primary/10 text-primary',                       que: 'Correo transaccional' },
-  stripe:      { Icon: CreditCard,     color: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400', que: 'Cobros y suscripciones' },
-  meta:        { Icon: ChartBar,       color: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',         que: 'Meta Ads' },
-  google_ads:  { Icon: ChartBar,       color: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',     que: 'Google Ads' },
-  gsc:         { Icon: MagnifyingGlass,color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400', que: 'Search Console' },
-  woocommerce: { Icon: ShoppingBag,    color: 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400', que: 'Tienda y pedidos' },
-  evolution:   { Icon: WhatsappLogo,   color: 'bg-green-50 text-green-600 dark:bg-green-950/30 dark:text-green-400',     que: 'Puente de WhatsApp' },
-  r2:          { Icon: Cloud,          color: 'bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400',             que: 'Almacenamiento' },
-  make:        { Icon: Lightning,      color: 'bg-pink-50 text-pink-600 dark:bg-pink-950/30 dark:text-pink-400',         que: 'Automatizaciones' },
-  claude:      { Icon: Robot,          color: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400', que: 'Análisis con IA' },
+  stripe:      { Icon: CreditCard,     color: 'bg-primary/10 text-primary', que: 'Cobros y suscripciones' },
+  meta:        { Icon: ChartBar,       color: 'bg-info-soft text-info-soft-foreground',         que: 'Meta Ads' },
+  google_ads:  { Icon: ChartBar,       color: 'bg-warning-soft text-warning-soft-foreground',     que: 'Google Ads' },
+  gsc:         { Icon: MagnifyingGlass,color: 'bg-success-soft text-success-soft-foreground', que: 'Search Console' },
+  woocommerce: { Icon: ShoppingBag,    color: 'bg-warning-soft text-warning-soft-foreground', que: 'Tienda y pedidos' },
+  evolution:   { Icon: WhatsappLogo,   color: 'bg-success-soft text-success-soft-foreground',     que: 'Puente de WhatsApp' },
+  r2:          { Icon: Cloud,          color: 'bg-info-soft text-info-soft-foreground',             que: 'Almacenamiento' },
+  make:        { Icon: Lightning,      color: 'bg-info-soft text-info-soft-foreground',         que: 'Automatizaciones' },
+  claude:      { Icon: Robot,          color: 'bg-primary/10 text-primary', que: 'Análisis con IA' },
+  moodle:      { Icon: Key,            color: 'bg-info-soft text-info-soft-foreground',         que: 'Moodle del campus (MCP de Claude)' },
 };
 const deServicio = (s: string) => ICONO[s] || { Icon: Key, color: 'bg-muted text-muted-foreground', que: '' };
 
 const NOMBRE: Record<string, string> = {
   brevo: 'Brevo', stripe: 'Stripe', meta: 'Meta Ads', google_ads: 'Google Ads',
   gsc: 'Search Console', woocommerce: 'WooCommerce', evolution: 'Evolution',
-  r2: 'Cloudflare R2', make: 'Make', claude: 'Claude',
+  r2: 'Cloudflare R2', make: 'Make', claude: 'Claude', moodle: 'Moodle',
 };
 
 /** «hace 12 min», «hace 5 meses», «nunca». */
@@ -69,6 +71,11 @@ const olvidada = (iso: string | null) =>
   !!iso && (Date.now() - new Date(iso).getTime()) > 90 * 24 * 3600 * 1000;
 
 export default function ClavesPage() {
+  // Ver la lista lo trae también el admin (CRM#632); guardar, borrar y ver el
+  // valor entero siguen siendo de soporte: no se ofrece lo que el servidor niega.
+  const { can } = usePermission();
+  const puedeGuardar = can('credentials.edit');
+  const puedeRevelar = can('credentials.revelar');
   const [claves, setClaves] = useState<Credencial[]>([]);
   const [huecos, setHuecos] = useState<Hueco[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -137,7 +144,9 @@ Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Claves y variables"
-        subtitle="Qué hay puesto en cada proyecto y en cada entorno · solo soporte y superadmin"
+        subtitle={puedeGuardar
+          ? 'Qué hay puesto en cada proyecto y en cada entorno'
+          : 'Qué hay puesto en tus campus y en cada entorno · guardar o ver una clave es de soporte'}
         actions={
           <>
             <button
@@ -145,11 +154,11 @@ Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
               <ClockCounterClockwise size={14} weight="bold" /> Registro
             </button>
-            <button
+            {puedeGuardar && <button
               onClick={() => setEditando(null)}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
               <Plus size={14} weight="bold" /> Añadir clave
-            </button>
+            </button>}
           </>
         }
       />
@@ -157,15 +166,15 @@ Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard icon={Key} label="Claves guardadas" numericValue={claves.length} />
         <KpiCard
-          icon={WarningCircle} iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
+          icon={WarningCircle} iconBg="bg-destructive-soft text-destructive-soft-foreground"
           label="Huecos entre entornos" numericValue={huecos.length}
         />
         <KpiCard
-          icon={Clock} iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
+          icon={Clock} iconBg="bg-warning-soft text-warning-soft-foreground"
           label="Sin usarse en 90 días" numericValue={sinUsar}
         />
         <KpiCard
-          icon={ShieldCheck} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+          icon={ShieldCheck} iconBg="bg-success-soft text-success-soft-foreground"
           label="Proyectos cubiertos" numericValue={new Set(claves.map((c) => c.project_id)).size}
         />
       </div>
@@ -173,13 +182,13 @@ Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
       {/* El aviso que motivó el ticket: si esto hubiera existido, no se habría
           perdido la mañana buscando en el código por qué no salían los correos. */}
       {huecos.length > 0 && (
-        <div className="flex gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-4">
-          <WarningCircle size={20} weight="fill" className="text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="flex gap-3 bg-warning-soft border border-warning/30 rounded-lg p-4">
+          <WarningCircle size={20} weight="fill" className="text-warning flex-shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">
+            <p className="font-semibold text-sm text-warning-soft-foreground">
               {huecos.length === 1 ? 'Falta una clave en un entorno' : `Faltan ${huecos.length} claves entre entornos`}
             </p>
-            <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+            <p className="text-sm text-warning-soft-foreground mt-0.5 leading-relaxed">
               {huecos.map((h, i) => (
                 <span key={`${h.service}-${h.project_id}`}>
                   {i > 0 && ' · '}
@@ -277,12 +286,12 @@ Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
                       <p className="text-[13px]">{c.puesta_por || '—'}</p>
                       <p className="text-xs text-muted-foreground">{hace(c.updated_at)}</p>
                     </td>
-                    <td className={`px-4 py-3 text-xs ${olvidada(c.last_used_at) ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}`}>
+                    <td className={`px-4 py-3 text-xs ${olvidada(c.last_used_at) ? 'text-warning font-semibold' : 'text-muted-foreground'}`}>
                       {hace(c.last_used_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end">
-                        <button
+                        {puedeRevelar && <button
                           onClick={() => ver(c.id)}
                           aria-label={abierta ? 'Ocultar la clave' : 'Ver la clave entera'}
                           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-primary/20
@@ -291,21 +300,21 @@ Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
                         >
                           {abierta ? <EyeSlash size={14} weight="bold" /> : <Eye size={14} weight="bold" />}
                           {abierta ? 'Ocultar' : 'Ver'}
-                        </button>
-                        <button
+                        </button>}
+                        {puedeGuardar && <button
                           onClick={() => setEditando(c)}
                           aria-label={`Cambiar la clave de ${NOMBRE[c.service] || c.service}`}
                           className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-border
                                      bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors
                                      focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        ><PencilSimple size={14} weight="bold" /></button>
-                        <button
+                        ><PencilSimple size={14} weight="bold" /></button>}
+                        {puedeGuardar && <button
                           onClick={() => borrar(c)}
                           aria-label={`Borrar la clave de ${NOMBRE[c.service] || c.service}`}
                           className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-border
                                      bg-card text-muted-foreground hover:text-destructive hover:border-destructive/30
                                      transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"
-                        ><Trash size={14} weight="bold" /></button>
+                        ><Trash size={14} weight="bold" /></button>}
                       </div>
                     </td>
                   </tr>

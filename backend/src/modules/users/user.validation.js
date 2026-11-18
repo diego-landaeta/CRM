@@ -1,24 +1,67 @@
 import { z } from 'zod';
+import { contrasenaNueva } from '../auth/auth.validation.js';
+
+// El correo de otro, solo el super admin (#248). Igual que al crear: sin
+// espacios y en minúsculas.
+export const correoSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+  z.string().email('Email invalido').max(255)
+);
 
 const projectAssignmentSchema = z.object({
   projectId: z.number().int().positive(),
   recibeLeads: z.boolean().optional().default(false),
 });
 
+// Las empresas enteras de un admin (#220): ids de `invoice_issuers`, la sociedad
+// emisora de cada campus. Que existan lo mira el servicio contra la base.
+const empresaIdsSchema = z.array(z.number().int().positive()).max(50).optional();
+
+const tieneCampus = (d) => d.projectIds?.length > 0 || d.projects?.length > 0;
+
+/**
+ * Quién puede tener una empresa entera: el admin (#220, con sus campus) y el
+ * colaborador —rol principal o añadido— (Diego, 26/10/2026: el equipo de
+ * desarrollo va por empresa en Tareas; al colaborador no se le dan campus).
+ */
+export const puedeTenerEmpresa = (role, rolesExtra = []) =>
+  role === 'admin' || role === 'colaborador' || (rolesExtra || []).includes('colaborador');
+
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor'], { message: 'Rol debe ser admin, gestor, soporte o tutor' }),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'], { message: 'Rol debe ser admin, gestor, soporte, tutor, colaborador o tutor redactor' }),
+  // Roles de MAS. Quien lleva prospectos y ademas da clase no tiene que elegir.
+  // Superadmin no cabe aqui a proposito: un rol añadido no puede dar acceso
+  // total --eso se pone como rol principal o no se pone--.
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   // Legacy: lista de ids (recibe_leads queda en false).
   projectIds: z.array(z.number().int().positive()).optional().default([]),
   // Nuevo: lista con flag recibe_leads por proyecto.
   projects: z.array(projectAssignmentSchema).optional(),
+  // Empresas ENTERAS de un admin, también los campus que se creen (#220). Solo
+  // las da el super admin: lo comprueba el controlador.
+  empresaIds: empresaIdsSchema,
+  // #694: sus excepciones de permisos, ya en el alta: `{ 'clave.accion': true | false }`.
+  // Las comprueba el controlador con las reglas de la ficha.
+  excepciones: z.record(z.boolean()).optional(),
 }).refine(
-  (d) => !['admin', 'gestor'].includes(d.role)
-    || (d.projectIds?.length > 0 || d.projects?.length > 0),
+  (d) => d.role !== 'gestor' || tieneCampus(d),
   {
-    message: 'Un admin o un gestor sin proyectos no ve nada: asigna al menos uno',
+    message: 'Una gestora sin campus no ve nada: elige al menos uno',
     path: ['projectIds'],
+  }
+).refine(
+  (d) => d.role !== 'admin' || tieneCampus(d) || d.empresaIds?.length > 0,
+  {
+    message: 'Un admin sin campus ni empresa no ve nada: marca un campus o una empresa entera',
+    path: ['projectIds'],
+  }
+).refine(
+  (d) => !(d.empresaIds?.length > 0) || puedeTenerEmpresa(d.role, d.roles_extra),
+  {
+    message: 'Solo un admin o un colaborador pueden tener una empresa entera',
+    path: ['empresaIds'],
   }
 );
 
@@ -42,7 +85,10 @@ export const createUserSchema = z.object({
  * O sea:
  *
  *   admin    sin proyectos -> 403 en cada endpoint con projectId. Es un alta
- *                             que parece buena y no sirve para nada.
+ *                             que parece buena y no sirve para nada. SALVO que
+ *                             tenga una empresa entera (#220, Diego 10/10): sus
+ *                             campus le llegan por ahi, los de hoy al guardarlo
+ *                             y los que se creen despues.
  *   gestor   sin proyectos -> ademas no ve ningun prospecto y nunca entra en
  *                             el reparto: las dos cosas van por `user_projects`.
  *   soporte  sin proyectos -> funciona. Pasa por encima del filtro.
@@ -65,28 +111,63 @@ export const createUserSchema = z.object({
 // factura. Vanessa lo es y no debe.
 export const updateUserSchema = z.object({
   nombre: z.string().min(2).max(200).optional(),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor']).optional(),
-  factura_manager: z.boolean().optional(),
-  editar_fechas_factura: z.boolean().optional(),
+  // Solo lo acepta el super admin (lo comprueba el controlador): #248.
+  email: correoSchema.optional(),
+  // Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246).
+  // A un tutor no le sale nada mientras siga el freno.
+  reenviarEnlace: z.boolean().optional(),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
+  // «Se dedica solo a colaboraciones»: no da permisos (eso es «Gestionar
+  // colaboraciones»), cambia lo que le toca: no entra en el reparto ni en las
+  // listas de gestoras.
   gestor_colaboraciones: z.boolean().optional(),
+  // factura_manager, editar_fechas_factura y usa_whatsapp ya no se guardan
+  // aquí (#423): son permisos del catálogo y se dan en su ficha, con su
+  // registro. Si llegan, se ignoran.
   projectIds: z.array(z.number().int().positive()).optional(),
   projects: z.array(projectAssignmentSchema).optional(),
+  // Las empresas enteras (#220). Una lista vacía las quita; sus campus se quedan.
+  empresaIds: empresaIdsSchema,
   // Teléfono del gestor (WhatsApp): usado por el widget y para contacto.
   whatsapp_phone: z.string().max(30).nullable().optional().or(z.literal('')),
   whatsapp_display_name: z.string().max(120).nullable().optional().or(z.literal('')),
 });
 
 // Reset de contraseña por un superadmin (no requiere la contraseña actual).
+// #248: las mismas reglas que «Establece tu contraseña», y repetida.
 export const adminSetPasswordSchema = z.object({
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(200),
+  password: contrasenaNueva,
+  confirmPassword: z.string().min(1, 'Repite la contraseña'),
+}).refine((d) => d.password === d.confirmPassword, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirmPassword'],
+});
+
+// El buscador (Ctrl K, #591): por nombre o correo, pocos resultados.
+export const buscarUsersSchema = z.object({
+  q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100),
+  projectIds: z.string().optional().transform((v) => (v ? v.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0) : null)),
+  limit: z.coerce.number().int().positive().max(10).default(5),
 });
 
 export const listUsersSchema = z.object({
   active: z.enum(['true', 'false']).optional(),
-  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor']).optional(),
+  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   projectId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   // La pantalla de Usuarios los pide expresamente; el resto de listas no.
   incluirTodos: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+  // Los desplegables de gestora (Prospectos, Ventas, la Cola, Reasignar…):
+  // a quien lleva un equipo comercial, solo ella y su equipo (QA del 09/11/2026).
+  // A los demás no les cambia nada.
+  alcance: z.enum(['comercial']).optional(),
+});
+
+// El equipo comercial de una administradora (Carlos, 09/11/2026): la lista
+// ENTERA de gestoras a su cargo. Vacía = sin equipo (lo ve todo, como antes).
+export const equipoComercialSchema = z.object({
+  gestoraIds: z.array(z.number().int().positive()).max(200, 'Demasiadas gestoras'),
 });

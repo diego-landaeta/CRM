@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { lazy, Suspense, useEffect, useState } from 'react';
 import { commissionsApi, type CommissionStats } from '../api/commissions.api';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -16,6 +17,9 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import { monthLabel, isInMonth, getCommissionExportColumns, type CommissionRow } from '../lib/period';
 import type { User } from '@/shared/types';
 import { formatCurrencyShort as fmt, formatDate } from '@/shared/lib/format';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
+import usePermission from '@/shared/hooks/usePermission';
 
 const RulesDialog = lazy(() => import('../components/RulesDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
@@ -26,12 +30,13 @@ const ESTADOS = [
   { v: 'pagado', label: 'Pagadas' },
 ];
 
-const inputClass = 'h-9 px-3 rounded-lg border border-border bg-card text-sm';
 
 type PeriodMode = 'all' | 'month';
 
 export default function CommissionsPage() {
   const { user } = useAuth();
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [items, setItems] = useState<CommissionRow[]>([]);
   const [stats, setStats] = useState<CommissionStats | null>(null);
@@ -53,15 +58,23 @@ export default function CommissionsPage() {
   // Selección múltiple para "marcar pagadas en lote" (CRM-138).
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id?: number | null } | null; activeIssuerId: number | null;
+  };
 
   async function load(): Promise<void> {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = filterEstado ? { estado: filterEstado } : {};
+      // Sin esto la pantalla enseñaba las comisiones de TODOS los proyectos con
+      // la empresa puesta arriba: cifras de una cosa con el nombre de otra.
+      const ambito = ambitoComoObjeto({ activeIssuerId, activeProject });
+      const params: Record<string, string | number> = {
+        ...ambito, ...(filterEstado ? { estado: filterEstado } : {}),
+      };
       if (filterUser) params.userId = filterUser;
       const fn = isAdmin ? commissionsApi.list : commissionsApi.listMine;
       const fnStats = isAdmin ? commissionsApi.stats : commissionsApi.statsMine;
-      const [listRes, statsRes] = await Promise.all([fn(params), fnStats(filterUser && isAdmin ? { userId: filterUser } : {})]);
+      const [listRes, statsRes] = await Promise.all([fn(params), fnStats({ ...ambito, ...(filterUser && isAdmin ? { userId: filterUser } : {}) })]);
       if (listRes.success) setItems(listRes.data || []);
       if (statsRes.success && statsRes.data) setStats(statsRes.data);
     } catch (err: any) {
@@ -69,7 +82,7 @@ export default function CommissionsPage() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load();   }, [filterEstado, filterUser]);
+  useEffect(() => { load();   }, [filterEstado, filterUser, activeProject?.id, activeIssuerId]);
   useEffect(() => { setSelected(new Set()); }, [periodMode, year, month, filterEstado, filterUser]);
 
   // Aplicar filtro de mes en cliente (el backend aún no acepta el parámetro segun ticket).
@@ -182,13 +195,13 @@ export default function CommissionsPage() {
                 onClick={() => setClosingMonth(true)}
                 aria-label="Cerrar mes"
                 title={`Cierra ${monthLabel(year, month)} para snapshot inmutable`}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-950/60"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-warning/30 bg-warning-soft text-warning-soft-foreground text-xs font-semibold hover:bg-warning-soft"
               >
                 <Lock size={14} weight="bold" /> <span className="hidden sm:inline">Cerrar mes</span>
               </button>
             )}
-            {isAdmin && user?.role === 'superadmin' && (
-              <button onClick={() => setRulesOpen(true)} className="inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90">
+            {isAdmin && user?.role === 'superadmin' && can('commissions.reglas') && (
+              <button onClick={() => setRulesOpen(true)} className="inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 <Gear size={14} weight="bold" /> <span className="hidden sm:inline">Reglas (% por gestor)</span><span className="sm:hidden">Reglas</span>
               </button>
             )}
@@ -201,13 +214,13 @@ export default function CommissionsPage() {
         <CalendarBlank size={16} className="text-muted-foreground flex-shrink-0" weight="regular" />
         <button
           onClick={() => setPeriodMode('month')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${periodMode === 'month' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${periodMode === 'month' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
         >
           Mes/año
         </button>
         <button
           onClick={() => setPeriodMode('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${periodMode === 'all' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${periodMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
         >
           Todo el histórico
         </button>
@@ -254,8 +267,8 @@ export default function CommissionsPage() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard icon={ChartBar} label="Total generado" value={fmt(stats.total)} />
-          <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.pagado)} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400" />
-          <KpiCard icon={Clock} label="Pendiente" value={fmt(stats.pendiente)} iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400" />
+          <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.pagado)} iconBg="bg-success-soft text-success-soft-foreground" />
+          <KpiCard icon={Clock} label="Pendiente" value={fmt(stats.pendiente)} iconBg="bg-warning-soft text-warning-soft-foreground" />
           <KpiCard icon={CurrencyEur} label="Comisiones" value={stats.cantidad} />
         </div>
       )}
@@ -263,7 +276,7 @@ export default function CommissionsPage() {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border flex items-center gap-2 flex-wrap">
           {ESTADOS.map(e => (
-            <button key={e.v} onClick={() => setFilterEstado(e.v)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterEstado === e.v ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}>
+            <button key={e.v} onClick={() => setFilterEstado(e.v)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterEstado === e.v ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}>
               {e.label}
             </button>
           ))}
@@ -282,7 +295,7 @@ export default function CommissionsPage() {
         </div>
 
         {/* Bulk actions bar (CRM-138) */}
-        {isAdmin && selected.size > 0 && (
+        {isAdmin && can('commissions.pagar') && selected.size > 0 && (
           <div className="px-4 py-2 border-b border-border bg-primary/5 flex items-center justify-between gap-2 flex-wrap">
             <span className="text-xs font-semibold text-primary">
               {selected.size} seleccionada{selected.size !== 1 ? 's' : ''} para pagar
@@ -296,7 +309,7 @@ export default function CommissionsPage() {
               </button>
               <button
                 onClick={() => setBulkPay(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-success text-success-foreground text-xs font-semibold hover:bg-success"
               >
                 <CheckCircle size={12} weight="bold" /> Marcar todas como pagadas
               </button>
@@ -373,16 +386,16 @@ export default function CommissionsPage() {
                       <td className="px-4 py-3 text-right tabular-nums font-bold">{fmt(r.importe_comision)}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                          r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                          r.estado === 'pagado' ? 'bg-success-soft text-success-soft-foreground' :
                           r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
-                          'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                          'bg-warning-soft text-warning-soft-foreground'
                         }`}>{r.estado}</span>
                         {r.fecha_pago && <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(r.fecha_pago)}</p>}
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-3 text-right">
                           {r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
-                            <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-green-50 text-green-600 text-[11px] font-semibold hover:bg-green-100">
+                            <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-success-soft text-success text-[11px] font-semibold hover:bg-success-soft">
                               Pagar
                             </button>
                           )}
@@ -404,9 +417,9 @@ export default function CommissionsPage() {
                       <div className="text-xs text-muted-foreground truncate">{r.product_nombre || r.producto_contratado || '—'}</div>
                     </div>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
-                      r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                      r.estado === 'pagado' ? 'bg-success-soft text-success-soft-foreground' :
                       r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
-                      'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                      'bg-warning-soft text-warning-soft-foreground'
                     }`}>{r.estado}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
@@ -428,8 +441,8 @@ export default function CommissionsPage() {
                       {formatDate(r.created_at)}
                       {isAdmin && r.user_nombre && <span> · <span className="font-medium text-foreground">{r.user_nombre}</span></span>}
                     </div>
-                    {isAdmin && r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
-                      <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-green-50 text-green-600 text-[11px] font-semibold hover:bg-green-100 flex-shrink-0">
+                    {isAdmin && can('commissions.pagar') && r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
+                      <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-success-soft text-success text-[11px] font-semibold hover:bg-success-soft flex-shrink-0">
                         Pagar
                       </button>
                     )}

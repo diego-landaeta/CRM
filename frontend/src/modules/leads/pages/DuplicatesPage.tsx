@@ -14,7 +14,8 @@ import {
   ArrowsClockwise, GitMerge, Warning, MagnifyingGlass, CheckCircle,
   ArrowSquareOut, Phone, EnvelopeSimple, WhatsappLogo, Crown,
 } from '@phosphor-icons/react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
+import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -64,8 +65,10 @@ function porDefecto(g: Grupo): number {
 }
 
 export default function DuplicatesPage() {
-  const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
-  const projectId = activeProject?.id;
+  // Los duplicados se buscan dentro de UN campus. Con una empresa o «Todos»
+  // arriba, se elige aquí cuál (#218, tanda 3).
+  const campus = useCampusDeLaPantalla();
+  const projectId = campus.id;
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,10 +146,14 @@ export default function DuplicatesPage() {
     } finally { setFusionando(null); }
   }
 
-  if (!projectId || projectId === -1) {
+  if (!projectId) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
-        Selecciona un proyecto para repasar sus duplicados.
+      <div className="space-y-4 pb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
+        <ElegirCampus campus={campus} que="sus duplicados" />
+        <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
+          Elige el campus para repasar sus duplicados.
+        </div>
       </div>
     );
   }
@@ -159,12 +166,14 @@ export default function DuplicatesPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-          Fichas de <strong>{activeProject?.nombre}</strong> que comparten correo, teléfono o usuario de
+          Fichas de <strong>{campus.nombre}</strong> que comparten correo, teléfono o usuario de
           WhatsApp con otra. Elige cuál se queda y fusiona: el historial completo —interacciones,
           recordatorios, ventas, matrículas, correos y el chat de WhatsApp— se mueve a la que se queda,
           y las demás van a la papelera apuntando a ella.
         </p>
       </div>
+
+      <ElegirCampus campus={campus} que="sus duplicados" />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
@@ -206,7 +215,7 @@ export default function DuplicatesPage() {
         </div>
       ) : visibles.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-10 text-center text-muted-foreground">
-          <CheckCircle size={40} weight="duotone" className="mx-auto mb-2 text-emerald-500" />
+          <CheckCircle size={40} weight="duotone" className="mx-auto mb-2 text-success" />
           <p className="text-sm font-semibold">
             {grupos.length === 0 ? 'Ninguna ficha repetida en este proyecto' : 'Nada que encaje con el filtro'}
           </p>
@@ -234,12 +243,12 @@ export default function DuplicatesPage() {
                     );
                   })}
                   {g.ya_marcado && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-info-soft text-info-soft-foreground border border-info/30">
                       ya marcado como duplicado
                     </span>
                   )}
                   {g.con_conversion > 0 && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-success-soft text-success-soft-foreground border border-success/30">
                       {g.con_conversion} con venta
                     </span>
                   )}
@@ -253,7 +262,7 @@ export default function DuplicatesPage() {
                       <div
                         key={l.id}
                         className={`px-4 py-3 flex items-start gap-3 ${
-                          esLaQueSeQueda ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : seCierra ? '' : 'opacity-50'
+                          esLaQueSeQueda ? 'bg-success-soft/60' : seCierra ? '' : 'opacity-50'
                         }`}
                       >
                         <label className="flex items-center pt-0.5 cursor-pointer" title="Esta es la ficha que se queda">
@@ -267,7 +276,7 @@ export default function DuplicatesPage() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            {esLaQueSeQueda && <Crown size={14} weight="fill" className="text-emerald-600 dark:text-emerald-400" />}
+                            {esLaQueSeQueda && <Crown size={14} weight="fill" className="text-success" />}
                             <Link
                               to={`${RUTA_FICHA}/${l.id}`}
                               target="_blank"
@@ -278,7 +287,7 @@ export default function DuplicatesPage() {
                             <span className="text-[11px] text-muted-foreground tabular-nums">#{l.id}</span>
                             <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{l.status || '—'}</span>
                             {Number(l.n_conversiones) > 0 && (
-                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-semibold">
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-success-soft text-success-soft-foreground font-semibold">
                                 {l.n_conversiones} venta{Number(l.n_conversiones) > 1 ? 's' : ''}
                               </span>
                             )}
@@ -317,7 +326,7 @@ export default function DuplicatesPage() {
                 </div>
 
                 {ventasQueSeCierran.length > 0 && (
-                  <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border-t border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                  <div className="px-4 py-2 bg-warning-soft border-t border-warning/30 text-xs text-warning-soft-foreground flex items-start gap-2">
                     <Warning size={15} className="flex-none mt-0.5" />
                     <span>
                       {ventasQueSeCierran.length === 1 ? 'Una de las fichas que vas a cerrar tiene venta' : `${ventasQueSeCierran.length} de las fichas que vas a cerrar tienen ventas`}.

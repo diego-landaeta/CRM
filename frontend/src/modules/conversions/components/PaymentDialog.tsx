@@ -1,7 +1,8 @@
-import { useState, useEffect, type FormEvent } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { useState, useEffect, type FormEvent } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import { X } from '@phosphor-icons/react';
-import { conversionsApi, type Conversion } from '../api/conversions.api';
+import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { formatCurrency } from '@/shared/lib/format';
@@ -10,7 +11,32 @@ interface PaymentForm {
   importe: string;
   fecha: string;
   notas: string;
+  metodo: MetodoPago | '';
+  referencia: string;
 }
+
+/*
+  LA FORMA DE PAGO DEL ABONO (15/10).
+
+  Este diálogo no la pedía: el abono se guardaba sin método y en la factura caía
+  el de la venta. Con el webhook de transferencias (Conexión) hace falta saber si
+  entró por transferencia o depósito bancario, que es lo único que se avisa.
+
+  Por defecto «Sin indicar», que es como se guardaba hasta ahora: el aviso sale
+  solo cuando alguien elige transferencia o depósito, no por suponerlo.
+*/
+const FORMAS_DE_PAGO: ReadonlyArray<{ value: MetodoPago | ''; label: string }> = [
+  { value: '', label: '— Sin indicar —' },
+  { value: 'transferencia', label: 'Transferencia bancaria' },
+  { value: 'deposito', label: 'Depósito bancario' },
+  { value: 'tarjeta', label: 'Tarjeta' },
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'bizum', label: 'Bizum' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'otro', label: 'Otro' },
+];
+// Aquí y no importado de la API: la prueba del diálogo sustituye ese módulo entero.
+const esBancario = (m: string) => m === 'transferencia' || m === 'deposito';
 
 interface PaymentDialogProps {
   open: boolean;
@@ -26,11 +52,13 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
     importe: '',
     fecha: new Date().toISOString().slice(0, 10),
     notas: '',
+    metodo: '',
+    referencia: '',
   });
 
   useEffect(() => {
     if (open) {
-      setForm({ importe: '', fecha: new Date().toISOString().slice(0, 10), notas: '' });
+      setForm({ importe: '', fecha: new Date().toISOString().slice(0, 10), notas: '', metodo: '', referencia: '' });
     }
   }, [open]);
 
@@ -56,6 +84,8 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
         importe,
         fecha: form.fecha,
         notas: form.notas || null,
+        metodo: form.metodo || null,
+        referencia: esBancario(form.metodo) && form.referencia.trim() ? form.referencia.trim() : null,
         ...(permitirDuplicado ? { permitir_duplicado: true } : {}),
       });
     }
@@ -85,7 +115,6 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
     }
   }
 
-  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
   return (
     <Portal>
@@ -109,17 +138,17 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
             </div>
             <div className="flex justify-between mb-1">
               <span className="text-muted-foreground">Pagado:</span>
-              <span className="font-semibold text-green-600 tabular-nums">{formatCurrency(conversion.importe_pagado)}</span>
+              <span className="font-semibold text-success tabular-nums">{formatCurrency(conversion.importe_pagado)}</span>
             </div>
             <div className="flex justify-between pt-1 border-t border-border">
               <span className="text-muted-foreground">Pendiente:</span>
-              <span className="font-bold text-orange-600 tabular-nums">{formatCurrency(pendiente)}</span>
+              <span className="font-bold text-warning tabular-nums">{formatCurrency(pendiente)}</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe del abono (EUR) *</label>
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Importe del abono (EUR) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -135,18 +164,36 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha</label>
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha</label>
               <input type="date" aria-label="Fecha del abono" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} />
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Notas</label>
+              <label htmlFor="abono-metodo" className="mb-1.5 block px-1 text-secundario text-muted-foreground">Forma de pago</label>
+              <select id="abono-metodo" value={form.metodo}
+                onChange={e => setForm({ ...form, metodo: e.target.value as MetodoPago | '' })}
+                className={inputClass}>
+                {FORMAS_DE_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </div>
+
+            {esBancario(form.metodo) && (
+              <div>
+                <label htmlFor="abono-referencia" className="mb-1.5 block px-1 text-secundario text-muted-foreground">Referencia del banco (opcional)</label>
+                <input id="abono-referencia" value={form.referencia} maxLength={120}
+                  onChange={e => setForm({ ...form, referencia: e.target.value })}
+                  placeholder="Nº de operación o concepto" className={inputClass} />
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Notas</label>
               <input value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Primer plazo, segunda cuota, etc..." className={inputClass} />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted">Cancelar</button>
-              <button type="submit" disabled={saving} className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+              <button type="submit" disabled={saving} className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
                 {saving ? 'Guardando...' : 'Registrar abono'}
               </button>
             </div>

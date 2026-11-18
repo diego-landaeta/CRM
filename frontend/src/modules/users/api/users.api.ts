@@ -11,7 +11,10 @@ export interface CrmUser {
   id: number;
   nombre: string;
   email: string;
+  /** El rol PRINCIPAL. Es el que sale en las listas y el que mira medio CRM. */
   role: UserRole;
+  /** Roles de MAS: solo suman permisos. Vacio en casi todo el mundo. */
+  roles_extra?: UserRole[];
   active: boolean;
   last_login_at: string | null;
   created_at: string | null;
@@ -31,6 +34,25 @@ export interface CrmUser {
   factura_manager?: boolean;
   editar_fechas_factura?: boolean;
   gestor_colaboraciones?: boolean;
+  /**
+   * Si usa el WhatsApp del CRM (#128).
+   *
+   * `null` significa que la migracion 156 todavia no esta aplicada — no que
+   * este apagado. La pantalla lo distingue: con null la casilla no se puede
+   * tocar y dice por que, en vez de dejar apagar algo que no se va a guardar.
+   */
+  usa_whatsapp?: boolean | null;
+  /**
+   * Las empresas ENTERAS de un admin (#220): le llegan también los campus que
+   * se creen en ellas. `null` = falta la migración 203, no «ninguna».
+   */
+  empresa_ids?: number[] | null;
+}
+
+/** Una empresa del grupo: la sociedad emisora de los campus. */
+export interface Empresa {
+  id: number;
+  razon_social: string;
 }
 
 export interface ListUsersParams {
@@ -66,6 +88,8 @@ function normalizeUser(raw: any): CrmUser {
     nombre: raw.nombre || raw.name || '',
     email: raw.email || '',
     role: raw.role,
+    // Los roles de mas, si los tiene. Vacio en casi todo el mundo.
+    roles_extra: Array.isArray(raw.roles_extra) ? raw.roles_extra : [],
     active: raw.active !== false,
     last_login_at: raw.last_login_at ?? null,
     created_at: raw.created_at ?? null,
@@ -76,6 +100,10 @@ function normalizeUser(raw: any): CrmUser {
     factura_manager: !!raw.factura_manager,
     editar_fechas_factura: !!raw.editar_fechas_factura,
     gestor_colaboraciones: !!raw.gestor_colaboraciones,
+    // Sin `!!`: hace falta distinguir «apagado» de «todavia no hay columna».
+    usa_whatsapp: raw.usa_whatsapp ?? null,
+    // Igual que arriba: null si la migración 203 no está, para no fingir.
+    empresa_ids: Array.isArray(raw.empresa_ids) ? raw.empresa_ids.map(Number) : null,
   };
 }
 
@@ -102,7 +130,13 @@ export interface CreateUserPayload {
   nombre: string;
   email: string;
   role: UserRole;
+  /** Roles de MAS. Solo suman permisos; el principal sigue siendo `role`. */
+  roles_extra?: UserRole[];
   projects: ProjectAssignment[];
+  /** Empresas enteras (#220). Solo lo acepta el servidor de un super admin. */
+  empresaIds?: number[];
+  /** #694: excepciones de permisos, ya en el alta. Pide «Permisos de cada persona». */
+  excepciones?: Record<string, boolean>;
 }
 
 export interface CreateUserResult {
@@ -120,7 +154,13 @@ export async function createUser(payload: CreateUserPayload): Promise<CreateUser
 /** Solo estos campos acepta el backend hoy. El email NO se puede cambiar. */
 export interface UpdateUserPayload {
   nombre?: string;
+  /** Solo lo acepta el servidor si quien lo manda es super admin (#246). */
+  email?: string;
+  /** Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246). */
+  reenviarEnlace?: boolean;
   role?: UserRole;
+  /** Roles de MAS. Una lista vacia los quita todos, que es lo que se espera. */
+  roles_extra?: UserRole[];
   projects?: ProjectAssignment[];
   /**
    * Formato viejo, que aqui sirve para una cosa que el nuevo no puede: dejar a
@@ -130,6 +170,17 @@ export interface UpdateUserPayload {
    */
   projectIds?: number[];
   whatsapp_phone?: string;
+  /**
+   * Las casillas del formulario. Faltaban aqui, y por eso no se mandaban: el
+   * dialogo las pintaba, se marcaban y al volver seguian como estaban. El
+   * backend si las acepta desde el principio (`updateUserSchema`).
+   */
+  factura_manager?: boolean;
+  editar_fechas_factura?: boolean;
+  /** WhatsApp del CRM (#128). */
+  usa_whatsapp?: boolean;
+  /** Empresas enteras (#220). Lista vacía = quitarlas; sus campus se quedan. Solo super admin. */
+  empresaIds?: number[];
 }
 
 export async function updateUser(id: number, payload: UpdateUserPayload): Promise<CrmUser> {
@@ -149,8 +200,93 @@ export async function reactivateUser(id: number): Promise<void> {
   if (!res.success) throw new Error(res.error || 'No se pudo reactivar el usuario');
 }
 
-/** Reset de contraseña por un superadmin. Cierra las sesiones activas del usuario. */
-export async function setUserPassword(id: number, password: string): Promise<void> {
-  const res = await client.patch(`/users/${id}/password`, { password });
+/**
+ * Reset de contraseña por un superadmin. Cierra las sesiones activas del usuario.
+ * Repetida, con las reglas de «Establece tu contraseña» (#248).
+ */
+export async function setUserPassword(id: number, password: string, confirmPassword: string): Promise<void> {
+  const res = await client.patch(`/users/${id}/password`, { password, confirmPassword });
   if (!res.success) throw new Error(res.error || 'No se pudo cambiar la contraseña');
+}
+
+/**
+ * Las empresas del grupo, para la casilla «todos los campus de esta empresa»
+ * (#220). Salen todas, también las que aún no tienen campus: un admin se puede
+ * dar de alta antes que el primero.
+ */
+export async function listEmpresas(): Promise<Empresa[]> {
+  const res = await client.get('/projects/sociedades');
+  if (!res.success) throw new Error(res.error || 'No se pudieron cargar las empresas');
+  return (res.data || []).map((e: any) => ({ id: Number(e.id), razon_social: e.razon_social }));
+}
+
+/** Si cambiarle el correo a alguien puede dejarle sin prospectos de Make (#248). */
+export interface AvisoCambioCorreo {
+  email: string;
+  campusEnReparto: number;
+  prospectosAsignados: number;
+  enviosDeMake: number;
+  recibeProspectos: boolean;
+}
+
+export async function avisoCambioCorreo(id: number): Promise<AvisoCambioCorreo> {
+  const res = await client.get(`/users/${id}/aviso-correo`);
+  if (!res.success) throw new Error(res.error || 'No se pudo comprobar si recibe prospectos');
+  return res.data as AvisoCambioCorreo;
+}
+
+/** Si quien da de alta puede dar un rol: como principal o como añadido (Tony, 03/11). */
+export interface PuedeDarRol {
+  puede: boolean;
+  /** Los tres primeros permisos que le daría y quien da de alta no tiene. */
+  faltan: string[];
+  /** Cuántos son en total (pueden ser más de tres). */
+  cuantos: number;
+}
+
+export interface RolAsignable {
+  rol: UserRole;
+  nombre: string;
+  principal: PuedeDarRol;
+  anadido: PuedeDarRol;
+}
+
+/** Qué roles puede dar en un alta quien pregunta. La misma regla que al guardar. */
+export async function listRolesAsignables(): Promise<RolAsignable[]> {
+  const res = await client.get('/users/roles-asignables');
+  if (!res.success) throw new Error(res.error || 'No se pudo saber qué roles puedes dar');
+  return (res.data || []) as RolAsignable[];
+}
+
+/**
+ * Un correo del equipo que Brevo se niega a entregar (migración 290). Caso real
+ * de ISEIE (17/11/2026): una gestora tres semanas sin avisos por un rebote duro.
+ */
+export interface BrevoBloqueo {
+  id: number;
+  user_id: number;
+  /** El código de Brevo: hardBounce, contactFlaggedAsSpam, unsubscribedViaEmail… */
+  codigo: string | null;
+  /** Ya en castellano. */
+  motivo: string | null;
+  bloqueado_desde: string | null;
+  detectado_at: string | null;
+}
+
+export interface BrevoBloqueos {
+  /** Si la vigilancia está encendida (BREVO_BLOQUEADOS_ACTIVO). Apagada, no hay marcas. */
+  activo: boolean;
+  bloqueos: BrevoBloqueo[];
+}
+
+export async function listBrevoBloqueos(): Promise<BrevoBloqueos> {
+  const res = await client.get('/users/brevo-bloqueos');
+  if (!res.success) throw new Error(res.error || 'No se pudieron leer los bloqueos de Brevo');
+  return { activo: !!res.data?.activo, bloqueos: (res.data?.bloqueos || []) as BrevoBloqueo[] };
+}
+
+/** «Desbloquear en Brevo». Si el buzón sigue sin existir, Brevo lo vuelve a bloquear. */
+export async function desbloquearBrevo(id: number): Promise<void> {
+  const res = await client.delete(`/users/${id}/brevo-bloqueo`);
+  if (!res.success) throw new Error(res.error || 'Brevo no lo desbloqueó');
 }

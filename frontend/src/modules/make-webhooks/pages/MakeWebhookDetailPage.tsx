@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { rutaApp } from '@/shared/lib/rutaApp';
 import {
   ArrowLeft, Copy, ArrowsClockwise, Trash, Plus, X, PaperPlaneTilt, PencilSimple,
 } from '@phosphor-icons/react';
@@ -215,6 +216,12 @@ export default function MakeWebhookDetailPage() {
             <p className="text-[11px] text-muted-foreground mt-0.5">Aplica el mapeo y crea leads en el CRM.</p>
           </button>
         </div>
+        {hook.mode === 'active' && Object.keys(hook.field_mapping || {}).length === 0 && (
+          <p className="mt-2 text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 text-amber-800 dark:text-amber-300 p-2">
+            Activo sin mapeo guardado: los prospectos entran con los campos reconocidos por su nombre habitual
+            (<code>email</code>, <code>full_name</code>, <code>phone_complete</code>, <code>course</code>…). Guarda el mapeo para no depender de eso.
+          </p>
+        )}
       </div>
 
       {/* URL + Secret */}
@@ -267,7 +274,7 @@ export default function MakeWebhookDetailPage() {
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-muted-foreground">Mapeo de campos CRM ← Make</p>
-            <button onClick={save} className="h-7 px-3 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90">Guardar</button>
+            <button onClick={save} className="h-7 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90">Guardar</button>
           </div>
 
           <div className="space-y-2 max-h-96 overflow-auto">
@@ -319,7 +326,7 @@ export default function MakeWebhookDetailPage() {
                     setNewField('');
                   }
                 }}
-                className="h-8 px-3 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90"
+                className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90"
               >
                 <Plus size={12} weight="bold" />
               </button>
@@ -345,8 +352,9 @@ export default function MakeWebhookDetailPage() {
                   'bg-amber-100 text-amber-700'
                 }`}>{d.result}</span>
                 <span className="text-muted-foreground tabular-nums">{new Date(d.received_at).toLocaleString('es-ES')}</span>
-                {d.lead_id && <a href={`/crm/leads/${d.lead_id}`} className="text-primary underline">lead #{d.lead_id}</a>}
-                {d.error_message && <span className="text-red-600 truncate" title={d.error_message}>· {d.error_message}</span>}
+                {d.lead_id && <a href={rutaApp(`/prospectos/${d.lead_id}`)} className="text-primary underline">lead #{d.lead_id}</a>}
+                {/* #627: un envío aceptado con nota es uno que entró sin mapeo: aviso, no error. */}
+                {d.error_message && <span className={`${d.result === 'accepted' ? 'text-amber-700 dark:text-amber-400' : 'text-red-600'} truncate`} title={d.error_message}>· {d.error_message}</span>}
               </div>
             ))}
           </div>

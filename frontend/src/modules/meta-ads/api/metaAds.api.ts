@@ -27,7 +27,13 @@ export interface MetaCampaign {
   total_impressions: number;
   total_clicks: number;
   total_leads: number;
+  /** Los que entraron AL CRM por esta campaña. No son los de Meta: Meta solo
+      cuenta los de su propio formulario, asi que una campaña que lleva a la web
+      le reporta cero aunque entren veinte. */
+  leads_crm?: number;
+  ventas_crm?: number;
   cpl: number | null;
+  cpl_crm?: number | null;
   ctr: number | null;
 }
 
@@ -71,17 +77,33 @@ export interface MetaAd {
   ctr: number | null;
 }
 
+/**
+ * Del gasto a la venta (#53): campaña → lead → venta → cobrado. `ventas` son las
+ * que ya tienen un cobro (la regla de «Ventas»); `cobrado` sale de los apuntes.
+ * Dos lecturas del mismo rango: la COHORTE (`cobrado`, `retorno`, `roi_pct`: lo
+ * que han cobrado hasta hoy los leads captados en el rango) y la CAJA
+ * (`cobrado_en_periodo`…: lo que ha entrado en el rango, sea de cuando sea el lead).
+ */
 export interface MetaRoiRow {
   campaign_id: string;
   nombre: string;
   status?: string | null;
   spend: number;
   leads_meta: number;
+  leads_crm: number;
   ventas: number;
+  vendido: number;
+  /** Igual que `vendido` (nombre de antes). */
   facturado: number;
   cobrado: number;
+  cobrado_en_periodo: number;
+  coste_por_lead: number | null;
+  coste_por_venta: number | null;
+  retorno: number;
+  retorno_en_periodo: number;
   ganancia: number;
   roi_pct: number | null;
+  roi_en_periodo_pct: number | null;
   n_productos_asociados: number;
   productos_nombres?: string | null;
 }

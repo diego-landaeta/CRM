@@ -1,6 +1,7 @@
 // Calcula la prioridad visual de un lead segun su estado, recordatorios y dias inactivos.
 // Resultado: { tone, label, dotClass, borderClass }
 import type { Lead } from '@/shared/types';
+import { yaPaso } from '@/shared/lib/fechas';
 
 export type Priority = 'overdue' | 'urgent' | 'fresh' | 'inProgress' | 'won' | 'lost' | 'normal';
 
@@ -11,59 +12,68 @@ export interface PriorityStyle {
   rowBgClass: string;
 }
 
+// El tono dice QUE HAY QUE HACER, igual que en StatusBadge: no puede pasar que
+// el mismo lead salga ambar en la tabla y violeta en su punto.
+//
+//   destructive  se paso la fecha
+//   warning      corre prisa
+//   info         acaba de entrar, no toca nada todavia
+//   success      gano
+//   neutro       cerrado o sin nada que decir
 const PRIORITY_STYLES: Record<Priority, PriorityStyle> = {
   overdue: {
     label: 'Vencido',
-    dotClass: 'bg-red-500',
-    borderClass: 'border-l-red-500',
-    rowBgClass: 'hover:bg-red-50/30 dark:hover:bg-red-950/20',
+    dotClass: 'bg-destructive',
+    borderClass: 'border-l-destructive',
+    rowBgClass: 'hover:bg-destructive-soft',
   },
   urgent: {
     label: 'Urgente',
-    dotClass: 'bg-amber-500',
-    borderClass: 'border-l-amber-500',
-    rowBgClass: 'hover:bg-amber-50/30 dark:hover:bg-amber-950/20',
+    dotClass: 'bg-warning',
+    borderClass: 'border-l-warning',
+    rowBgClass: 'hover:bg-warning-soft',
   },
   fresh: {
     label: 'Nuevo',
-    dotClass: 'bg-blue-500',
-    borderClass: 'border-l-blue-500',
+    dotClass: 'bg-info',
+    borderClass: 'border-l-info',
     rowBgClass: '',
   },
   inProgress: {
     label: 'En curso',
-    dotClass: 'bg-emerald-500',
-    borderClass: 'border-l-emerald-500',
+    dotClass: 'bg-primary',
+    borderClass: 'border-l-primary',
     rowBgClass: '',
   },
   won: {
+    // Verde, no violeta: convertido es el final bueno del embudo y el color
+    // tiene que decirlo. Era violeta y no se distinguia de «nuevo».
     label: 'Convertido',
-    dotClass: 'bg-violet-500',
-    borderClass: 'border-l-violet-500',
+    dotClass: 'bg-success',
+    borderClass: 'border-l-success',
     rowBgClass: '',
   },
   lost: {
     label: 'No interesado',
-    dotClass: 'bg-zinc-400',
-    borderClass: 'border-l-zinc-300 dark:border-l-zinc-700',
+    dotClass: 'bg-muted-foreground/50',
+    borderClass: 'border-l-border',
     rowBgClass: '',
   },
   normal: {
     label: 'Normal',
-    dotClass: 'bg-zinc-300 dark:bg-zinc-600',
+    dotClass: 'bg-muted-foreground/40',
     borderClass: 'border-l-transparent',
     rowBgClass: '',
   },
 };
-
 export function getLeadPriority(lead: Partial<Lead> | null | undefined): Priority {
   if (!lead) return 'normal';
   const estado = lead.estado || lead.status;
 
   // Recordatorio vencido tiene prioridad maxima
   if (lead.next_reminder_at) {
-    const due = new Date(lead.next_reminder_at);
-    if (!isNaN(due.getTime()) && due < new Date()) return 'overdue';
+    // Un DATE: vence cuando su día ya pasó, no a las 20:00 del anterior (15/10).
+    if (yaPaso(lead.next_reminder_at)) return 'overdue';
   }
 
   // Estados terminales

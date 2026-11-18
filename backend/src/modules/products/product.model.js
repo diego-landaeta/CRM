@@ -1,4 +1,6 @@
 import { query } from '../../shared/config/db.js';
+// El calculo de plazas vive aparte: lo usa tambien la cola del dia.
+import { PLAZAS_JOIN, PLAZAS_COLS } from './plazas.sql.js';
 
 // #86 · Las plazas ocupadas NO se guardan en ninguna columna: se cuentan aqui,
 // cada vez. Es lo que exige el proceso comercial —«se comprueba antes de cada
@@ -7,30 +9,7 @@ import { query } from '../../shared/config/db.js';
 //
 // Se cuentan LEADS distintos, no filas de venta: la misma persona puede tener
 // dos ventas del mismo producto (un plan que se partio, una cuota suelta) y
-// sigue ocupando una plaza. Por eso mismo `es_mensualidad` queda fuera: una
-// mensualidad no es una matricula nueva.
-//
-// `plazas_ocupadas_previas` se suma porque hay matriculas anteriores al CRM que
-// ocupan plaza y de las que aqui no hay venta.
-const PLAZAS_JOIN = `
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(p.plazas_ocupadas_previas, 0) + COUNT(DISTINCT cv.lead_id) AS ocupadas
-      FROM conversions cv
-     WHERE cv.producto_contratado_id = p.id
-       AND cv.es_mensualidad IS NOT TRUE
-  ) pl ON TRUE`;
-
-// `plazas_libres` puede salir NEGATIVA, y se deja asi a proposito: significa que
-// la convocatoria esta sobrevendida y el administrador tiene que verlo. Quien
-// pinte una plantilla de cara al cliente es el que corta en cero, no esto.
-const PLAZAS_COLS = `
-  pl.ocupadas AS plazas_ocupadas,
-  CASE WHEN p.plazas_totales IS NULL THEN NULL
-       ELSE p.plazas_totales - pl.ocupadas END AS plazas_libres,
-  CASE WHEN p.fecha_cierre_convocatoria IS NULL THEN NULL
-       ELSE (p.fecha_cierre_convocatoria - CURRENT_DATE) END AS dias_para_cierre`;
-
-// Listado: omite _texto pesados. Para detalle completo usar findById(id).
+/// Listado: omite _texto pesados. Para detalle completo usar findById(id).
 const LIST_COLS = [
   'p.id', 'p.project_id', 'p.nombre', 'p.sku', 'p.precio', 'p.moneda',
   'p.duracion', 'p.horas', 'p.modalidad', 'p.fecha_inicio_texto', 'p.num_modulos',
@@ -42,8 +21,10 @@ const LIST_COLS = [
   "LEFT(p.descripcion, 280) AS descripcion",
 ].join(', ');
 
+// Un campus o varios (#218: con «Todos» o una empresa, los del ámbito). Cada
+// fila lleva el nombre de su campus, para la columna «Campus».
 export async function findByProject(projectId, { includeInactive = false, categoryId = null } = {}) {
-  const params = [projectId];
+  const params = [[].concat(projectId).map(Number)];
   let categoryFilter = '';
   if (categoryId) {
     // Filtra por categoría incluyendo TODOS sus descendientes (CTE recursivo)
@@ -58,12 +39,14 @@ export async function findByProject(projectId, { includeInactive = false, catego
     params.push(categoryId);
   }
   const base = `SELECT ${LIST_COLS}, ${PLAZAS_COLS},
-                       c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre
+                       c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre,
+                       pr.nombre as proyecto_nombre
                 FROM products p
+                LEFT JOIN projects pr ON pr.id = p.project_id
                 LEFT JOIN product_categories c ON c.id = p.categoria_id
                 LEFT JOIN product_categories sc ON sc.id = p.subcategoria_id
                 ${PLAZAS_JOIN}
-                WHERE p.project_id = $1 ${categoryFilter}`;
+                WHERE p.project_id = ANY($1::int[]) ${categoryFilter}`;
   const sql = includeInactive
     ? base + ' ORDER BY p.created_at DESC'
     : base + ' AND p.active = true ORDER BY p.created_at DESC';

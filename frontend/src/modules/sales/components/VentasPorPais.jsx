@@ -46,7 +46,7 @@ function Aviso({ activo, payload }) {
   );
 }
 
-export default function VentasPorPais({ projectId = null, from = null, to = null, responsableId = null, top = 8 }) {
+export default function VentasPorPais({ projectId = null, issuerId = null, from = null, to = null, responsableId = null, paisEntrada = null, top = 8 }) {
   const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
@@ -64,14 +64,16 @@ export default function VentasPorPais({ projectId = null, from = null, to = null
     setCargando(true); setError(null);
     const params = {};
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
+    if (paisEntrada) params.paisEntrada = paisEntrada;
     client.get('/ventas/paises', { params })
       .then((r) => { if (vivo) setFilas(r.success ? (r.data || []) : []); })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar los países'); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId, paisEntrada]);
 
   const { conPais, sinTelefono, total } = useMemo(() => {
     const limpias = filas.map((f) => ({
@@ -93,7 +95,7 @@ export default function VentasPorPais({ projectId = null, from = null, to = null
 
   if (cargando) return <div className="bg-card border border-border rounded-lg p-6 h-[360px] animate-pulse" />;
   if (error) {
-    return <div className="bg-card border border-border rounded-lg p-6 text-sm text-red-600 dark:text-red-400">{error}</div>;
+    return <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">{error}</div>;
   }
   if (!conPais.length && !sinTelefono) return null;
 
@@ -173,9 +175,9 @@ export default function VentasPorPais({ projectId = null, from = null, to = null
       </div>
 
       {sinTelefono && (
-        <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2.5">
-          <Warning size={15} weight="fill" className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-900 dark:text-amber-300">
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft p-2.5">
+          <Warning size={15} weight="fill" className="text-warning shrink-0 mt-0.5" />
+          <div className="text-xs text-warning-soft-foreground">
             <strong>{num(sinTelefono.ventas)} ventas ({eur(sinTelefono.vendido)})</strong> sin teléfono, así que no
             se les puede asignar país. Son{' '}
             <strong>{total ? Math.round((sinTelefono.vendido / total) * 100) : 0}%</strong> de lo vendido:

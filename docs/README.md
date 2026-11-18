@@ -3,12 +3,149 @@
 > **Fuente de verdad del esquema:** `backend/migrations/*.sql` — todos los SQL ejecutados, en orden.
 > Este es el **único** documento de referencia; el resto se consolidó aquí (el historial completo queda en git).
 
-## Deploy y ramas (resumen)
-- `main` = **producción**. ISEIH: https://360crm.tech/crm · VPS `187.124.128.126` · PM2 `crm-api-production` :3001 · front `/var/www/crm/production/frontend`.
-- ISEIE: https://crm.iseie.com · VPS `72.60.90.135` · PM2 `crm-iseie-api` · front `/var/www/crm-iseie`.
-- **Deploy front:** `npm run build` → tar dist → scp/paramiko → swap con backup → `chown www-data`. **Backend:** scp del módulo + `pm2 restart`.
-- **Migraciones:** aplicar en ambas DBs (`crm_prod_db` · `crm_iseie`).
-- **Paridad:** el módulo `invoices` es espejo entre ambos CRMs; navegación/rutas (Sidebar, App.jsx) NO se copian enteras.
+## Deploy y ramas (al día el 09/10/2026)
+
+**Ramas.** `main` = **producción**, con la etiqueta de cada versión (`v2.0.0`, `v2.0.1`). `staging` = **pruebas** (/testeo), independiente de `main`. Lo nuevo entra por `staging`; cuando Diego lo aprueba pasa a `main` con un **pull request** (`gh pr create` + `gh pr merge --admin`: la protección de `main` pide revisión y no se aplica a administradores). El gancho `pre-push` no deja empujar a `main` ni a `feat/angel|fabian|diego`. Las ramas de trabajo salen de `staging`.
+
+| | Producción | Pruebas |
+|---|---|---|
+| Web | https://360crm.tech/crm | https://360crm.tech/testeo |
+| Rama | `main` | `staging` |
+| Backend | `/opt/crm/production` · PM2 `crm-api-production` :3001 | `/opt/crm/staging` · PM2 `crm-api-staging` :3002 |
+| Frontal | `/var/www/crm/production/frontend` · `npm run build` | `/var/www/crm/staging/frontend` · `npm run build -- --mode staging` |
+| Base | `crm_prod_db` | `crm_test_db` |
+
+VPS `187.124.128.126`. PM2 corre como el usuario **claude** (`export PATH=~/.nvm/versions/node/v24.14.1/bin:$PATH; pm2 …`), no como root.
+
+**Subir el backend.** El código sale de la rama (`git archive <rama> backend/src …`), nunca de ficheros sueltos copiados a mano: así se perdió una vez una función. Antes de reiniciar se carga la app entera sin escuchar (`NODE_ENV=test node --env-file=.env -e "import('./src/app.js')"`); `node --check` no basta. Luego `pm2 restart` y `/api/health`.
+**Subir el frontal.** Comprobar en `dist/index.html` que las rutas son las del entorno (`/crm/` o `/testeo/`): un build del otro entorno deja la web en blanco con un 200. Se guarda copia de la carpeta anterior.
+**Migraciones.** Como `postgres` (`sudo -u postgres psql -v ON_ERROR_STOP=1`), con su bloque de GRANT a `crm_user`, y comprobando el catálogo después (un aviso sin «ERROR» ha dado por aplicada alguna que no lo estaba). Si la columna es un ENUM, hay que ampliar el tipo, no solo el CHECK. **Después de cada tanda, `scripts/dar-propiedad-a-crm-user.sql`** sobre la misma base (#71): lo que crea `postgres` nace suyo, y así las bases de pruebas y de producción dejan de separarse. Es idempotente; el destino es el dueño de la base.
+**Copias.** Antes de una subida grande: `pg_dump -Fc`, tar del backend y del frontal en `/var/backups/crm/`. La copia diaria automática de la base (con copia fuera del VPS), la purga de los `.tgz` viejos y la rotación de logs: [copias-de-la-base.md](copias-de-la-base.md) (#634).
+
+**Interruptores del `.env` de producción** (09/10): `NOVEDADES_AUTO=0` desde la 2.1.0 (las Novedades se mandan a mano, primero la prueba a Diego; con `1` saldrían solas al arrancar) · `MCP_CODIGO_OBLIGATORIO=true` (Claude pide el código de verificación) · `FEEDBACK_DIA7_INICIO=2026-09-29` (el correo del 7.º día solo para primeros contactos desde ese día) · `PASO_VENCIDO_DISABLED=1` (el trabajo de las 3:00 apagado) · correos del equipo encendidos (sin `RESUMEN_DISABLED` ni `REPORTE_SEMANAL_DISABLED`) · `LEAD_SIN_TOCAR_DISABLED=1`. En pruebas, `EMAIL_LISTA_BLANCA` frena los correos a todo el que no esté en la lista.
+
+**Correos del tablero de tareas** (#210): `TAREAS_CORREOS_ACTIVOS`, **apagado por defecto**. Apagado, el CRM arma cada correo (asignada, devuelta, aprobada, comentario nuevo y el de cada mañana) y lo registra en el log con su destinatario y asunto, pero no llama a Brevo: no sale nada ni en local ni en /testeo. Lo enciende Diego en producción cuando lo decida (`true` o `1`). Cada persona puede apagar cada uno en «Mis preferencias». El de cada mañana va a `TAREAS_DIARIO_HORA` (8 por defecto) en la hora de la oficina (`APP_TIMEZONE`, Europe/Madrid), no en la del servidor; `TAREAS_DIARIO_DISABLED=1` ni lo programa.
+
+**El tablero de tareas, solo en pruebas** (#210, Diego 07/10): igual que la pantalla se esconde en /crm con `SOLO_EN_PRUEBAS`, el servidor no monta `/api/tasks` ni programa el correo de cada mañana en producción. Con `NODE_ENV=production` solo se montan si `CRM_BASE_URL` apunta a `/testeo` —**el servidor de /testeo tiene que tenerla así**, o su tablero dejaría de responder— o si se aprueba con `TAREAS_EN_PRODUCCION=1` (`backend/src/shared/config/soloEnPruebas.js`).
+**Frontal:** `VITE_BETA_MODE=true` en producción (lo que no está en `BETA_ROUTES` sale como «Próximamente»); `VITE_FACTURACION_V2` solo en pruebas (la emisión automática de facturas no va a producción).
+**Paridad:** ISEIE (https://crm.iseie.com, repo `CRM-ISEIE`) tiene las mismas funciones; los módulos se copian, la navegación no (ISEIE usa `/leads` donde aquí es `/prospectos`). Las personas de fuera (Diana, Hugo) trabajan solo aquí; el paso a ISEIE lo hace el equipo de Diego. Lo que todavía es distinto entre los dos, con su decisión o su pregunta: `docs/PARIDAD-ENTRE-CRMS.md` (al día el 15/10).
+**Permisos** (#423): cada ruta pide un permiso del catálogo (`backend/src/modules/permissions/catalogo.js`, la única lista; se reparte en Configuración › Roles y en «Ver permisos» de cada usuario). `docs/PERMISOS.md` es el inventario de cada ruta —qué la protegía antes, quién podía y qué permiso pide ahora— y el catálogo entero, **generado** con `npm run permisos:inventario` (backend); no se edita a mano.
+**Al desplegar #423 (migraciones 221 y 222):** 1) antes de migrar, `node scripts/comparar-permisos.mjs --simular` contra la base del entorno: aplica la 221 y la 222 dentro de una transacción, compara a cada persona activa acción por acción (antes ↔ después) y lo deshace todo; tiene que acabar con **0 sin explicar** (las diferencias explicadas son los cambios de `inventario/cambios-aprobados.js`). 2) Migrar la 221 y la 222 (se pueden pasar dos veces). 3) `node scripts/comparar-permisos.mjs` (solo lee): otra vez 0 sin explicar. `--detalle` lista cada diferencia. Lo que la 222 archiva (valores guardados que antes no surtían efecto) queda en `permisos_inertes_archivo`; cada cambio de permisos, en `permisos_registro`.
+**nginx** (#193, 07/10): el registro de accesos tapa la llave del MCP (`crm_mcp_***`) con el formato `crm_seguro` (`/etc/nginx/conf.d/crm-registro-seguro.conf`). Las copias del sitio van a la carpeta de copias, **nunca** dentro de `sites-enabled`: nginx carga todo lo que hay ahí.
+
+**Versiones y arreglos urgentes** (09/10). `v2.1.0` en producción desde el 07/10 (etiqueta en `main`). Un arreglo que tiene que llegar a producción sin esperar a la versión siguiente va **solo**: rama `hotfix/<nombre>` sacada de `origin/main`, `git cherry-pick -x` del commit que ya entró en `staging`, pull request a `main` y despliegue desde `main`. Así no se arrastra lo que está en pruebas (el 08 y el 09/10: el ranking por lo cobrado, la paginación de Facturas de ISEIE y la checklist manual). `staging` siempre lleva todo lo de `main` y algo más; nunca al revés.
+**Comprobar qué corre de verdad un servidor:** el md5 de cada `.js` de `backend/src` (quitando los `\r`) contra el de la rama. El 09/10 los cuatro entornos daban 0 ficheros distintos.
+
+**Lo que no está aprobado para producción** va detrás de `SOLO_EN_PRUEBAS` en el frontal (verdadero en local y en el entorno de pruebas, falso en producción): no sale ni en el menú ni por la dirección. El 09/10: Tareas (#210), Convocatorias y Certificaciones (Certifex). Para aprobar una pantalla, se quita de detrás de la bandera.
+
+**Checklist del proceso comercial** (09/10). Es **manual**: un paso solo sale hecho si la gestora lo marca (guarda quién y cuándo). Si ya hay un contacto apuntado que lo daría, lleva la marca «contactado», pero sigue por hacer. «+ Seguimiento» añade el 5, el 6… (`POST /proceso/lead/:leadId/seguimiento`). La cola del día no cambia: sigue sacando a quien ya se contactó según la regla de un paso por contacto y día.
+
+**Correo de «¿por qué has desistido?»** (09/10). Sale en **un solo caso**: tras **7 días sin ninguna interacción** (de cualquier tipo, también una nota), con un primer contacto y sin comprar. Ya no sale al descartar a alguien. `FEEDBACK_DIA7_INICIO` sigue mirando el primer contacto.
+
+**Resumen del día de dirección:** a las 19 del reloj del servidor (`RESUMEN_HORA`, las 21:00 de Madrid). La tarea mira cada 30 minutos y la primera vez a los 30 minutos de arrancar: **no reiniciar la API entre las 21:31 y las 22:00 de Madrid**, o ese día no sale. El reporte semanal sale los lunes. Un superadmin recibe todas las empresas, tenga o no campus asignados.
+
+
+## Certifex: enlace en producción (#272)
+
+Certifex emite los diplomas; el CRM decide **quién** lo recibe y **cuándo** se le avisa. Pantallas: Matrículas → **Certificaciones** (Emisiones y Consultas de la web) y Matrículas → **Diplomas** (lo que piden los alumnos desde Moodle; también en el menú, Clientes → Diplomas). Solo admin y superadmin aprueban, emiten, envían, corrigen y revocan; soporte ve las Consultas.
+
+**Lo que hace el CRM y lo que no.** Emitir **no** manda correo: el diploma queda «pendiente de aviso» y alguien lo envía con «Enviar diploma al alumno» después de ver el PDF. Rechazar tampoco avisa: el aviso de rechazo es otro botón. Un nombre mal escrito se **corrige** (mismo número y mismo QR, queda quién y por qué), no se revoca. Al emitir, el CRM manda el **programa oficial** de la formación vendida (horas de `products.horas` y temario de `product_modules`) si la encuentra sin dudas: el campus de Certifex tiene que casar con **un** proyecto del CRM por nombre o slug (PSIKO → «Psiko Aprende», ACADEMIAIA → «Academia IA») y la venta, con el nombre del curso de Moodle. Si no, se emite con lo de Moodle y el panel lo dice antes de aprobar.
+
+**Variables — backend (`.env` del servidor, nunca en el frontal):**
+
+| Variable | Qué es |
+|---|---|
+| `CERTIFEX_API_URL` | La URL de Certifex (`https://certifex.tech`). Sin ella y sin la clave, «Certifex no está conectado». |
+| `CERTIFEX_CRM_CLAVE` | La clave de este CRM (`cfx_crm_…`). La genera Certifex en **su** servidor con `npm run crm:clave` y la deja en un fichero 600; se trae por el canal de secretos y se borra el fichero. Volver a ejecutarlo la rota. |
+| `CERTIFEX_PUBLICO_URL` | Opcional: la web pública (verificación y PDF) si algún día no es la de la API. |
+| `CERTIFEX_WEBHOOK_SECRETO` | Secreto compartido con el que Certifex entrega consultas (`POST /api/certifex/consultas`) y solicitudes de diploma (`POST /api/certifex/solicitudes`). En Certifex es `CRM_CONSULTAS_SECRETO`, con `CRM_CONSULTAS_URL=https://<crm>/crm/api/certifex/consultas` (las solicitudes van a `…/solicitudes`, o a `CRM_SOLICITUDES_URL`). Sin él, las dos entradas responden 404. `openssl rand -hex 32`. |
+
+**Interruptor — frontal:** `VITE_CERTIFEX_PANEL=1` enseña Certificaciones y Diplomas (`frontend/src/shared/lib/certifexPanel.ts`). Sin ponerla: **apagado en producción**, encendido en local y en /testeo; `=0` lo apaga también en pruebas. Se lee al compilar: cambiarla pide `npm run build` del frontal de ese entorno. Solo enseña las pantallas: lo que conecta es el backend.
+
+**Migraciones:** `186_certifex_consultas.sql` (consultas de la web, si aún no está) y `199_certifex_solicitudes_diploma.sql`: solicitudes y aviso de rechazo; las columnas de lo revisado a mano antes de aprobar («Editar»: `email_crm`, `producto_id`, `programa_editado`, `editado_por`, `editado_en`), y las del aviso «ha terminado la formación» (`completado_en`, `completado_nota`, `completado_recibido_en`). Las dos son reaplicables (todo va con `IF NOT EXISTS`). **La 198 aún no está aplicada en ningún servidor** (09/10): si se hubiera aplicado ya en alguno con una versión anterior, hay que **reaplicarla** para que tenga las columnas nuevas. (La `175` del repositorio es «paso hecho a mano», no tiene que ver con Certifex.)
+
+**Avisos que entrega Certifex** (los tres con `X-Certifex-Secreto`; sin el secreto configurado, 404; con otro, 401): `POST /api/certifex/consultas`, `POST /api/certifex/solicitudes` (el alumno pide el diploma) y `POST /api/certifex/completados` (Moodle da la formación por terminada y el alumno aún no lo ha pedido; en Certifex, `CRM_COMPLETADOS_URL` o la de consultas con `/completados`). Los tres son idempotentes y no rechazan enteras las entregas legítimas (correo vacío o mal escrito → sin correo; curso largo → recortado). La campana de solicitudes y de «terminados» suena solo a super admin y a los admin con el proyecto de ese campus.
+
+**Cada admin, solo sus campus.** En Diplomas y en Certificaciones/Emisiones, un admin que no es super admin solo ve y toca los campus de Certifex cuyo proyecto del CRM tiene activo en `user_projects` (el campus casa con un único proyecto por nombre o slug). Lo ajeno no aparece en los listados y, en las acciones, responde 404. Super admin ve todo.
+
+**Emitir con el programa del CRM, desde las dos pestañas.** «Aprobar y emitir», «Emitir» y el «Emitir» de Emisiones usan la misma emisión (`certifex.emision.js`). Si la base del CRM no contesta, no se aprueba ni se emite nada (error antes de llamar a Certifex). Una matrícula revisada a mano que aun así no tiene programa no se aprueba ni se emite (`emitir_bloqueado`).
+
+**Orden de despliegue.**
+1. **Certifex primero**: su versión con el contrato `/api/crm/v1` completo (decisiones, emitir con `items`/programa, avisos, avisos-rechazo, diplomas, revocar, corregir) y el plugin de Moodle de la solicitud.
+2. **CRM en staging** (/testeo): migraciones 186 y 199 en `crm_test_db` (como se describe arriba: `postgres` + `dar-propiedad-a-crm-user.sql`), backend con las cuatro variables apuntando a un Certifex de pruebas, frontal de staging (el interruptor ya va encendido allí).
+3. Comprobar en staging (abajo) y que Diego lo apruebe.
+4. **CRM en producción**: PR a `main`, migraciones en `crm_prod_db`, variables en `/opt/crm/production/.env`, `pm2 restart crm-api-production`, y el frontal con `VITE_CERTIFEX_PANEL=1`.
+5. **El último paso, en Certifex: el candado** (abajo). Hasta ese momento Certifex sigue emitiendo como antes.
+
+**Cómo comprobar que está conectado.** `GET /api/certifex/emisiones/estado` con sesión de admin: `{"conectado": true, "nombre": "<CRM>", "centros": [...], "urlPublica": "…"}`. Si la clave no vale, `conectado: false` con el motivo; sin variables, `{"conectado": false}`. En la pantalla: el punto verde «Conectado como …» en Certificaciones y en Diplomas. La entrada de solicitudes: un `POST /api/certifex/solicitudes` sin la cabecera `X-Certifex-Secreto` tiene que dar **401** (404 = falta `CERTIFEX_WEBHOOK_SECRETO`).
+
+**El candado de un centro.** `npm run crm:clave -- --nombre=CRM --centros=PSIKO,ISEIH,…` (en el servidor de Certifex) da de alta este CRM para esos centros, y **desde ese momento esos centros no emiten nada sin el OK del CRM** (lo sostiene la base de Certifex, no solo su API). Si el CRM aún no está desplegado y conectado, en esos centros no sale ningún diploma. Hacerlo centro a centro, empezando por un piloto, y solo con el CRM ya comprobado.
+
+**Ningún correo sale solo:** ni al emitir, ni al revocar, ni al rechazar. Si el correo de Certifex está apagado (`CERTIFEX_EMAIL_ACTIVO`), al «Enviar» el panel lo dice («Aprobado, pero el correo está apagado») y queda registrado para reenviar.
+
+## Consultas de alumnos (#185, fases 1–4: #187–#190)
+
+Las dudas que los alumnos escriben en el campus (mensajería privada de Moodle) entran en el CRM, van al tutor que toca, se responden desde el CRM y se miden. Pantallas: menú **Consultas** (bandeja, Alumnos sin mensajes, Mi carga, Tutores, Métricas) y la ficha del tutor en **Tutores**.
+
+**Conectar un campus** (el mismo conector para todos; uno por campus): Finanzas → Integraciones, con ese campus elegido arriba → «Campus (Moodle)» → URL del campus y token de un **administrador** del Moodle (lee los mensajes de todos) → **Probar conexión** → marcar **«Leer las consultas de este campus»** (solo se lee lo escrito desde ese momento). En el Moodle: servicios web y REST activos, y el permiso `webservice/rest:use` para el rol de los tutores. Cada tutor necesita estar matriculado en ese campus (lo comprueba el CRM) y su propio token en su ficha («Responder en su nombre») para que las respuestas salgan con su nombre. Moodle solo deja escribir entre usuarios que comparten curso.
+
+**Trabajos programados** (cada uno con su interruptor en `.env`; detalles en `backend/.env.example`):
+
+| Trabajo | Cada cuánto | Interruptor |
+|---|---|---|
+| Matrícula de los tutores en cada campus (#187); además, al abrir la ficha del tutor si la última tiene más de 30 s | cada hora | `TUTORES_CAMPUS_DISABLED=1` |
+| Leer las consultas de los campus (#188). Se salta los campus con el plugin del CRM al día (#689): esos entran por el aviso y por el repaso de 15 min, y vuelven aquí solos si el plugin falla o se desconecta | 5 min | `CONSULTAS_CAMPUS_DISABLED=1` |
+| Alumnos matriculados de cada tutor (#189) | 1 vez al día | `CONSULTAS_ALUMNOS_DISABLED=1` |
+| Resumen semanal al tutor (#189) | lunes, 9:00 | `CONSULTAS_RESUMEN_DISABLED=1` |
+| Recordatorio de plazo al tutor y aviso de fuera de plazo a administración (#190) | 15 min | `CONSULTAS_PLAZO_DISABLED=1` |
+| Recordatorio de carga de trabajo desactualizada (#190) | 1 vez al día (como mucho uno por semana a cada tutor) | `CONSULTAS_CARGA_RECORDATORIO_DISABLED=1` |
+
+Los **correos al tutor** respetan el freno `NO_ESCRIBIR_A_TUTORES` (`backend/src/shared/config/frenoTutores.js`): con él puesto no sale ninguno y se apunta en el registro. Desde el 11/11 (#211, PR de seguimiento de la #688) se quita sin tocar código: **`CORREOS_A_TUTORES=1`** en el `.env` y reiniciar; sin la variable, o con otro valor, sigue puesto. Con el freno, a un tutor tampoco le llega el código para cambiar su correo en «Mi perfil»: la pantalla le dice que lo pida a administración. El código de ese cambio se guarda como HMAC con **`CODIGO_CORREO_SECRET`** (si falta, con `JWT_SECRET`). Los avisos de la **campana** sí llegan. El aviso de fuera de plazo va a los super admin y a los admin de ese campus; la reasignación es manual, desde la consulta.
+
+## Asignación de leads por actividad (#513 · gemela CRM-ISEIE#284, 27/10/2026)
+
+Pedida por Carlos y definida con Diego. Pantalla: **Conexión › Asignación de leads** (super admin y admin; permisos `webhooks_salientes.*`). El paso a paso y su estado están en la issue #513.
+
+**Flujo.** Web (Brevo o SMTP de Hostinger) → **entrada de Make** (mailhook o webhook por campus) → `POST /api/asignacion/entrada` con la clave de la configuración (`Authorization: Bearer` o `X-API-Key`).
+- **Hay alguna gestora activa:** el CRM crea el lead con ella (`idempotency_key = asignacion-<uid>`) y manda el formulario al **escenario 2**. Ese escenario no rota por HTTP ni crea el lead. Recibe los campos tal cual, más `gestora`, `responsable_*` y `lead_id`.
+- **No hay ninguna, o la asignación está apagada:** el CRM no crea el lead y lo manda al **escenario 1**, el de siempre.
+- **El CRM no contesta en 5 s o da error:** la entrada de Make lo manda al escenario 1 por su cuenta.
+- **Envío a los escenarios:** lo hace el CRM, por mailhook (Brevo, cuenta `crm`) o webhook JSON. Reintenta a 1, 5 y 15 minutos (`jobs/asignacionScheduler.js`; se apaga con `ASIGNACION_DISABLED=1`).
+- **Sin duplicados:** una decisión por campus y `uid`.
+
+**Activa.** Al menos una acción en la ventana, que por defecto son 15 minutos y se configura entre 1 y 240. Todo está en `asignacion.actividad.js`.
+- **Qué cuenta:**
+  - `lead_interactions`: una nota cuenta solo si tiene 20 caracteres o más y no repite otra suya.
+  - `lead_status_history`, sin los cambios deshechos en menos de 10 minutos.
+  - `lead_reminders`, `lead_steps` y `lead_audit_log`.
+  - WhatsApp salientes, también los mandados desde el móvil con el número conectado (instancia `crm-u<id>`). Se mira la hora de WhatsApp para que no cuente el historial; los grupos no cuentan.
+  - `actividad_crm`, que apunta el middleware `registrarActividad` (crear lead, venta, cobro, matrícula, factura, proceso).
+- **Candidatas:** las de `gestoresDelReparto` del campus. Con menos de dos, no se elige por actividad: va al escenario 1 (Diego, 28/10).
+- **Freno de pruebas (temporal):** un formulario con correo @ejemplo.com se decide pero no crea lead ni se manda al escenario 1.
+- **A quién le toca entre las activas:**
+  1. menos asignados hoy en ese campus (día de Valencia; cada campus reparte aparte, Diego 28/10);
+  2. menos en total en ese campus;
+  3. la que lleva más rato sin recibir uno;
+  4. el id.
+- **«Hoy» suma también las conversaciones de WhatsApp que le abrió la persona ese día.** Si esa conversación acaba en un lead suyo, cuenta una sola vez.
+
+**WhatsApp (widget).** `/api/w/data/:id.json` y `/api/w/whatsapp/:id.js` le dan a la web solo a la gestora del widget a la que le toca (`asignacion.widget.js`; la decisión se guarda 20 s por campus). La web ya elige al azar entre las que recibe, así que no hay que volver a pegar el código. Si no hay nadie activo, la web recibe todas las gestoras. Pulsar el botón no asigna nada.
+
+**Tablas** (migraciones 230 y 231 aquí; 243 y 244 en ISEIE): `asignacion_destinos` (destinos cifrados y huella de la clave), `asignacion_decisiones` (qué se decidió, por qué y el envío) y `actividad_crm`.
+
+**Probar en un staging:** `cd backend && node scripts/asignacion-e2e.mjs` en el servidor (se niega en las bases de producción). Crea una configuración contra un receptor de pruebas, simula actividad y borra todo al terminar. El 27/10 dio 31/31 en /testeo y en el staging de ISEIE.
+
+## Versión 2.0.0 (en producción desde el 29/09/2026)
+
+Lo nuevo, con un botón para ir a cada pantalla, está dentro del CRM en **Novedades** (`backend/src/modules/novedades/versiones.js`) y en la release `v2.0.0` de GitHub. En corto:
+
+- **Proceso comercial**: la cola del día (por tramos: atrasados, hoy, mañana, semana), los pasos en la ficha, el seguimiento de fin de mes y el filtro por paso en Prospectos. Desde el 29/09 un contacto solo cierra **el paso que toca**, en su día y uno por día (`shared/utils/pasoCerrado.js`).
+- **Feedback de quien no compra**: correo con la marca de cada campus al descartar y al 7.º día, encuesta de seis preguntas (con comentarios), panel en Análisis → Feedback y su parte en Reportes.
+- **Novedades**: aviso en la campana, correo con PDF al equipo y el apartado para leerlas.
+- **Correos del equipo**: resumen de la tarde por empresa, «Tu día y lo de mañana» y los de los lunes.
+- **Claude por MCP** (#173, Diana): Conexión → MCP da una URL para consultar el CRM desde Claude, solo lectura y con el alcance de cada persona. **Conectores** (Captación) pueden ser de un campus, de una empresa o de todo el sistema, y el tipo «Claude (MCP)» saca una URL limitada a ese alcance.
+- **Ventas y facturación**: venta sin gestora, número de factura al registrar, ventas compartidas, IVA incluido por defecto, avisos de huecos en la numeración.
+- **Marca de cada campus** en correos y formularios (logo, color, fondo de cabecera, remitente y su cuenta de Brevo, editables desde el panel).
 
 ---
 
@@ -161,7 +298,83 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 139 | 139_banco_de_mensajes.sql | Los indices que necesita el banco de mensajes, que recorre todo por fecha en vez de un hilo (#101). |
 | 140 | 140_tipos_de_proyecto.sql | Los tipos de proyecto que faltaban: educacion, ecommerce, servicios, inmobiliaria (#15). Sin ella el CRM no se rompe: los tipos nuevos salen como no disponibles y elegir uno contesta 409 diciendo que falta esta migracion. |
 | 141 | 141_columnas_por_entidad.sql | `client_columns` y `product_columns` en `projects`: la pestaña Columnas servia solo para prospectos (#8). Sin ella la pestaña sigue funcionando para leads y las otras dos salen deshabilitadas. |
+| 142 | 142_plazas_y_cierre.sql | #86 · Plazas y cierre de convocatoria en el catalogo. |
+| 143 | 143_pasos_comerciales.sql | #87 · Los cinco pasos del proceso comercial, en la base y editables. |
 | 144 | 144_registro_tareas.sql | El diario de las tareas programadas, para la pantalla de registro (#111). Sin ella el registro funciona igual: la fuente «Tareas» sale tachada y la pantalla avisa de que falta esta migracion, en vez de enseñar cinco fuentes como si fueran seis. |
+| 145 | 145_gasto_de_ia.sql | Lo que cuesta la IA, apuntado (#30, y sobre todo #22) |
+| 146 | 146_agenda_del_lead.sql | La agenda de cada prospecto: qué paso del proceso le toca y qué día. |
+| 147 | 147_convocatorias.sql | Las convocatorias, y a quién se le ofrecieron (#86). |
+| 148 | 148_proyecto_de_pruebas.sql | Un proyecto marcado como DE PRUEBAS, para trastear en producción sin |
+| 149 | 149_busqueda_de_tutor.sql | Si se está buscando tutor para una formación, y con qué anuncio. |
+| 150 | 150_ventas_compartidas.sql | Una venta, dos gestoras: repartir el mérito sin descuadrar los totales. |
+| 151 | 151_plantillas_proceso_comercial.sql | Las plantillas del proceso comercial, cargadas de verdad. |
+| 152 | 152_plantillas_dia4_y_opiniones.sql | El dia 4 donde no hay CETLAT, y el enlace real de opiniones. |
+| 153 | 153_plantilla_pide_adjunto.sql | Plantillas que llevan una imagen detrás. |
+| 154 | 154_plazas_solo_aviso.sql | Las plazas NO las lleva el CRM: solo avisa de que hay que mirarlas. |
+| 155 | 155_revision_de_la_base.sql | Que quede apuntado que una ficha se reviso (#132) |
+| 156 | 156_estados_comision_tutor.sql | Los estados de la comision del tutor: dos mas. |
+| 157 | 157_entregables_del_tutor.sql | Que ha entregado cada tutor de cada formacion. |
+| 158 | 158_numerar_al_convertir.sql | Quien puede poner el numero de factura EN EL MOMENTO de registrar la venta. |
+| 160 | 160_avisar_al_tutor.sql | «Avisar tutor»: el correo mensual de comisiones que pidio Diego el 14/09. |
+| 161 | 161_datos_de_cedia.sql | Los datos fiscales de CEDIA, que estaban sin rellenar. |
+| 162 | 162_factura_no_requerida.sql | La columna `conversions.factura_no_requerida`, que nunca tuvo migración. |
+| 163 | 163_estados_de_la_comision.sql | Los estados de la comisión del tutor. Diego, 14/09: |
+| 164 | 164_huecos_de_las_plantillas.sql | Las plantillas de correo del proceso comercial no rellenaban ni un hueco. |
+| 165 | 165_datos_de_ictess.sql | Los datos fiscales de ICTESS, que seguia con el marcador. |
+| 166 | 166_cuerpo_de_los_correos.sql | Guardar el correo, no solo que se mandó. Primera parte del #146. |
+| 167 | 167_usa_whatsapp.sql | La casilla «usa el WhatsApp del CRM», por persona (#128). Nace encendida para quien ya tiene conversaciones y apagada para el resto. Sin ella el CRM se queda EXACTAMENTE como hoy —sale todo el que puede por su rol— y la casilla de la ficha aparece sin poder tocarse, diciendo que falta esta migracion. |
+| 168 | 168_etiquetas_de_whatsapp.sql | Las etiquetas de WhatsApp de cada gestora y en que chats estan puestas (#128, #138). Sin ella no se guarda ninguna: la lista de chats no enseña etiquetas, el boton de la cabecera no se pinta y los avisos de WhatsApp se descartan sin error. Nada mas deja de funcionar. |
+| 169 | 169_etiquetas_pendientes.sql | Las etiquetas que llegan ANTES que su conversacion (#138). Al enlazar, WhatsApp manda las etiquetas antes que el historial: sin esta tabla se tiraban y no hay forma de recuperarlas —Evolution guarda las de cada chat pero no las devuelve por ningun endpoint—. Con una cuenta Business eso perdia la clasificacion entera de la gestora, en silencio. Sin ella, todo lo demas de etiquetas funciona: solo se pierde lo que llegue antes de tiempo. |
+| 170 | 170_lid_de_la_conversacion.sql | La otra llave de cada conversacion: el `@lid` si se guardo por telefono, o el telefono si se guardo por `@lid` (#138). WhatsApp direcciona cada vez mas por `@lid` y los avisos de etiquetas usan el que tengan a mano: sin esto una etiqueta puesta desde el movil no encuentra su chat. Ademas el puente traduce el `@lid` y Evolution no, asi que sin ella el resultado cambia entre local y produccion. Sin aplicarla, esas etiquetas se quedan esperando en la 169 en vez de perderse. |
+| 171 | 171_correo_recibido.sql | El correo que ENTRA. Segunda mitad del #146. |
+| 171 | 171_hora_de_sincronizacion.sql | La hora a la que sincroniza cada proyecto su catalogo. |
+| 172 | 172_plantilla_por_paso.sql | Cada plantilla, atada a su paso del proceso comercial. |
+| 173 | 173_correo_por_paso.sql | El correo de cada paso, atado al paso (la otra mitad del #88). |
+| 174 | 174_roles_adicionales.sql | Un usuario puede tener MAS DE UN ROL. |
+| 175 | 175_paso_hecho_a_mano.sql | Marcar un paso a mano, y que el estado del prospecto lo siga |
+| 176 | 176_feedback.sql | El correo de «¿por qué has desistido?» y lo que contesta cada uno |
+| 177 | 177_remitente_no_contestar.sql | El remitente «no contestar» de cada campus |
+| 178 | 178_feedback_respuestas.sql | La encuesta de feedback, con todas sus preguntas |
+| 179 | 179_remitentes_campus.sql | El «no responder» de cada campus, para el correo de feedback |
+| 180 | 180_cabecera_de_marca.sql | El fondo de la cabecera de cada marca, en correos y formularios |
+| 181 | 181_novedades.sql | Las novedades de cada versión: cuándo y a quién se mandaron |
+| 182 | 182_mcp_acceso.sql | Conexion de Claude al CRM por MCP (Model Context Protocol). |
+| 183 | 183_conectores_alcance.sql | Conectores de un campus, de una EMPRESA o de TODO el sistema. |
+| 184 | 184_mcp_por_conector.sql | Un token del MCP de Claude puede nacer de un CONECTOR. |
+| 185 | 185_conectores_creador.sql | Quién creó cada conector, y cada conexión de Claude. |
+| 186 | 186_certifex_consultas.sql | Las consultas que llegan desde la web de Certifex. |
+| 187 | 187_emisor_bic.sql | El BIC/SWIFT de cada sociedad emisora, para las facturas por transferencia. |
+| 188 | 188_enlace_opynio_iseie.sql | El enlace de Opynio de ISEIE (#209). |
+| 189 | 189_mcp_codigo_desbloqueo.sql | Código de desbloqueo del MCP de Claude (#192). |
+| 190 | 190_mcp_caducidad_y_rotacion.sql | MCP de Claude: caducidad, rotación y URLs sin usar (#194). |
+| 191 | 191_mcp_auditoria_visible_y_alertas.sql | MCP de Claude: auditoría visible y alertas (#195). |
+| 192 | 192_mcp_interruptor.sql | Interruptor de emergencia del MCP de Claude (#196). |
+| 193 | 193_tasks_tablero.sql | Tablero de tareas del equipo (#210): tareas, historial, lista de comprobación, comentarios y etiquetas. |
+| 194 | 194_rol_colaborador.sql | El rol `colaborador` en el ENUM `user_role`: solo ve el Equipo de Desarrollo (#210, lo comparte #202). |
+| 195 | 195_tasks_enlaces.sql | Los enlaces de la tarjeta de una tarea (#210). |
+| 196 | 196_tasks_areas_columns_external.sql | Tablero (#210, 07/10): columnas propias (`tasks.status` pasa a apuntar a `task_columns`; las tareas conservan su columna), áreas, proyectos propios con CHECK «campus o proyecto propio», y etiquetas sin repetir. Se puede pasar dos veces sin deshacer lo configurado. |
+| 197 | 197_permisos_por_rol.sql | Permisos de Tareas por rol («Aprobar y cerrar» y «Configurar»), editables desde Configuración › Roles por el superadmin y el admin (#210, 08/10). Guarda solo lo que se aparta del valor por defecto del código; el orden es: por defecto del rol → esta tabla → rol a medida → excepciones de la persona. Se puede pasar dos veces. |
+| 198 | 198_facturas_colaborador.sql | Facturas de colaboradores (#202, Diana): colaboradores, sus empresas e importe acordado, la factura de cada mes con su enlace y el registro (solo añadir). Se puede pasar dos veces. |
+| 199 | 199_certifex_solicitudes_diploma.sql | Certifex · Diplomas (#272): las solicitudes de diploma que avisa Certifex desde Moodle, lo revisado a mano antes de aprobar («Editar») y el aviso «ha terminado la formación». Se puede pasar dos veces. |
+| 200 | 200_widget_idiomas.sql | Widget de WhatsApp en varios idiomas: `project_widget_config.traducciones` (inglés, francés y portugués; el español sigue en `welcome_text` y `message_template`) y arregla el «¡Hablamos?» guardado por defecto. Se puede pasar dos veces. |
+| 204 | 204_egresos_por_empresa.sql | Egresos por empresa (#227): `expenses.issuer_id` para los gastos de toda una empresa sin campus, con CHECK «campus o empresa». No mueve datos. La misma 204 en CRM-ISEIE. Se puede pasar dos veces. |
+| 208 | 208_tutores_campus_y_empresas.sql | Consultas de alumnos, fase 1 (#187): `tutor_empresas` (las empresas enteras de un tutor; sus campus se leen de `projects.sociedad_emisora_id` al consultar, también los nuevos, sin copiar filas) y `tutor_campus` (su matrícula en el Moodle de cada campus: activa, pendiente o baja). Los campus sueltos del tutor siguen en `user_projects`. Se puede pasar dos veces. |
+| 209 | 209_consultas_de_alumnos.sql | Consultas de alumnos, fase 2 (#188): `consultas` (alumno, curso, proyecto, empresa, tutor, estado y la hora de cada paso), `consulta_mensajes` (el id del mensaje de Moodle no se repite por proyecto), `consulta_adjuntos` (enlace propio con caducidad), `consulta_eventos` y el token del tutor en `tutor_campus` (cifrado). Se puede pasar dos veces. |
+| 210 | 210_alumnos_y_carga_del_tutor.sql | Consultas de alumnos, fase 3 (#189): `tutor_alumnos` (los alumnos matriculados de cada tutor, leídos del campus; la fecha de matrícula es aproximada, la primera vez que el CRM los ve) y `tutor_carga` (el nivel y el texto de la carga de trabajo, con su historial). Se puede pasar dos veces. |
+| 211 | 211_recordatorios_de_consultas.sql | Consultas de alumnos, fase 4 (#190): en `consultas`, cuándo se recordó al tutor que se acerca el plazo y cuándo se avisó a administración de que se pasó (valen para la espera de ahora: si el alumno vuelve a escribir, se vuelve a avisar); `tutor_carga_recordatorios` (el último recordatorio de carga desactualizada a cada tutor). Se puede pasar dos veces. |
+| 212 | 212_matriculas_historial_y_documentos.sql | Matrículas (#199): el DNI por detrás y la foto (`dni_dorso_url/_key`, `foto_url/_key`, los nombres del contrato de la #198) y `matriculas_eventos`, el historial de cada matrícula: llegada (por el formulario o a mano), cada cambio de estado con quién y el motivo al rechazar, y cada documento subido o reemplazado. Solo se lee y se añade (`GRANT SELECT, INSERT`). Las que ya existían empiezan con su llegada y su último cambio. Se puede pasar dos veces. Es la 212 porque la 207 es la firma de Certifex (#349) y las 208–211 las consultas de alumnos (#187–#190). |
+| 213 | 213_matriculas_datos_de_admision.sql | Webhook de admisión (#198): los datos de la persona en columnas propias de `matriculas` (`nombre`, `email`, `telefono`, `documento_tipo`, `fecha_nacimiento`, `direccion`, `pais`, `estudios`, `curso_solicitado`; el número de documento sigue en `dni`) y `envio_huella`, la huella del envío con índice único por campus (el mismo envío no crea dos matrículas). Índice por `lower(email)` para unir la solicitud a su prospecto y a la firma de Certifex. Solo añade columnas e índices (sin `GRANT`). Se puede pasar dos veces. |
+
+> **09/10/2026, comprobado contra el catálogo de producción:** aplicadas hasta la **195**. La 193–195
+> (tablas del tablero de Hugo, #210, y el rol `colaborador`) están, pero vacías y sin pantalla: el
+> tablero va detrás de `SOLO_EN_PRUEBAS`. La **196** solo en /testeo; va con el tablero cuando se apruebe.
+>
+> **Comprobado el 29/09/2026 contra el catálogo de producción** (no contra la
+> salida de ningún comando): aplicadas todas las de esta lista hasta la **184**.
+> Las de la 2.0.0 se aplicaron ese día (160, 164, 166, 171 correo recibido y 175–184).
+> De la 185 en adelante están listadas, pero esta tabla no dice si ya están aplicadas
+> en cada servidor: compruébalo en `_migraciones` antes de dar una por puesta.
+
 
 > **Comprobado el 04/09/2026 contra el catalogo de las dos bases**, no contra la
 > salida de ningun comando: un `sudo` que pide contraseña devuelve un aviso sin

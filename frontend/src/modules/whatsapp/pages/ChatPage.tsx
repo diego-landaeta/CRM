@@ -6,12 +6,12 @@ import {
   MessageSeparator, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
+import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat, Tag, DotsThreeVertical } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  chatApi, urlMedia,
-  type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp,
+  chatApi, urlMedia, etiquetasWhatsapp,
+  type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp, type EtiquetaWhatsapp,
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
 import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
@@ -22,8 +22,9 @@ import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
+import EtiquetasDelChat from '../components/EtiquetasDelChat';
 import type { DatosParaRellenar } from '../lib/plantilla';
-import { altoDelMarco, rellenoDeAbajo } from '../lib/altoDelMarco';
+import { altoDelMarco, rellenoDeAbajo, loQueHayEncima } from '../lib/altoDelMarco';
 import './chat.css';
 import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
 import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
@@ -372,12 +373,20 @@ const ETIQUETAS = ['por_contactar', 'en_seguimiento', 'convertido', 'no_interesa
 const ETIQUETA_GRUPOS = 'grupos';
 
 export default function ChatPage() {
-  const { activeProject } = useProjectContext() as {
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
+    activeIssuer: { nombre?: string; campus: Array<{ id: number }> } | null;
+    activeIssuerId: number | null;
   };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Para el hueco {proyecto} de las plantillas.
-  const nombreProyecto = activeProject?.nombre ?? null;
+  // Con una EMPRESA puesta no hay UN proyecto, hay sus campus. Lo que sabe
+  // recibir una lista --buscar prospectos, las plantillas-- la recibe; el
+  // chat en si es de la gestora, no del proyecto, y le da igual.
+  const campusIds = (activeIssuer?.campus || []).map((c) => c.id);
+  const ambitoCsv = !projectId && campusIds.length ? campusIds.join(',') : null;
+  const hayAmbito = !!projectId || !!ambitoCsv;
+  const nombreProyecto = activeIssuer?.nombre ?? activeProject?.nombre ?? null;
 
   // De quien es el WhatsApp que se esta viendo. Una gestora solo tiene el suyo
   // y el selector ni aparece; quien manda puede abrir el de otra persona.
@@ -426,6 +435,11 @@ export default function ChatPage() {
   // «pendiente de contestar / ya vendido / no interesado»— y viaja con la
   // persona en vez de con el chat.
   const [etiqueta, setEtiqueta] = useState<string | null>(null);
+  // La etiqueta de WhatsApp por la que se filtra, y las que hay para ofrecer.
+  // Se piden una vez: cambian cuando la gestora las toca en el móvil, no cada
+  // cinco segundos, y esta pantalla ya pregunta bastante.
+  const [etiquetaWa, setEtiquetaWa] = useState<string | null>(null);
+  const [etiquetasWa, setEtiquetasWa] = useState<EtiquetaWhatsapp[]>([]);
 
   // Dos estados distintos, y la diferencia importa:
   //   · `cargando`  — todavia no ha vuelto la primera peticion.
@@ -477,6 +491,20 @@ export default function ChatPage() {
   // Los datos con los que se rellenan los huecos de la plantilla. Se piden al
   // abrir el selector y no antes: la mayoria de los mensajes no usan plantilla.
   const [datosPlantilla, setDatosPlantilla] = useState<DatosParaRellenar>({});
+  /**
+   * Las plantillas desde la BARRA DE ARRIBA, no solo desde el campo de escribir.
+   *
+   * Diego, 23/09, señalando esa zona: «aquí necesitamos como un desplegable de
+   * las plantillas». El que había vive dentro de la caja de escribir, y esa caja
+   * solo existe con una conversación abierta: quien entra al chat y todavía no
+   * ha elegido a nadie —que es la pantalla de la captura— no veía plantillas por
+   * ningún sitio.
+   *
+   * Con conversación abierta hace lo mismo que el otro: el texto entra en el
+   * campo de escribir. Sin conversación no hay dónde meterlo, así que se copia
+   * al portapapeles: sirve para mirar cómo va un mensaje o para pegarlo fuera.
+   */
+  const [plantillasArriba, setPlantillasArriba] = useState(false);
   // A quien se va a llamar, y si el intento quedo apuntado.
   const [llamando, setLlamando] = useState<
     { telefono: string; nombre: string | null; apuntada: boolean } | null
@@ -496,6 +524,13 @@ export default function ChatPage() {
   // En un telefono no caben la lista y el hilo a la vez: o una u otro, como en
   // WhatsApp. Se mide el ancho de verdad en vez de suponerlo.
   const [estrecho, setEstrecho] = useState(() => window.innerWidth < 900);
+  // Y por debajo de 640 px —el mismo corte que en chat.css— la cabecera del
+  // hilo no tiene sitio para todas sus acciones: las que no son de cada momento
+  // se van a un menu «Mas» (#128).
+  const [enTelefono, setEnTelefono] = useState(() => window.innerWidth <= 640);
+  const [masAbierto, setMasAbierto] = useState(false);
+  const mas = useRef<HTMLDivElement>(null);
+  const botonMas = useRef<HTMLButtonElement>(null);
   // Quien esta escribiendo al otro lado. En un grupo dice ademas QUIEN de
   // todos: «Maria escribiendo…», que es lo unico que sirve cuando son quince.
   const [escribiendo, setEscribiendo] = useState<{ quien: string; que: string } | null>(null);
@@ -562,7 +597,7 @@ export default function ChatPage() {
       //
       // Se vio otra vez al probar las etiquetas: seis conversaciones en la base
       // y una sola en pantalla.
-      const r = await chatApi.lista(null, deQuien, buscaChats, etiqueta);
+      const r = await chatApi.lista(null, deQuien, buscaChats, etiqueta, etiquetaWa);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
@@ -575,7 +610,7 @@ export default function ChatPage() {
     } finally {
       setCargando(false);
     }
-  }, [deQuien, buscaChats, etiqueta]);
+  }, [deQuien, buscaChats, etiqueta, etiquetaWa]);
 
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
     const r = await chatApi.hilo(id, limite, deQuien);
@@ -585,6 +620,15 @@ export default function ChatPage() {
     setMensajes((antes) => (igualesPor(antes, llegan, mismoMensaje) ? antes : llegan));
     setEscribiendo(r.data.escribiendo || null);
   }, [cuantos, deQuien]);
+
+  // Las etiquetas de esta sesión, para poder filtrar por ellas. Una vez.
+  useEffect(() => {
+    let vivo = true;
+    etiquetasWhatsapp(deQuien)
+      .then((r) => { if (vivo) setEtiquetasWa(r.success ? (r.data || []) : []); })
+      .catch(() => { if (vivo) setEtiquetasWa([]); });
+    return () => { vivo = false; };
+  }, [deQuien]);
 
   useEffect(() => {
     cargarLista();
@@ -619,6 +663,32 @@ export default function ChatPage() {
     };
   }, [aPantalla]);
 
+  // El menu «Mas» de la cabecera, en el telefono.
+  //
+  // Se cierra al cambiar de chat —lo que ofrecia era del anterior—, al tocar
+  // fuera y con Escape. Escape devuelve el foco al boton, que es donde estaba
+  // quien lo abrio con el teclado; y no sigue hacia la ventana, donde con la
+  // pantalla completa puesta tambien la cerraria.
+  useEffect(() => { setMasAbierto(false); }, [abierto, enTelefono]);
+  useEffect(() => {
+    if (!masAbierto) return undefined;
+    const alTocar = (e: PointerEvent) => {
+      if (mas.current && !mas.current.contains(e.target as Node)) setMasAbierto(false);
+    };
+    const alPulsar = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setMasAbierto(false);
+      botonMas.current?.focus();
+    };
+    document.addEventListener('pointerdown', alTocar);
+    document.addEventListener('keydown', alPulsar);
+    return () => {
+      document.removeEventListener('pointerdown', alTocar);
+      document.removeEventListener('keydown', alPulsar);
+    };
+  }, [masAbierto]);
+
   // El recorrido, AL ENTRAR.
   //
   // Antes esperaba a `chats.length && conv`: a que hubiera conversaciones Y una
@@ -650,12 +720,19 @@ export default function ChatPage() {
       if (arriba === undefined) return;
       setAlto(altoDelMarco(arriba, window.innerHeight, rellenoDeAbajo(marco.current)));
     };
-    const mirarAncho = () => setEstrecho(window.innerWidth < 900);
+    const mirarAncho = () => {
+      setEstrecho(window.innerWidth < 900);
+      setEnTelefono(window.innerWidth <= 640);
+    };
     mirarAncho();
     window.addEventListener('resize', mirarAncho);
     medir();
     const ro = new ResizeObserver(medir);
     if (document.body) ro.observe(document.body);
+    // Y lo que tiene encima: si encoge, el body no cambia de tamaño (es
+    // `min-h-screen`) y el marco se quedaria corto. El porque, en
+    // `loQueHayEncima`.
+    loQueHayEncima(marco.current).forEach((e) => ro.observe(e));
     window.addEventListener('resize', medir);
     return () => {
       ro.disconnect();
@@ -688,11 +765,11 @@ export default function ChatPage() {
   useEffect(() => {
     if (!nuevoAbierto) return undefined;
     const t = setTimeout(async () => {
-      const r = await chatApi.buscarProspectos(projectId, busca);
+      const r = await chatApi.buscarProspectos(projectId, busca, ambitoCsv);
       if (r.success) setCandidatos((r.data || []).filter((l) => l.telefono));
     }, 300);
     return () => clearTimeout(t);
-  }, [nuevoAbierto, busca, projectId]);
+  }, [nuevoAbierto, busca, projectId, ambitoCsv]);
 
   function fallo(e: unknown) {
     // Aqui contestan los frenos: ritmo, «no me escribas» y sin consentimiento.
@@ -724,7 +801,18 @@ export default function ChatPage() {
    * que es lo que no hay que perder— en vez de desaparecer.
    */
   async function enviar(texto: string) {
-    const t = texto.replace(/<[^>]*>/g, '').trim();
+    // Llega TEXTO, no HTML.
+    //
+    // Antes se recibia el innerHTML de la caja y se le quitaban las etiquetas
+    // con una expresion. Dos motivos para no seguir asi:
+    //
+    //   · Desde que mayusculas+enter hace un salto de parrafo, ese salto es un
+    //     `<br>` — y quitarlo dejaba «primera lineasegunda linea», pegadas.
+    //   · La expresion se comia texto de verdad: «3 < 5 > 2» tiene algo que
+    //     parece una etiqueta, y se borraba el trozo de en medio.
+    //
+    // Ahora `onSend` pasa el texto con sus saltos y aqui solo se recorta.
+    const t = texto.trim();
     if (!t || !abierto) return;
 
     // Ni bloquear el teclado ni mandar tres veces lo mismo.
@@ -1297,18 +1385,6 @@ export default function ChatPage() {
   // cargadas, y por eso no aparecia nada de mas atras.
   const visibles = chats;
 
-  if (conexion && !conexion.configurado) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-8 text-center">
-        <p className="font-semibold mb-1">WhatsApp no esta conectado</p>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">{conexion.motivo}</p>
-        <Link to="/whatsapp/conexion" className="text-sm text-primary hover:underline mt-3 inline-block">
-          Ir a conectar el número
-        </Link>
-      </div>
-    );
-  }
-
   // Por que no se puede escribir ahora mismo, si es que no se puede.
   //
   // Antes la caja seguia activa con WhatsApp caido: se escribia el mensaje
@@ -1333,32 +1409,167 @@ export default function ChatPage() {
   const enCamino = pendientes.filter((m) => m.paraConversacion === abierto);
   const hilo = enCamino.length ? [...mensajes, ...enCamino] : mensajes;
 
+  /**
+   * Los datos con los que se rellenan los huecos, del chat que esté abierto.
+   *
+   * La usan los dos botones de plantillas. Estaba escrita dentro del `onClick`
+   * de uno de ellos, y duplicarla en el otro era garantizar que un día
+   * rellenaran cosas distintas.
+   */
+  const traerDatosDePlantilla = useCallback(() => {
+    if (!abierto) { setDatosPlantilla({}); return; }
+    chatApi.ficha(abierto, deQuien)
+      .then((r) => {
+        if (!r.success) return;
+        const p = r.data.prospecto;
+        setDatosPlantilla(p
+          ? {
+            nombre: p.nombre, email: p.email, telefono: p.telefono,
+            producto: p.producto,
+            // Los de su formación (#129). Las plazas se cuentan AHORA, al abrir
+            // el selector: el documento comercial dice que no se arrastre nunca
+            // el dato del mensaje anterior.
+            plazas: p.plazas_libres,
+            cierre: p.fecha_cierre_convocatoria,
+            inicio: p.fecha_inicio_texto,
+          }
+          : { telefono: r.data.telefono, nombre: r.data.nombre });
+      })
+      .catch(() => setDatosPlantilla({}));
+  }, [abierto, deQuien]);
+
+  if (conexion && !conexion.configurado) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-8 text-center">
+        <p className="font-semibold mb-1">WhatsApp no esta conectado</p>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">{conexion.motivo}</p>
+        <Link to="/whatsapp/conexion" className="text-sm text-primary hover:underline mt-3 inline-block">
+          Ir a conectar el número
+        </Link>
+      </div>
+    );
+  }
+
+  /**
+   * Han elegido una plantilla desde la barra de arriba.
+   *
+   * Con chat abierto va al campo de escribir, igual que el otro botón: elegir
+   * no es enviar, se lee y se ajusta antes. Sin chat abierto no hay campo, así
+   * que se copia —y se dice que se ha copiado, que si no parece que no hizo
+   * nada—.
+   */
+  async function elegirDesdeLaBarra(texto, plantilla) {
+    if (abierto && !bloqueo) {
+      setBorrador(texto);
+      if (plantilla?.pide_adjunto) setTimeout(() => ficheroRef.current?.click(), 120);
+      return;
+    }
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(texto);
+    toast(ok
+      ? {
+        title: 'Plantilla copiada',
+        description: 'Ábre una conversación y pégala, o úsala donde la necesites.',
+      }
+      : { title: 'No se ha podido copiar', variant: 'destructive' });
+  }
 
   let ultimoDia = '';
 
+  // Dos acciones de la cabecera del hilo que cambian de sitio con el ancho: en
+  // la fila, o dentro del menu «Mas» en el telefono. Se escriben una vez aqui.
+  //
+  // La etiqueta del prospecto, cambiable desde la cabecera (#72). Solo con
+  // ficha: un grupo no tiene estado, y un numero que no es prospecto tampoco —
+  // para ese esta el boton de la ficha, que deja convertirlo. Un <select> de
+  // verdad y no un menu propio: se abre con teclado, se lee con lector de
+  // pantalla y en el movil sale la rueda del sistema.
+  const estadoDelChat = conv?.lead_id ? (
+    <select
+      className={`wa-estado-elegir wa-et-${conv.lead_status || 'nuevo'}`}
+      value={conv.lead_status || ''}
+      aria-label="Estado del prospecto"
+      title="Cambiar el estado de este prospecto"
+      onChange={(e) => { setMasAbierto(false); cambiarEstado(conv, e.target.value); }}
+    >
+      {!conv.lead_status && <option value="">Sin estado</option>}
+      {Object.entries(STATUS_LABELS).map(([valor, texto]) => (
+        <option key={valor} value={valor}>{texto}</option>
+      ))}
+    </select>
+  ) : null;
+  // Las etiquetas del WhatsApp de la gestora (#128, #138). Van aparte del
+  // desplegable de estado: ese es del CRM y va con la persona; estas son de su
+  // movil. Si esa cuenta no tiene etiquetas —no es Business— el boton no se
+  // pinta, en vez de abrir una lista vacia.
+  const etiquetasDelChat = conv ? (
+    <EtiquetasDelChat
+      conversacionId={conv.id}
+      puestas={conv.etiquetas_wa || []}
+      esGrupo={conv.es_grupo}
+      deQuien={deQuien}
+      conTexto={enTelefono}
+      alCambiar={() => { cargarHilo(conv.id); cargarLista(); }}
+    />
+  ) : null;
+
   return (
-    <div className={`space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
+    <div className={`wa-pagina space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
       <div className="wa-barra-superior flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
-        <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+        <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-success' : 'bg-warning'}`} />
         {conexion?.conectado
-          ? <span className="text-muted-foreground">
+          ? <span className="wa-quien text-muted-foreground">
               {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}: <strong className="text-foreground">
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
             </span>
-          : <span className="wa-sin-enlazar text-amber-700 dark:text-amber-400">
+          : <span className="wa-sin-enlazar text-warning">
               {/* Si miras la sesion de otra persona, «no tienes WhatsApp
                   enlazado» es mentira: la que no lo tiene es ella. */}
               {sesion.esMia
                 ? <>No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi número</Link></>
                 : `El WhatsApp de ${sesion.nombre} no está enlazado`}
             </span>}
+        {/* Las plantillas, también desde aquí: el otro botón está dentro de
+            la caja de escribir y esa caja no existe hasta que abres un chat. */}
+        {hayAmbito && (
+          <span className="wa-ancla-plantillas ml-auto">
+            <button type="button" className="wa-btn-plantillas"
+              aria-label="Ver las plantillas"
+              title="Ver las plantillas del proceso"
+              aria-expanded={plantillasArriba}
+              onClick={() => {
+                setPlantillasArriba((v) => !v);
+                if (!plantillasArriba) traerDatosDePlantilla();
+              }}>
+              <FileText size={14} weight="bold" />
+              <span className="font-medium">Plantillas</span>
+            </button>
+            {plantillasArriba && (
+              <SelectorPlantillas
+                anclaje="abajo"
+                borrador={borrador}
+                usuarioId={deQuien}
+                nombreSesion={sesion.esMia ? null : sesion.nombre}
+                projectId={projectId}
+                issuerId={activeIssuerId}
+                datos={datosPlantilla}
+                nombreProyecto={nombreProyecto}
+                alElegir={elegirDesdeLaBarra}
+                alCerrar={() => setPlantillasArriba(false)}
+              />
+            )}
+          </span>
+        )}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
         <button type="button" onClick={() => setAPantalla((v) => !v)}
           aria-label={aPantalla ? 'Salir' : 'Ampliar'}
           title={aPantalla ? 'Salir de pantalla completa (Esc)' : 'Ver solo el chat'}
-          className="wa-btn-ampliar ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          /* El ml-auto lo lleva el primero del grupo de la derecha. Normalmente
+             es el de plantillas; si no hay ambito ese boton no sale y le toca
+             a este, o la barra entera se iria a la izquierda. */
+          className={`wa-btn-ampliar ${hayAmbito ? '' : 'ml-auto '}inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground`}>
           {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
           <span className="font-medium">{aPantalla ? 'Salir' : 'Ampliar'}</span>
         </button>
@@ -1400,7 +1611,7 @@ export default function ChatPage() {
             <div className="wa-barra-lista">
               <Search placeholder="Buscar un chat" value={filtro}
                 onChange={(v: string) => setFiltro(v)} onClearClick={() => setFiltro('')} />
-              <button type="button" title="Escribir a un prospecto"
+              <button type="button" title="Escribir a un prospecto" aria-label="Escribir a un prospecto"
                 onClick={() => setNuevoAbierto(true)} className="wa-btn-nuevo">
                 <PencilSimpleLine size={16} weight="bold" />
               </button>
@@ -1420,11 +1631,40 @@ export default function ChatPage() {
                   {e === ETIQUETA_GRUPOS ? 'Grupos' : (STATUS_LABELS[e] || e)}
                 </button>
               ))}
-              {etiqueta && (
-                <button type="button" onClick={() => setEtiqueta(null)}
+              {(etiqueta || etiquetaWa) && (
+                <button type="button" onClick={() => { setEtiqueta(null); setEtiquetaWa(null); }}
                   className="wa-etiqueta wa-etiqueta-quitar">Quitar filtro</button>
               )}
             </div>
+
+            {/* Las etiquetas DE WHATSAPP, en su propia fila (#128, #138).
+                Van separadas y con un icono a propósito. Puestas junto a las de
+                arriba salían DOS botones «Grupos» —el filtro de grupos del CRM y
+                la etiqueta que WhatsApp trae de fábrica con ese nombre— sin nada
+                que dijera cuál es cuál. Se vio en pantalla con un número real,
+                no leyendo el código.
+
+                Solo se pinta la fila si esa cuenta tiene etiquetas: sin WhatsApp
+                Business no hay ninguna, y una fila de filtros vacía se lee como
+                una avería. */}
+            {etiquetasWa.length > 0 && (
+              <div className="wa-etiquetas wa-etiquetas-wa" role="group"
+                aria-label="Filtrar por una etiqueta de tu WhatsApp">
+                <span className="wa-etiquetas-de">De tu WhatsApp</span>
+                {etiquetasWa.map((e) => (
+                  <button
+                    key={e.wa_id}
+                    type="button"
+                    aria-pressed={etiquetaWa === e.wa_id}
+                    title={`Etiqueta de tu WhatsApp · en ${e.conversaciones} chat(s)`}
+                    onClick={() => setEtiquetaWa(etiquetaWa === e.wa_id ? null : e.wa_id)}
+                    className={`wa-etiqueta wa-et-whatsapp ${etiquetaWa === e.wa_id ? 'wa-etiqueta-puesta' : ''}`}>
+                    <Tag size={11} weight={etiquetaWa === e.wa_id ? 'fill' : 'regular'} />
+                    {e.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
             {sync?.entrando && (
               <div className="wa-sincronizando">
                 Sincronizando… {sync.conversaciones} chats · {sync.mensajes} mensajes
@@ -1460,6 +1700,25 @@ export default function ChatPage() {
                           {STATUS_LABELS[c.lead_status] || c.lead_status}
                         </span>
                       )}
+                      {/* Las etiquetas que la gestora tiene puestas en SU
+                          WhatsApp (#128, #138). Son otra cosa que el estado de
+                          al lado: ese lo decide el CRM y va con la persona;
+                          estas las puso ella en el móvil. Por eso se pintan
+                          distintas y no se mezclan con la del estado.
+                          Dos como mucho: la fila tiene el ancho que tiene, y
+                          con cinco etiquetas no se leería ni el nombre. */}
+                      {(c.etiquetas_wa || []).slice(0, 2).map((e) => (
+                        <span key={e.waId} className="wa-fila-etiqueta wa-et-whatsapp"
+                          title={`Etiqueta de WhatsApp: ${e.nombre}`}>
+                          {e.nombre}
+                        </span>
+                      ))}
+                      {(c.etiquetas_wa || []).length > 2 && (
+                        <span className="wa-fila-etiqueta wa-et-whatsapp"
+                          title={(c.etiquetas_wa || []).map((e) => e.nombre).join(', ')}>
+                          +{(c.etiquetas_wa || []).length - 2}
+                        </span>
+                      )}
                       <span className="wa-fila-cuando">{cuandoDe(c.ultimo_at)}</span>
                     </div>
                     <div className="wa-fila-adelanto">
@@ -1483,7 +1742,30 @@ export default function ChatPage() {
                 suspender el numero. Que ella lo sepa cuesta dos lineas, y le
                 ahorra volver a reportarlo — y a nosotros, buscar un fallo que
                 no existe. */}
-            {buscaChats && !visibles.length && (
+            {/* Filtrando por una etiqueta del móvil y sin resultados.
+                Antes salía la lista en blanco y punto: la gestora no tiene por
+                qué saber si es que no hay ninguno con esa etiqueta o si el
+                filtro está roto. Se dice cuál está puesta y se ofrece quitarla.
+
+                Va ANTES que el de buscar porque puede haber las dos cosas a la
+                vez, y el motivo más probable de no encontrar nada es el filtro
+                —es la misma lección de la #72. */}
+            {etiquetaWa && !visibles.length && (
+              <div className="wa-sin-resultados">
+                <p className="font-medium text-foreground">
+                  Ninguno de tus chats tiene la etiqueta «
+                  {etiquetasWa.find((e) => e.wa_id === etiquetaWa)?.nombre || etiquetaWa}»
+                </p>
+                <p>
+                  Es una etiqueta de tu WhatsApp: si la pones desde el móvil o desde aquí, el chat
+                  aparecerá en este filtro.
+                </p>
+                <button type="button" className="wa-etiqueta wa-etiqueta-quitar"
+                  onClick={() => setEtiquetaWa(null)}>Quitar el filtro</button>
+              </div>
+            )}
+
+            {buscaChats && !etiquetaWa && !visibles.length && (
               <div className="wa-sin-resultados">
                 <p className="font-medium text-foreground">Sin resultados para «{buscaChats}»</p>
                 {/* La etiqueta puesta, LO PRIMERO y antes que nada.
@@ -1545,6 +1827,7 @@ export default function ChatPage() {
                      lo que uno pulsa— no hace nada. Ademas es diminuta. */
                   <ConversationHeader.Back>
                     <button type="button" className="wa-volver" title="Ver todos los chats"
+                      aria-label="Ver todos los chats"
                       onClick={() => { setAbierto(null); setConv(null); }}>
                       <CaretLeft size={20} weight="bold" />
                     </button>
@@ -1563,27 +1846,7 @@ export default function ChatPage() {
                     : [telefonoVisible(conv), conv.lead_id ? 'prospecto' : 'sin prospecto']
                         .filter(Boolean).join(' · ')} />
                 <ConversationHeader.Actions>
-                  {/* La etiqueta del prospecto, cambiable desde aqui (#72).
-                      Solo con ficha: un grupo no tiene estado, y un numero que
-                      no es prospecto tampoco — para ese esta el boton de al
-                      lado, que abre la ficha y deja convertirlo.
-                      Un <select> de verdad y no un menu propio: se abre con
-                      teclado, se lee con lector de pantalla y en el movil sale
-                      la rueda del sistema. */}
-                  {conv.lead_id && (
-                    <select
-                      className={`wa-estado-elegir wa-et-${conv.lead_status || 'nuevo'}`}
-                      value={conv.lead_status || ''}
-                      aria-label="Estado del prospecto"
-                      title="Cambiar el estado de este prospecto"
-                      onChange={(e) => cambiarEstado(conv, e.target.value)}
-                    >
-                      {!conv.lead_status && <option value="">Sin estado</option>}
-                      {Object.entries(STATUS_LABELS).map(([valor, texto]) => (
-                        <option key={valor} value={valor}>{texto}</option>
-                      ))}
-                    </select>
-                  )}
+                  {!enTelefono && estadoDelChat}
                   {/* La ficha, en un popup y SIN salir de aqui.
                       Antes era un enlace a /prospectos/:id que navegaba en esta
                       misma pestaña: al volver se recargaban las conversaciones,
@@ -1606,6 +1869,7 @@ export default function ChatPage() {
                         paso los tres van iguales. */}
                     <Info size={17} />
                   </button>
+                  {!enTelefono && etiquetasDelChat}
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo cuando hay un numero de verdad al que llamar: a un
                       grupo no se puede, y de quien llega por «@lid» no tenemos
@@ -1614,14 +1878,53 @@ export default function ChatPage() {
                       ofrecerlo. */}
                   {telefonoVisible(conv) && (
                     <button type="button" onClick={() => llamar(conv)} className="wa-btn-llamar"
+                      aria-label={`Llamar a ${telefonoVisible(conv)} desde el móvil`}
                       title={`Llamar a ${telefonoVisible(conv)} desde el móvil`}>
                       <PhoneCall size={17} />
                     </button>
                   )}
-                  <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
-                    title="No volver a escribir a este número">
-                    <Prohibit size={17} />
-                  </button>
+                  {enTelefono ? (
+                    /* En el telefono, el estado, las etiquetas y «no volver a
+                       escribir» van aqui dentro (#128). Con todo en la fila, al
+                       nombre le quedaban 0 px a 390; en dos filas cabia, pero la
+                       cabecera se comia 104 px del hilo. A la vista quedan la
+                       ficha y llamar, que son las de cada conversacion.
+
+                       Es un panel y no un role="menu": dentro hay un <select> y
+                       el boton de etiquetas abre su propia lista, y un menu ARIA
+                       solo admite elementos de menu. Va justo detras del boton,
+                       asi que el tabulador entra en el sin mas. */
+                    <div className="wa-mas" ref={mas}>
+                      <button type="button" ref={botonMas} className="wa-btn-mas"
+                        aria-label="Más acciones" title="Más acciones"
+                        aria-expanded={masAbierto} aria-controls="wa-mas-panel"
+                        onClick={() => setMasAbierto((v) => !v)}>
+                        <DotsThreeVertical size={20} weight="bold" />
+                      </button>
+                      {masAbierto && (
+                        <div id="wa-mas-panel" className="wa-mas-panel" role="group" aria-label="Más acciones">
+                          {estadoDelChat && (
+                            <div className="wa-mas-fila">
+                              <span className="wa-mas-texto" aria-hidden="true">Estado</span>
+                              {estadoDelChat}
+                            </div>
+                          )}
+                          {etiquetasDelChat}
+                          <button type="button" className="wa-mas-item wa-mas-peligro"
+                            onClick={() => { setMasAbierto(false); setPidiendoMotivo(true); }}>
+                            <Prohibit size={17} />
+                            No volver a escribir
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
+                      aria-label="No volver a escribir a este número"
+                      title="No volver a escribir a este número">
+                      <Prohibit size={17} />
+                    </button>
+                  )}
                 </ConversationHeader.Actions>
               </ConversationHeader>
 
@@ -1964,7 +2267,7 @@ export default function ChatPage() {
                 {/* Las plantillas, AQUI. Estaban solo en su pantalla, asi que
                     habia que salir del chat, copiar a mano y volver — con lo
                     cual no ahorraban nada. */}
-                {!bloqueo && projectId && (
+                {!bloqueo && hayAmbito && (
                   <button type="button" className="wa-btn-plantillas"
                     aria-label="Usar una plantilla"
                     title="Usar una plantilla"
@@ -1972,17 +2275,7 @@ export default function ChatPage() {
                     onClick={() => {
                       setPlantillasAbiertas((v) => !v);
                       // Los datos para los huecos se piden al abrir, no antes.
-                      if (!plantillasAbiertas && abierto) {
-                        chatApi.ficha(abierto, deQuien)
-                          .then((r) => {
-                            if (!r.success) return;
-                            const p = r.data.prospecto;
-                            setDatosPlantilla(p
-                              ? { nombre: p.nombre, email: p.email, telefono: p.telefono, producto: p.producto }
-                              : { telefono: r.data.telefono, nombre: r.data.nombre });
-                          })
-                          .catch(() => setDatosPlantilla({}));
-                      }
+                      if (!plantillasAbiertas) traerDatosDePlantilla();
                     }}>
                     <FileText size={15} />
                     <span>Plantillas</span>
@@ -1990,12 +2283,25 @@ export default function ChatPage() {
                 )}
               </InputToolbox>
 
-              {plantillasAbiertas && projectId && (
+              {plantillasAbiertas && hayAmbito && (
                 <SelectorPlantillas
+                  borrador={borrador}
+                  usuarioId={deQuien}
+                  nombreSesion={sesion.esMia ? null : sesion.nombre}
                   projectId={projectId}
+                  issuerId={activeIssuerId}
                   datos={datosPlantilla}
                   nombreProyecto={nombreProyecto}
-                  alElegir={(texto) => setBorrador(texto)}
+                  alElegir={(texto, plantilla) => {
+                    setBorrador(texto);
+                    // El documento, dia 2: el mensaje anuncia la opinion y
+                    // «(enviar la captura justo despues)». Si la plantilla lleva
+                    // imagen detras, se abre ya el selector: acordarse del clip
+                    // es justo lo que se olvida con prisa.
+                    if (plantilla?.pide_adjunto) {
+                      setTimeout(() => ficheroRef.current?.click(), 120);
+                    }
+                  }}
                   alCerrar={() => setPlantillasAbiertas(false)}
                 />
               )}
@@ -2006,9 +2312,31 @@ export default function ChatPage() {
                   : grabando ? 'Grabando… pulsa ■ para terminar (no se envía todavía)'
                   : 'Escribe un mensaje'
                 }
-                value={borrador}
-                onChange={(_html, texto) => setBorrador(texto)}
-                onSend={enviar} disabled={Boolean(bloqueo)} attachButton
+                /* MAYÚSCULAS + ENTER TIENE QUE HACER UN SALTO DE PÁRRAFO.
+                   Pedido: «necesito poder tocar mayus + enter y que haga un
+                   salto de párrafo sin enviar el mensaje, ahora no lo hace».
+
+                   El kit ya distingue —con Shift no envía— y el salto se
+                   perdía aquí: de los tres valores que devuelve
+                   (html, textContent, innerText) cogíamos el DEL MEDIO, y
+                   `textContent` no conserva los saltos. Como la caja está
+                   controlada, al siguiente render el <br> desaparecía: pulsabas
+                   y no pasaba nada.
+
+                   Ahora se guarda `innerText`, que sí los trae, y al pintar se
+                   vuelven a <br> — en HTML un salto de línea es un espacio, así
+                   que devolver el texto tal cual los borraría otra vez. Se
+                   escapan los signos primero: esto entra como innerHTML y una
+                   plantilla con «<» no puede romper la caja. */
+                value={borrador
+                  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                  .replace(/\n/g, '<br>')}
+                onChange={(_html, _texto, conSaltos) => setBorrador(
+                  (conSaltos ?? '').replace(/\r\n/g, '\n'))}
+                /* El kit manda cuatro cosas y la PRIMERA es el HTML. Se coge
+                   la tercera, que es el texto con los saltos de parrafo. */
+                onSend={(_html, _texto, conSaltos) => enviar(conSaltos ?? '')}
+                disabled={Boolean(bloqueo)} attachButton
                 onAttachClick={() => ficheroRef.current?.click()}
                 sendDisabled={Boolean(bloqueo)} />
             </ChatContainer>
@@ -2152,7 +2480,7 @@ export default function ChatPage() {
             </div>
             <div className="wa-panel-cuerpo">
               <p className="wa-panel-nota">
-                El CRM no le enviara nada mas a <strong>{conv ? nombreDe(conv) : ''}</strong>,
+                El CRM no le enviará nada más a <strong>{conv ? nombreDe(conv) : ''}</strong>,
                 ni con plantilla ni «solo una última vez». Se puede quitar después.
               </p>
               <input autoFocus value={motivoNuevo} onChange={(e) => setMotivoNuevo(e.target.value)}

@@ -3,6 +3,8 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Package, Eye, EyeSlash } from '@phosphor-icons/react';
 import { RUTAS_VALIDAS } from '@/shared/lib/rutasAterrizaje';
+import OlvideLaClave from '@/shared/components/OlvideLaClave';
+import { MARCA } from '@/shared/config/marca';
 
 // Patron topografico (Hero Patterns "Topography", MIT) — encoded as data URL
 const TOPO_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800' viewBox='0 0 800 800'><g fill='none' stroke='currentColor' stroke-width='1.2'><path d='M769 229L1037 260.9M927 880L731 737 520 660 309 538 40 599 295 764 126.5 879.5 40 599-197 493 102 382-31 229 126.5 79.5-69-63'/><path d='M-31 229L237 261 390 382 603 493 308.5 537.5 101.5 381.5M370 905L295 764'/><path d='M520 660L578 842 731 737 840 599 603 493 520 660 295 764 309 538 390 382 539 269 769 229 577.5 41.5 370 105 295 -36 126.5 79.5 237 261 102 382 40 599 -69 737 127 880'/><path d='M520-140L578.5 42.5 731-63M603 493L539 269 237 261 370 105M902 382L539 269M390 382L102 382'/><path d='M-222 42L126.5 79.5 370 105 539 269 577.5 41.5 927 80 769 229 902 382 603 493 731 737M295-36L577.5 41.5M578 842L295 764M40-201L127 80M102 382L-261 269'/></g><g fill='currentColor'><circle cx='769' cy='229' r='4'/><circle cx='539' cy='269' r='4'/><circle cx='603' cy='493' r='4'/><circle cx='731' cy='737' r='4'/><circle cx='520' cy='660' r='4'/><circle cx='309' cy='538' r='4'/><circle cx='295' cy='764' r='4'/><circle cx='40' cy='599' r='4'/><circle cx='102' cy='382' r='4'/><circle cx='127' cy='80' r='4'/><circle cx='370' cy='105' r='4'/><circle cx='578' cy='42' r='4'/><circle cx='237' cy='261' r='4'/><circle cx='390' cy='382' r='4'/></g></svg>`;
@@ -67,7 +69,7 @@ export default function LoginPage() {
           <div className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
             <Package size={18} weight="bold" />
           </div>
-          <span className="font-semibold text-base">MultiCRM</span>
+          <span className="font-semibold text-base">{MARCA}</span>
         </div>
 
         {/* Form al centro vertical */}
@@ -121,7 +123,7 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div role="alert" className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg px-4 py-2.5 font-medium">
+                <div role="alert" className="text-sm text-destructive-soft-foreground bg-destructive-soft border border-destructive/30 rounded-lg px-4 py-2.5 font-medium">
                   {error}
                 </div>
               )}
@@ -140,6 +142,11 @@ export default function LoginPage() {
                   'Iniciar sesión'
                 )}
               </button>
+
+              {/* #37 · quien pierde la clave dependia de que alguien se la
+                  cambiara a mano. Va aqui, debajo del boton, que es donde se
+                  mira despues de que no te dejen entrar. */}
+              <OlvideLaClave correoInicial={email} />
 
               <p className="text-xs text-muted-foreground text-center pt-2">
                 ¿No tienes cuenta?{' '}
@@ -160,7 +167,7 @@ export default function LoginPage() {
       {/* Panel decoracion (derecha, solo desktop) */}
       <div
         aria-hidden="true"
-        className="hidden lg:flex flex-1 relative overflow-hidden bg-gradient-to-br from-primary/5 via-violet-500/5 to-emerald-500/5 dark:from-primary/10 dark:via-violet-500/10 dark:to-emerald-500/10"
+        className="hidden lg:flex flex-1 relative overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10"
       >
         {/* Patron topografico */}
         <div
@@ -173,8 +180,8 @@ export default function LoginPage() {
         {/* Vignette para suavizar bordes */}
         <div className="absolute inset-0 bg-gradient-to-r from-background/60 via-transparent to-transparent pointer-events-none" />
         {/* Glow circulares sutiles */}
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 rounded-full bg-violet-500/10 dark:bg-violet-500/5 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-1/4 left-1/3 w-80 h-80 rounded-full bg-emerald-500/10 dark:bg-emerald-500/5 blur-3xl pointer-events-none" />
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 rounded-full bg-primary/10 dark:bg-primary/5 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 left-1/3 w-80 h-80 rounded-full bg-success/10 dark:bg-success/5 blur-3xl pointer-events-none" />
       </div>
     </div>
   );

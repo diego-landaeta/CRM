@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro'];
+// 'deposito' (depósito bancario) desde el 15/10: con 'transferencia', las dos
+// formas de cobro que disparan el webhook de transferencias (migración 206).
+export const PAYMENT_METHODS = ['transferencia', 'deposito', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro'];
+
+// La referencia del banco de una transferencia o un depósito (nº de operación).
+const referencia = z.string().trim().max(120).optional().nullable();
 
 const conversionItemSchema = z.object({
   product_id: z.number().int().positive().optional().nullable(),
@@ -50,12 +55,34 @@ export const createPaymentSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas: z.string().max(500).optional().nullable(),
   metodo: z.enum(PAYMENT_METHODS).optional().nullable(),
+  referencia,
   // Confirmacion explicita cuando de verdad son dos cobros iguales seguidos.
   permitir_duplicado: z.boolean().optional(),
 });
 
+// Cobrar una cuota. Antes el controlador leia el cuerpo sin validar: el método
+// podia ser cualquier texto.
+export const payInstallmentSchema = z.object({
+  fecha_cobro: z.string({ required_error: 'fecha_cobro requerida' }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
+  importe_cobrado: z.coerce.number().positive('Importe debe ser positivo').optional().nullable(),
+  metodo: z.enum(PAYMENT_METHODS).optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+  referencia,
+});
+
+// Editar el pago de una cuota ya cobrada: fecha, importe y, desde el 15/10, la
+// forma de pago y la referencia.
+export const editPaidInstallmentSchema = z.object({
+  fecha_cobro: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
+  importe_cobrado: z.coerce.number().positive('Importe debe ser positivo').optional(),
+  metodo: z.enum(PAYMENT_METHODS).optional().nullable(),
+  referencia,
+}).refine((d) => Object.keys(d).length > 0, { message: 'Indica fecha_cobro, importe_cobrado o metodo' });
+
 export const listConversionsSchema = z.object({
   projectId: z.coerce.number().int().positive().optional(),
+  // Una sociedad entera: el controlador la traduce a sus campus.
+  issuerId: z.coerce.number().int().positive().optional(),
   leadId: z.coerce.number().int().positive().optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   pendiente: z.enum(['true', 'false']).optional(),
@@ -68,6 +95,8 @@ export const listConversionsSchema = z.object({
   // Filtro por producto: hasta ahora se hacia en el navegador sobre las filas
   // cargadas, asi que con paginacion dejaba fuera el resto.
   producto: z.string().max(255).optional(),
+  // Todas · Solo compartidas · Solo enteras (#163).
+  compartidas: z.enum(['todas', 'solo', 'enteras']).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });

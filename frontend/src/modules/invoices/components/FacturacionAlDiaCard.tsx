@@ -9,15 +9,35 @@
 // aparece en la cola ni suma en los totales.
 import { useEffect, useState, useCallback } from 'react';
 import client from '@/shared/api/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
+import { posibleDuplicada, preguntarSiEmitirDuplicada, fechaLegible, type OtraFactura } from '../lib/posibleDuplicada';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
   cliente: string | null; producto: string | null; gestora: string | null;
   origen: 'stripe' | 'manual'; es_el_siguiente: boolean;
+  // «posible duplicada» (CRM#819): ya hay una factura de este cliente por el
+  // mismo importe esa semana. La emision automatica no la saca; aqui se ve por que.
+  motivo?: string | null; posible_duplicada?: OtraFactura | null;
+  /** Factura automática (#764): en qué están los datos fiscales de esa venta. */
+  datos_fiscales?: { estado: 'pendiente' | 'respondido' | 'ficha' | 'revision'; caduca_at: string; motivo: string | null } | null;
 };
+
+/** La etiqueta de la factura automática, debajo del cliente. Sin ella, nada. */
+function EstadoDatosFiscales({ d }: { d: ColaItem['datos_fiscales'] }) {
+  if (!d) return null;
+  const texto = {
+    pendiente: `Esperando datos del alumno (hasta el ${new Date(d.caduca_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})`,
+    respondido: 'Datos del alumno: sale sola',
+    ficha: 'Con los datos de la ficha: sale sola',
+    revision: 'Revisar datos: no sale sola',
+  }[d.estado];
+  if (!texto) return null;
+  const tono = d.estado === 'revision' ? 'text-warning' : 'text-muted-foreground';
+  return <span className={`block text-[10px] ${tono}`} title={d.motivo || undefined}>{texto}</span>;
+}
 type PorDia = { dia: string; cobros: number; importe: number };
 type Proforma = {
   id: number; total: number | string; created_at: string;
@@ -41,9 +61,16 @@ function fecha(d: unknown) {
   return d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 }
 
-export default function FacturacionAlDiaCard({ projectId }: { projectId?: number | null }) {
-  const { user } = useAuth() as { user?: { role?: string; factura_manager?: boolean } };
-  const puedeFacturar = !!user?.factura_manager || user?.role === 'superadmin';
+export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia = false }: {
+  projectId?: number | null;
+  /** El campus, cuando hay una cola por campus (empresa elegida arriba). */
+  titulo?: string;
+  /** Con varias colas, la que no tiene nada por facturar no se pinta. */
+  ocultarSiVacia?: boolean;
+}) {
+  // «Emitir desde la cola» del catálogo (#423; antes, la casilla factura_manager).
+  const { can } = usePermission();
+  const puedeFacturar = can('facturas.cola');
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);
   const [aprobando, setAprobando] = useState<number | null>(null);
@@ -61,12 +88,39 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
   useEffect(() => { cargar(); }, [cargar]);
 
 
-  async function generar(paymentId: number, forzar = false) {
+  /*
+    ANTES DE EMITIR, PREGUNTAR EL NUMERO.
+
+    Diego, 14/09: «le doy a generar factura y me debe indicar el numero que voy
+    a generar, para cambiarlo o ponerlo manualmente».
+
+    Antes este boton emitia en el acto y te enterabas del numero por el aviso,
+    cuando ya estaba gastado. Ahora primero se pide cual toca, se enseña, y se
+    puede cambiar. Cancelar no consume numero.
+  */
+  const [pidiendoNumero, setPidiendoNumero] = useState<{ paymentId: number; forzar: boolean; sugerido: string; texto: string } | null>(null);
+
+  async function pedirNumero(paymentId: number, forzar = false) {
+    if (!projectId) return;
+    setGenerando(paymentId);
+    try {
+      const r = await client.get<{ codigo: string; siguiente: number; serie: string }>(
+        `/invoices/siguiente-numero?projectId=${projectId}`);
+      const sug = r?.success ? String(r.data.siguiente) : '';
+      setPidiendoNumero({ paymentId, forzar, sugerido: sug, texto: sug });
+    } catch {
+      // Si no se puede consultar, se deja escribirlo a mano igualmente.
+      setPidiendoNumero({ paymentId, forzar, sugerido: '', texto: '' });
+    } finally { setGenerando(null); }
+  }
+
+  async function generar(paymentId: number, forzar = false, numero?: string, confirmarDuplicada = false) {
     if (!projectId) return;
     setGenerando(paymentId);
     try {
       const r = await client.post<{ codigo?: string }>('/invoices/cola/generar',
-        { projectId, paymentId, ...(forzar ? { forzar: true } : {}) });
+        { projectId, paymentId, ...(forzar ? { forzar: true } : {}), ...(numero ? { numero: Number(numero) } : {}),
+          ...(confirmarDuplicada ? { confirmar_duplicada: true } : {}) });
       if (r.success) {
         toast({ title: 'Factura generada', description: r.data?.codigo || '' });
         cargar();
@@ -77,7 +131,14 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
         if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
           setGenerando(null);
-          return generar(paymentId, true);
+          return generar(paymentId, true, pidiendoNumero?.texto);
+        }
+      } else if (!confirmarDuplicada && posibleDuplicada(err)) {
+        // Ya hay una factura de este cliente por el mismo importe esa semana
+        // (CRM#819): se pregunta; con «Emitir igualmente» se manda confirmada.
+        if (await preguntarSiEmitirDuplicada(posibleDuplicada(err) as OtraFactura)) {
+          setGenerando(null);
+          return generar(paymentId, forzar, numero, true);
         }
       } else {
         toast({
@@ -108,13 +169,90 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
 
   if (!estado) return null;
   const cola = estado.cola || [];
+  if (ocultarSiVacia && (estado.pagos_sin_factura || 0) === 0 && (estado.proformas_pendientes?.length || 0) === 0) return null;
+
+  // El cuadro que pide el numero. Va antes que nada: mientras esta abierto,
+
+  // no se ha emitido nada y cancelar no gasta numero.
+
+  const cuadroNumero = pidiendoNumero && (
+
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
+
+      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-xl">
+
+        <h3 className="text-sm font-semibold">Número de la factura</h3>
+
+        <p className="mt-1 text-xs text-muted-foreground">
+
+          {pidiendoNumero.sugerido
+
+            ? <>El siguiente disponible es el <b className="text-foreground tabular-nums">{pidiendoNumero.sugerido}</b>. Puedes dejarlo o poner otro.</>
+
+            : 'Escribe el número que quieres darle.'}
+
+        </p>
+
+        {/* Diego, 14/09: que antes de emitir se recuerde mirar el Excel. El CRM
+            sabe cual es el siguiente de SU serie, pero el orden bueno esta en la
+            hoja --y cuando los dos no coinciden, manda la hoja--. */}
+        <p className="mt-2 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-2 text-[11px] font-medium text-warning-soft-foreground">
+          <span aria-hidden="true">⚠</span>
+          <span>
+            Comprueba la numeración en el Excel de facturación primero.
+            {' '}Si hay discrepancia, contacta con soporte; y si hace falta, genera la
+            {' '}factura manualmente y avisa.
+          </span>
+        </p>
+        <input
+
+          autoFocus
+
+          value={pidiendoNumero.texto}
+
+          onChange={(e) => setPidiendoNumero({ ...pidiendoNumero, texto: e.target.value.replace(/[^0-9]/g, '') })}
+
+          onKeyDown={(e) => { if (e.key === 'Enter' && pidiendoNumero.texto) { const p = pidiendoNumero; setPidiendoNumero(null); generar(p.paymentId, p.forzar, p.texto); } }}
+
+          inputMode="numeric"
+
+          className="mt-3 h-10 w-full rounded-md border border-border bg-background px-3 text-lg tabular-nums"
+
+        />
+
+        <div className="mt-4 flex justify-end gap-2">
+
+          <button type="button" onClick={() => setPidiendoNumero(null)}
+
+            className="h-9 px-3 rounded-md border border-border text-sm">Cancelar</button>
+
+          <button type="button" disabled={!pidiendoNumero.texto}
+
+            onClick={() => { const p = pidiendoNumero; setPidiendoNumero(null); generar(p.paymentId, p.forzar, p.texto); }}
+
+            className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40">
+
+            Emitir la factura
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <>
+      {cuadroNumero}
+      <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
-            <Receipt size={16} weight="bold" /> Cola de facturación
+            <Receipt size={16} weight="bold" /> Cola de facturación{titulo ? ` · ${titulo}` : ''}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1 max-w-[52ch]">
             Todo cobro sin factura sale aquí por orden de fecha, venga de Stripe o
@@ -136,7 +274,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       </div>
 
       {estado.pagos_sin_factura === 0 && (estado.proformas_pendientes?.length || 0) === 0 && (
-        <div className="mt-4 flex items-center gap-2 text-[12px] text-emerald-600 dark:text-emerald-400">
+        <div className="mt-4 flex items-center gap-2 text-[12px] text-success">
           <CheckCircle size={16} weight="fill" />
           Todo facturado: no queda ningún cobro por generar.
         </div>
@@ -152,7 +290,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
                 title={`${d.cobros} cobro${d.cobros === 1 ? '' : 's'} · ${fmt(d.importe)}`}
                 className={`text-[11px] px-2 py-1 rounded font-semibold tabular-nums ${
                   i === 0
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                    ? 'bg-success-soft text-success-soft-foreground'
                     : 'bg-muted text-muted-foreground'
                 }`}
               >
@@ -185,11 +323,24 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
                   <tr
                     key={c.payment_id}
                     className={`border-b border-border/50 last:border-0 ${
-                      c.es_el_siguiente ? 'bg-emerald-50/60 dark:bg-emerald-950/10' : ''
+                      c.es_el_siguiente ? 'bg-success-soft/60' : ''
                     }`}
                   >
                     <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">{fecha(c.fecha)}</td>
-                    <td className="px-2 py-1.5 truncate max-w-[170px]">{c.cliente || '—'}</td>
+                    <td className="px-2 py-1.5 truncate max-w-[170px]">
+                      {c.cliente || '—'}
+                      {c.motivo && (
+                        <span
+                          className="block w-fit mt-0.5 px-1.5 rounded bg-warning-soft text-warning-soft-foreground text-[10px] font-semibold"
+                          title={c.posible_duplicada
+                            ? `Ya existe la factura ${c.posible_duplicada.numero} de este cliente por el mismo importe el día ${fechaLegible(c.posible_duplicada.fecha)}.`
+                            : undefined}
+                        >
+                          {c.motivo}
+                        </span>
+                      )}
+                      <EstadoDatosFiscales d={c.datos_fiscales} />
+                    </td>
                     <td className="px-2 py-1.5 truncate max-w-[130px] text-muted-foreground">{c.gestora || '—'}</td>
                     <td className="px-2 py-1.5">
                       <span className="inline-flex items-center gap-1 text-muted-foreground">
@@ -203,7 +354,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
                       {puedeFacturar ? (
                         <button
                           type="button"
-                          onClick={() => generar(c.payment_id)}
+                          onClick={() => pedirNumero(c.payment_id)}
                           disabled={generando === c.payment_id}
                           className={`h-6 px-2 rounded font-semibold whitespace-nowrap disabled:opacity-40 ${
                             c.es_el_siguiente
@@ -232,12 +383,12 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
 
       {(estado.proformas_pendientes?.length || 0) > 0 && (
         <div className="mt-4 border-t border-border pt-4">
-          <h4 className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mb-2">
+          <h4 className="text-[11px] font-bold text-warning mb-2">
             Proformas esperando visto bueno ({estado.proformas_pendientes!.length})
           </h4>
           <div className="space-y-1.5">
             {estado.proformas_pendientes!.map((pf) => (
-              <div key={pf.id} className="flex items-center justify-between gap-3 bg-amber-50/60 dark:bg-amber-950/10 rounded-md px-3 py-2">
+              <div key={pf.id} className="flex items-center justify-between gap-3 bg-warning-soft/60 rounded-md px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-[12px] font-semibold truncate">{pf.cliente_nombre || 'Sin nombre'}</p>
                   <p className="text-[10px] text-muted-foreground">
@@ -262,5 +413,6 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       )}
 
     </div>
+    </>
   );
 }

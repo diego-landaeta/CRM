@@ -3,9 +3,13 @@ import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
 import { webhookLeadSchema, listLeadsSchema, quickCountsSchema, revisarLeadSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
+import { leerFiltroPais } from './pais.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { soloLoSuyo, alcanceComercial, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -24,12 +28,16 @@ import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared
 // historial. Va en TODO handler que reciba un :id de lead: la ficha estaba
 // protegida pero seis puertas al mismo lead no lo estaban, y por ahi se leia y
 // se escribia el historial de fichas ajenas (#109).
+//
+// Y quien lleva un equipo comercial (09/11/2026), los de su equipo y los suyos:
+// `alcanceComercial` dice de quién puede ver; null = de todo su campus.
 async function exigirQueSeaSuyo(req, leadId) {
-  if (req.user.role !== 'gestor') return;              // admin, superadmin y soporte ven todo
+  const alcance = await alcanceComercial(req.user);
+  if (!alcance) return;                           // admin sin equipo, superadmin y soporte ven todo
   const { rows } = await query(
     'SELECT responsable_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [leadId]);
   if (!rows.length) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
-  if (rows[0].responsable_id !== req.user.userId) {
+  if (!enElAlcance(alcance, rows[0].responsable_id)) {
     throw new AppError('Ese contacto es de otra gestora', 403, 'NO_ES_TUYO');
   }
 }
@@ -68,11 +76,29 @@ export async function list(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const filters = { ...parsed.data };
+    // Solo dentro de sus campus (#591). La lista no pasaba por `projectAccess`:
+    // un admin de un campus podía pedir `?projectId=` de otro y el buscador
+    // (Ctrl K) le encontraba personas que no puede abrir. Mismo criterio que
+    // `campusPedidos`: lo ajeno se cae, y si no queda nada no casa con nada.
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user?.userId);
+      if (filters.projectId && !mios.includes(Number(filters.projectId))) {
+        throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+      }
+      if (Array.isArray(filters.projectIds)) {
+        const quedan = filters.projectIds.filter((id) => mios.includes(Number(id)));
+        filters.projectIds = quedan.length ? quedan : [-1];
+      }
+    }
     // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
     // Ignoramos cualquier responsableId/unassigned que venga del cliente.
-    if (req.user.role === 'gestor') {
-      filters.responsableId = req.user.userId;
+    // Quien lleva un equipo, lo de su equipo (o el de una de ellas si lo pide).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
+      filters.responsableId = acotarAlAlcance(filters.responsableId, alcance);
       filters.unassigned = false;
+    }
+    if (soloLoSuyo(req.user)) {
       filters.duplicated = false;
       filters.reincidente = false;
     }
@@ -105,7 +131,8 @@ export async function quickCounts(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const filtros = { ...parsed.data };
-    if (req.user.role === 'gestor') filtros.responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filtros.responsableId = acotarAlAlcance(filtros.responsableId, alcance);
 
     res.json({ success: true, data: await leadModel.contarFiltrosRapidos(filtros) });
   } catch (err) { next(err); }
@@ -127,7 +154,7 @@ export async function revisar(req, res, next) {
 
     if (!(await leadModel.sePuedeRevisar())) {
       throw new AppError(
-        'Todavia no se puede validar la base: falta aplicar la migracion 149.',
+        'Todavia no se puede validar la base: falta aplicar la migracion 155.',
         503, 'MIGRATION_PENDING');
     }
     const parsed = revisarLeadSchema.safeParse(req.body);
@@ -136,7 +163,8 @@ export async function revisar(req, res, next) {
     }
     const lead = await leadModel.findById(id);
     if (!lead) throw new AppError('Prospecto no encontrado', 404, 'NOT_FOUND');
-    if (req.user.role === 'gestor' && lead.responsable_id !== req.user.userId) {
+    const alcance = await alcanceComercial(req.user);
+    if (!enElAlcance(alcance, lead.responsable_id)) {
       throw new AppError('Ese prospecto no es tuyo', 403, 'FORBIDDEN');
     }
 
@@ -147,7 +175,7 @@ export async function revisar(req, res, next) {
     // cuanto queda sin tener que pedirlo aparte en cada clic.
     const progreso = await leadModel.comoVaLaRevision({
       projectId: lead.project_id,
-      responsableId: req.user.role === 'gestor' ? req.user.userId : null,
+      responsableId: alcance,
     });
     res.status(201).json({ success: true, data: { revision: hecho, progreso } });
   } catch (err) { next(err); }
@@ -159,14 +187,14 @@ export async function progresoRevision(req, res, next) {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     const progreso = await leadModel.comoVaLaRevision({
       projectId,
-      responsableId: req.user.role === 'gestor' ? req.user.userId : null,
+      responsableId: await alcanceComercial(req.user),
     });
     res.json({
       success: true,
       data: {
         ...progreso,
         aviso: progreso.disponible ? null
-          : 'Falta aplicar la migracion 149 (lead_revisiones): todavia no se puede validar la base.',
+          : 'Falta aplicar la migracion 155 (lead_revisiones): todavia no se puede validar la base.',
       },
     });
   } catch (err) { next(err); }
@@ -198,9 +226,8 @@ export async function exportWasapi(req, res, next) {
       duplicated: false,
       reincidente: false,
     };
-    if (req.user.role === 'gestor') {
-      filters.responsableId = req.user.userId;
-    }
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filters.responsableId = acotarAlAlcance(filters.responsableId, alcance);
 
     const result = await leadModel.findAll(filters);
     let leads = result.leads.map((l) => ({
@@ -222,6 +249,11 @@ export async function exportWasapi(req, res, next) {
 
     if (req.query.onlyWithPhone === 'true') {
       leads = leads.filter((l) => l.telefono && String(l.telefono).replace(/[^\d]/g, '').length >= 7);
+    }
+    // Las MISMAS condiciones en los dos sitios: un fichero que sale distinto
+    // segun desde donde se pida acaba mandando la difusion a quien no tocaba.
+    if (req.query.onlyWithProduct === 'true') {
+      leads = leads.filter((l) => String(l.producto_nombre || '').trim());
     }
     if (req.query.pais) {
       const paisFilter = String(req.query.pais).toLowerCase();
@@ -275,8 +307,48 @@ export async function getById(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     await exigirQueSeaSuyo(req, id);
     const lead = await leadService.getById(id);
-    res.json({ success: true, data: lead });
+
+    // Las etiquetas de WhatsApp de esta persona (#138).
+    //
+    // «Quien mira la ficha del prospecto no ve lo que la gestora ya sabe» — es
+    // literal del ticket. Las etiquetas viven en la conversacion y aqui se
+    // traen cruzadas por el lead.
+    //
+    // Quien manda las ve todas; el resto, solo las de SU sesion: una misma
+    // persona puede hablar con dos gestoras, y lo que una piense de ella no es
+    // de la otra. Va suelto — que WhatsApp no este instalado, o que falte la
+    // migracion 157, no puede dejar sin ficha a nadie.
+    let etiquetasWa = [];
+    try {
+      const wa = await import('../whatsapp/chat.model.js');
+      const evolution = await import('../whatsapp/evolution.client.js');
+      const mandaEl = ['admin', 'superadmin', 'soporte'].includes(req.user.role);
+      etiquetasWa = await wa.etiquetasDeLead(id, {
+        instancias: mandaEl ? null : [evolution.instanciaDe(req.user.userId)],
+      });
+    } catch { etiquetasWa = []; }
+
+    res.json({ success: true, data: { ...lead, etiquetas_wa: etiquetasWa } });
   } catch (err) { next(err); }
+}
+
+/*
+  «Todos» o una EMPRESA en el Dashboard: la lista de campus en UNA peticion
+  (#224). Antes el navegador pedia stats y today por cada campus —con CEDIA,
+  catorce peticiones— y no pintaba nada hasta que llegaba la ultima.
+
+  Siempre dentro de lo suyo, como `proyectosDelAmbito`: lo que no sea de la
+  persona se cae de la lista, y si no queda ninguno es una lista que no casa
+  con nada, nunca «todos».
+*/
+async function campusPedidos(req) {
+  const ids = String(req.query.projectIds || '').split(',')
+    .map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
+  if (!ids.length) return null;
+  if (veTodoElCrm(req.user)) return ids;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  const quedan = ids.filter((id) => mios.includes(id));
+  return quedan.length ? quedan : [-1];
 }
 
 export async function today(req, res, next) {
@@ -285,7 +357,9 @@ export async function today(req, res, next) {
     const data = await leadService.getTodaySummary({
       userId: req.user.userId,
       role: req.user.role,
+      alcanceIds: await alcanceComercial(req.user),
       projectId: projectId && !isNaN(projectId) ? projectId : null,
+      projectIds: await campusPedidos(req),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -293,8 +367,9 @@ export async function today(req, res, next) {
 
 export async function stats(req, res, next) {
   try {
+    const lista = await campusPedidos(req);
     const projectId = parseInt(req.query.projectId);
-    if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+    if (!lista && isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
     // Aceptamos los mismos filtros que el listado para que los chips de stats
     // reflejen el subconjunto filtrado, no el total global.
     const opts = {
@@ -303,11 +378,14 @@ export async function stats(req, res, next) {
       dateTo: req.query.dateTo || null,
       productId: req.query.productId ? parseInt(req.query.productId) : null,
       canal: req.query.canal || null,
+      // País de entrada (#221). Lo que no sea un código ni `sin_pais` se ignora.
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
       search: req.query.search || null,
     };
     // SEGURIDAD: gestor solo ve sus propios stats, ignoramos responsableId del query.
-    if (req.user.role === 'gestor') opts.responsableId = req.user.userId;
-    const data = await leadService.getStats(projectId, opts);
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) opts.responsableId = acotarAlAlcance(opts.responsableId, alcance);
+    const data = await leadService.getStats(lista || projectId, opts);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
@@ -332,7 +410,8 @@ export async function changeStatus(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.changeStatus(id, parsed.data.status, parsed.data.motivo, req.user.userId);
+    const result = await leadService.changeStatus(id, parsed.data.status, parsed.data.motivo, req.user.userId,
+      { feedback: parsed.data.feedback });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -346,7 +425,11 @@ export async function addInteraction(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha);
+    // El paso que se atiende desde la cola se marca solo si puede marcar pasos,
+    // que es el mismo permiso que pide la checklist (PATCH /proceso/paso-lead).
+    const pasoId = parsed.data.paso_id && await tienePermiso(req, 'proceso.trabajar')
+      ? parsed.data.paso_id : null;
+    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha, { pasoId });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -473,13 +556,33 @@ export async function getPurchaseHistory(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// DELETE /api/leads/:id  (superadmin only — soft delete con motivo)
+// Lo que una gestora puede alegar para eliminar: limpieza, no decisiones de
+// negocio. «Otro» queda para quien administra.
+export const MOTIVOS_DE_GESTORA = ['test', 'spam', 'duplicado_manual'];
+
+// DELETE /api/leads/:id  (soft delete con motivo)
+//
+// Admin y superadmin, como siempre. Y desde el 01/10, la gestora que tenga el
+// permiso `leads.delete` —se da persona a persona en Permisos—. Diego: «a
+// Dayana y a Ana no les sale para eliminar leads, tienen que poder» (#204).
+// Para ella, tres limites que comprueba el servidor, no la pantalla: solo sus
+// leads, ninguno con venta, y solo por prueba, spam o duplicado.
 export async function softDelete(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const reason = (req.body?.reason || 'otro').toLowerCase();
     const motivo = req.body?.motivo || null;
+    if (!(await tienePermiso(req, 'leads.delete_cualquiera'))) {
+      await exigirQueSeaSuyo(req, id);
+      if (!MOTIVOS_DE_GESTORA.includes(reason)) {
+        throw new AppError('Puedes eliminar por prueba, spam o duplicado. Para otro motivo, pídeselo a un administrador.', 403, 'MOTIVO_SOLO_ADMIN');
+      }
+      const { rows } = await query('SELECT 1 FROM conversions WHERE lead_id = $1 LIMIT 1', [id]);
+      if (rows.length) {
+        throw new AppError('Este contacto ya tiene una venta: solo un administrador puede eliminarlo.', 403, 'TIENE_VENTA');
+      }
+    }
     const result = await leadService.softDelete(id, { reason, motivo, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -527,6 +630,10 @@ export async function restore(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // `leads.restaurar` como excepción a un admin: solo los de sus campus.
+    const { rows: [lead] } = await query('SELECT project_id FROM leads WHERE id = $1', [id]);
+    if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+    await exigirCampusSuyo(req, lead.project_id, 'Lead no encontrado', 'LEAD_NOT_FOUND');
     const result = await leadService.restore(id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -539,6 +646,16 @@ export async function reassign(req, res, next) {
     const parsed = reassignSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    // Quien lleva un equipo comercial (09/11/2026) reasigna dentro de él: solo
+    // prospectos suyos o de sus gestoras, y solo a ella misma o a una de ellas.
+    // Sin equipo, como siempre (lo decide el permiso `leads.assign`).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance && alcance.length > 1) {
+      await exigirQueSeaSuyo(req, id);
+      if (!enElAlcance(alcance, parsed.data.responsable_id)) {
+        throw new AppError('Solo puedes pasarlo a alguien de tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+      }
     }
     const result = await leadService.reassign(id, parsed.data.responsable_id, req.user.userId);
     res.json({ success: true, data: result });
@@ -571,10 +688,11 @@ export async function getLeadSequences(req, res, next) {
 // ── #13 Cola de revisión de duplicados ─────────────────────────
 export async function listReviewQueue(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    // Solo la de sus campus: sin campus, antes salía la cola de TODAS las empresas.
+    const projectIds = await listaDelAmbito(req);
     const status = req.query.status || 'pending';
-    const result = await dupQueue.list({ projectId, status });
-    const counts = await dupQueue.counts(projectId);
+    const result = await dupQueue.list({ projectIds, status });
+    const counts = await dupQueue.counts(null, projectIds);
     res.json({ success: true, data: result, counts });
   } catch (err) { next(err); }
 }
@@ -583,6 +701,12 @@ export async function decideReviewQueue(req, res, next) {
   try {
     const queueId = parseInt(req.params.id);
     if (isNaN(queueId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Decidir sobre un duplicado de otra empresa: «no encontrado», como si no existiera.
+    const { rows: [entrada] } = await query('SELECT project_id FROM lead_duplicate_review_queue WHERE id = $1', [queueId]);
+    if (!entrada) throw new AppError('Entrada no encontrada', 404, 'NOT_FOUND');
+    if (!veTodoElCrm(req.user) && !(await campusDeLaPersona(req.user.userId)).includes(Number(entrada.project_id))) {
+      throw new AppError('Entrada no encontrada', 404, 'NOT_FOUND');
+    }
     const { action, notas } = req.body || {};
     const result = await dupQueue.decide({ queueId, action, notas, userId: req.user.userId });
     res.json({ success: true, data: result });

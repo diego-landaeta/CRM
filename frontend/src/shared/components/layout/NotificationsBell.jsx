@@ -45,7 +45,9 @@ export default function NotificationsBell({ collapsed = false, className = '' })
         // 2) Resumen del día y leads nuevos — sólo admin/superadmin con proyecto activo.
         let todayRes = { success: false, data: null };
         let leadsRes = { success: false, data: [] };
-        if (isAdminLike && activeProject?.id) {
+        // Solo con un proyecto de verdad: con «Todos» o una empresa (-1) el
+        // servidor rechazaba las dos peticiones.
+        if (isAdminLike && activeProject?.id > 0) {
           [todayRes, leadsRes] = await Promise.all([
             client.get(`/leads/today`, { params: { projectId: activeProject.id } }).catch(() => ({ success: false, data: null })),
             // 'por_contactar' y no 'nuevo': la migracion 076 cambio el DEFAULT de la
@@ -87,7 +89,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
               kind: 'overdue',
               title: 'Recordatorio vencido',
               body: `${r.lead_nombre}: ${r.nota || 'sin nota'}`,
-              href: `/leads/${r.lead_id}`,
+              href: `/prospectos/${r.lead_id}`,
               when: r.fecha_recordatorio,
             });
           }
@@ -98,7 +100,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
             kind: 'urgent',
             title: 'Cobros vencidos',
             body: `${today.cobros_vencidos} pagos atrasados pendientes`,
-            href: '/accounting/receivable',
+            href: '/finanzas/por-cobrar',
             when: new Date().toISOString(),
           });
         }
@@ -109,7 +111,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
             kind: 'info',
             title: 'Nuevo prospecto',
             body: `${l.nombre} — ${l.email || 'sin email'}`,
-            href: `/leads/${l.id}`,
+            href: `/prospectos/${l.id}`,
             when: l.created_at,
           });
         }
@@ -202,7 +204,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
       >
         <Icon size={16} weight={unread > 0 ? 'fill' : 'regular'} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-card">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center ring-2 ring-card">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -215,7 +217,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
             role="dialog"
             aria-label="Notificaciones"
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width }}
-            className="bg-card border border-border rounded-xl shadow-2xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            className="bg-card border border-border rounded-xl shadow-popover z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
           >
             <header className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div>
@@ -251,7 +253,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
                       >
                         <span className={cn(
                           'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
-                          it.kind === 'overdue' ? 'bg-red-500' : it.kind === 'urgent' ? 'bg-amber-500' : 'bg-blue-500',
+                          it.kind === 'overdue' ? 'bg-destructive' : it.kind === 'urgent' ? 'bg-warning' : 'bg-info',
                         )} />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold leading-tight">{it.title}</p>

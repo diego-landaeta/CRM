@@ -61,6 +61,20 @@ const COLUMNAS = {
 };
 COLUMNAS['cobros-venta'] = COLUMNAS.cobros;
 COLUMNAS['leads-convertidos'] = COLUMNAS.ventas;
+// Las tres partes de lo cobrado (Diego, 19/10/2026: «cifras separadas»). Con
+// el nº y la fecha de la venta delante: es lo que dice a qué caja va cada cobro.
+// El importe es la parte de la gestora en una venta compartida, para que las
+// filas sumen el número pulsado.
+COLUMNAS['cobros-periodo'] = [
+  { k: 'fecha', h: 'Cobro', t: 'date' }, { k: 'cliente', h: 'Cliente' },
+  { k: 'importe', h: 'Importe', t: 'eur' },
+  { k: 'venta', h: 'Venta nº', t: 'num' }, { k: 'fecha_venta', h: 'Venta de', t: 'date' },
+  { k: 'cuota', h: 'Cuota', t: 'num' }, { k: 'formacion', h: 'Formación' },
+  { k: 'factura', h: 'Factura' }, { k: 'emitida', h: 'Facturada', t: 'date' },
+  { k: 'asesora', h: 'Asesora' },
+];
+COLUMNAS['cobros-anteriores'] = COLUMNAS['cobros-periodo'];
+COLUMNAS['cobros-cuotas'] = COLUMNAS['cobros-periodo'];
 
 const TITULOS = {
   leads: 'Leads entrados',
@@ -69,6 +83,9 @@ const TITULOS = {
   mensualidades: 'Mensualidades cobradas',
   cobros: 'Cobros',
   'cobros-venta': 'Cobros de venta nueva',
+  'cobros-periodo': 'Cobrado de ventas del periodo',
+  'cobros-anteriores': 'Cobrado de ventas anteriores',
+  'cobros-cuotas': 'Cobrado en cuotas (plan de pago o mensualidad)',
 };
 
 // Las cifras van a la derecha; el resto, a la izquierda.
@@ -162,7 +179,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-6xl max-h-[86vh] flex flex-col">
+      <div className="bg-card border border-border rounded-xl shadow-dialog w-full max-w-6xl max-h-[86vh] flex flex-col">
         <div className="flex items-start justify-between gap-3 p-4 border-b border-border">
           <div className="min-w-0">
             <h3 className="font-semibold">{TITULOS[consulta?.tipo] || 'Detalle'}</h3>
@@ -225,6 +242,16 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                         className={`px-3 py-1.5 ${ES_CIFRA.has(c.t) ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-amber-600 dark:text-amber-500 font-semibold' : ''} ${c.t === 'pagos' && Number(f[c.k] || 0) > 1 ? 'text-sky-600 dark:text-sky-400 font-semibold' : ''}`}>
                         <span className="block max-w-[240px] truncate" title={titulo(c, f)}>
                           {celda(c, f)}
+                          {/* Cual de las filas es la compartida. El importe que
+                              se enseña ya es la parte de esta asesora. */}
+                          {c.k === 'cliente' && f.compartida && (
+                            <span
+                              title={f.asesora ? `Compartida con ${f.asesora} · aquí se ve su parte` : 'Venta compartida'}
+                              className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold align-middle bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                            >
+                              COMPARTIDO
+                            </span>
+                          )}
                         </span>
                       </td>
                     ))}

@@ -1,6 +1,5 @@
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
-import { sendEmail } from '../shared/services/brevo.service.js';
 import { notifyUsers } from '../modules/notifications/notifications.service.js';
 import { vigilar } from './latido.js';
 
@@ -8,7 +7,7 @@ const TICK_MS = parseInt(process.env.REMINDER_TICK_MS || String(15 * 60 * 1000))
 
 let running = false;
 
-async function processDueReminders() {
+export async function processDueReminders() {
   // Buscar recordatorios vencidos no completados y no notificados aún.
   // OJO: ya NO exigimos u.email IS NOT NULL — el recordatorio se notifica en
   // campanita aunque el gestor no tenga email configurado (que lo tiene casi
@@ -17,7 +16,7 @@ async function processDueReminders() {
     SELECT r.id, r.lead_id, r.fecha_recordatorio, r.nota,
            l.nombre as lead_nombre, l.email as lead_email, l.responsable_id,
            u.nombre as gestor_nombre, u.email as gestor_email,
-           p.nombre as proyecto_nombre
+           l.project_id, p.nombre as proyecto_nombre
       FROM lead_reminders r
       JOIN leads l ON l.id = r.lead_id
       JOIN projects p ON p.id = l.project_id
@@ -41,33 +40,15 @@ async function processDueReminders() {
       metadata: { reminder_id: rem.id, lead_id: rem.lead_id, fecha: rem.fecha_recordatorio },
     });
 
-    // 2) Email best-effort (si Brevo no está configurado o falla, no bloquea).
-    if (rem.gestor_email) {
-      try {
-        const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
-        await sendEmail({
-          to: rem.gestor_email,
-          subject: `Recordatorio vencido: ${rem.lead_nombre} (${rem.proyecto_nombre})`,
-          htmlContent: `
-            <p>Hola ${rem.gestor_nombre},</p>
-            <p>Tienes un recordatorio vencido para el prospecto <strong>${rem.lead_nombre}</strong>.</p>
-            ${rem.nota ? `<p><em>"${rem.nota}"</em></p>` : ''}
-            <p>Fecha: ${rem.fecha_recordatorio}</p>
-            <p><a href="${baseUrl}/prospectos/${rem.lead_id}">Ver prospecto →</a></p>
-          `,
-          tags: ['reminder', `lead-${rem.lead_id}`],
-        });
-      } catch (err) {
-        // Email fallido NO debe impedir marcar el recordatorio como notificado —
-        // la campanita ya cumplió.
-        logger.warn({ err: err.message, reminderId: rem.id }, 'Reminder: email fallido (campanita ya disparada)');
-      }
-    }
+    // 2) Sin correo (Diego, 09/10): los recordatorios van uno por uno en «Tu día y
+    //    lo de mañana» (correosDelEquipo.js → recordatoriosPendientes), que llega a
+    //    quien los tenga, sea del rol que sea. Un correo por recordatorio era
+    //    gastar Brevo para repetir lo que ya dice ese correo y la campanita.
 
     // 3) Marcar como notificado para no reenviar en el siguiente tick.
     try {
       await query(`UPDATE lead_reminders SET notificado_at = NOW() WHERE id = $1`, [rem.id]);
-      logger.info({ reminderId: rem.id, leadId: rem.lead_id, gestorId: rem.responsable_id }, 'Recordatorio notificado (in-app + email)');
+      logger.info({ reminderId: rem.id, leadId: rem.lead_id, gestorId: rem.responsable_id }, 'Recordatorio notificado (campanita)');
     } catch (err) {
       logger.error({ err: err.message, reminderId: rem.id }, 'Error marcando recordatorio notificado');
     }

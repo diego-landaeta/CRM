@@ -1,9 +1,11 @@
 // Ventas: resumen consolidado, por asesora y por cliente. Comparten filtros
 // (proyecto activo, rango de fechas y busqueda) para que los tres cuadren entre si.
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -28,6 +30,9 @@ type Resumen = {
   ventas: number; clientes: number; asesoras: number;
   importe: number; cobrado: number; pendiente: number;
   liquidadas: number; con_saldo: number; ticket_medio: number;
+  // Lo cobrado por encima del importe de la venta (#692). Opcional: un
+  // servidor anterior no lo manda.
+  cobrado_de_mas?: { ventas: number; importe: number };
   cuotas: {
     ventas_con_plan: number; total: number; cobradas: number; pendientes: number;
     vencidas: number; importe_pendiente: number; importe_vencido: number;
@@ -54,11 +59,18 @@ const TABS = [
 
 export default function SalesAnalysisPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext() as { activeProject?: { id?: number; nombre?: string } };
+  const { activeProject, activeIssuerId, activeIssuer } = useProjectContext() as {
+    activeProject?: { id?: number; nombre?: string };
+    activeIssuerId: number | null;
+    activeIssuer: { nombre?: string; campus?: Array<unknown> } | null;
+  };
   const [tab, setTab] = useState<'resumen' | 'asesora' | 'cliente'>('resumen');
   const [rango, setRango] = useState({ from: '', to: '' });
   const [search, setSearch] = useState('');
   const [buscado, setBuscado] = useState('');
+  // Todas · Solo compartidas · Solo enteras (#163), junto a los filtros que ya
+  // había. Con una gestora, la compartida le sigue contando la mitad.
+  const [compartidas, setCompartidas] = useState<'todas' | 'solo' | 'enteras'>('todas');
   const [loading, setLoading] = useState(true);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
@@ -66,11 +78,22 @@ export default function SalesAnalysisPage() {
   const [page, setPage] = useState(1);
   const [totalClientes, setTotalClientes] = useState(0);
 
-  const params: Record<string, string | number> = {};
-  if (activeProject?.id) params.projectId = activeProject.id;
+  // EL AMBITO SALE DEL HELPER COMPARTIDO, no se arma aqui (#136): con una
+  // sociedad elegida se manda `issuerId` y el servidor lo traduce a sus campus
+  // con `proyectosDelAmbito`. Resolverlo aqui es lo que Diego pide no hacer, y
+  // ademas se perderia lo que esa funcion protege: una sociedad SIN campus
+  // devuelve `[-1]` y la pantalla sale vacia, que es la respuesta honesta.
+  // Calculado a mano, un filtro que se queda vacio ensena TODAS las sociedades.
+  const params: Record<string, string | number> = { ...ambitoComoObjeto({ activeIssuerId, activeProject }) };
+
+  // De qué son las cifras que se están mirando, dicho igual que en Reportes.
+  const ambito = activeIssuer
+    ? `${activeIssuer.nombre || 'La sociedad'} · ${activeIssuer.campus?.length ?? 0} campus`
+    : (activeProject?.nombre || 'Todos los proyectos');
   if (rango.from) params.from = rango.from;
   if (rango.to) params.to = rango.to;
   if (buscado) params.search = buscado;
+  if (compartidas !== 'todas') params.compartidas = compartidas;
   const key = JSON.stringify(params);
 
   useEffect(() => { setPage(1); }, [key, tab]);
@@ -111,17 +134,35 @@ export default function SalesAnalysisPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Análisis de ventas"
-        subtitle={activeProject?.nombre || 'Todos los proyectos'}
+        // CON UNA SOCIEDAD, EL NOMBRE ES EL DE LA SOCIEDAD (#136). Decia el
+        // del campus activo mientras sumaba los siete: cifras de una cosa con
+        // el nombre de otra, que se leen como buenas y es peor que no
+        // enseñarlas. Mismo texto que Reportes, para que se reconozca.
+        subtitle={ambito}
       />
 
       {/* Filtros comunes a las tres vistas */}
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+        {/* Los mismos atajos que en Facturacion: un solo componente para que no
+            acaben comportandose distinto en cada pantalla. */}
+        <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
         <label className="text-xs font-semibold text-muted-foreground">Desde</label>
         <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         <label className="text-xs font-semibold text-muted-foreground">Hasta</label>
         <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        <label className="text-xs font-semibold text-muted-foreground" htmlFor="analisis-compartidas">Reparto</label>
+        <select
+          id="analisis-compartidas"
+          value={compartidas}
+          onChange={(e) => setCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
+          className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
+        >
+          <option value="todas">Todas</option>
+          <option value="solo">Solo compartidas</option>
+          <option value="enteras">Solo enteras</option>
+        </select>
         <form
           onSubmit={(e) => { e.preventDefault(); setBuscado(search.trim()); }}
           className="flex items-center gap-2 flex-1 min-w-[220px]"
@@ -139,10 +180,10 @@ export default function SalesAnalysisPage() {
             Buscar
           </button>
         </form>
-        {(rango.from || rango.to || buscado) && (
+        {(rango.from || rango.to || buscado || compartidas !== 'todas') && (
           <button
             type="button"
-            onClick={() => { setRango({ from: '', to: '' }); setSearch(''); setBuscado(''); }}
+            onClick={() => { setRango({ from: '', to: '' }); setSearch(''); setBuscado(''); setCompartidas('todas'); }}
             className="text-[11px] text-primary hover:underline whitespace-nowrap"
           >
             Quitar filtros
@@ -173,20 +214,32 @@ export default function SalesAnalysisPage() {
         !resumen ? <EmptyState icon={Receipt} title="Sin datos" description="No hay ventas en este filtro." /> : (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
+              <KpiCard icon={Receipt} iconBg="bg-info-soft text-info-soft-foreground"
                 label="Ventas" value={String(resumen.ventas)}
-                badge={`${resumen.clientes} clientes`} badgeColor="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" />
-              <KpiCard icon={CurrencyEur} iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+                badge={`${resumen.clientes} clientes`} badgeColor="bg-info-soft text-info-soft-foreground" />
+              <KpiCard icon={CurrencyEur} iconBg="bg-primary/10 text-primary"
                 label="Importe vendido" value={fmt(resumen.importe)}
-                badge={`ticket ${fmt(resumen.ticket_medio)}`} badgeColor="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400" />
-              <KpiCard icon={CheckCircle} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+                badge={`ticket ${fmt(resumen.ticket_medio)}`} badgeColor="bg-primary/10 text-primary" />
+              <KpiCard icon={CheckCircle} iconBg="bg-success-soft text-success-soft-foreground"
                 label="Cobrado" value={fmt(resumen.cobrado)}
-                badge={`${resumen.liquidadas} liquidadas`} badgeColor="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400" />
-              <KpiCard icon={Wallet} iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+                badge={`${resumen.liquidadas} liquidadas`} badgeColor="bg-success-soft text-success-soft-foreground" />
+              <KpiCard icon={Wallet} iconBg="bg-warning-soft text-warning-soft-foreground"
                 label="Pendiente de cobro" value={fmt(resumen.pendiente)}
-                badge={`${resumen.con_saldo} con saldo`} badgeColor="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+                badge={`${resumen.con_saldo} con saldo`} badgeColor="bg-warning-soft text-warning-soft-foreground"
                 trend="down" />
             </div>
+
+            {/* #692: «Pendiente» ya no baja de 0. Si hay ventas cobradas por
+                encima de su importe, se dice aquí, con cuántas y cuánto, en vez
+                de restarlo de lo que deben las demás. */}
+            {(resumen.cobrado_de_mas?.ventas ?? 0) > 0 && (
+              <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+                <strong>{resumen.cobrado_de_mas!.ventas}</strong>{' '}
+                {resumen.cobrado_de_mas!.ventas === 1 ? 'venta tiene' : 'ventas tienen'} cobrado más que su importe:{' '}
+                <strong>{fmt(resumen.cobrado_de_mas!.importe)}</strong> de más. Va dentro de «Cobrado», no resta del pendiente.
+                Suele ser un cobro repetido o un importe de venta mal puesto: hay que mirarlas una a una.
+              </p>
+            )}
 
             <div className="bg-card border border-border rounded-lg p-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2"><Calendar size={16} weight="bold" /> Cobro fraccionado</h3>
@@ -196,10 +249,10 @@ export default function SalesAnalysisPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
                   {[
                     { l: 'Ventas a plazos', v: String(resumen.cuotas.ventas_con_plan), c: '' },
-                    { l: 'Cuotas cobradas', v: `${resumen.cuotas.cobradas} / ${resumen.cuotas.total}`, c: 'text-emerald-600 dark:text-emerald-400' },
-                    { l: 'Cuotas pendientes', v: String(resumen.cuotas.pendientes), c: 'text-orange-600 dark:text-orange-400' },
-                    { l: 'Importe por cobrar', v: fmt(resumen.cuotas.importe_pendiente), c: 'text-orange-600 dark:text-orange-400' },
-                    { l: 'Vencido', v: `${fmt(resumen.cuotas.importe_vencido)} · ${resumen.cuotas.vencidas} cuotas`, c: 'text-red-600 dark:text-red-400' },
+                    { l: 'Cuotas cobradas', v: `${resumen.cuotas.cobradas} / ${resumen.cuotas.total}`, c: 'text-success' },
+                    { l: 'Cuotas pendientes', v: String(resumen.cuotas.pendientes), c: 'text-warning' },
+                    { l: 'Importe por cobrar', v: fmt(resumen.cuotas.importe_pendiente), c: 'text-warning' },
+                    { l: 'Vencido', v: `${fmt(resumen.cuotas.importe_vencido)} · ${resumen.cuotas.vencidas} cuotas`, c: 'text-destructive' },
                   ].map((x) => (
                     <div key={x.l} className="bg-muted/40 rounded-md p-3">
                       <p className="text-[11px] text-muted-foreground">{x.l}</p>
@@ -238,8 +291,8 @@ export default function SalesAnalysisPage() {
                       <td className="px-4 py-3 text-right tabular-nums">{a.ventas}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{a.clientes}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(a.importe)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{fmt(a.cobrado)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-orange-600 dark:text-orange-400">{fmt(a.pendiente)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-success">{fmt(a.cobrado)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-warning">{fmt(a.pendiente)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{fmt(a.ticket_medio)}</td>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fecha(a.ultima_venta)}</td>
                     </tr>
@@ -280,14 +333,14 @@ export default function SalesAnalysisPage() {
                       <td className="px-4 py-3 text-muted-foreground text-[12px] max-w-[160px] truncate" title={cl.asesoras || ''}>{cl.asesoras || '—'}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{cl.ventas}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(cl.importe)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{fmt(cl.cobrado)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-orange-600 dark:text-orange-400">{fmt(cl.pendiente)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-success">{fmt(cl.cobrado)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-warning">{fmt(cl.pendiente)}</td>
                       <td className="px-4 py-3">
                         {cl.cuotas_pendientes === 0 ? (
                           <span className="text-muted-foreground text-[11px]">—</span>
                         ) : (
                           <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                            cl.cuotas_vencidas > 0 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'
+                            cl.cuotas_vencidas > 0 ? 'text-destructive' : 'text-warning'
                           }`}>
                             {cl.cuotas_vencidas > 0 && <WarningCircle size={12} weight="fill" />}
                             {cl.cuotas_pendientes} pend. · {fmt(cl.cuotas_importe_pendiente)}

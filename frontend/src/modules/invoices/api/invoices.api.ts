@@ -21,6 +21,8 @@ export interface Issuer {
   email: string | null;
   telefono: string | null;
   iban: string | null;
+  /** BIC/SWIFT del banco; sale debajo del IBAN en las facturas por transferencia. */
+  bic?: string | null;
   serie: string | null;
   logo_url: string | null;
   pie_default: string | null;
@@ -47,7 +49,7 @@ export interface CreateInvoiceBody {
   ivaIncluido?: boolean;
   leyendaIva?: string | null;
   notas?: string;
-  metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro';
+  metodoPago: 'transferencia' | 'deposito' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro';
   /** Empresa o particular. Decide el rótulo del cliente en el PDF. */
   clienteTipo?: 'empresa' | 'particular';
   piePago?: string;
@@ -58,6 +60,10 @@ export interface CreateInvoiceBody {
   tipo?: 'normal' | 'proforma';
   /** true = crear como BORRADOR (sin numero fiscal, datos fiscales opcionales) */
   borrador?: boolean;
+  /** «Emitir igualmente» cuando el CRM avisa de que pasa de lo cobrado de la venta. */
+  permitirMasDeLoCobrado?: boolean;
+  /** «Emitir igualmente» tras el aviso de posible duplicada (CRM#819). */
+  confirmar_duplicada?: boolean;
 }
 
 export interface ProjectInvoicingConfig {
@@ -66,6 +72,9 @@ export interface ProjectInvoicingConfig {
   factura_pie_default: string | null;
   factura_serie_default: string;
   factura_metodo_default: string | null;
+  /** Sus gestoras pueden poner el numero al registrar la venta, sin pasar por
+   *  la cola. Por defecto NO: el freno del 14/09 sigue siendo la regla. */
+  numera_al_convertir?: boolean;
   datos_fiscales?: Record<string, unknown>;
 }
 
@@ -109,6 +118,16 @@ export interface Invoice {
   tipo?: 'normal' | 'rectificativa' | 'proforma';
   rectifica_id?: number | null;
   rectifica_codigo?: string | null;
+  /** Qué es la factura: la de una venta nueva, una cuota de una venta anterior,
+   *  o una suelta que no cuelga de ninguna venta. */
+  clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
+  /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
+  fecha_de_la_venta?: string | null;
+  /** Lo que falta por cobrar de la venta: lo que propone «Cobrada» en una proforma. */
+  pendiente_de_la_venta?: number | string | null;
+  /** Sin cobro propio, marcada como pagada, y la venta tiene más facturado que
+   *  cobrado: el dinero de esta factura no existe. */
+  sospecha_duplicada?: boolean;
   motivo_rectificacion?: string | null;
   // Vista por sociedad
   project_id?: number | null;
@@ -134,6 +153,8 @@ export interface LeadConversion {
   fecha_conversion: string | null;
   producto_nombre: string | null;
   producto_precio: number | string | null;
+  /** Lo cobrado que aún no tiene factura. */
+  por_facturar?: number | string | null;
 }
 
 export interface LeadFiscalData {
@@ -188,6 +209,10 @@ export interface InvoiceTemplate {
 
 export interface VentaSinFactura {
   conversion_id: number;
+  /** El campus de la venta (lo usa «Emitir proforma» cuando arriba hay una empresa). */
+  project_id?: number | null;
+  /** Lo ya cobrado: con algún cobro, su factura sale de la cola, no de una proforma (21/10). */
+  importe_pagado?: number | string | null;
   lead_id: number;
   cliente_nombre: string;
   /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
@@ -204,13 +229,24 @@ export const invoicesApi = {
     Object.entries(params).forEach(([k, v]) => v != null && v !== '' && qs.set(k, String(v)));
     return client.get<Invoice[]>(`/invoices?${qs}`);
   },
-  stats: (params: { projectId?: number | null; issuerId?: number | null }) => {
+  /** Con los mismos filtros de fecha y estado que la lista (#233). */
+  stats: (params: { projectId?: number | null; issuerId?: number | null; from?: string; to?: string; estado?: string }) => {
     const qs = new URLSearchParams();
     if (params.projectId) qs.set('projectId', String(params.projectId));
     if (params.issuerId) qs.set('issuerId', String(params.issuerId));
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.estado) qs.set('estado', params.estado);
     return client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?${qs}`);
   },
-  ventasSinFactura: (projectId: number) => client.get<VentaSinFactura[]>(`/invoices/ventas-sin-factura?projectId=${projectId}`),
+  ventasSinFactura: (scope: { projectId?: number | null; issuerId?: number | null }, periodo: { from?: string; to?: string } = {}) =>
+    client.get<VentaSinFactura[]>('/invoices/ventas-sin-factura?'
+      + new URLSearchParams({
+          ...(scope.issuerId ? { issuerId: String(scope.issuerId) }
+            : scope.projectId ? { projectId: String(scope.projectId) } : {}),
+          ...(periodo.from ? { from: periodo.from } : {}),
+          ...(periodo.to ? { to: periodo.to } : {}),
+        }).toString()),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
@@ -274,12 +310,18 @@ export const invoicesApi = {
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
+  // «Cobrada» en una proforma: apunta el cobro en la venta y la proforma pasa a factura.
+  cobrarProforma: (id: number, body: { importe: number; fecha: string; metodo?: string | null; notas?: string | null; referencia?: string | null }) =>
+    client.post<Invoice>(`/invoices/${id}/cobrar-proforma`, body),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
   // Eliminar factura + liberar su número (errores de carga) — admin/superadmin.
   remove: (id: number) => client.delete<{ id: number; codigo: string | null }>(`/invoices/${id}`),
   rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
   // Corregir una factura ya emitida/pagada (IVA, datos, concepto) — admin only.
   corregir: (id: number, body: {
+    // El numero se puede cambiar desde la pantalla de edicion: el servidor
+    // comprueba que este libre y dice quien lo tiene si no lo esta.
+    numero?: number;
     exento?: boolean; ivaPct?: number; ivaIncluido?: boolean;
     items?: InvoiceItem[];
     clienteNombre?: string; clienteNif?: string; clienteDireccion?: string;
@@ -291,7 +333,7 @@ export const invoicesApi = {
   /** Asociar una factura existente a una venta (conversión) del cliente — Opción B. */
   asociarVenta: (id: number, conversionId: number) => client.patch<Invoice>(`/invoices/${id}/asociar`, { conversionId }),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
-  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
+  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null; permitirMasDeLoCobrado: boolean; confirmar_duplicada: boolean }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   /** Completar datos fiscales del cliente en una factura YA emitida (auto-emitida al pagar). */
   completarDatos: (id: number, patch: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/completar-datos`, patch),

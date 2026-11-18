@@ -10,6 +10,8 @@ otro** — ver [`docs/PARIDAD-ENTRE-CRMS.md`](docs/PARIDAD-ENTRE-CRMS.md).
 
 ## Dónde está
 
+**Versión en producción: 2.0.0** (29/09/2026). `main` = producción y `staging` = pruebas, independientes.
+
 | Rama | Entorno | Dirección | Base de datos | PM2 |
 |---|---|---|---|---|
 | `main` | Producción | https://360crm.tech/crm/ | `crm_prod_db` | `crm-api-production` :3001 |
@@ -108,7 +110,7 @@ con diagramas.
 
 ## Empezar en tu equipo
 
-Hacen falta **Node 20 o superior**, **Docker** y **git**. Nada más: ni acceso al
+Hacen falta **Node 22 o superior** (producción y CI usan el 24; versión en `.nvmrc`), **Docker** y **git**. Nada más: ni acceso al
 servidor, ni credenciales de producción.
 
 ```bash
@@ -118,17 +120,40 @@ cd CRM
 # 1 · la base de datos, en Docker, con datos de mentira
 cd backend
 npm install
-npm run db:arriba      # levanta PostgreSQL
-npm run db:preparar    # aplica las 126 migraciones y siembra datos
+npm run db:arriba      # levanta PostgreSQL en el puerto 15432
+npm run db:preparar    # aplica las migraciones y siembra datos
 
-# 2 · la API
+# 2 · el .env de la API — sin esto arranca pero no conecta
+cp .env.example .env
+```
+
+En ese `.env` basta con cuatro líneas para trabajar en local; lo demás son
+integraciones que no hacen falta para ver el CRM funcionando:
+
+```
+DATABASE_URL=postgresql://crm_user:crm_local@127.0.0.1:15432/crm_dev
+JWT_SECRET=lo-que-quieras-largo
+JWT_REFRESH_SECRET=otra-cosa-larga
+ENCRYPTION_KEY=treinta-y-dos-caracteres-exactos
+```
+
+```bash
+# 3 · la API
 npm run dev            # http://localhost:3001
 
-# 3 · el frontal, en otra terminal
+# 4 · el frontal, en otra terminal
 cd ../frontend
 npm install
 npm run dev            # http://localhost:5173
 ```
+
+El frontal no necesita `.env`: habla con la API por el proxy de Vite, que ya
+apunta a `localhost:3001`.
+
+Para entrar, los usuarios de ejemplo son `manuel@empresa.com` (superadmin),
+`diego@empresa.com` y `angel@empresa.com` (admin), todos con la contraseña
+`CrmTemp2026!`. Solo existen en la base de Docker, que es de mentira y
+desechable.
 
 Para tirar la base y volver a empezar: `npm run db:abajo && npm run db:arriba && npm run db:preparar`.
 
@@ -156,8 +181,11 @@ flowchart LR
   class M prod
 ```
 
-- Rama por tarea, **pull request a `staging`**. A `main` no se va directo si toca
-  dinero, sesiones o el esquema de la base.
+- Rama por tarea, que sale de `staging`, y **pull request a `staging`**.
+- **A `main` solo por pull request desde `staging`**, cuando Diego lo aprueba: `main` está
+  protegida y el gancho `pre-push` bloquea el push directo. Cada versión lleva su etiqueta
+  (`v2.0.0`…) y su release en GitHub; lo nuevo de cada una está dentro del CRM, en **Novedades**.
+- Cómo se despliega cada entorno: [`docs/README.md`](docs/README.md), «Deploy y ramas».
 - **Migraciones**: un fichero nuevo en `backend/migrations/`, numerado. **No se
   ejecuta SQL a mano en el servidor** — las aplica quien despliega.
 - **Commits en español**, con prefijo: `feat:`, `fix:`, `refactor:`, `docs:`,

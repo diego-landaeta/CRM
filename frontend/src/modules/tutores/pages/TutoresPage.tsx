@@ -1,14 +1,32 @@
-import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank, MagnifyingGlass, PencilSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import { inputClass } from '@/shared/lib/ui';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import Entregables from '../components/Entregables';
+import CampoCobraDesde from '../components/CampoCobraDesde';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
+import {
+  lasQueYaRigen, laQueDuerme, cursosParaElAlta, avisoDelAlta, type CursoDelAlta, type CursoQueFallo,
+  cobraDesdeActual, hayQueMandarCobraDesde, confirmacionCobraDesde, avisoCobraDesde,
+  campusDelRechazo, formacionesConCampus, type CampusDeLaFormacion, type FormacionConCampus,
+} from '../lib/colaboraciones';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
+import { avisoCambioCorreo } from '@/modules/users/api/users.api';
+import { confirmacionCambioCorreo, problemaDeContrasena } from '@/modules/users/lib/credenciales';
+import ConsultasDelTutor from '../components/ConsultasDelTutor';
+import usePermission from '@/shared/hooks/usePermission';
 
 // Tutores y sus colaboraciones.
 //
@@ -21,9 +39,29 @@ interface Formacion { id: number; nombre: string; precio: string }
 // Un curso tal como se asigna en el alta: cada uno con SU fecha. No es un
 // detalle: un tutor puede llevar Logopedia desde marzo y haber cogido Disfagia
 // en septiembre, y cobrar de los dos desde el mismo dia le regala meses.
-interface CursoDelAlta { productId: number; pct: number; desde: string }
 
 const hoy = () => new Date().toISOString().slice(0, 10);
+
+/*
+  Los avisos de los formularios de tutor los da el CRM, no el globo del
+  navegador (#106): los formularios llevan noValidate y aquí se comprueba lo
+  mismo que comprobaba el navegador, diciendo qué falta y dónde.
+*/
+// La misma regla que type="email" del navegador (la del estándar HTML).
+const CORREO_RE = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+type Aviso = { title: string; description: string };
+const avisar = (a: Aviso | null) => { if (a) toast({ ...a, variant: 'destructive' }); return Boolean(a); };
+const faltaNombre = (nombre: string): Aviso | null => (nombre.trim()
+  ? null : { title: 'Falta el nombre', description: 'Escríbelo en «Nombre y apellidos».' });
+const correoMalo = (correo: string): Aviso | null => (CORREO_RE.test(correo.trim())
+  ? null : { title: 'Correo no válido', description: 'Escríbelo en «Correo» como nombre@dominio.com.' });
+// Lo mismo que min="0" max="100" step="0.5" del campo.
+const porcentajeMalo = (pct: string, campo: string): Aviso | null => {
+  const n = Number(pct);
+  return pct.trim() !== '' && Number.isFinite(n) && n >= 0 && n <= 100 && Number.isInteger(n * 2)
+    ? null
+    : { title: 'Porcentaje no válido', description: `En «${campo}», un número de 0 a 100 (se admiten medios, como 7,5).` };
+};
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
 
 const enCastellano = (f: string) => {
@@ -43,12 +81,43 @@ function generarContrasena() {
 
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject, projects } = useProjectContext() as {
+  const { activeProject, projects, activeIssuer, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
+    activeIssuerId: number | null;
     projects: Array<{ id: number; nombre: string }>;
   };
-  const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Los campus de la empresa. Dar de alta o asignar un curso necesita UNO
+  // concreto --hay que saber en cual entra y de que catalogo sale el curso--,
+  // pero eso no obliga a cambiar el selector de arriba: se elige aqui, y solo
+  // entre los suyos. Diego, 14/09: «puse empresa y tuve que entrar a un campus
+  // si o si».
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  // «Gestionar colaboraciones» del catálogo (#423; antes, admin o la casilla).
+  const { can } = usePermission();
+  const puede = can('tutores.gestionar');
+  // El correo de un tutor, solo el super admin (#248). La contraseña, también el
+  // admin (Diego, 09/10, #246).
+  // Basta el permiso (el superadmin lo tiene siempre): se le da a quien administración diga
+  // desde su ficha de permisos. Antes pedía además ser superadmin y la excepción no servía.
+  const puedeCambiarCorreo = can('tutores.cambiar_correo');
+  const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
+  const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
+  // lee siempre: quien lleva las colaboraciones trabaja con la plantilla
+  // entera, y cada fila dice de qué marca es.
+  const issuerId = activeIssuerId ?? null;
+  // Dar de alta a alguien o asignarle un curso SÍ necesita un proyecto
+  // concreto: hay que saber en cuál se le da de alta y de qué catálogo sale el
+  // curso. Eso se apaga, no se tapia la pantalla entera.
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  const projectId = proyectoFijado ?? soloCampus;
+  // Dar de alta ya no obliga a cambiar el selector de arriba (#219): con una
+  // empresa o «Todos», el formulario pide el campus, entre los de esa empresa
+  // (o todos los suyos), y de su catálogo salen los cursos.
+  const puedeAlta = Boolean(projectId) || campus.length > 0;
+  const [campusAlta, setCampusAlta] = useState<number | null>(null);
+  const [formacionesAlta, setFormacionesAlta] = useState<Formacion[]>([]);
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
   const [elegido, setElegido] = useState<Tutor | null>(null);
@@ -57,9 +126,17 @@ export default function TutoresPage() {
   const [cargando, setCargando] = useState(true);
   const [popupAlta, setPopupAlta] = useState(false);
   const [popupColab, setPopupColab] = useState(false);
+  // Que fila se esta editando, y con que valores mientras se teclea.
+  const [editando, setEditando] = useState<number | null>(null);
+  const [edicion, setEdicion] = useState({ pct: '', desde: '', hasta: '' });
   const [cursoColab, setCursoColab] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [borrando, setBorrando] = useState<number | null>(null);
+  // La formacion que se esta editando. Hasta hoy la unica accion de la fila era
+  // «Quitar»: un 10 % mal puesto solo se arreglaba borrando la asignacion, y
+  // eso se lleva por delante el historico de por que se le pago lo que se le
+  // pago. El servidor ya sabia editarla —PATCH /colaboraciones/:id—; no habia
+  // boton.
   // Cursos que se le asignan EN EL ALTA. Crear al tutor y luego entrar a
   // añadirle cursos son dos pasos para una sola decision: cuando das de alta a
   // alguien ya sabes que imparte.
@@ -69,6 +146,9 @@ export default function TutoresPage() {
   const [nuevoPct, setNuevoPct] = useState('10');
   const [nuevaFecha, setNuevaFecha] = useState(hoy());
   const [ajustes, setAjustes] = useState<AjustesTutores | null>(null);
+  // Si el CRM NO escribe a los tutores (freno del 15/09). Mientras no se sepa,
+  // se da por parado: prometer un correo que no sale es peor que no ofrecerlo.
+  const sinCorreos = ajustes?.correos_a_tutores !== true;
   const [contrasena, setContrasena] = useState('');
   const [copiada, setCopiada] = useState(false);
   // En que marcas da clase. Un profesor puede estar en varias —Filtracion en
@@ -79,50 +159,127 @@ export default function TutoresPage() {
   // Retirados: no salen por defecto. Se pueden enseñar porque, si no, retirar a
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
+  // Buscador de la lista. Diego: «necesito una lupa en tutores». No habia
+  // ninguno: con 19 tutores ya cuesta, y la lista crece.
+  // `?buscar=` lo trae el buscador (Ctrl K, #591): la lista sale ya filtrada por ese tutor.
+  // Se lee una vez, al abrir, de la dirección: sin el hook del router, que esta
+  // pantalla no necesitaba (y sus pruebas la montan sin él).
+  const [busca, setBusca] = useState(() => new URLSearchParams(window.location.search).get('buscar') ?? '');
   const [popupClave, setPopupClave] = useState(false);
   const [popupPago, setPopupPago] = useState(false);
+  // «Cobra desde» en Editar tutor (Diego, 13/10): la fecha de inicio de TODAS
+  // sus colaboraciones activas. `tocado` importa: sin el, guardar el IBAN de un
+  // tutor con fechas distintas las igualaria todas a la mas antigua.
+  const [cobraDesde, setCobraDesde] = useState('');
+  const [cobraDesdeTocado, setCobraDesdeTocado] = useState(false);
   const [claveNueva, setClaveNueva] = useState('');
+  const [claveRepetida, setClaveRepetida] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
   const [procesando, setProcesando] = useState(false);
+  // «Añadir formación» ofrece las de TODOS los campus de quien asigna, cada una
+  // con el suyo (#384), no solo las del campus de arriba.
+  const [formacionesColab, setFormacionesColab] = useState<FormacionConCampus[] | null>(null);
+  // La formación es de un campus en el que el tutor no está: lo que se iba a
+  // guardar, esperando a que se diga si se le añade a ese campus.
+  const [otroCampus, setOtroCampus] = useState<{
+    campus: CampusDeLaFormacion;
+    datos: Parameters<typeof tutoresApi.crearColaboracion>[0];
+    formacion: string;
+  } | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await tutoresApi.listar(projectId, verRetirados);
+      const r = await tutoresApi.listar(projectId, verRetirados, issuerId);
       setTutores(r.success ? (r.data || []) : []);
     } finally { setCargando(false); }
-  }, [projectId, verRetirados]);
+  }, [projectId, issuerId, verRetirados]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
+  // Las formaciones del ámbito. Con una empresa puesta y sin campus elegido,
+  // `/products` no contesta --solo entiende UN proyecto-- y el desplegable se
+  // quedaba vacío sin decir por qué. Se piden las de cada campus y se juntan
+  // por nombre, que es lo que se lee: los campus de una empresa repiten
+  // formaciones y dos filas con el mismo texto no se distinguen.
   useEffect(() => {
-    if (!projectId) return;
-    client.get(`/products?projectId=${projectId}&limit=500`)
-      .then((r) => setFormaciones(r.success ? (r.data || []) : []))
-      .catch(() => setFormaciones([]));
-  }, [projectId]);
+    const ids = projectId ? [projectId] : campus.map((c) => c.id);
+    if (!ids.length) { setFormaciones([]); return; }
+    let vivo = true;
+    Promise.all(ids.map((id) =>
+      client.get(`/products?projectId=${id}&limit=500`)
+        .then((r) => (r.success ? (r.data || []) : []))
+        .catch(() => [])))
+      .then((tandas) => {
+        if (!vivo) return;
+        const porNombre = new Map<string, Formacion>();
+        for (const filas of tandas) {
+          for (const x of filas as Formacion[]) {
+            const clave = String(x.nombre || '').trim().toLowerCase();
+            if (clave && !porNombre.has(clave)) porNombre.set(clave, x);
+          }
+        }
+        setFormaciones([...porNombre.values()].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      });
+    return () => { vivo = false; };
+  }, [projectId, campus]);
+
+  // Las del alta: las del campus elegido en el formulario (#219). Si es el de
+  // arriba, ya están pedidas.
+  useEffect(() => {
+    if (!popupAlta || !campusAlta) { setFormacionesAlta([]); return; }
+    if (campusAlta === projectId) { setFormacionesAlta(formaciones); return; }
+    let vivo = true;
+    client.get(`/products?projectId=${campusAlta}&limit=500`)
+      .then((r) => {
+        if (!vivo) return;
+        const filas = (r.success ? (r.data || []) : []) as Formacion[];
+        setFormacionesAlta([...filas].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      })
+      .catch(() => { if (vivo) setFormacionesAlta([]); });
+    return () => { vivo = false; };
+  }, [popupAlta, campusAlta, projectId, formaciones]);
+
+  // Las de «Añadir formación»: las de todos los campus de quien asigna, sin
+  // juntar por nombre, cada una con su campus (#384). Se piden al abrirlo por
+  // primera vez; si cambian sus campus, se vuelven a pedir.
+  useEffect(() => { setFormacionesColab(null); }, [projects]);
+  useEffect(() => {
+    if (!popupColab || formacionesColab) return;
+    const suyos = (projects || []).filter((p) => p?.id && p.id !== -1);
+    if (!suyos.length) { setFormacionesColab([]); return; }
+    let vivo = true;
+    Promise.all(suyos.map((p) =>
+      client.get(`/products?projectId=${p.id}&limit=500`)
+        .then((r) => ({ projectId: p.id, campus: p.nombre, formaciones: (r.success ? (r.data || []) : []) as Formacion[] }))
+        .catch(() => ({ projectId: p.id, campus: p.nombre, formaciones: [] as Formacion[] }))))
+      .then((tandas) => { if (vivo) setFormacionesColab(formacionesConCampus(tandas)); });
+    return () => { vivo = false; };
+  }, [popupColab, formacionesColab, projects]);
 
   // El arranque del modulo manda sobre la fecha por defecto: si las comisiones
   // empiezan en agosto, proponer hoy solo invita a ponerlo mal.
+  // Los ajustes son de quien gestiona tutores; sin eso, 403 (#631).
   useEffect(() => {
+    if (!puede) return;
     tutoresApi.ajustes().then((r) => {
       if (!r.success || !r.data) return;
       setAjustes(r.data);
       const arranque = String(r.data.aplica_desde).slice(0, 10);
       setNuevaFecha(arranque > hoy() ? arranque : hoy());
     }).catch(() => { /* se queda con hoy */ });
-  }, []);
+  }, [puede]);
 
   // Cerrar con Escape, que es lo que hace todo el mundo antes de buscar la X.
-  useEffect(() => {
-    if (!popupAlta && !popupColab) return;
-    const alPulsar = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setPopupAlta(false); setPopupColab(false); }
-    };
-    window.addEventListener('keydown', alPulsar);
-    return () => window.removeEventListener('keydown', alPulsar);
-  }, [popupAlta, popupColab]);
+  // Todas las ventanas, no solo el alta y la formación; y con un desplegable
+  // abierto, Escape cierra solo el desplegable, como en los demás (#106).
+  // Con la pregunta del campus abierta (#384), Escape la cierra solo a ella.
+  const cerrarVentanas = useCallback(() => {
+    setPopupAlta(false); setPopupColab(false); setPopupPago(false);
+    setPopupClave(false); setPopupRetiro(false);
+  }, []);
+  useEscapeKey(cerrarVentanas, (popupAlta || popupColab || popupPago || popupClave || popupRetiro) && !otroCampus);
 
   function anadirCursoAlAlta() {
     const id = Number(nuevoCurso);
@@ -137,10 +294,28 @@ export default function TutoresPage() {
     setCursosAlta([]);
     setNuevoCurso('');
     setNuevoPct(String(ajustes?.pct_por_defecto ?? 10));
-    setContrasena('');
+    // Con los correos a tutores parados la contraseña es la UNICA forma de
+    // entrar: va ya generada, y el alta no se deja sin ella.
+    setContrasena(sinCorreos ? generarContrasena() : '');
     setCopiada(false);
-    setMarcas(projectId ? [projectId] : []);
+    // El campus del alta: el de arriba; si no hay y la empresa tiene uno solo,
+    // ese; si tiene varios, se elige en el formulario (#219).
+    const inicial = projectId ?? (campus.length === 1 ? campus[0].id : null);
+    setCampusAlta(inicial);
+    setMarcas(inicial ? [inicial] : []);
     setPopupAlta(true);
+  }
+
+  // Cambiar el campus del alta cambia el catálogo: los cursos ya añadidos eran
+  // del otro, así que se quitan. Y el campus va marcado en «En qué marcas».
+  function elegirCampusAlta(id: number | null) {
+    setCursosAlta([]);
+    setNuevoCurso('');
+    setMarcas((prev) => {
+      const sin = prev.filter((x) => x !== campusAlta);
+      return id && !sin.includes(id) ? [...sin, id] : sin;
+    });
+    setCampusAlta(id);
   }
 
   const cargarColabs = useCallback(async (t: Tutor) => {
@@ -148,12 +323,23 @@ export default function TutoresPage() {
     setColabs(r.success ? (r.data || []) : []);
   }, []);
 
+  // Lo que hay hoy: el valor inicial del campo es la fecha mas temprana de sus
+  // colaboraciones activas. Se rellena al abrir, y si las colaboraciones llegan
+  // con el dialogo ya abierto, tambien — mientras nadie haya tocado el campo.
+  const cobraActual = useMemo(() => cobraDesdeActual(colabs), [colabs]);
+  useEffect(() => {
+    if (!popupPago) { setCobraDesdeTocado(false); return; }
+    if (!cobraDesdeTocado) setCobraDesde(cobraActual.desde || '');
+  }, [popupPago, cobraActual.desde, cobraDesdeTocado]);
+
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
   function abrirColab() { setCursoColab(null); setPopupColab(true); }
 
   function abrirClave() {
-    setClaveNueva(generarContrasena());
+    const clave = generarContrasena();
+    setClaveNueva(clave);
+    setClaveRepetida(clave);
     setClaveCopiada(false);
     setPopupClave(true);
   }
@@ -165,9 +351,9 @@ export default function TutoresPage() {
     if (!elegido) return;
     setProcesando(true);
     try {
-      const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva);
+      const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva, claveRepetida);
       if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella.` });
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella. Sus sesiones abiertas se han cerrado.` });
       setPopupClave(false);
       cargar();
     } catch (err) {
@@ -235,7 +421,7 @@ export default function TutoresPage() {
         <div className="text-[11px] text-muted-foreground font-semibold mt-0.5">retirado</div>
       )}
       {t.pendiente_de_entrar && (
-        <div className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
+        <div className="text-[11px] text-warning-soft-foreground font-semibold mt-0.5">
           aún no ha entrado
         </div>
       )}
@@ -267,16 +453,58 @@ export default function TutoresPage() {
     e.preventDefault();
     if (!elegido) return;
     const f = new FormData(e.currentTarget);
+    const correoEscrito = puedeCambiarCorreo ? String(f.get('email') || '') : '';
+    if (avisar(faltaNombre(String(f.get('nombre') || ''))
+      || (correoEscrito.trim() ? correoMalo(correoEscrito) : null))) return;
     setProcesando(true);
     try {
+      const nombre = String(f.get('nombre') || '').trim();
+      // El correo solo lo cambia el super admin (#248); a los demás el campo les
+      // sale bloqueado y el servidor les contesta 403.
+      const email = puedeCambiarCorreo ? String(f.get('email') || '').trim().toLowerCase() : '';
+      const cambiaCorreo = Boolean(email) && email !== String(elegido.email || '').toLowerCase();
+      if (cambiaCorreo) {
+        const aviso = await avisoCambioCorreo(elegido.id).catch(() => null);
+        if (!window.confirm(confirmacionCambioCorreo(elegido.nombre || 'este tutor', elegido.email || '—', email, aviso))) return;
+      }
+      // Igualar fechas distintas se pregunta antes: es mover dinero de varios
+      // cursos a la vez.
+      const mandaFecha = hayQueMandarCobraDesde(cobraDesde, cobraDesdeTocado, cobraActual);
+      const pregunta = mandaFecha ? confirmacionCobraDesde(cobraDesde, cobraActual) : null;
+      if (pregunta && !window.confirm(pregunta)) return;
       const r = await tutoresApi.guardarPerfil(elegido.id, {
+        // El nombre y el correo solo se mandan si han cambiado: el correo es la
+        // credencial y tocarlo por costumbre echaria a alguien de su cuenta.
+        ...(nombre && nombre !== elegido.nombre ? { nombre } : {}),
+        ...(cambiaCorreo ? { email, reenviarEnlace: f.get('reenviarEnlace') === 'on' } : {}),
         dniNif: String(f.get('dniNif') || ''),
         telefono: String(f.get('telefono') || ''),
         // Sin espacios: se copian del banco con ellos y luego no casan.
         iban: String(f.get('iban') || '').replace(/\s+/g, '').toUpperCase(),
       });
       if (!r?.success) throw new Error('no');
-      toast({ title: 'Datos guardados' });
+
+      // «Cobra desde», despues del perfil y por su propia puerta: lo puede
+      // tocar quien gestiona colaboraciones, no el tutor. Si falla, los datos
+      // ya estan guardados y se dice asi, sin mezclarlo.
+      if (mandaFecha) {
+        try {
+          const rc = await tutoresApi.cambiarCobraDesde(elegido.id, cobraDesde);
+          if (!rc?.success || !rc.data) throw new Error('no se pudo cambiar la fecha');
+          const a = avisoCobraDesde(rc.data);
+          toast({ ...a, description: `Datos guardados. ${a.description}` });
+        } catch (err) {
+          toast({
+            title: 'Datos guardados, pero la fecha no',
+            description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+            variant: 'destructive',
+            duration: 0,
+          });
+        }
+        await cargarColabs(elegido);
+      } else {
+        toast({ title: 'Datos guardados' });
+      }
       setPopupPago(false);
       await cargar();
     } catch (err) {
@@ -292,14 +520,32 @@ export default function TutoresPage() {
 
   async function altaTutor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!projectId) return;
     const f = new FormData(e.currentTarget);
+    // Todo lo que falta o está mal, de una vez (#106).
+    const correo = String(f.get('email') || '');
+    const faltan: Falta[] = numerosMalEscritos(e.currentTarget);
+    if (!campusAlta) faltan.push({ title: 'Falta el campus', description: 'Elige en «Campus» en cuál se le da de alta: de su catálogo salen sus cursos.', que: 'el campus en «Campus»' });
+    if (!String(f.get('nombre') || '').trim()) faltan.push({ ...faltaNombre('')!, que: 'el nombre en «Nombre y apellidos»' });
+    if (!correo.trim()) faltan.push({ title: 'Falta el correo', description: 'Escríbelo en «Correo»: es con lo que entra al CRM.', que: 'el correo en «Correo»' });
+    else if (correoMalo(correo)) faltan.push({ ...correoMalo(correo)!, que: 'un correo válido en «Correo» (nombre@dominio.com)' });
+    if (sinCorreos && !contrasena) {
+      faltan.push({ title: 'Falta la contraseña', description: 'Sin correos no se le puede mandar el enlace: escríbela o pulsa «Generar».', que: 'la contraseña (escríbela o pulsa «Generar»)' });
+    } else if (contrasena && contrasena.length < 8) {
+      faltan.push({ title: 'Contraseña demasiado corta', description: 'En «Contraseña», al menos 8 caracteres.', que: 'una contraseña de al menos 8 caracteres' });
+    }
+    // Como el navegador: vacío vale (se toma el de por defecto); escrito, de 0 a 100.
+    if (nuevoPct.trim() !== '' && porcentajeMalo(nuevoPct, '%')) {
+      faltan.push({ ...porcentajeMalo(nuevoPct, '%')!, que: 'un % del curso de 0 a 100' });
+    }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta || !campusAlta) { if (falta) toast(falta); return; }
     setGuardando(true);
     try {
       const r = await tutoresApi.alta({
         nombre: String(f.get('nombre') || ''),
         email: String(f.get('email') || ''),
-        projectIds: marcas.length ? marcas : [projectId],
+        // El campus del alta, siempre; y las demás marcas que se hayan marcado.
+        projectIds: [...new Set([campusAlta, ...marcas])],
         dniNif: String(f.get('dniNif') || '') || undefined,
         iban: String(f.get('iban') || '') || undefined,
         telefono: String(f.get('telefono') || '') || undefined,
@@ -307,59 +553,222 @@ export default function TutoresPage() {
       });
       if (!r.success) throw new Error(r.error || 'no se pudo');
 
-      // Cada curso con SU fecha. Si alguno falla se dice cual: el tutor ya
-      // existe y no tiene sentido deshacerlo por eso.
-      const fallidos: string[] = [];
-      for (const c of cursosAlta) {
-        const rc = await tutoresApi.crearColaboracion({
-          tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
-        });
-        if (!rc.success) fallidos.push(formaciones.find((x) => x.id === c.productId)?.nombre || String(c.productId));
+      // Cada curso con SU fecha, y cada uno por separado. El tutor YA existe:
+      // un curso que falla —por ejemplo, que es de otro campus del tutor— no
+      // puede convertir el alta entera en «No se ha podido dar de alta», que
+      // era lo que pasaba, porque la llamada lanza el error y saltaba al
+      // `catch` de abajo con el tutor ya creado y el resto sin intentar (#206).
+      const cursos = cursosParaElAlta(cursosAlta, nuevoCurso, nuevoPct, nuevaFecha, Number(ajustes?.pct_por_defecto ?? 10));
+      const fallidos: CursoQueFallo[] = [];
+      for (const c of cursos) {
+        const nombre = formacionesAlta.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
+        try {
+          const rc = await tutoresApi.crearColaboracion({
+            tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
+          });
+          if (!rc.success) fallidos.push({ nombre, motivo: rc.error || 'no se pudo guardar' });
+        } catch (err) {
+          fallidos.push({ nombre, motivo: err instanceof Error ? err.message : 'no se pudo guardar' });
+        }
       }
-      if (fallidos.length) {
-        toast({ title: 'Algún curso no se ha podido asignar', description: fallidos.join(', '), variant: 'destructive' });
+      toast(avisoDelAlta(Boolean(r.data?.entraYa), cursos.length - fallidos.length, fallidos));
+      // #187: si en algún campus conectado su correo no es usuario, queda
+      // pendiente de matrícula, y se dice aquí mismo.
+      const enElCampus = (r.data as { avisosDelCampus?: string[] } | undefined)?.avisosDelCampus || [];
+      if (enElCampus.length) {
+        toast({ title: 'Revisa la matrícula en el campus', description: enElCampus.join(' '), variant: 'destructive' });
       }
-
-      const cuantos = cursosAlta.length - fallidos.length;
-      toast({
-        title: 'Tutor dado de alta',
-        description: [
-          r.data?.entraYa
-            ? 'Ya puede entrar con el correo y la contraseña que le has puesto.'
-            : 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.',
-          cuantos > 0 ? `Con ${cuantos} ${cuantos === 1 ? 'curso asignado' : 'cursos asignados'}.` : '',
-        ].filter(Boolean).join(' '),
-      });
       setPopupAlta(false);
       setCursosAlta([]);
+      setNuevoCurso('');
       setContrasena('');
       cargar();
     } catch (err) {
-      toast({ title: 'No se ha podido dar de alta', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+      toast({ title: 'No se ha podido dar de alta', description: err instanceof Error && err.message ? err.message : 'Inténtalo de nuevo en un momento.', variant: 'destructive' });
     } finally { setGuardando(false); }
   }
+
+  /**
+   * Volver a poner en vigor una formacion que se desactivo.
+   *
+   * Es lo contrario de «Quitar», y la diferencia importa: quitar borra la fila
+   * y con ella el rastro de por que se le pago a ese tutor lo que se le pago.
+   */
+  /**
+   * Editar una formacion ya asignada: el porcentaje y las fechas.
+   *
+   * Hasta ahora, para cambiar un 10 % habia que QUITAR la formacion y volver a
+   * añadirla — y quitarla borra el historico de por que se le pago al tutor lo
+   * que se le pago. El endpoint para editarla existia desde el principio
+   * (`editarColaboracionSchema` acepta pct, desde y hasta); faltaba la pantalla.
+   */
+  async function guardarColaboracion(c: Colaboracion) {
+    setGuardando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, {
+        pct: Number(edicion.pct),
+        desde: edicion.desde,
+        // Vaciar «hasta» significa «en adelante», no «no lo cambies».
+        hasta: edicion.hasta || null,
+      });
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      toast({ title: 'Formación actualizada' });
+      setEditando(null);
+      if (elegido) cargarColabs(elegido);
+    } catch (err) {
+      toast({
+        title: 'No se ha podido guardar',
+        // Lo que mas falla aqui es que el tramo pise otro del mismo curso.
+        description: (err instanceof Error && err.message) || 'Revisa las fechas: no pueden solaparse con otra del mismo curso.',
+        variant: 'destructive',
+      });
+    } finally { setGuardando(false); }
+  }
+
 
   async function altaColaboracion(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!elegido) return;
     const f = new FormData(e.currentTarget);
+    const productId = Number(f.get('productId'));
+    const pctEscrito = String(f.get('pct') ?? '');
+    const faltan: Falta[] = [];
+    // Sin curso, el servidor contestaba con un error que no tenía que ver.
+    if (!productId) faltan.push({ title: 'Falta el curso', description: 'Elígelo en «Curso»: escribe para buscarlo.', que: 'el curso en «Curso»' });
+    // Vacío no es «no válido»: falta (visto en la prueba a mano).
+    if (!pctEscrito.trim()) {
+      faltan.push({ title: 'Falta el porcentaje', description: 'Escríbelo en «Porcentaje»: de 0 a 100 (se admiten medios, como 7,5).', que: 'el porcentaje en «Porcentaje»' });
+    } else if (porcentajeMalo(pctEscrito, 'Porcentaje')) {
+      faltan.push({ ...porcentajeMalo(pctEscrito, 'Porcentaje')!, que: 'un porcentaje de 0 a 100 en «Porcentaje»' });
+    }
+    if (!String(f.get('desde') || '')) {
+      faltan.push({ title: 'Falta la fecha', description: 'Pon en «Desde» el día que empezó con esta formación.', que: 'la fecha en «Desde»' });
+    }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     setGuardando(true);
     try {
-      const r = await tutoresApi.crearColaboracion({
+      // Si esa formacion ya la tuvo y esta desactivada, esto es REACTIVARLA.
+      // Crear otra fila dejaria dos colaboraciones del mismo tutor con el mismo
+      // curso, y entonces «cuanto se le debe» tendria dos respuestas.
+      const dormida = laQueDuerme(colabs, productId);
+      if (dormida) {
+        const r = await tutoresApi.editarColaboracion(dormida.id, {
+          activa: true,
+          pct: Number(f.get('pct')),
+          desde: String(f.get('desde')),
+          hasta: String(f.get('hasta') || '') || null,
+        });
+        if (!r.success) throw new Error(r.error || 'no se pudo');
+        toast({ title: 'Formación reactivada', description: 'Ya la tenía, y vuelve a estar vigente.' });
+        setPopupColab(false);
+        cargarColabs(elegido);
+        cargar();
+        return;
+      }
+      const datos = {
         tutorId: elegido.id,
-        productId: Number(f.get('productId')),
+        productId,
         pct: Number(f.get('pct')),
         desde: String(f.get('desde')),
         hasta: String(f.get('hasta') || '') || null,
-      });
-      if (!r.success) throw new Error(r.error || 'no se pudo');
+      };
+      try {
+        const r = await tutoresApi.crearColaboracion(datos);
+        if (!r.success) throw new Error(r.error || 'no se pudo');
+      } catch (err) {
+        // Es de un campus en el que no está: se pregunta si añadirlo, en vez
+        // de dejar un «no» sin salida (#384).
+        const campusDeLaFormacion = campusDelRechazo(err);
+        if (!campusDeLaFormacion) throw err;
+        setOtroCampus({
+          campus: campusDeLaFormacion,
+          datos,
+          formacion: formacionesColab?.find((x) => x.id === productId)?.nombre || 'Esa formación',
+        });
+        return;
+      }
       setPopupColab(false);
       cargarColabs(elegido);
       cargar();
     } catch (err) {
-      toast({ title: 'No se ha podido añadir', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+      toast({ title: 'No se ha podido añadir', description: err instanceof Error && err.message ? err.message : 'Inténtalo de nuevo en un momento.', variant: 'destructive' });
     } finally { setGuardando(false); }
   }
+
+  /** «Sí, añádela a este campus»: el mismo alta, con `anadirAlCampus`. */
+  async function anadirAlCampusYAsignar() {
+    if (!otroCampus || !elegido) return;
+    const { campus: c, datos } = otroCampus;
+    const nombreCampus = c.proyecto || 'ese campus';
+    setGuardando(true);
+    try {
+      const r = await tutoresApi.crearColaboracion({ ...datos, anadirAlCampus: true });
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      toast({ title: `Añadida a ${nombreCampus} y formación asignada`, description: `${elegido.nombre} ya está en ${nombreCampus}.` });
+      setOtroCampus(null);
+      setPopupColab(false);
+      cargarColabs(elegido);
+      cargar();
+    } catch (err) {
+      // 403 si ese campus no es de quien lo pide: el servidor dice por qué.
+      toast({ title: `No se ha podido añadir a ${nombreCampus}`, description: err instanceof Error ? err.message : '', variant: 'destructive' });
+      setOtroCampus(null);
+    } finally { setGuardando(false); }
+  }
+
+  /** Marcar lo que ha entregado de una formacion. Se guarda al pulsar, sin
+   *  boton de guardar: es una casilla, y pedir confirmacion para una casilla
+   *  sobra. */
+  async function marcarEntregado(
+    c: Colaboracion,
+    cambio: { entregoFoto?: boolean; entregoVideo?: boolean; modulosPct?: number },
+  ) {
+    // Se pinta ya y se corrige si el servidor dice que no: esperar medio segundo
+    // por una casilla se siente roto.
+    const antes = colabs;
+    setColabs((xs) => xs.map((x) => (x.id === c.id ? {
+      ...x,
+      entrego_foto: cambio.entregoFoto ?? x.entrego_foto,
+      entrego_video: cambio.entregoVideo ?? x.entrego_video,
+      modulos_pct: cambio.modulosPct ?? x.modulos_pct,
+    } : x)));
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, cambio);
+      if (!r?.success) throw new Error('no');
+    } catch (err) {
+      setColabs(antes);
+      toast({
+        title: 'No se ha podido marcar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    }
+  }
+
+  /** Volver a activar una formacion desactivada, o desactivarla sin borrarla. */
+  async function alternarColab(c: Colaboracion) {
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, { activa: !c.activa });
+      if (!r?.success) throw new Error('no');
+      toast({
+        title: c.activa ? 'Formación desactivada' : 'Formación reactivada',
+        description: c.activa
+          ? 'Deja de generar comisión nueva. Lo ya generado se queda.'
+          : 'Vuelve a generar comisión desde su fecha de inicio.',
+      });
+      if (elegido) { cargarColabs(elegido); cargar(); }
+    } catch (err) {
+      toast({
+        title: 'No se ha podido cambiar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally { setProcesando(false); }
+  }
+
+  /** El porcentaje y las fechas, sin quitar y rehacer. */
 
   async function quitar(c: Colaboracion) {
     // Dos toques: el primero avisa, el segundo hace. Sin dialogo aparte, que
@@ -383,28 +792,59 @@ export default function TutoresPage() {
       </div>
     );
   }
-  if (!projectId) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-        Elige un proyecto concreto para ver sus tutores.
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">
       <PageHeader
         title="Tutores"
-        subtitle={cargando ? 'cargando…' : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'} · cobran un porcentaje de lo que se cobra de sus formaciones`}
+        subtitle={cargando
+          ? 'cargando…'
+          : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'}`
+            + (activeIssuer && !proyectoFijado ? ` de ${activeIssuer.nombre}` : '')
+            + ' · cobran un porcentaje de lo que se cobra de sus formaciones'
+            + (puedeAlta ? '' : ' · no tienes ningún campus en el que dar de alta')}
         actions={(
-          <Button onClick={abrirAlta}>
-            <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* El campus, dentro de la empresa. Dar de alta o asignar un curso
+                necesita uno concreto —hay que saber en cuál entra y de qué
+                catálogo sale el curso—, pero se elige AQUÍ y solo entre los
+                suyos, sin tocar el selector de arriba. */}
+            {activeIssuer && !proyectoFijado && campus.length > 0 && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                aria-label={`Campus de ${activeIssuer.nombre}`}
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                <option value="">Todos los campus</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
+            <Button onClick={abrirAlta} disabled={!puedeAlta}
+              title={puedeAlta ? undefined : 'No tienes ningún campus en el que dar de alta'}>
+              <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
+            </Button>
+          </div>
         )}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-3 items-start">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="relative border-b border-border">
+            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input autoComplete="off"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar tutor por nombre o correo…"
+              aria-label="Buscar tutor"
+              className="w-full h-9 pl-9 pr-8 bg-transparent text-sm outline-none"
+            />
+            {busca && (
+              <button type="button" onClick={() => setBusca('')} aria-label="Quitar la búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={13} weight="bold" />
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs text-muted-foreground cursor-pointer">
             <input type="checkbox" checked={verRetirados} className="accent-primary"
               onChange={(e) => { setVerRetirados(e.target.checked); setElegido(null); }} />
@@ -416,8 +856,16 @@ export default function TutoresPage() {
                 description="Da de alta el primero para asignarle formaciones." />
             )}
             {(() => {
-              const deAqui = tutores.filter((t) => t.es_de_este_proyecto);
-              const hermanos = tutores.filter((t) => !t.es_de_este_proyecto);
+              // Sin tildes y por nombre o correo: «jose» encuentra «José».
+              const plano = (x: string) => (x || '').toLowerCase()
+                .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e').replace(/[íìï]/g, 'i')
+                .replace(/[óòö]/g, 'o').replace(/[úùü]/g, 'u').replace(/ñ/g, 'n');
+              const q = plano(busca.trim());
+              const visibles = q
+                ? tutores.filter((t) => plano(t.nombre || '').includes(q) || plano(t.email || '').includes(q))
+                : tutores;
+              const deAqui = visibles.filter((t) => t.es_de_este_proyecto);
+              const hermanos = visibles.filter((t) => !t.es_de_este_proyecto);
               return (
                 <>
                   {hermanos.length > 0 && deAqui.length > 0 && (
@@ -451,6 +899,17 @@ export default function TutoresPage() {
                   <p className="text-xs text-muted-foreground truncate">
                     {elegido.email}{elegido.dni_nif ? ` · ${elegido.dni_nif}` : ''}
                   </p>
+                  {/* El aviso de la lista dice el problema; este lleva a la
+                      solucion. Antes «sin IBAN · no se le puede pagar» salia en
+                      45 de 45 y desde ahi no habia forma de llegar a Datos de
+                      pago: habia que saber que ese boton era el sitio. */}
+                  {elegido.active !== false && !elegido.iban && (
+                    <button type="button" onClick={() => setPopupPago(true)}
+                      className="mt-1 text-[11px] font-semibold text-destructive hover:underline inline-flex items-center gap-1">
+                      <Bank size={12} weight="bold" />
+                      Sin IBAN · poner el suyo para poder pagarle
+                    </button>
+                  )}
                 </div>
                 <div className="ml-auto flex flex-wrap items-center gap-2">
                   {elegido.active === false ? (
@@ -460,12 +919,19 @@ export default function TutoresPage() {
                     </Button>
                   ) : (
                     <>
+                      {/* Editar al tutor. Antes no habia forma de cambiarle el
+                          nombre ni el correo desde ninguna pantalla. Diego,
+                          14/09: «necesitamos algo visible para poder editar
+                          tutores». Va el primero, que es lo que se busca. */}
                       <Button variant="outline" size="sm" onClick={() => setPopupPago(true)}>
-                        <Bank size={14} weight="bold" className="mr-1.5" /> Datos de pago
+                        <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar tutor
                       </Button>
-                      <Button variant="outline" size="sm" onClick={abrirClave}>
-                        <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
-                      </Button>
+                      {/* El super admin y el admin (#246). */}
+                      {puedeContrasena && (
+                        <Button variant="outline" size="sm" onClick={abrirClave}>
+                          <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm"
                         className="text-destructive hover:text-destructive"
                         onClick={() => setPopupRetiro(true)}>
@@ -494,6 +960,7 @@ export default function TutoresPage() {
                         <th className="py-2 px-3 font-semibold">Desde</th>
                         <th className="py-2 px-3 font-semibold">Hasta</th>
                         <th className="py-2 px-3 font-semibold">Estado</th>
+                        <th className="py-2 px-3 font-semibold">Entregado</th>
                         <th className="py-2 pl-3" />
                       </tr>
                     </thead>
@@ -502,14 +969,39 @@ export default function TutoresPage() {
                         <tr key={c.id}>
                           <td className="py-2 pr-3">{c.formacion}</td>
                           <td className="py-2 px-3 text-muted-foreground">{c.proyecto}</td>
-                          <td className="py-2 px-3 text-right tabular-nums font-semibold">{Number(c.pct)} %</td>
-                          <td className="py-2 px-3 tabular-nums">{soloFecha(c.vigente_desde)}</td>
-                          <td className="py-2 px-3 tabular-nums text-muted-foreground">
-                            {soloFecha(c.vigente_hasta) || 'en adelante'}
-                          </td>
+                          {editando === c.id ? (
+                            <>
+                              <td className="py-2 px-3 text-right">
+                                <input autoComplete="off" type="number" step="0.5" min="0" max="100" value={edicion.pct}
+                                  onChange={(e) => setEdicion((v) => ({ ...v, pct: e.target.value }))}
+                                  aria-label="Porcentaje"
+                                  className="w-16 h-8 px-2 rounded border border-border bg-background text-sm text-right tabular-nums" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input type="date" value={edicion.desde}
+                                  onChange={(e) => setEdicion((v) => ({ ...v, desde: e.target.value }))}
+                                  aria-label="Desde"
+                                  className="h-8 px-1.5 rounded border border-border bg-background text-sm" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input type="date" value={edicion.hasta}
+                                  onChange={(e) => setEdicion((v) => ({ ...v, hasta: e.target.value }))}
+                                  aria-label="Hasta (vacío = en adelante)"
+                                  className="h-8 px-1.5 rounded border border-border bg-background text-sm" />
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="py-2 px-3 text-right tabular-nums font-semibold">{Number(c.pct)} %</td>
+                              <td className="py-2 px-3 tabular-nums">{soloFecha(c.vigente_desde)}</td>
+                              <td className="py-2 px-3 tabular-nums text-muted-foreground">
+                                {soloFecha(c.vigente_hasta) || 'en adelante'}
+                              </td>
+                            </>
+                          )}
                           <td className="py-2 px-3">
                             {c.rige_hoy ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
                                 <CheckCircle size={13} weight="fill" /> vigente
                               </span>
                             ) : (
@@ -518,10 +1010,74 @@ export default function TutoresPage() {
                               </span>
                             )}
                           </td>
+                          <td className="py-2 px-3">
+                            {/* Marcas, no archivos: aqui se apunta que llego la
+                                foto, el video o los modulos. Se lee igual en la
+                                fila del cobro de Comisiones. */}
+                            <Entregables
+                              valor={c}
+                              ocupado={procesando}
+                              onCambiar={(cambio) => marcarEntregado(c, cambio)}
+                            />
+                          </td>
                           <td className="py-2 pl-3 text-right">
+                            {/* Una desactivada por error no tenia salida: la unica
+                                accion era «Quitar», que borra el historico de por
+                                que se le pago lo que se le pago. El endpoint para
+                                reactivarla existia desde el principio —`activa` ya
+                                estaba en `editarColaboracionSchema`—; lo que
+                                faltaba era el boton. */}
+                            {editando === c.id ? (
+                              <>
+                                <button type="button" onClick={() => guardarColaboracion(c)} disabled={guardando}
+                                  className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-primary hover:underline">
+                                  Guardar
+                                </button>
+                                <button type="button" onClick={() => setEditando(null)} disabled={guardando}
+                                  className="text-xs text-muted-foreground hover:text-foreground mr-3">
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              /* Editar el porcentaje y las fechas SIN quitar la
+                                 formacion: quitarla borra el historico de por
+                                 que se le pago lo que se le pago. */
+                              <button type="button"
+                                onClick={() => {
+                                  setEditando(c.id);
+                                  setEdicion({
+                                    pct: String(Number(c.pct)),
+                                    desde: soloFecha(c.vigente_desde) || '',
+                                    hasta: soloFecha(c.vigente_hasta) || '',
+                                  });
+                                }}
+                                className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-muted-foreground hover:text-foreground">
+                                <PencilSimple size={13} weight="bold" />
+                                Editar
+                              </button>
+                            )}
+                            {!c.activa && editando !== c.id && (
+                              <button type="button" onClick={() => alternarColab(c)}
+                                disabled={procesando}
+                                className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-success hover:text-success-soft-foreground">
+                                <ArrowsClockwise size={13} weight="bold" />
+                                Reactivar
+                              </button>
+                            )}
+                            {c.activa && editando !== c.id && (
+                              /* Apagarla sin borrarla. Sin este lado, la unica
+                                 forma de parar una formacion era «Quitar», que
+                                 se lleva por delante el historico. */
+                              <button type="button" onClick={() => alternarColab(c)}
+                                disabled={procesando}
+                                className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-muted-foreground hover:text-foreground">
+                                <ArrowsClockwise size={13} weight="bold" />
+                                Desactivar
+                              </button>
+                            )}
                             <button type="button" onClick={() => quitar(c)}
                               className={`text-xs font-semibold inline-flex items-center gap-1 ${
-                                borrando === c.id ? 'text-red-600' : 'text-muted-foreground hover:text-foreground'
+                                borrando === c.id ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
                               }`}>
                               <Trash size={13} weight="bold" />
                               {borrando === c.id ? '¿Seguro?' : 'Quitar'}
@@ -533,6 +1089,8 @@ export default function TutoresPage() {
                   </table>
                 </div>
               )}
+              {/* Consultas de alumnos (#187): campus, empresas y matrícula. */}
+              <ConsultasDelTutor key={elegido.id} tutorId={elegido.id} puedeGestionar />
             </>
           )}
         </div>
@@ -544,12 +1102,12 @@ export default function TutoresPage() {
       {popupPago && elegido && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setPopupPago(false)}>
-          <form onSubmit={guardarPago} onClick={(e) => e.stopPropagation()}
+          <form onSubmit={guardarPago} onClick={(e) => e.stopPropagation()} noValidate
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md">
 
             <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
               <div className="min-w-0">
-                <h2 className="font-bold text-base">Datos de pago</h2>
+                <h2 className="font-bold text-base">Editar tutor</h2>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">{elegido.nombre}</p>
               </div>
               <button type="button" onClick={() => setPopupPago(false)} aria-label="Cerrar"
@@ -566,28 +1124,50 @@ export default function TutoresPage() {
                 </p>
               )}
 
-              <div>
-                <label htmlFor="pago-dni" className="text-xs font-semibold">DNI / NIF</label>
-                <input id="pago-dni" name="dniNif" defaultValue={elegido.dni_nif || ''}
-                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
-              </div>
+              <Field label="Nombre y apellidos" required htmlFor="pago-nombre">
+                <input autoComplete="off" id="pago-nombre" name="nombre" defaultValue={elegido.nombre || ''} required
+                  className={inputClass} />
+              </Field>
 
               <div>
-                <label htmlFor="pago-tel" className="text-xs font-semibold">Teléfono</label>
-                <input id="pago-tel" name="telefono" defaultValue={elegido.telefono || ''}
-                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+                <Field label="Correo" disabled={!puedeCambiarCorreo} htmlFor="pago-email"
+                  hint={puedeCambiarCorreo
+                    ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.'
+                    : 'Solo quien tiene el permiso «Correo de un tutor» puede cambiarlo.'}>
+                  <input autoComplete="off" id="pago-email" name="email" type="email" defaultValue={elegido.email || ''}
+                    readOnly={!puedeCambiarCorreo} disabled={!puedeCambiarCorreo}
+                    className={`${inputClass} ${puedeCambiarCorreo ? '' : 'opacity-60 cursor-not-allowed'}`} />
+                </Field>
+                {puedeCambiarCorreo && !sinCorreos && (
+                  <label className="mt-1.5 px-1 flex items-center gap-2 text-secundario text-muted-foreground">
+                    <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
+                    Mandarle el enlace para poner contraseña en la dirección nueva
+                  </label>
+                )}
               </div>
 
-              <div>
-                <label htmlFor="pago-iban" className="text-xs font-semibold">IBAN</label>
-                <input id="pago-iban" name="iban" defaultValue={elegido.iban || ''}
+              <FilaCampos>
+                <Field label="DNI / NIF" htmlFor="pago-dni">
+                  <input autoComplete="off" id="pago-dni" name="dniNif" defaultValue={elegido.dni_nif || ''} className={inputClass} />
+                </Field>
+                <Field label="Teléfono" htmlFor="pago-tel">
+                  <input autoComplete="off" id="pago-tel" name="telefono" defaultValue={elegido.telefono || ''} className={inputClass} />
+                </Field>
+              </FilaCampos>
+
+              <Field label="IBAN" htmlFor="pago-iban"
+                hint="Se guarda sin espacios. Vaciar un campo lo borra; el resto no se toca.">
+                <input autoComplete="off" id="pago-iban" name="iban" defaultValue={elegido.iban || ''}
                   placeholder="ES00 0000 0000 0000 0000 0000"
-                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background
-                             text-sm font-mono tracking-wide" />
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Se guarda sin espacios. Vaciar un campo lo borra; el resto no se toca.
-                </p>
-              </div>
+                  className={`${inputClass} font-mono tracking-wide`} />
+              </Field>
+
+              <CampoCobraDesde
+                colabs={colabs}
+                valor={cobraDesde}
+                onCambio={(v) => { setCobraDesde(v); setCobraDesdeTocado(true); }}
+                aplicaDesde={ajustes?.aplica_desde}
+              />
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
@@ -603,14 +1183,14 @@ export default function TutoresPage() {
       {/* Alta de tutor */}
       {popupAlta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupAlta(false)}>
-          <form onSubmit={altaTutor} onClick={(e) => e.stopPropagation()}
+          <form onSubmit={altaTutor} onClick={(e) => e.stopPropagation()} noValidate
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
             <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
               <div>
                 <h2 className="font-bold text-base">Nuevo tutor</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Sus datos, cómo entra, y los cursos por los que cobra.
+                  Sus datos, su contraseña y los cursos por los que cobra.
                 </p>
               </div>
               <button type="button" onClick={() => setPopupAlta(false)}
@@ -620,75 +1200,82 @@ export default function TutoresPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+              {/* Sin un campus arriba (empresa o «Todos»), se elige aquí (#219). */}
+              {!proyectoFijado && (
+                <section className="space-y-2">
+                  <Field label="Campus" required htmlFor="alta-campus"
+                    hint="En el que se le da de alta. De su catálogo salen los cursos de abajo.">
+                    <select id="alta-campus" value={campusAlta ?? ''}
+                      onChange={(e) => elegirCampusAlta(e.target.value ? Number(e.target.value) : null)}
+                      className={inputClass}>
+                      <option value="">Elige el campus…</option>
+                      {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </Field>
+                </section>
+              )}
+
               <section className="space-y-3">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Quién es</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="text-xs font-medium sm:col-span-2">
-                    Nombre y apellidos <span className="text-red-500">*</span>
-                    <input name="nombre" required autoFocus
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                  </label>
-                  <label className="text-xs font-medium sm:col-span-2">
-                    Correo <span className="text-red-500">*</span>
-                    <input name="email" type="email" required
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                    <span className="block text-[11px] text-muted-foreground font-normal mt-1">
-                      Es con lo que entra al CRM.
-                    </span>
-                  </label>
-                  <label className="text-xs font-medium">
-                    DNI / NIF
-                    <input name="dniNif"
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                  </label>
-                  <label className="text-xs font-medium">
-                    Teléfono
-                    <input name="telefono"
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                  </label>
-                  <label className="text-xs font-medium sm:col-span-2">
-                    IBAN
-                    <input name="iban" placeholder="ES00 0000 0000 0000 0000 0000"
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
-                    <span className="block text-[11px] text-muted-foreground font-normal mt-1">
-                      Donde se le paga. Puedes dejarlo para más adelante.
-                    </span>
-                  </label>
-                </div>
+                <h3 className="text-tabla uppercase text-muted-foreground">Quién es</h3>
+                <FilaCampos>
+                  <Field label="Nombre y apellidos" required htmlFor="alta-nombre" className="sm:col-span-2">
+                    <input autoComplete="off" id="alta-nombre" name="nombre" required autoFocus className={inputClass} />
+                  </Field>
+                  <Field label="Correo" required htmlFor="alta-email" className="sm:col-span-2" hint="Es con lo que entra al CRM.">
+                    <input autoComplete="off" id="alta-email" name="email" type="email" required className={inputClass} />
+                  </Field>
+                  <Field label="DNI / NIF" htmlFor="alta-dni">
+                    <input autoComplete="off" id="alta-dni" name="dniNif" className={inputClass} />
+                  </Field>
+                  <Field label="Teléfono" htmlFor="alta-tel">
+                    <input autoComplete="off" id="alta-tel" name="telefono" className={inputClass} />
+                  </Field>
+                  <Field label="IBAN" htmlFor="alta-iban" className="sm:col-span-2" hint="Donde se le paga. Puedes dejarlo para más adelante.">
+                    <input autoComplete="off" id="alta-iban" name="iban" placeholder="ES00 0000 0000 0000 0000 0000"
+                      className={`${inputClass} tabular-nums`} />
+                  </Field>
+                </FilaCampos>
               </section>
 
               <section className="space-y-2 border-t border-border pt-4">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cómo entra</h3>
+                {/* La casilla tenía solo el título del apartado y el texto gris: se
+                    veía que era la contraseña solo por el ejemplo (#106). */}
+                <Field label="Contraseña" required={sinCorreos} htmlFor="alta-clave"
+                  hint={sinCorreos
+                    ? 'No se le manda ningún correo: entra con esta contraseña. Cópiala y pásasela tú antes de dar de alta, porque después no se puede volver a ver.'
+                    : contrasena
+                      ? 'Entra ya con esa contraseña. Cópiala antes de dar de alta — después no se puede volver a ver.'
+                      : 'Si la dejas vacía se le manda un correo para que la ponga él. Con contraseña entra al momento.'}>
                 <div className="flex gap-2">
-                  <input value={contrasena} onChange={(e) => { setContrasena(e.target.value); setCopiada(false); }}
-                    type="text" minLength={8} autoComplete="new-password" placeholder="Contraseña (mínimo 8)"
-                    className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm" />
+                  <input id="alta-clave" value={contrasena} onChange={(e) => { setContrasena(e.target.value); setCopiada(false); }}
+                    type="text" minLength={8} required={sinCorreos} autoComplete="new-password" placeholder="Mínimo 8 caracteres"
+                    className={`${inputClass} flex-1 min-w-0`} />
                   <Button type="button" variant="outline" size="sm"
                     onClick={() => { setContrasena(generarContrasena()); setCopiada(false); }}>
                     <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> Generar
                   </Button>
                   <Button type="button" variant="outline" size="sm" disabled={!contrasena}
                     onClick={() => { navigator.clipboard?.writeText(contrasena); setCopiada(true); }}>
-                    {copiada ? <CheckCircle size={14} weight="fill" className="text-emerald-600" /> : <Copy size={14} weight="bold" />}
+                    {copiada ? <CheckCircle size={14} weight="fill" className="text-success" /> : <Copy size={14} weight="bold" />}
                   </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {contrasena
-                    ? 'Entra ya con esa contraseña. Cópiala antes de dar de alta — después no se puede volver a ver.'
-                    : 'Si la dejas vacía se le manda un correo para que la ponga él, y eso necesita que Brevo esté configurado. Con contraseña entra al momento.'}
-                </p>
+                </Field>
               </section>
 
-              {projects.length > 1 && (
+              {/* Las marcas de lo que hay arriba (#219, Diego 05/11): con una
+                  empresa, solo sus campus, igual que el desplegable «Campus»
+                  (#346). Una marca que ya tuviera de otra empresa no se pierde:
+                  sigue en `marcas`, solo no se ofrece aquí. */}
+              {campus.length > 1 && (
                 <section className="space-y-2 border-t border-border pt-4">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <h3 className="text-tabla uppercase text-muted-foreground">
                     En qué marcas da clase
                   </h3>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="px-1 text-secundario text-muted-foreground">
                     Solo podrá cobrar de cursos de las marcas que marques aquí.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {projects.map((p) => {
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="En qué marcas da clase">
+                    {campus.map((p) => {
                       const puesta = marcas.includes(p.id);
                       return (
                         <button key={p.id} type="button"
@@ -708,45 +1295,43 @@ export default function TutoresPage() {
 
               <section className="space-y-2 border-t border-border pt-4">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Sus cursos</h3>
+                  <h3 className="text-tabla uppercase text-muted-foreground">Sus cursos</h3>
                   {cursosAlta.length > 0 && (
-                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                    <span className="text-secundario text-muted-foreground tabular-nums">
                       {cursosAlta.length} {cursosAlta.length === 1 ? 'curso' : 'cursos'}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="px-1 text-secundario text-muted-foreground">
                   Puedes añadirle todos los que dé. Cada uno con su porcentaje y desde cuándo lo lleva.
                 </p>
 
-                <div className="grid grid-cols-[minmax(0,1fr)_5rem_9.5rem_auto] gap-2 items-end">
-                  <label className="text-[11px] text-muted-foreground min-w-0">
-                    Curso
-                    <div className="mt-1">
-                      <BuscadorEnLista
-                        opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
-                        comoDinero
-                        placeholder="Escribe para buscar un curso…"
-                        sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
-                        valor={nuevoCurso ? Number(nuevoCurso) : null}
-                        onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
-                        excluir={cursosAlta.map((c) => c.productId)}
-                      />
-                    </div>
-                  </label>
-                  <label className="text-[11px] text-muted-foreground">
-                    %
-                    <input type="number" step="0.5" min="0" max="100" value={nuevoPct}
+                {/* En el móvil no caben cuatro columnas: el curso va arriba, el
+                    porcentaje y la fecha debajo, y «Añadir» a lo ancho (#106). */}
+                <div className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_6rem_9.5rem_auto] gap-fila items-end">
+                  <Field label="Curso" htmlFor="alta-curso" className="col-span-2 sm:col-span-1">
+                    <BuscadorEnLista
+                      id="alta-curso"
+                      opciones={formacionesAlta.map((f) => ({ ...f, nota: f.precio }))}
+                      comoDinero
+                      placeholder={campusAlta ? 'Escribe para buscar un curso…' : 'Elige antes el campus'}
+                      sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta."
+                      valor={nuevoCurso ? Number(nuevoCurso) : null}
+                      onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
+                      excluir={cursosAlta.map((c) => c.productId)}
+                    />
+                  </Field>
+                  <Field label="%" htmlFor="alta-curso-pct">
+                    <input autoComplete="off" id="alta-curso-pct" type="number" step="0.5" min="0" max="100" value={nuevoPct}
                       onChange={(e) => setNuevoPct(e.target.value)}
-                      className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm tabular-nums" />
-                  </label>
-                  <label className="text-[11px] text-muted-foreground">
-                    Lo lleva desde
-                    <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
-                      className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
-                  </label>
+                      className={`${inputClass} tabular-nums`} />
+                  </Field>
+                  <Field label="Lo lleva desde" htmlFor="alta-curso-desde">
+                    <input id="alta-curso-desde" type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
+                      className={inputClass} />
+                  </Field>
                   <Button type="button" variant="outline" size="sm" disabled={!nuevoCurso}
-                    onClick={anadirCursoAlAlta} className="h-9">
+                    onClick={anadirCursoAlAlta} className="h-9 col-span-2 sm:col-span-1">
                     <Plus size={14} weight="bold" className="mr-1" /> Añadir
                   </Button>
                 </div>
@@ -757,13 +1342,13 @@ export default function TutoresPage() {
                       <li key={c.productId} className="flex items-center gap-3 px-3 py-2 text-sm bg-muted/30">
                         <div className="min-w-0 flex-1">
                           <p className="truncate">{formaciones.find((fo) => fo.id === c.productId)?.nombre}</p>
-                          <p className="text-[11px] text-muted-foreground tabular-nums">
+                          <p className="text-secundario text-muted-foreground tabular-nums">
                             desde el {enCastellano(c.desde)}
                           </p>
                         </div>
                         <span className="tabular-nums font-semibold shrink-0">{c.pct} %</span>
                         <button type="button" aria-label="Quitar"
-                          className="text-muted-foreground hover:text-red-600 shrink-0"
+                          className="text-muted-foreground hover:text-destructive shrink-0"
                           onClick={() => setCursosAlta((prev) => prev.filter((x) => x.productId !== c.productId))}>
                           <Trash size={14} weight="bold" />
                         </button>
@@ -772,13 +1357,15 @@ export default function TutoresPage() {
                   </ul>
                 ) : (
                   <p className="text-xs text-muted-foreground border border-dashed border-border rounded-md px-3 py-3 text-center">
-                    Sin cursos todavía. Mientras no tenga ninguno, no genera comisión.
+                    {nuevoCurso
+                      ? 'El curso elegido se le asigna al darle de alta, aunque no pulses «Añadir».'
+                      : 'Sin cursos todavía. Mientras no tenga ninguno, no genera comisión.'}
                   </p>
                 )}
 
                 {ajustes && (
-                  <p className="text-[11px] text-muted-foreground flex gap-1.5">
-                    <Warning size={13} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
+                  <p className="px-1 text-secundario text-muted-foreground flex gap-1.5">
+                    <Warning size={13} weight="fill" className="text-warning shrink-0 mt-0.5" />
                     <span>
                       Aunque pongas una fecha anterior, no se paga nada cobrado antes del{' '}
                       <strong className="tabular-nums">{enCastellano(String(ajustes.aplica_desde).slice(0, 10))}</strong>,
@@ -802,48 +1389,63 @@ export default function TutoresPage() {
       {/* Añadir formación */}
       {popupColab && elegido && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupColab(false)}>
-          <form onSubmit={altaColaboracion} onClick={(e) => e.stopPropagation()}
-            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md p-4 space-y-3">
+          <form onSubmit={altaColaboracion} onClick={(e) => e.stopPropagation()} noValidate
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-lg p-4 space-y-3">
+            {/* max-w-lg: con max-w-md, las tres fechas no cabían y «Hasta» salía
+                cortada, con el calendario encima (visto en la prueba a mano). */}
             <div className="flex items-start justify-between gap-3">
               <h2 className="font-bold">Formación de {elegido.nombre}</h2>
-              <button type="button" onClick={() => setPopupColab(false)} className="text-muted-foreground hover:text-foreground">
+              <button type="button" onClick={() => setPopupColab(false)} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground">
                 <X size={16} weight="bold" />
               </button>
             </div>
 
-            {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir. */}
-            <BuscadorEnLista
-              opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
-              comoDinero
-              placeholder="Escribe para buscar un curso…"
-              sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
-              valor={cursoColab}
-              onElegir={setCursoColab}
-              excluir={colabs.map((c) => c.product_id)}
-              autoFocus
-            />
+            {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir.
+                Y `excluir` solo esconde las que YA rigen. Antes las escondia todas,
+                y una formacion desactivada por error quedaba sin salida: no salia
+                aqui para volver a añadirla, y en su fila solo habia «Quitar» —que
+                se lleva por delante el historico—. El mensaje ademas mentia: decia
+                «ningun curso con ese nombre» mientras la tabla de al lado lo
+                estaba enseñando. */}
+            {/* Con su etiqueta, como en «Nuevo tutor» (#106). Las de todos los
+                campus de quien asigna, cada una con el suyo a la derecha (#384).
+                Una de un campus en el que el tutor no está se puede elegir: al
+                guardar se pregunta si añadirlo a ese campus. */}
+            <Field label="Curso" required htmlFor="colab-curso">
+              <BuscadorEnLista
+                id="colab-curso"
+                opciones={formacionesColab ?? []}
+                placeholder={formacionesColab ? 'Escribe para buscar un curso o un campus…' : 'Cargando las formaciones…'}
+                sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta."
+                valor={cursoColab}
+                onElegir={setCursoColab}
+                excluir={lasQueYaRigen(colabs)}
+                yaEstaFuera="«{nombre}» ya la tiene asignada y activa. Para cambiar el porcentaje o las fechas, edítala desde su tabla."
+                autoFocus
+              />
+            </Field>
             <input type="hidden" name="productId" value={cursoColab ?? ''} />
+            {elegido.marcas && (
+              <p className="text-[11px] text-muted-foreground">
+                Está en: {elegido.marcas}. Si eliges una de otro campus, te preguntaremos si añadirlo.
+              </p>
+            )}
 
-            <div className="grid grid-cols-3 gap-2">
-              <label className="text-xs text-muted-foreground">
-                Porcentaje
-                <input name="pct" type="number" step="0.5" min="0" max="100" defaultValue="10" required
-                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                Desde
-                <input name="desde" type="date" defaultValue={hoy()} required
-                  className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                Hasta
-                <input name="hasta" type="date"
-                  className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
-              </label>
-            </div>
+            <FilaCampos columnas={3}>
+              <Field label="Porcentaje" required htmlFor="colab-pct">
+                <input autoComplete="off" id="colab-pct" name="pct" type="number" step="0.5" min="0" max="100" defaultValue="10" required
+                  className={inputClass} />
+              </Field>
+              <Field label="Desde" required htmlFor="colab-desde">
+                <input id="colab-desde" name="desde" type="date" defaultValue={hoy()} required className={inputClass} />
+              </Field>
+              <Field label="Hasta" htmlFor="colab-hasta">
+                <input id="colab-hasta" name="hasta" type="date" className={inputClass} />
+              </Field>
+            </FilaCampos>
 
-            <p className="text-xs text-muted-foreground flex gap-1.5">
-              <Warning size={14} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
+            <p className="px-1 text-secundario text-muted-foreground flex gap-1.5">
+              <Warning size={14} weight="fill" className="text-warning shrink-0 mt-0.5" />
               <span>
                 <strong>Desde</strong> es el día que empezó con esta formación, no el de hoy si ya llevaba
                 tiempo. Cobra los pagos a partir de esa fecha — y nunca antes del arranque general del módulo.
@@ -856,6 +1458,23 @@ export default function TutoresPage() {
           </form>
         </div>
       )}
+
+      {/* La formación es de un campus en el que no está (#384). */}
+      <ConfirmDialog
+        open={!!otroCampus && !!elegido}
+        title={`Esta tutora no está en ${otroCampus?.campus.proyecto || 'ese campus'}`}
+        message={otroCampus && elegido ? (
+          <>
+            «{otroCampus.formacion}» es de <strong>{otroCampus.campus.proyecto || 'otro campus'}</strong>. ¿Quieres añadirla a
+            este campus? {elegido.nombre} queda en {otroCampus.campus.proyecto || 'ese campus'} con esta formación asignada: las
+            dos cosas a la vez.
+          </>
+        ) : null}
+        confirmLabel={`Añadir a ${otroCampus?.campus.proyecto || 'ese campus'}`}
+        loading={guardando}
+        onConfirm={anadirAlCampusYAsignar}
+        onCancel={() => setOtroCampus(null)}
+      />
 
       {popupClave && elegido && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -872,24 +1491,33 @@ export default function TutoresPage() {
             <p className="text-xs text-muted-foreground">
               Para <strong>{elegido.nombre}</strong>. Cópiala y pásasela: no se le manda ningún correo.
             </p>
+            <Field label="Nueva contraseña" htmlFor="clave-nueva">
             <div className="flex gap-1.5">
-              <input value={claveNueva} onChange={(e) => { setClaveNueva(e.target.value); setClaveCopiada(false); }}
-                className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono min-w-0" />
+              <input id="clave-nueva" value={claveNueva} onChange={(e) => { setClaveNueva(e.target.value); setClaveCopiada(false); }}
+                autoComplete="new-password"
+                className={`${inputClass} flex-1 font-mono min-w-0`} />
               <Button type="button" variant="outline" size="sm" aria-label="Generar otra"
-                onClick={() => { setClaveNueva(generarContrasena()); setClaveCopiada(false); }}>
+                onClick={() => { const c = generarContrasena(); setClaveNueva(c); setClaveRepetida(c); setClaveCopiada(false); }}>
                 <ArrowsClockwise size={14} weight="bold" />
               </Button>
               <Button type="button" variant="outline" size="sm" aria-label="Copiar"
                 onClick={() => { navigator.clipboard?.writeText(claveNueva); setClaveCopiada(true); }}>
-                {claveCopiada ? <CheckCircle size={14} weight="fill" className="text-green-600" /> : <Copy size={14} weight="bold" />}
+                {claveCopiada ? <CheckCircle size={14} weight="fill" className="text-success" /> : <Copy size={14} weight="bold" />}
               </Button>
             </div>
-            {claveNueva.length < 8 && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                Necesita al menos 8 caracteres.
+            </Field>
+            {/* Repetida, como en «Establece tu contraseña» (#248). La generada ya la rellena. */}
+            <Field label="Repite la contraseña" htmlFor="clave-repetida">
+              <input id="clave-repetida" value={claveRepetida} onChange={(e) => setClaveRepetida(e.target.value)}
+                autoComplete="new-password"
+                className={`${inputClass} font-mono`} />
+            </Field>
+            {problemaDeContrasena(claveNueva, claveRepetida) && (
+              <p className="px-1 text-secundario text-warning-soft-foreground">
+                {problemaDeContrasena(claveNueva, claveRepetida)}
               </p>
             )}
-            <Button className="w-full" disabled={procesando || claveNueva.length < 8} onClick={guardarClave}>
+            <Button className="w-full" disabled={procesando || Boolean(problemaDeContrasena(claveNueva, claveRepetida))} onClick={guardarClave}>
               {procesando ? 'Cambiando…' : 'Cambiar la contraseña'}
             </Button>
           </div>

@@ -11,7 +11,7 @@
 //   - orden (recent, facturado, cobrado, pendiente, nombre)
 
 import { useEffect, useRef, useState } from 'react';
-import { Funnel, MagnifyingGlass, X, CaretDown } from '@phosphor-icons/react';
+import { Funnel, X, CaretDown } from '@phosphor-icons/react';
 
 interface Gestor { id: number; nombre: string }
 interface Producto { id: number; nombre: string }
@@ -31,14 +31,14 @@ interface Props {
   filteredCount: number;
 }
 
-const ESTADO_PAGO_LABELS: Record<string, string> = {
+export const ESTADO_PAGO_LABELS: Record<string, string> = {
   pagado: 'Pagados',
   parcial: 'Pago parcial',
   sin_pagar: 'Sin pagar',
   sin_ventas: 'Sin compras registradas',
 };
 
-const SORT_LABELS: Record<string, string> = {
+export const SORT_LABELS: Record<string, string> = {
   recent: 'Más reciente',
   facturado: 'Más facturado',
   cobrado: 'Más cobrado',
@@ -117,20 +117,8 @@ export default function ClientsFiltersBar(props: Props) {
         {open && (
           <div className="absolute left-0 top-full mt-2 z-40 w-[min(540px,calc(100vw-2rem))] bg-card border border-border rounded-lg shadow-xl overflow-hidden">
             <div className="max-h-[70vh] overflow-y-auto">
-              {/* Búsqueda */}
-              <Section title="Búsqueda">
-                <div className="relative">
-                  <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Nombre, email o teléfono…"
-                    className="w-full h-9 pl-9 pr-3 rounded-md border border-border bg-muted/40 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              </Section>
-
+              {/* Sin buscador aquí: ya está en la fila de arriba, y dos buscadores
+                  eran dos sitios donde escribir y dos que limpiar. */}
               {/* Filtros principales */}
               <Section title="Filtros principales">
                 {isAdmin && (

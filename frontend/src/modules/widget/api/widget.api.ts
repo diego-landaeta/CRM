@@ -10,6 +10,8 @@ export interface WidgetConfig {
   excluded_user_ids: number[];
   show_bubble: boolean;
   bubble_delay_ms: number;
+  /** Los otros idiomas (12/10): vacío = el texto por defecto de ese idioma. */
+  traducciones?: Partial<Record<'en' | 'fr' | 'pt', { welcome?: string; template?: string }>>;
   updated_at: string;
 }
 
@@ -25,7 +27,32 @@ export interface CandidateUser {
   in_project: boolean;
 }
 
+/** Las cifras del botón por gestora (widget.pulsaciones.js). */
+export interface PulsacionesDeGestora {
+  id: number;
+  nombre: string;
+  pulsaciones: number;
+  /** Altas que dio ella con origen WhatsApp. */
+  altas: number;
+  /** De esas altas, las que tienen una pulsación suya de las 24 h anteriores. */
+  con_pulsacion: number;
+}
+export interface AmbitoPulsaciones { projectId?: number | null; issuerId?: number | null }
+export interface ResumenPulsaciones {
+  from: string;
+  to: string;
+  porGestora: PulsacionesDeGestora[];
+  paginas: { pagina: string; pulsaciones: number; con_alta: number }[];
+}
+
 export const widgetApi = {
+  /** Un campus, una empresa o, sin ninguno, todos los campus que ve quien mira. */
+  pulsaciones: (ambito: AmbitoPulsaciones, from: string, to: string) =>
+    client.get<ResumenPulsaciones>(`/widget/pulsaciones?${new URLSearchParams({
+      ...(ambito.projectId ? { projectId: String(ambito.projectId) } : {}),
+      ...(ambito.issuerId ? { issuerId: String(ambito.issuerId) } : {}),
+      from, to,
+    })}`),
   getConfig: (projectId: number) =>
     client.get<{ config: WidgetConfig; candidates: CandidateUser[] }>(`/widget/config?projectId=${projectId}`),
   updateConfig: (body: Partial<WidgetConfig> & { projectId: number }) =>

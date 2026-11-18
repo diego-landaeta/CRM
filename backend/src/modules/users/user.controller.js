@@ -1,9 +1,31 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema } from './user.validation.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, buscarUsersSchema } from './user.validation.js';
+import { veTodoElCrm, campusDeLaPersona, campusParaRecortar } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import crypto from 'crypto';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
+
+/**
+ * A quién ve en Usuarios quien pregunta (Diego, 04/11: «el project manager ve
+ * todo», de sus campus). Quien solo VE la lista —sin «Editar usuarios»— la ve de
+ * la gente de sus campus; quien la administra, como hasta hoy. `null` = sin recorte.
+ */
+export async function campusDeLaLista(req) {
+  if (veTodoElCrm(req.user) || await tienePermiso(req, 'users.edit')) return null;
+  return campusParaRecortar(req);
+}
+
+/** La ficha de otra persona, si la lista se le recorta: solo si comparten campus. */
+export async function exigirPersonaDeSusCampus(req, id) {
+  if (Number(id) === Number(req.user?.userId)) return;
+  const campus = await campusDeLaLista(req);
+  if (!campus) return;
+  const suyos = await campusDeLaPersona(id);
+  if (!suyos.some((c) => campus.includes(c))) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+}
 
 export async function list(req, res, next) {
   try {
@@ -11,7 +33,9 @@ export async function list(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await userService.list(parsed.data);
+    const { alcance, ...filtros } = parsed.data;
+    const soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    const result = await userService.list({ ...filtros, campus: await campusDeLaLista(req), soloIds });
     res.json({
       success: true,
       data: result.users,
@@ -20,12 +44,42 @@ export async function list(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/users/buscar?q=&projectIds= — el buscador (Ctrl K, #591).
+ *
+ * Una ruta aparte para no cambiar la lista de Configuración. Superadmin y
+ * soporte encuentran a cualquiera; el resto, solo a quien comparte alguno de
+ * sus campus (y, si la cabecera acota, dentro de esos).
+ */
+export async function buscar(req, res, next) {
+  try {
+    const parsed = buscarUsersSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const { q, projectIds, limit } = parsed.data;
+    let campus = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user?.userId);
+    if (projectIds?.length) campus = campus ? projectIds.filter((id) => campus.includes(id)) : projectIds;
+    if (campus && !campus.length) campus = [-1];
+    res.json({ success: true, data: await userModel.buscar({ q, campus, limit }) });
+  } catch (err) { next(err); }
+}
+
 export async function getById(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
     const user = await userService.getById(id);
     res.json({ success: true, data: user });
+  } catch (err) { next(err); }
+}
+
+/** Los roles que quien pregunta puede dar en un alta, y si no, qué le falta (Tony, 03/11). */
+export async function rolesAsignables(req, res, next) {
+  try {
+    const { rolesAsignables: calcular } = await import('../permissions/permissions.editar.js');
+    res.json({ success: true, data: await calcular(req.user) });
   } catch (err) { next(err); }
 }
 
@@ -35,7 +89,32 @@ export async function create(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const user = await userService.create(parsed.data);
+    // La empresa entera (#220), solo el super admin. Crear y editar usuarios
+    // sigue como estaba —esto no lo amplia ni lo recorta—, pero dar una empresa
+    // es dar los campus que se creen mañana, y eso no lo decide un admin, ni
+    // para otro ni para si mismo. Se mira el rol del token, no la pantalla.
+    if (parsed.data.empresaIds?.length && !(await tienePermiso(req, 'users.empresas'))) {
+      throw new AppError('Solo un superadmin puede dar una empresa entera', 403, 'FORBIDDEN');
+    }
+    // Dar de alta con un rol es darle ese rol: nadie da lo que no tiene (QA de Diego, punto 7).
+    const { exigirQueNoDeMasDeLoQueTiene } = await import('../permissions/permissions.editar.js');
+    await exigirQueNoDeMasDeLoQueTiene(req.user, null, { role: parsed.data.role, roles_extra: parsed.data.roles_extra || [] });
+    // #694: sus excepciones, ya en el alta. Se comprueban antes de crear nada
+    // (mismas reglas que en su ficha) y se guardan en la misma operación.
+    const { excepciones = {}, ...datos } = parsed.data;
+    const hayExcepciones = Object.keys(excepciones).length > 0;
+    const editar = hayExcepciones ? await import('../permissions/permissions.editar.js') : null;
+    if (hayExcepciones) {
+      if (!(await tienePermiso(req, 'users.excepciones'))) {
+        throw new AppError('Poner excepciones de permisos es «Permisos de cada persona»', 403, 'FORBIDDEN');
+      }
+      await editar.exigirExcepcionesDeAlta(req.user,
+        { role: datos.role, roles_extra: datos.roles_extra || [], projectIds: editar.campusDelAlta(datos) }, excepciones);
+    }
+    const user = await userService.create(datos, {
+      porUserId: req.user?.userId ?? null,
+      alCrear: hayExcepciones ? (u) => editar.guardarExcepciones(u.id, excepciones, req.user, { origen: 'alta_usuario' }) : null,
+    });
     res.status(201).json({ success: true, data: user });
   } catch (err) { next(err); }
 }
@@ -48,9 +127,51 @@ export async function update(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // El correo de otro, solo el super admin (#248). Un admin que lo mande se
+    // lleva un 403 aunque la pantalla no se lo ofrezca: no basta con ocultarlo.
+    const { email, reenviarEnlace, ...resto } = parsed.data;
+    if (email !== undefined && !(await tienePermiso(req, 'users.empresas'))) {
+      throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
+    }
+    // Las empresas enteras (#220), lo mismo: solo el super admin, y también
+    // para quitarlas (una lista vacía).
+    if (resto.empresaIds !== undefined && !(await tienePermiso(req, 'users.empresas'))) {
+      throw new AppError('Solo un superadmin puede dar o quitar una empresa entera', 403, 'FORBIDDEN');
+    }
+
     // Como estaba ANTES, para saber si pierde el acceso a WhatsApp.
     const antes = await userService.getById(id).catch(() => null);
-    const user = await userService.update(id, parsed.data);
+    // El rol, los roles de más y «se dedica a colaboraciones» deciden lo que
+    // puede hacer: si CAMBIAN, con las mismas reglas que sus permisos en la
+    // ficha (#423). Antes, admin y soporte se los cambiaban a cualquiera, sin
+    // mirar campus. La pantalla manda el rol siempre: lo que cuenta es que cambie.
+    const mismaLista = (a, b) => [...(a || [])].sort().join() === [...(b || [])].sort().join();
+    const cambiaQuienEs = antes && (
+      (resto.role !== undefined && resto.role !== antes.role)
+      || (resto.roles_extra !== undefined && !mismaLista(resto.roles_extra, antes.roles_extra))
+      || (resto.gestor_colaboraciones !== undefined && resto.gestor_colaboraciones !== !!antes.gestor_colaboraciones));
+    if (cambiaQuienEs) {
+      if (!(await tienePermiso(req, 'users.excepciones'))) {
+        throw new AppError('Cambiar el rol de alguien es «Permisos de cada persona»', 403, 'FORBIDDEN');
+      }
+      const { exigirQuePuedaTocarA, exigirQueNoDeMasDeLoQueTiene } = await import('../permissions/permissions.editar.js');
+      await exigirQuePuedaTocarA(req.user, id);
+      // Y nada de lo que gane puede faltarle a quien lo cambia (QA, punto 7).
+      await exigirQueNoDeMasDeLoQueTiene(req.user, id, { role: resto.role, roles_extra: resto.roles_extra });
+    }
+    // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
+    // Al momento y sin código (Diego, 06/11, #688): el código es solo para quien
+    // cambia el suyo desde «Mi perfil».
+    const correo = email !== undefined
+      ? await userService.cambiarCorreo(id, email, {
+        reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
+        // El rol con el que se va a guardar, para el freno de tutores (#262).
+        rolFinal: resto.role ?? null,
+      })
+      : null;
+    const user = Object.keys(resto).length
+      ? await userService.update(id, resto, { porUserId: req.user?.userId ?? null })
+      : await userService.getById(id);
 
     // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
     // sus conversaciones se quedan. El numero es suyo y no puede seguir
@@ -64,7 +185,13 @@ export async function update(req, res, next) {
       wa.alPerderAcceso(id, `cambio de rol: ${antes.role} -> ${user.role}`).catch(() => {});
     }
 
-    res.json({ success: true, data: user });
+    // Sus permisos se recuerdan medio minuto (también «Usar su WhatsApp», que el
+    // chat pregunta cada tres segundos). Se olvidan aquí para que el cambio se
+    // note al momento. OJO: quitarle WhatsApp NO desvincula el número; eso solo
+    // pasa cuando deja de PODER tenerlo, que es el bloque de arriba.
+    (await import('../permissions/permissions.service.js')).olvidarPermisos(id);
+
+    res.json({ success: true, data: correo ? { ...user, correo } : user });
   } catch (err) { next(err); }
 }
 
@@ -97,13 +224,35 @@ export async function setPassword(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // El super admin, a cualquiera. El admin, solo a un TUTOR de sus campus (Diego,
+    // 09/10, #246: «sí, y admin»). A nadie más: ni a una gestora ni a otro admin.
+    // Quién puede: la ruta pide «Contraseña de otros» (#423). A quién: el
+    // superadmin, a cualquiera; el resto, solo a tutores de sus campus.
     if (req.user?.role !== 'superadmin') {
-      throw new AppError('Solo un superadmin puede cambiar la contraseña de otro usuario', 403, 'FORBIDDEN');
+      const destino = await userModel.findById(id);
+      if (!destino || destino.role !== 'tutor') {
+        throw new AppError('Un admin solo puede cambiar la contraseña de un tutor', 403, 'FORBIDDEN');
+      }
+      const { campusDeLaPersona } = await import('../../shared/utils/ambito.js');
+      const { tieneAlgunCampus } = await import('../tutores/tutor.model.js');
+      if (!(await tieneAlgunCampus(id, await campusDeLaPersona(req.user.userId)))) {
+        throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
+      }
     }
     const parsed = adminSetPasswordSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    await userService.setPassword(id, parsed.data.password);
+    await userService.setPassword(id, parsed.data.password, { porUserId: req.user.userId, ip: req.ip });
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+// GET /api/users/:id/aviso-correo — antes de cambiar el correo de alguien, si
+// recibe prospectos por Make (#248). Solo super admin, como el cambio.
+export async function avisoCorreo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    res.json({ success: true, data: await userService.avisoCambioCorreo(id) });
   } catch (err) { next(err); }
 }
 
@@ -197,12 +346,37 @@ export async function deleteAvatar(req, res, next) {
 const AVISOS = [
   { aviso: 'lead_sin_tocar', titulo: 'Prospecto sin contactar',
     detalle: 'Cuando te asignan uno y pasa media hora sin que lo toques.' },
-  { aviso: 'resumen_del_dia', titulo: 'Resumen del dia',
-    detalle: 'Al cerrar la jornada: que ha entrado, que has hecho y que queda.' },
-  { aviso: 'plan_de_manana', titulo: 'Plan de mañana',
-    detalle: 'Por la noche, lo que te espera al dia siguiente.' },
-  { aviso: 'reporte_semanal', titulo: 'Reporte semanal',
-    detalle: 'Los lunes: como fue la semana comparada con la anterior. Solo administracion.' },
+  { aviso: 'resumen_del_dia', titulo: 'Resumen del día (dirección)',
+    detalle: 'Cada tarde, por empresa: prospectos, ventas, cobrado y cada gestora. Solo administración.' },
+  { aviso: 'plan_de_manana', titulo: 'Tu día y lo de mañana',
+    detalle: 'Cada noche: lo que hiciste hoy, tu cola de mañana, tus recordatorios y cómo va tu mes.' },
+  { aviso: 'semana_gestora', titulo: 'Tu semana',
+    detalle: 'Los lunes: tus números de la semana, contra la anterior y la media del equipo, y tu puesto.' },
+  { aviso: 'reporte_semanal', titulo: 'Reporte semanal (dirección)',
+    detalle: 'Los lunes, por empresa: la semana contra la anterior y el ranking. Solo administración.' },
+  // Tablero de tareas (#210, fase 3). Los nombres, en tasks.emails.js.
+  { aviso: 'tarea_asignada', titulo: 'Tarea asignada',
+    detalle: 'Cuando alguien te asigna una tarea del tablero.' },
+  { aviso: 'tareas_del_dia', titulo: 'Tus tareas de hoy',
+    detalle: 'Cada mañana, si tienes tareas que vencen hoy o ya vencidas.' },
+  { aviso: 'tarea_devuelta', titulo: 'Tarea devuelta',
+    detalle: 'Cuando revisan una tarea tuya y la devuelven, con lo que falta.' },
+  { aviso: 'tarea_cerrada', titulo: 'Tarea aprobada',
+    detalle: 'Cuando aprueban una tarea tuya y pasa a «Hecha».' },
+  { aviso: 'tarea_comentario', titulo: 'Comentario en tu tarea',
+    detalle: 'Cuando alguien comenta en una tarea que tienes asignada.' },
+  // Cursos pendientes (#336), en cursos-pendientes.correos.js.
+  { aviso: 'cursos_pendientes', titulo: 'Cursos pendientes',
+    detalle: 'Cuando te asignan un curso, se acerca o pasa su fecha, o hay alumnas sin habilitar; y el resumen de los lunes (super admin).' },
+  { aviso: 'tarea_supervisor', titulo: 'Tarea que supervisas',
+    detalle: 'Cuando te ponen de supervisor de una tarea y cuando está lista para revisar.' },
+  { aviso: 'tarea_estado', titulo: 'Cambio de estado de una tarea',
+    detalle: 'Cuando cambia de estado una tarea que llevas, supervisas o creaste (si se mueve varias veces seguidas, un solo correo).' },
+  { aviso: 'tareas_resumen', titulo: 'Tu resumen de tareas',
+    detalle: 'De lunes a viernes por la tarde: lo que hiciste hoy en el tablero y lo que te falta.' },
+  // Consultas de alumnos (#769), en consultas.plazos.js. Solo administración.
+  { aviso: 'consulta_fuera_de_plazo', titulo: 'Consulta fuera de plazo',
+    detalle: 'Cuando la consulta de un alumno de tus campus pasa el plazo sin respuesta del tutor. Solo administración.' },
 ];
 
 export async function misAvisos(req, res, next) {
@@ -235,5 +409,32 @@ export async function cambiarMiAviso(req, res, next) {
         [req.user.userId, aviso]);
     }
     res.json({ success: true, data: { aviso, encendido: Boolean(encendido) } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/users/brevo-bloqueos — quién del equipo tiene el correo bloqueado en
+ * Brevo (migración 290), para la marca de la lista y de la ficha. Con el mismo
+ * recorte que la lista. `activo` dice si la vigilancia está encendida: apagada,
+ * el botón de desbloquear no tiene sentido.
+ */
+export async function brevoBloqueos(req, res, next) {
+  try {
+    const { abiertos } = await import('./brevo-bloqueos.js');
+    const { bloqueadosActivo } = await import('../../shared/services/brevo-bloqueados.service.js');
+    const activo = bloqueadosActivo();
+    const bloqueos = activo ? await abiertos({ campus: await campusDeLaLista(req) }) : [];
+    res.json({ success: true, data: { activo, bloqueos } });
+  } catch (err) { next(err); }
+}
+
+/** DELETE /api/users/:id/brevo-bloqueo — «Desbloquear en Brevo» (permiso users.brevo_desbloquear). */
+export async function desbloquearBrevo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
+    const { desbloquear } = await import('./brevo-bloqueos.js');
+    res.json({ success: true, data: await desbloquear({ userId: id, porQuien: req.user?.userId }) });
   } catch (err) { next(err); }
 }

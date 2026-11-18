@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, CalendarBlank, Plus, Trash, CheckCircle, Coins } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
+import Select from '@/shared/components/ui/Select';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
 interface Installment {
@@ -13,6 +14,10 @@ interface Installment {
   importe_cobrado?: number | null;
   metodo?: string | null;
   metodo_pago?: string | null;
+  // La forma de pago y la referencia del COBRO de la cuota (una cuota saldada
+  // con un abono no siempre tiene su propio `metodo`).
+  pago_metodo?: string | null;
+  pago_referencia?: string | null;
   concepto?: string | null;
   factura_id?: number | null;
   factura_codigo?: string | null;
@@ -24,6 +29,9 @@ interface Props {
   onClose: () => void;
   onSaved?: () => void;
 }
+
+// Los conceptos de siempre; también se puede escribir otro.
+const CONCEPTOS_CUOTA = ['Mensualidad', 'Matrícula', 'Cuota del curso', 'Materiales', 'Certificado', 'Reserva de plaza'];
 
 // Diálogo para gestionar las cuotas de una conversión.
 // - Si la conversión es de pago único: ofrece "Convertir a fraccionado" (N cuotas mensuales o personalizadas).
@@ -46,7 +54,22 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   const [payImporte, setPayImporte] = useState<string>('');
   const [payFecha, setPayFecha] = useState<string>('');
   const [payMetodo, setPayMetodo] = useState<string>('transferencia');
+  // Al editar, con qué forma de pago llegó: solo se manda si se cambia. Antes el
+  // desplegable salía en «Editar pago» pero no se guardaba; ahora sí, y cambiar
+  // una cuota A transferencia o depósito avisa al webhook de transferencias.
+  const [payMetodoInicial, setPayMetodoInicial] = useState<string>('');
+  const [payReferencia, setPayReferencia] = useState<string>('');
+  const [payReferenciaInicial, setPayReferenciaInicial] = useState<string>('');
   const [payingNow, setPayingNow] = useState(false);
+  // Edicion de una cuota que aun no se ha cobrado: fecha e importe.
+  //
+  // El endpoint existia desde el principio (PATCH /conversions/installments/:id)
+  // y hasta la funcion del cliente, pero ninguna pantalla lo llamaba: la lista
+  // solo dejaba cobrar o borrar. Una gestora que acordaba con el alumno cobrar
+  // el 25 y no el 21 no tenia donde ponerlo — tenia que borrar el plan entero y
+  // rehacerlo. Daniela, 21/09.
+  const [editDraft, setEditDraft] = useState<Record<number, { importe: string; fecha: string }>>({});
+  const [savingInst, setSavingInst] = useState<number | null>(null);
 
   async function load() {
     if (!conversion) return;
@@ -159,6 +182,48 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     }
   }
 
+  // Lo que hay escrito ahora mismo en la fila de una cuota: lo tocado por la
+  // gestora o, si no ha tocado nada, lo que hay guardado.
+  function draftDe(inst: Installment) {
+    return editDraft[inst.id!] ?? {
+      importe: String(inst.importe_previsto ?? ''),
+      fecha: String(inst.fecha_vencimiento || '').slice(0, 10),
+    };
+  }
+
+  function cambiada(inst: Installment) {
+    const d = draftDe(inst);
+    return Number(d.importe) !== Number(inst.importe_previsto)
+      || d.fecha !== String(inst.fecha_vencimiento || '').slice(0, 10);
+  }
+
+  async function handleSaveInstallment(inst: Installment) {
+    if (!inst.id) return;
+    const d = draftDe(inst);
+    const importe = Number(d.importe);
+    if (!isFinite(importe) || importe <= 0) {
+      toast({ title: 'Importe inválido', description: 'La cuota tiene que ser mayor que 0', variant: 'destructive' });
+      return;
+    }
+    if (!d.fecha) {
+      toast({ title: 'Falta la fecha', description: 'Pon la fecha de vencimiento', variant: 'destructive' });
+      return;
+    }
+    setSavingInst(inst.id);
+    try {
+      await conversionsApi.updateInstallment(inst.id, {
+        importe_previsto: importe,
+        fecha_vencimiento: d.fecha,
+      });
+      toast({ title: `Cuota #${inst.numero} guardada`, description: `${formatCurrency(importe)} · vence ${formatDate(d.fecha)}` });
+      setEditDraft((prev) => { const n = { ...prev }; delete n[inst.id!]; return n; });
+      onSaved?.();
+      await load();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSavingInst(null); }
+  }
+
   function handlePayInstallment(inst: Installment) {
     if (!inst.id) return;
     setPayingInst(inst);
@@ -166,6 +231,9 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     setPayImporte(String(inst.importe_previsto));
     setPayFecha(new Date().toISOString().slice(0, 10));
     setPayMetodo(inst.metodo || 'transferencia');
+    setPayMetodoInicial('');
+    setPayReferencia('');
+    setPayReferenciaInicial('');
   }
 
   function handleEditPaid(inst: Installment) {
@@ -174,7 +242,13 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     setPayMode('edit');
     setPayImporte(String(inst.importe_cobrado || inst.importe_previsto));
     setPayFecha((inst.fecha_cobro || '').slice(0, 10));
-    setPayMetodo(inst.metodo || 'transferencia');
+    // La del cobro, y si no hay, «Sin indicar»: proponer «transferencia» aquí
+    // la guardaría sin que nadie la eligiera.
+    const metodo = inst.pago_metodo || inst.metodo || '';
+    setPayMetodo(metodo);
+    setPayMetodoInicial(metodo);
+    setPayReferencia(inst.pago_referencia || '');
+    setPayReferenciaInicial(inst.pago_referencia || '');
   }
 
   async function handleUnpay(inst: Installment) {
@@ -203,11 +277,17 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     }
     setPayingNow(true);
     try {
+      const bancario = payMetodo === 'transferencia' || payMetodo === 'deposito';
+      const referencia = bancario && payReferencia.trim() ? payReferencia.trim() : null;
       if (payMode === 'edit') {
-        await conversionsApi.editPaidInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
+        await conversionsApi.editPaidInstallment(payingInst.id, {
+          importe_cobrado: importe, fecha_cobro: payFecha,
+          ...(payMetodo !== payMetodoInicial ? { metodo: payMetodo || null } : {}),
+          ...((referencia || '') !== payReferenciaInicial ? { referencia } : {}),
+        });
         toast({ title: 'Pago actualizado', description: `${importe}€ el ${payFecha}` });
       } else {
-        await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha, metodo: payMetodo });
+        await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha, metodo: payMetodo, referencia });
         toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
       }
       setPayingInst(null);
@@ -262,8 +342,44 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                     <div key={inst.id} className="p-3 flex items-center gap-3 text-sm">
                       <span className="font-bold text-muted-foreground w-8">#{inst.numero}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold tabular-nums">{formatCurrency(inst.importe_previsto)}</p>
-                        <p className="text-[11px] text-muted-foreground">Vence {formatDate(inst.fecha_vencimiento)}{inst.concepto ? ` · ${inst.concepto}` : ''}</p>
+                        {pagada ? (
+                          <>
+                            <p className="font-semibold tabular-nums">{formatCurrency(inst.importe_previsto)}</p>
+                            <p className="text-[11px] text-muted-foreground">Vence {formatDate(inst.fecha_vencimiento)}{inst.concepto ? ` · ${inst.concepto}` : ''}</p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <input
+                                type="number" step="0.01" min={0} value={draftDe(inst).importe}
+                                title="Importe de la cuota"
+                                onChange={(e) => setEditDraft((prev) => ({
+                                  ...prev, [inst.id!]: { ...draftDe(inst), importe: e.target.value },
+                                }))}
+                                className="w-24 h-8 px-2 rounded-md border border-border bg-muted/50 text-sm font-semibold tabular-nums"
+                              />
+                              <input
+                                type="date" value={draftDe(inst).fecha}
+                                title="Fecha de vencimiento"
+                                onChange={(e) => setEditDraft((prev) => ({
+                                  ...prev, [inst.id!]: { ...draftDe(inst), fecha: e.target.value },
+                                }))}
+                                className="h-8 px-2 rounded-md border border-border bg-muted/50 text-sm"
+                              />
+                              {cambiada(inst) && (
+                                <button
+                                  onClick={() => handleSaveInstallment(inst)}
+                                  disabled={savingInst === inst.id}
+                                  className="h-8 px-2.5 rounded-md bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 disabled:opacity-50">
+                                  {savingInst === inst.id ? 'Guardando…' : 'Guardar'}
+                                </button>
+                              )}
+                            </div>
+                            {inst.concepto && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{inst.concepto}</p>
+                            )}
+                          </>
+                        )}
                         {inst.factura_codigo && (
                           <button
                             onClick={async () => { const { invoicesApi } = await import('@/modules/invoices/api/invoices.api'); invoicesApi.openPdf(inst.factura_id!).catch(() => {}); }}
@@ -275,29 +391,29 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                       </div>
                       {pagada ? (
                         <>
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-400">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success-soft-foreground">
                             <CheckCircle size={14} weight="fill" /> {inst.fecha_cobro ? formatDate(inst.fecha_cobro) : 'Pagada'} · {formatCurrency(Number(inst.importe_cobrado || 0))}
                           </span>
                           <button onClick={() => handleEditPaid(inst)}
                             title="Editar pago (fecha o importe)"
-                            className="px-2 py-1 rounded-md text-[11px] font-semibold text-sky-700 hover:bg-sky-100 dark:hover:bg-sky-950/40">
+                            className="px-2 py-1 rounded-md text-[11px] font-semibold text-info-soft-foreground hover:bg-info-soft">
                             Editar
                           </button>
                           <button onClick={() => handleUnpay(inst)}
                             title="Deshacer el pago (vuelve a pendiente)"
-                            className="px-2 py-1 rounded-md text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-950/40">
+                            className="px-2 py-1 rounded-md text-[11px] font-semibold text-warning-soft-foreground hover:bg-warning-soft">
                             Deshacer
                           </button>
                         </>
                       ) : (
                         <>
                           <button onClick={() => handlePayInstallment(inst)}
-                            className="px-2.5 py-1 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90">
+                            className="px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90">
                             Marcar pagada
                           </button>
                           <button onClick={() => handleDeleteInstallment(inst)}
                             title="Eliminar cuota"
-                            className="p-1 text-muted-foreground hover:text-red-600"><Trash size={14} /></button>
+                            className="p-1 text-muted-foreground hover:text-destructive"><Trash size={14} /></button>
                         </>
                       )}
                     </div>
@@ -316,9 +432,22 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 Convierte esta conversión en pagos fraccionados. Las cuotas se distribuyen sobre el importe <strong>pendiente</strong> ({formatCurrency(pendiente)}).
               </p>
 
+              {/* Sin pendiente no hay nada que repartir: el borrador sale a 0 y
+                  al guardar saltaba «cuota incompleta», que no dice por que. */}
+              {pendiente <= 0 && (
+                <div className="border border-warning/30 bg-warning-soft rounded-md p-3">
+                  <p className="text-xs font-semibold text-warning-soft-foreground">
+                    Esta venta ya figura cobrada entera ({formatCurrency(Number(conversion.importe_pagado || 0))} de {formatCurrency(Number(conversion.importe_total))}), así que no queda nada que fraccionar.
+                  </p>
+                  <p className="text-[11px] text-warning-soft-foreground mt-1">
+                    Si el alumno va a pagar a plazos, deshaz primero el cobro desde la venta, o sube aquí arriba el importe total. Las cuotas se reparten sobre lo que queda pendiente, no sobre el total.
+                  </p>
+                </div>
+              )}
+
               {/* Editor de importe total para aplicar descuentos/becas */}
-              <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-md p-3">
-                <label className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-1 block">
+              <div className="border border-warning/30 bg-warning-soft rounded-md p-3">
+                <label className="text-[11px] font-semibold text-warning-soft-foreground mb-1 block">
                   ¿Aplicar descuento o beca? Modifica el importe total antes de fraccionar:
                 </label>
                 <div className="flex gap-2 items-center">
@@ -330,18 +459,18 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   <button
                     onClick={handleSaveTotal}
                     disabled={savingTotal || Number(totalDraft) === Number(conversion.importe_total)}
-                    className="h-9 px-3 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-50"
+                    className="h-9 px-3 rounded-md bg-warning text-warning-foreground text-xs font-semibold hover:bg-warning/90 disabled:opacity-50"
                   >
                     {savingTotal ? '...' : 'Actualizar total'}
                   </button>
                 </div>
-                <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
+                <p className="text-[10px] text-warning-soft-foreground mt-1">
                   Ejemplo: 30% de beca sobre 950€ → escribe <strong>665</strong>. Luego abajo las 6 cuotas sumarán ese nuevo total.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Nº de cuotas</label>
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Nº de cuotas</label>
                   <input
                     type="number" min={1} max={36} value={numCuotas}
                     onChange={(e) => setNumCuotas(Math.max(1, Math.min(36, Number(e.target.value) || 1)))}
@@ -349,28 +478,36 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Fecha primera cuota</label>
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha primera cuota</label>
                   <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)}
                     className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Concepto de las cuotas (opcional)</label>
-                <input
-                  list="conceptos-cuota" value={concepto}
-                  onChange={(e) => setConcepto(e.target.value)}
-                  placeholder="Elige uno o escribe el tuyo (otros)…"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
-                />
-                <datalist id="conceptos-cuota">
-                  <option value="Mensualidad" />
-                  <option value="Matrícula" />
-                  <option value="Cuota del curso" />
-                  <option value="Materiales" />
-                  <option value="Certificado" />
-                  <option value="Reserva de plaza" />
-                </datalist>
+                <label htmlFor="cuotas-concepto" className="mb-1.5 block px-1 text-secundario text-muted-foreground">Concepto de las cuotas (opcional)</label>
+                {/* Sin datalist: la lista del navegador tenía otro estilo y mezclaba
+                    lo escrito antes en otras casillas. Como el producto de Nueva
+                    venta: los de siempre en el desplegable y debajo, otro (#106). */}
+                <div className="space-y-1.5">
+                  <Select<string>
+                    value={CONCEPTOS_CUOTA.includes(concepto) ? concepto : ''}
+                    onChange={(v) => setConcepto(v)}
+                    options={[
+                      { value: '', label: 'Seleccionar o escribir abajo' },
+                      ...CONCEPTOS_CUOTA.map((c) => ({ value: c, label: c })),
+                    ]}
+                    ariaLabel="Concepto de las cuotas"
+                  />
+                  <input
+                    id="cuotas-concepto" value={concepto}
+                    onChange={(e) => setConcepto(e.target.value)}
+                    placeholder="Escribe o selecciona del listado"
+                    aria-label="Escribir el concepto"
+                    autoComplete="off"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
+                  />
+                </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Aparece en cada cuota. Predefinidos o texto libre.</p>
               </div>
 
@@ -385,7 +522,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                         next[i] = { ...next[i], importe_previsto: Number(e.target.value) || 0 };
                         setDraftInstallments(next);
                       }}
-                      className="flex-1 h-8 px-2 rounded-md border border-border bg-muted/50 text-sm tabular-nums"
+                      className="flex-1 min-w-0 h-8 px-2 rounded-md border border-border bg-muted/50 text-sm tabular-nums"
                     />
                     <input
                       type="date" value={c.fecha_vencimiento}
@@ -397,7 +534,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                       className="h-8 px-2 rounded-md border border-border bg-muted/50 text-sm"
                     />
                     <button onClick={() => setDraftInstallments(draftInstallments.filter((_, j) => j !== i))}
-                      className="p-1 text-muted-foreground hover:text-red-600"><Trash size={12} /></button>
+                      className="p-1 text-muted-foreground hover:text-destructive"><Trash size={12} /></button>
                   </div>
                 ))}
                 <div className="p-2 flex items-center justify-between">
@@ -423,7 +560,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
           </button>
           {mode === 'create' && (
             <button onClick={handleGenerate}
-              className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 inline-flex items-center gap-2">
+              className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 inline-flex items-center gap-2">
               <CalendarBlank size={14} weight="bold" /> Guardar cuotas
             </button>
           )}
@@ -440,12 +577,12 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
             </h4>
             <p className="text-xs text-muted-foreground mb-4">
               {payMode === 'edit'
-                ? 'Cambia importe o fecha. Se actualizará el pago y el total cobrado.'
+                ? 'Cambia importe, fecha o forma de pago. Se actualizará el pago y el total cobrado.'
                 : `Importe previsto: ${formatCurrency(payingInst.importe_previsto)}`}
             </p>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Importe cobrado (€)</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Importe cobrado (€)</label>
                 <input
                   type="number" step="0.01" min={0} value={payImporte}
                   onChange={(e) => setPayImporte(e.target.value)}
@@ -454,7 +591,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Fecha del pago</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha del pago</label>
                 <input
                   type="date" value={payFecha}
                   onChange={(e) => setPayFecha(e.target.value)}
@@ -463,13 +600,15 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 <p className="text-[10px] text-muted-foreground mt-1">Por defecto hoy. Cámbialo si registras un pago pasado.</p>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Método de pago de esta cuota</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Método de pago de esta cuota</label>
                 <select
                   value={payMetodo}
                   onChange={(e) => setPayMetodo(e.target.value)}
                   className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
                 >
+                  {payMode === 'edit' && payMetodoInicial === '' && <option value="">— Sin indicar —</option>}
                   <option value="transferencia">Transferencia bancaria</option>
+                  <option value="deposito">Depósito bancario</option>
                   <option value="tarjeta">Tarjeta</option>
                   <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
                   <option value="efectivo">Efectivo</option>
@@ -478,6 +617,17 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   <option value="otro">Otro</option>
                 </select>
               </div>
+              {(payMetodo === 'transferencia' || payMetodo === 'deposito') && (
+                <div>
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Referencia del banco (opcional)</label>
+                  <input
+                    value={payReferencia} maxLength={120}
+                    onChange={(e) => setPayReferencia(e.target.value)}
+                    placeholder="Nº de operación o concepto"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setPayingInst(null)} disabled={payingNow}
@@ -485,7 +635,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 Cancelar
               </button>
               <button onClick={confirmPayInstallment} disabled={payingNow}
-                className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
                 {payingNow ? 'Guardando…' : (payMode === 'edit' ? 'Guardar cambios' : 'Confirmar cobro')}
               </button>
             </div>

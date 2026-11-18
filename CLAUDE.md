@@ -127,10 +127,10 @@ scripts/    # backup.sh, deploy.sh
 - **Ramas y entornos:**
   - `main` → **produccion** (https://360crm.tech/crm/, DB `crm_prod_db`, PM2 `crm-api-production` :3001, frontend `/var/www/crm/production/frontend`)
   - `staging` → **QA/testeo** (https://360crm.tech/testeo/, DB `crm_test_db`, PM2 `crm-api-staging` :3002, frontend `/var/www/crm/staging/frontend`)
-  - `feat/<nombre-corto>` → features en desarrollo (opcional, sin PRs)
-  - Flujo recomendado para cambios grandes: `feat/X` → merge a `staging` → validar QA → merge a `main` → deploy prod
-  - **Push directo a `main` está permitido** para fixes y cambios chicos (es el flujo habitual del owner). Para cambios riesgosos (pagos, auth, migraciones DB) pasar primero por `staging`.
-  - Ver `docs/09-deploy-y-ramas.md` para procedimiento de deploy completo, rollback, envs y webhooks externos.
+  - `feat/<nombre-corto>` → features en desarrollo, **salen de `staging`**
+  - Flujo (desde el 29/09/2026): `feat/X` → `staging` (se prueba en /testeo) → **pull request a `main`** cuando Diego lo aprueba → deploy a producción desde `main`. `staging` y `main` son independientes.
+  - **A `main` solo por pull request**: está protegida en GitHub y el gancho `pre-push` bloquea el push directo (también a `feat/angel|fabian|diego`). Se fusiona con `gh pr merge --admin`. Cada versión lleva su etiqueta (`v2.0.0`, `v2.0.1`…).
+  - Procedimiento de deploy, entornos, interruptores del `.env` y migraciones: `docs/README.md`, sección «Deploy y ramas».
 - Variables de entorno en `.env` — NUNCA hardcodeadas
 - Nunca commit de `.env`, `.env.production`, `node_modules/`, `dist/`
 - VPS: Hostinger `187.124.128.126` (DNS `360crm.tech`). HTTPS con Let's Encrypt + renovación auto (`certbot.timer`).
@@ -142,7 +142,15 @@ scripts/    # backup.sh, deploy.sh
 - Contraseñas con **bcrypt cost factor 12**
 - JWT access token: **15 minutos** en header `Authorization: Bearer`
 - Refresh token: **30 dias** en **httpOnly cookie**
-- Middleware chain: `verifyToken` → `roleGuard` → `projectAccess`
+- Middleware chain: `verifyToken` → `puede('recurso.accion')` → `projectAccess`
+- **Permisos (#423):** cada ruta pide su permiso del catalogo con `puede('clave')`
+  (`shared/middleware/permissions.js`); dentro de un controlador,
+  `await tienePermiso(req, 'clave')`. Un permiso nuevo se registra SOLO en
+  `backend/src/modules/permissions/catalogo.js` (clave, nombre, una frase y los
+  roles que lo traen) y sale solo en Roles, en la ficha y en `/auth/me`. Nada de
+  `roleGuard`/`soloRoles` ni de `role === 'admin'` para decidir quien entra (una
+  prueba lo impide); el rol solo vale para el ALCANCE (que datos ve cada uno).
+  Tras tocar rutas: `npm run permisos:inventario` (regenera `docs/PERMISOS.md`).
 
 ### Roles
 - **Superadmin**: acceso total, unico que crea/desactiva usuarios
@@ -205,6 +213,7 @@ Esto es lo que hay de verdad en `docs/`:
 
 - `README.md` — indice del directorio
 - `10-whatsapp.md` — el modulo de WhatsApp, que es el mas grande
+- `PERMISOS.md` — cada ruta y cada accion, que la protege y quien puede (#423). Generado: `npm run permisos:inventario`
 - `TAREAS-EQUIPO.md` — reparto de trabajo y estado
 - `ESTADO-Y-PENDIENTES.md` — lo que queda abierto
 - `PARIDAD-ENTRE-CRMS.md` — que hay en MultiCRM y no en ISEIE, y al reves

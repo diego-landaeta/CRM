@@ -6,6 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { documentsApi, type CrmDocument, type DocumentType } from '../api/documents.api';
 import { toast } from '@/shared/hooks/useToast';
 import client from '@/shared/api/client';
+import usePermission from '@/shared/hooks/usePermission';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 
 interface Project {
   id: number;
@@ -51,9 +53,11 @@ function buildLast12Months(): { key: string; label: string; date: Date }[] {
 }
 
 export default function DocumentsConfigPage() {
-  const { user, projects } = useAuth();
+  const { user } = useAuth();
   const role = (user as { role?: string } | null)?.role;
-  const isAdmin = role === 'superadmin' || role === 'admin';
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const isAdmin = (role === 'superadmin' || role === 'admin') && can('documents.numeracion');
 
   const [counters, setCounters] = useState<CounterRow[]>([]);
   const [docs, setDocs] = useState<CrmDocument[]>([]);
@@ -63,7 +67,9 @@ export default function DocumentsConfigPage() {
   const [autoEmail, setAutoEmail] = useState<Record<number, boolean>>({});
   const [emailSaving, setEmailSaving] = useState<Record<number, boolean>>({});
 
-  const projectList = (projects || []) as Project[];
+  // Los campus del ámbito de la cabecera: con una empresa, los suyos; con «Todos»,
+  // todos los de quien mira (CRM#632).
+  const projectList = useProyectosDelAmbito<Project>();
 
   // Sincroniza auto_email_documents desde el contexto cada vez que cambian los proyectos
   useEffect(() => {

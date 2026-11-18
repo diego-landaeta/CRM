@@ -1,4 +1,6 @@
+import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
+import { recalcularCobrado } from '../conversions/cobrado.js';
 
 export async function upsertPayment(p) {
   const { rows } = await query(
@@ -73,11 +75,18 @@ export async function findPagoDuplicado(conversionId, importe, fecha, stripeId =
   // cuadre. Sin esto, reorganizar una venta o perder el enlace hacia que el
   // reintento de "cargos sin asociar" registrara el cobro por segunda vez.
   if (stripeId) {
-    const { rows: porId } = await query(
+    // El id EXACTO, no un trozo: con LIKE '%id%', «ch_x_r1» coincidía con la nota
+    // de «ch_x_r10» y el cargo se daba por duplicado (la prueba de los 30 cargos
+    // de stripeCobroUnaVez680 fallaba a ratos por eso). Delante y detrás, nada que
+    // pueda ser parte de un id (letra, número o guion bajo).
+    // Los ids de Stripe solo llevan letras, números y guion bajo: así no hay nada que escapar.
+    const idStripe = String(stripeId);
+    const idExacto = /^[A-Za-z0-9_]+$/.test(idStripe) ? `(^|[^A-Za-z0-9_])${idStripe}([^A-Za-z0-9_]|$)` : null;
+    const { rows: porId } = idExacto === null ? { rows: [] } : await query(
       `SELECT cp.id FROM conversion_payments cp
-        WHERE cp.notas LIKE '%' || $1 || '%'
+        WHERE cp.notas ~ $1
         ORDER BY cp.id LIMIT 1`,
-      [stripeId]
+      [idExacto]
     );
     if (porId[0]) return porId[0];
   }
@@ -122,23 +131,50 @@ export async function createConversionPayment(conversionId, amount, fecha, notas
   return rows[0].id;
 }
 
-export async function updateConversionPaid(conversionId, addAmount) {
-  await query(
-    `UPDATE conversions SET importe_pagado = LEAST(importe_total, importe_pagado + $1), updated_at=NOW() WHERE id=$2`,
-    [addAmount, conversionId]
-  );
+// El cobro ya está apuntado en `conversion_payments`: lo cobrado de la venta
+// pasa a ser la suma de sus pagos (#692). Antes se sumaba el cargo y se topaba
+// en el total (`LEAST`): si Stripe cobraba de más, la venta decía «pagada» con
+// menos de lo que sumaban sus pagos, y Análisis enseñaba más cobrado que
+// vendido. El importe se deja en la firma por compatibilidad.
+export async function updateConversionPaid(conversionId, _addAmount) {
+  await recalcularCobrado({ query }, conversionId);
 }
 
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments
 // como getStats. Antes getStats solo miraba el proyecto, asi que los totales de
 // arriba ignoraban el rango de fechas y el resto de filtros de abajo.
-function construirFiltro({ projectId, status, linked, search, from, to, facturables }) {
-  const conds = ['sp.project_id = $1'];
-  const params = [projectId];
+function construirFiltro({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  // Con una EMPRESA puesta son sus campus. Los cobros ya estan en nuestra base
+  // --los deja ahi el sincronizador--, asi que esto es leer varias filas, no
+  // hablar con varias cuentas de Stripe.
+  const conds = ['sp.project_id = ANY($1::int[])'];
+  const params = [comoLista(projectId, projectIds) || []];
   let i = 2;
   if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
   if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
   if (linked === 'no')  conds.push('sp.conversion_id IS NULL');
+  // sinEquivalente=1 → ademas de no estar enlazado, que NO haya ya un cobro
+  // apuntado a mano por ese mismo dinero.
+  //
+  // Que un cargo no este enlazado casi nunca significa que falte el dinero: la
+  // gestora ya lo registro en su venta y lo unico que no cuadra es el correo o
+  // la razon social con la que pago el cliente. Diego, 16/09: «recuerda que
+  // Stripe pasa a cola de facturacion en automatico, igual que las proformas»
+  // --y por eso el mismo importe salia dos veces, en la cola como Manual y aqui
+  // como «sin asociar»: los 859,10 de Innovacion Verde Inver--.
+  //
+  // Es la MISMA regla que ya usaba el vigilante (`vigilanteCatalogoScheduler`),
+  // que de 106 cargos sueltos avisaba solo de los 18 reales. La pantalla se
+  // habia quedado con el criterio tonto.
+  //
+  // En «Pagos Stripe» NO se aplica: ahi se entra precisamente a enlazarlos.
+  if (sinEquivalente) {
+    conds.push(`NOT EXISTS (
+      SELECT 1 FROM conversion_payments cp
+       WHERE ABS(cp.importe - sp.amount) < 0.01
+         AND cp.fecha BETWEEN sp.stripe_created_at::date - 3
+                          AND sp.stripe_created_at::date + 3)`);
+  }
   // facturables=1 → solo cobros que REALMENTE tocaría facturar: los posteriores a
   // la primera factura emitida por la sociedad del proyecto. Si esa sociedad aún
   // no factura (o empezó después), no se marca nada. Se deriva del dato, así que
@@ -178,14 +214,16 @@ function construirFiltro({ projectId, status, linked, search, from, to, facturab
          AND ( (sp.customer_email IS NOT NULL AND LOWER(f.cliente_email) = LOWER(sp.customer_email))
             OR (sp.customer_name  IS NOT NULL AND LOWER(f.cliente_nombre) = LOWER(sp.customer_name)) ))`);
   }
-  if (search) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
+  // Recortado: un espacio pegado al nombre dejaba el buscador a cero.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${termino.toLowerCase()}%`); i++; }
   if (from) { conds.push(`sp.stripe_created_at >= $${i++}`); params.push(from); }
   if (to)   { conds.push(`sp.stripe_created_at <= $${i++}`); params.push(to); }
   return { where: conds.join(' AND '), params };
 }
 
-export async function listPayments({ projectId, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables });
+export async function listPayments({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente, page = 1, limit = 50 }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const offset = (page - 1) * limit;
   const { rows } = await query(
     // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
@@ -217,6 +255,18 @@ export async function getById(id) {
   return rows[0] || null;
 }
 
+/** El campus de una venta, o null si no existe (#717: asociar solo dentro del campus del cargo). */
+export async function campusDeLaVenta(conversionId) {
+  const { rows } = await query('SELECT project_id FROM conversions WHERE id = $1', [conversionId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
+/** El campus de un prospecto, o null si no existe. */
+export async function campusDelLead(leadId) {
+  const { rows } = await query('SELECT project_id FROM leads WHERE id = $1', [leadId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
 export async function listProjectsWithStripe() {
   const { rows } = await query(
     `SELECT DISTINCT project_id FROM project_integrations
@@ -228,8 +278,8 @@ export async function listProjectsWithStripe() {
 // Los totales de la cabecera responden al MISMO filtro que el listado: si
 // arriba pone un rango de fechas, las cifras son de ese rango. Antes eran
 // siempre las del historico completo y no cuadraban con lo que se veia debajo.
-export async function getStats({ projectId, status, linked, search, from, to, facturables }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables });
+export async function getStats({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,
@@ -280,6 +330,52 @@ export async function fechaDeCorte(projectId) {
   return rows[0]?.corte || null;
 }
 
+/**
+ * Los TRES ESCALONES del corte, por separado y con cual manda.
+ *
+ * `fechaDeCorte` devuelve el resultado; esto devuelve el porque. Hace falta
+ * para poder enseñarlo ANTES de guardar la clave de un proyecto, que es el
+ * momento en que importa: en cuanto hay clave, el sondeo empieza a traer
+ * cobros por su cuenta cada cinco minutos, y si el suelo esta mal se importa
+ * el historico entero. Hay 576 cobros anteriores al alta de su proyecto; cada
+ * uno que se asocie crea una factura de algo que ya se facturo fuera.
+ *
+ * Se consultan los tres aunque solo mande uno: quien lo mira necesita ver que
+ * el que manda es el que cree, no solo el resultado.
+ */
+export async function escalonesDelCorte(projectId) {
+  const { rows } = await query(
+    `SELECT
+       (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = $1) AS corte_mano,
+       (SELECT MIN(f.fecha_emision) FROM invoices f
+         WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = $1)
+           AND f.tipo <> 'proforma' AND f.numero IS NOT NULL) AS primera_factura,
+       (SELECT pr3.created_at::date FROM projects pr3 WHERE pr3.id = $1) AS alta_proyecto,
+       (SELECT pr4.nombre FROM projects pr4 WHERE pr4.id = $1) AS proyecto,
+       (SELECT pr5.sociedad_emisora_id FROM projects pr5 WHERE pr5.id = $1) AS sociedad_emisora_id`,
+    [projectId]
+  );
+  const r = rows[0];
+  // OJO: una consulta de subselects SIEMPRE devuelve una fila, aunque el
+  // proyecto no exista — saldria con los tres escalones a null, que la pantalla
+  // pinta como «este proyecto no tiene suelo de facturacion», en rojo. Eso es
+  // otra cosa: no es que falte el suelo, es que no hay proyecto. `nombre` es
+  // NOT NULL, asi que sirve para distinguirlo.
+  if (!r || r.proyecto == null) return null;
+  const corte = r.corte_mano || r.primera_factura || r.alta_proyecto || null;
+  const manda = r.corte_mano ? 'corte_mano' : r.primera_factura ? 'primera_factura'
+    : r.alta_proyecto ? 'alta_proyecto' : null;
+  return {
+    proyecto: r.proyecto,
+    sociedadEmisoraId: r.sociedad_emisora_id,
+    corteMano: r.corte_mano,
+    primeraFactura: r.primera_factura,
+    altaProyecto: r.alta_proyecto,
+    corte,
+    manda,
+  };
+}
+
 export async function getSyncState(projectId) {
   const { rows } = await query(`SELECT * FROM stripe_sync_state WHERE project_id=$1`, [projectId]);
   return rows[0] || null;
@@ -300,6 +396,29 @@ export async function upsertSyncState(projectId, fields) {
 // Cargos ya importados que siguen sin asociar a una venta. La sincronizacion los
 // reintenta en cada pasada: si mientras tanto el lead se convirtio, o alguien
 // deshizo una asociacion, en el siguiente Sincronizar se vuelven a enganchar.
+/**
+ * Los cargos que tienen VENTA pero se quedaron SIN COBRO (19/10, venta 595 de Dayana:
+ * se borró el cobro al que estaban enganchados). La segunda pasada de Sincronizar los
+ * vuelve a enganchar al cobro equivalente que ya esté apuntado, sin crear ninguno.
+ */
+export async function listConVentaSinCobro(projectId, limit = 500) {
+  const { rows } = await query(
+    `SELECT id, stripe_id, status, amount, currency,
+            EXTRACT(EPOCH FROM stripe_created_at)::bigint AS stripe_created_at,
+            conversion_id, conversion_payment_id, lead_id, link_method, linked_by
+       FROM stripe_payments
+      WHERE project_id = $1
+        AND status = 'succeeded'
+        AND COALESCE(refunded, false) = false
+        AND conversion_id IS NOT NULL
+        AND conversion_payment_id IS NULL
+      ORDER BY stripe_created_at DESC
+      LIMIT $2`,
+    [projectId, limit]
+  );
+  return rows;
+}
+
 export async function listPendientesDeAsociar(projectId, limit = 500) {
   const { rows } = await query(
     `SELECT id, project_id, stripe_id, status, amount, currency, customer_email, customer_name,

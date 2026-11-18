@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
+import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
+import { tieneRol } from '@/shared/lib/roles';
 
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
@@ -21,15 +24,26 @@ function fmtDate(d?: string | null) {
 }
 
 const STATUS_TONE: Record<string, string> = {
-  ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-  PAUSED: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  DELETED: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+  ACTIVE: 'bg-success-soft text-success-soft-foreground',
+  PAUSED: 'bg-muted text-muted-foreground',
+  DELETED: 'bg-destructive-soft text-destructive-soft-foreground',
   ARCHIVED: 'bg-muted text-muted-foreground',
 };
 
 export default function MetaAdsPage() {
-  const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
-  const projectId = activeProject?.id;
+  const { user } = useAuth() as {
+    user: { role?: string; roles_extra?: string[] } | null;
+  };
+  // La publicidad es de UN campus: cada uno tiene su cuenta de anuncios (Diego,
+  // 15/09: «publicidad individual»). Con una empresa o «Todos» arriba, ya no se
+  // tapia: se elige aquí cuál (#218, tanda 3).
+  const campus = useCampusDeLaPantalla();
+  const projectId = campus.id;
+  const selector = <ElegirCampus campus={campus} que="sus anuncios" />;
+  // Quien la ve por `meta_ads.view` (26/10/2026: el equipo de desarrollo) solo
+  // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
+  // (el servidor también se lo niega).
+  const soloVer = !tieneRol(user, 'admin', 'superadmin', 'soporte');
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
   // ID de la cuenta filtrada en la UI. null = "Todas" (agrega cross-cuentas, default).
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
@@ -119,19 +133,33 @@ export default function MetaAdsPage() {
   const currency = account?.currency || 'EUR';
 
   // Estados de página
-  if (!projectId || projectId === -1) {
+  if (!projectId) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
-        Selecciona un proyecto en la barra superior.
+      <div className="space-y-3">
+        {selector}
+        <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
+          Elige el campus: cada uno tiene su cuenta de anuncios.
+        </div>
       </div>
     );
   }
   if (loading) {
     return <div className="h-40 bg-muted/40 rounded-lg animate-pulse" />;
   }
+  if (soloVer && accounts.length === 0) {
+    return (
+      <div className="space-y-3">
+        {selector}
+        <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
+          Este campus no tiene ninguna cuenta de Meta conectada todavía.
+        </div>
+      </div>
+    );
+  }
   if (accounts.length === 0 || showAddAccount) {
     return (
       <div className="space-y-3">
+        {selector}
         {showAddAccount && (
           <button onClick={() => setShowAddAccount(false)}
             className="text-xs text-muted-foreground hover:text-foreground">
@@ -141,7 +169,7 @@ export default function MetaAdsPage() {
         <Suspense fallback={null}>
           <ConnectWizard
             projectId={projectId}
-            projectName={activeProject?.nombre}
+            projectName={campus.nombre}
             onConnected={() => { setShowAddAccount(false); loadAccounts(); }}
           />
         </Suspense>
@@ -152,10 +180,11 @@ export default function MetaAdsPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {selector}
       {/* Header con selector de cuenta (cuando hay >1) + info + acciones */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="w-10 h-10 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-md bg-info-soft text-info flex items-center justify-center flex-shrink-0">
             <PlugsConnected size={20} weight="duotone" />
           </div>
           <div className="min-w-0 flex-1">
@@ -177,7 +206,7 @@ export default function MetaAdsPage() {
                 <CaretUpDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
               </div>
             ) : (
-              <h1 className="text-lg font-bold tracking-tight truncate">{account.ad_account_nombre || account.ad_account_id}</h1>
+              <h2 className="text-lg font-bold tracking-tight truncate">{account.ad_account_nombre || account.ad_account_id}</h2>
             )}
             <p className="text-xs text-muted-foreground">
               {filterAccountId == null && accounts.length > 1 ? (
@@ -186,19 +215,20 @@ export default function MetaAdsPage() {
                 <>
                   {account.ad_account_id} · {account.currency || '—'} ·{' '}
                   Última sync: {fmtDate(account.last_synced_at)}{' '}
-                  {account.last_sync_status === 'in_progress' && <span className="text-amber-600">(en progreso…)</span>}
-                  {account.last_sync_status === 'error' && <span className="text-red-600">(error)</span>}
+                  {account.last_sync_status === 'in_progress' && <span className="text-warning">(en progreso…)</span>}
+                  {account.last_sync_status === 'error' && <span className="text-destructive">(error)</span>}
                 </>
               )}
             </p>
             {!(filterAccountId == null && accounts.length > 1) && account.last_sync_error && (
-              <p className="text-[11px] text-red-600 mt-0.5" title={account.last_sync_error}>
+              <p className="text-[11px] text-destructive mt-0.5" title={account.last_sync_error}>
                 <Warning size={11} className="inline mr-0.5" />
                 Motivo: {account.last_sync_error}
               </p>
             )}
           </div>
         </div>
+        {!soloVer && (
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={handleSync}
             disabled={syncing || account.last_sync_status === 'in_progress' || (filterAccountId == null && accounts.length > 1)}
@@ -222,9 +252,11 @@ export default function MetaAdsPage() {
             <Gear size={14} weight="duotone" /> Configuración
           </button>
         </div>
+        )}
       </div>
 
       {/* Selector rango fechas (oculto cuando estás en config) */}
+
       {tab !== 'config' && tab !== 'manual' && (
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-semibold text-muted-foreground">Rango:</label>
@@ -258,7 +290,7 @@ export default function MetaAdsPage() {
       {tab !== 'config' && tab !== 'manual' && dashboard && dashboard.daily.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <ChartLineUp size={16} weight="duotone" className="text-blue-600" />
+            <ChartLineUp size={16} weight="duotone" className="text-info" />
             Evolución diaria
           </h3>
           <DailyChart daily={dashboard.daily} currency={currency} />
@@ -278,16 +310,18 @@ export default function MetaAdsPage() {
           </button>
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
-            ROI (asociaciones manuales)
+            Del gasto a la venta
           </button>
           <button onClick={() => setTab('manual')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Manual
           </button>
+          {!soloVer && (
           <button onClick={() => setTab('config')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'config' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             <Gear size={13} weight="duotone" /> Configuración
           </button>
+          )}
         </div>
 
         {tab === 'campaigns' && (
@@ -305,7 +339,13 @@ export default function MetaAdsPage() {
                     <th className="text-right px-3 py-2 font-medium">Gasto</th>
                     <th className="text-right px-3 py-2 font-medium">Impr.</th>
                     <th className="text-right px-3 py-2 font-medium">Clicks · CTR</th>
-                    <th className="text-right px-3 py-2 font-medium">Leads · CPL</th>
+                    <th className="text-right px-3 py-2 font-medium">Leads Meta</th>
+                    {/* Los del CRM van aparte y NO sustituyen a los de Meta: son
+                        dos cuentas distintas, y verlas juntas es lo que explica
+                        la diferencia. Meta solo cuenta su formulario; el CRM
+                        cuenta a quien entro de verdad, por la UTM de campaña. */}
+                    <th className="text-right px-3 py-2 font-medium">Leads CRM · CPL</th>
+                    <th className="text-right px-3 py-2 font-medium">Ventas</th>
                     <th className="text-right px-3 py-2 font-medium w-24">Productos</th>
                   </tr>
                 </thead>
@@ -318,8 +358,8 @@ export default function MetaAdsPage() {
                       currency={currency}
                       dateFrom={dateFrom}
                       dateTo={dateTo}
-                      onAssociate={() => setAssociateOpen(c)}
-                      onAssociateAdSet={(a) => setAssociateAdSetOpen(a)}
+                      onAssociate={soloVer ? undefined : () => setAssociateOpen(c)}
+                      onAssociateAdSet={soloVer ? undefined : (a) => setAssociateAdSetOpen(a)}
                     />
                   ))}
                 </tbody>
@@ -342,7 +382,7 @@ export default function MetaAdsPage() {
           </Suspense>
         )}
 
-        {tab === 'config' && (
+        {tab === 'config' && !soloVer && (
           <div className="p-4">
             <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
               <MetaSettingsPanel
@@ -382,10 +422,10 @@ export default function MetaAdsPage() {
 
 function KpiCard({ icon: Icon, label, value, hint, tone = 'blue' }: { icon: any; label: string; value: string; hint?: string; tone?: string }) {
   const toneMap: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
-    emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-    amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
-    violet: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
+    blue: 'bg-info-soft text-info-soft-foreground',
+    emerald: 'bg-success-soft text-success-soft-foreground',
+    amber: 'bg-warning-soft text-warning-soft-foreground',
+    violet: 'bg-primary/10 text-primary',
   };
   return (
     <div className="bg-card border border-border rounded-lg p-4">
@@ -412,8 +452,8 @@ function DailyChart({ daily, currency }: { daily: MetaDashboard['daily']; curren
         return (
           <div key={d.date} className="flex flex-col items-center gap-1 min-w-[24px] group relative">
             <div className="flex items-end gap-0.5 h-24">
-              <div className="w-2.5 bg-violet-400 rounded-t" style={{ height: `${hSpend}%` }} title={`Gasto: ${fmtMoney(d.spend, currency)}`} />
-              <div className="w-2.5 bg-emerald-400 rounded-t" style={{ height: `${hLeads}%` }} title={`Leads: ${d.leads}`} />
+              <div className="w-2.5 bg-primary rounded-t" style={{ height: `${hSpend}%` }} title={`Gasto: ${fmtMoney(d.spend, currency)}`} />
+              <div className="w-2.5 bg-success rounded-t" style={{ height: `${hLeads}%` }} title={`Leads: ${d.leads}`} />
             </div>
             <span className="text-[9px] text-muted-foreground rotate-45 origin-left">{d.date.slice(5)}</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-popover border border-border rounded p-2 text-[10px] shadow-lg z-10 whitespace-nowrap">
@@ -434,7 +474,7 @@ function DailyChart({ daily, currency }: { daily: MetaDashboard['daily']; curren
 // Tabla 3 niveles: Campaign → AdSet → Ad. Click en chevron toggle.
 
 function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, onAssociateAdSet }:
-  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void; onAssociateAdSet: (a: MetaAdSet) => void }) {
+  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate?: () => void; onAssociateAdSet?: (a: MetaAdSet) => void }) {
   const [open, setOpen] = useState(false);
   const [adsets, setAdSets] = useState<MetaAdSet[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -479,28 +519,46 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
           <span className="text-muted-foreground">{c.ctr != null ? c.ctr.toFixed(2) + '%' : '—'}</span>
         </td>
         <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-          <span className="font-semibold">{fmtNum(c.total_leads)}</span><br />
+          <span className={c.total_leads ? 'font-semibold' : 'text-muted-foreground'}>{fmtNum(c.total_leads)}</span><br />
           <span className="text-muted-foreground">{c.cpl != null ? fmtMoney(c.cpl, currency) : '—'}</span>
         </td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-xs"
+          title="Leads que entraron al CRM con la UTM de esta campaña. Meta solo cuenta los de su propio formulario.">
+          <span className={c.leads_crm ? 'font-semibold text-success' : 'text-muted-foreground'}>
+            {fmtNum(c.leads_crm || 0)}
+          </span><br />
+          <span className="text-muted-foreground">{c.cpl_crm != null ? fmtMoney(c.cpl_crm, currency) : '—'}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+          <span className={c.ventas_crm ? 'font-semibold' : 'text-muted-foreground'}>{fmtNum(c.ventas_crm || 0)}</span>
+        </td>
         <td className="px-3 py-2.5 text-right">
+          {onAssociate && (
           <button onClick={onAssociate} className="text-[11px] text-primary hover:underline font-semibold">
             Asociar
           </button>
+          )}
         </td>
       </tr>
       {open && (
         <tr className="bg-muted/20">
-          <td colSpan={7} className="px-0 py-0">
+          <td colSpan={9} className="px-0 py-0">
             {loading ? (
               <div className="px-8 py-3 text-xs text-muted-foreground">Cargando conjuntos…</div>
             ) : adsets && adsets.length === 0 ? (
-              <div className="px-8 py-3 text-xs text-muted-foreground italic">Sin conjuntos en este rango (o backfill aún no incluye adsets).</div>
+              /* El mensaje de antes se disculpaba por el backfill, que no tenia
+                 nada que ver: los conjuntos estaban --924 en la base-- y lo que
+                 fallaba era el filtro por proyecto. Diego, 14/09. */
+              <div className="px-8 py-3 text-xs text-muted-foreground italic">
+                Esta campaña no tiene conjuntos en el CRM. Si acabas de crearlos en Meta,
+                aparecerán tras la próxima sincronización.
+              </div>
             ) : (
               <table className="w-full text-xs">
                 <tbody>
                   {(adsets || []).map((a) => (
                     <AdSetRow key={a.adset_id} a={a} projectId={projectId} currency={currency} dateFrom={dateFrom} dateTo={dateTo}
-                      onAssociate={() => onAssociateAdSet(a)} />
+                      onAssociate={onAssociateAdSet ? () => onAssociateAdSet(a) : undefined} />
                   ))}
                 </tbody>
               </table>
@@ -513,7 +571,7 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
 }
 
 function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
-  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void }) {
+  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate?: () => void }) {
   const [open, setOpen] = useState(false);
   const [ads, setAds] = useState<MetaAd[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -559,15 +617,17 @@ function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
           {fmtNum(a.total_leads)} <span className="text-muted-foreground">· {a.cpl != null ? fmtMoney(a.cpl, currency) : '—'}</span>
         </td>
         <td className="px-3 py-2 text-right">
+          {onAssociate && (
           <button onClick={(e) => { e.stopPropagation(); onAssociate(); }}
             className="text-[11px] text-primary hover:underline font-semibold">
             Asociar
           </button>
+          )}
         </td>
       </tr>
       {open && (
         <tr className="bg-muted/30">
-          <td colSpan={7} className="px-0 py-0">
+          <td colSpan={9} className="px-0 py-0">
             {loading ? (
               <div className="pl-14 py-2 text-xs text-muted-foreground">Cargando anuncios…</div>
             ) : ads && ads.length === 0 ? (
@@ -638,14 +698,14 @@ function ProductsViewTable({ rows, currency }: { rows: any[]; currency: string }
         </thead>
         <tbody>
           {rows.map((r) => {
-            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-emerald-600' : 'text-red-600';
+            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-success' : 'text-destructive';
             return (
               <tr key={r.product_id} className="border-t border-border hover:bg-muted/30 align-top">
                 <td className="px-4 py-2.5">
                   <p className="font-medium truncate max-w-xs" title={r.producto_nombre}>{r.producto_nombre}</p>
                   <p className="text-[10px] text-muted-foreground">
                     {r.producto_precio != null && `${fmtMoney(r.producto_precio, currency)} · `}
-                    {r.producto_activo ? <span className="text-emerald-600">activo</span> : <span>inactivo</span>}
+                    {r.producto_activo ? <span className="text-success">activo</span> : <span>inactivo</span>}
                   </p>
                 </td>
                 <td className="px-3 py-2.5 text-xs">
@@ -680,14 +740,14 @@ function ProductLinks({ links }: { links: Array<{ scope: string; id: string; nam
     <div className="space-y-1">
       {camp.map((l) => (
         <div key={l.id} className="flex items-center gap-1.5">
-          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-semibold">Camp</span>
+          <span className="text-[9px] px-1 py-0.5 rounded bg-info-soft text-info-soft-foreground font-semibold">Camp</span>
           <span className="truncate max-w-xs" title={l.name}>{l.name}</span>
           {l.status && <span className={`text-[9px] px-1 py-0.5 rounded ${STATUS_TONE[l.status] || 'bg-muted'}`}>{l.status}</span>}
         </div>
       ))}
       {ads.map((l) => (
         <div key={l.id} className="flex items-center gap-1.5">
-          <span className="text-[9px] px-1 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-semibold">AdSet</span>
+          <span className="text-[9px] px-1 py-0.5 rounded bg-info-soft text-info-soft-foreground font-semibold">AdSet</span>
           <span className="truncate max-w-xs" title={l.name}>{l.name}</span>
           {l.status && <span className={`text-[9px] px-1 py-0.5 rounded ${STATUS_TONE[l.status] || 'bg-muted'}`}>{l.status}</span>}
         </div>
@@ -696,54 +756,80 @@ function ProductLinks({ links }: { links: Array<{ scope: string; id: string; nam
   );
 }
 
+/**
+ * Del gasto a la venta, no al lead (#53): por campaña, lo que costó, cuántas
+ * ventas trajo, cuánto se ha cobrado de verdad y qué retorno deja.
+ *
+ * Hay dos lecturas del mismo rango de fechas, y se enseñan las dos porque
+ * responden a cosas distintas: la del retorno mira lo que han cobrado HASTA HOY
+ * los leads captados en el rango (una campaña de hace dos meses sigue cobrando),
+ * y «Entró en el periodo» mira la caja del rango, sea de cuando sea el lead.
+ */
 function RoiTable({ rows, currency }: { rows: MetaRoiRow[]; currency: string }) {
   if (rows.length === 0) {
     return (
       <p className="p-6 text-center text-sm text-muted-foreground">
-        Sin datos de ROI. Asocia productos a las campañas (botón "Asociar" en la tabla de Campañas)
-        para que el CRM cruce el gasto Meta con las ventas registradas.
+        Sin datos en este rango. Aquí salen las campañas con gasto o con prospectos que llegaron por ellas
+        (el CRM lee la campaña de la UTM del prospecto).
       </p>
     );
   }
+  const tono = (n: number | null) => (n == null ? '' : n >= 0 ? 'text-success' : 'text-destructive');
+  const pct = (n: number | null) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
   return (
     <div className="overflow-x-auto">
+      <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border">
+        Una venta es la que ya tiene algún cobro. Lo cobrado sale de los cobros apuntados, no de lo que declara la venta.
+        «Retorno» compara el gasto del rango con lo que han cobrado hasta hoy los prospectos captados en ese rango;
+        «Entró en el periodo» es lo que se ha cobrado dentro del rango, de prospectos de cualquier fecha.
+      </p>
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] text-muted-foreground">
           <tr>
             <th className="text-left px-4 py-2 font-medium">Campaña</th>
-            <th className="text-left px-3 py-2 font-medium">Productos asociados</th>
             <th className="text-right px-3 py-2 font-medium">Gasto</th>
-            <th className="text-right px-3 py-2 font-medium">Ventas · Facturado</th>
-            <th className="text-right px-3 py-2 font-medium">Ganancia</th>
-            <th className="text-right px-3 py-2 font-medium">ROI</th>
+            <th className="text-right px-3 py-2 font-medium">Prospectos · coste</th>
+            <th className="text-right px-3 py-2 font-medium">Ventas · coste por venta</th>
+            <th className="text-right px-3 py-2 font-medium">Vendido · Cobrado</th>
+            <th className="text-right px-3 py-2 font-medium">Retorno</th>
+            <th className="text-right px-3 py-2 font-medium">Entró en el periodo</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
-            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-emerald-600' : 'text-red-600';
-            return (
-              <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
-                <td className="px-4 py-2.5">
-                  <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
-                  <p className="text-[10px] text-muted-foreground">{r.status}</p>
-                </td>
-                <td className="px-3 py-2.5 text-xs">
-                  {r.n_productos_asociados === 0
-                    ? <span className="text-muted-foreground italic">— sin productos asociados —</span>
-                    : <span className="truncate block max-w-md" title={r.productos_nombres || ''}>{r.productos_nombres}</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                  <span className="font-semibold">{r.ventas}</span> · <span>{fmtMoney(r.facturado, currency)}</span><br />
-                  <span className="text-muted-foreground">Cobrado: {fmtMoney(r.cobrado, currency)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.ganancia, currency)}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${roiTone}`}>
-                  {r.roi_pct == null ? '—' : `${r.roi_pct >= 0 ? '+' : ''}${r.roi_pct.toFixed(1)}%`}
-                </td>
-              </tr>
-            );
-          })}
+          {rows.map((r) => (
+            <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
+              <td className="px-4 py-2.5">
+                <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
+                <p className="text-[10px] text-muted-foreground">{r.status}</p>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.leads_crm)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_lead != null ? fmtMoney(r.coste_por_lead, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.ventas)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_venta != null ? fmtMoney(r.coste_por_venta, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span>{fmtMoney(r.vendido, currency)}</span>
+                <br />
+                <span className="font-semibold">{fmtMoney(r.cobrado, currency)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${tono(r.roi_pct)}`}>
+                {fmtMoney(r.retorno, currency)}
+                <br />
+                <span className="text-xs">{pct(r.roi_pct)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${tono(r.roi_en_periodo_pct)}`}>
+                {fmtMoney(r.cobrado_en_periodo, currency)}
+                <br />
+                <span>{fmtMoney(r.retorno_en_periodo, currency)} · {pct(r.roi_en_periodo_pct)}</span>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

@@ -35,7 +35,7 @@ const filas = {
 /** Que tablas dice `information_schema` que existen. */
 let tablasQueExisten = [
   'lead_audit_log', 'document_audit_log', 'user_activity_log',
-  'registro_tareas', 'make_webhook_deliveries', 'status_errors',
+  'registro_tareas', 'make_webhook_deliveries', 'email_envios', 'status_errors',
 ];
 
 /** Fuentes que revientan al leerse, para probar que no se llevan la pantalla. */
@@ -73,7 +73,7 @@ beforeEach(() => {
   rotas = new Set();
   tablasQueExisten = [
     'lead_audit_log', 'document_audit_log', 'user_activity_log',
-    'registro_tareas', 'make_webhook_deliveries', 'status_errors',
+    'registro_tareas', 'make_webhook_deliveries', 'email_envios', 'status_errors',
   ];
   modelo.olvidarTablas();
   filas.lead_audit_log = [{
@@ -228,7 +228,7 @@ describe('lo que se lee en cada fila', () => {
     const r = await modelo.listar({ vista: 'general' });
     const f = r.filas.find((x) => x.fuente === 'ficha');
     expect(f.resumen).toBe('Cambió email de «a@b.com» a «c@d.com»');
-    expect(f.enlace).toBe('/crm/leads/7');
+    expect(f.enlace).toBe('/prospectos/7');
   });
 
   it('una tarea que fallo lo dice, y va marcada como no correcta', async () => {

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { useState, useEffect } from 'react';
 import { X } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
 interface ProjectForm {
   nombre: string;
@@ -36,7 +36,10 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
   useEffect(() => {
     if (open) {
       setNewSoc(null);
-      client.get('/projects/sociedades').then(r => setSociedades(r.data?.data || [])).catch(() => setSociedades([]));
+      // `client` ya devuelve el cuerpo ({ success, data }): la lista es `r.data`.
+      // Con `r.data.data` el desplegable salía siempre vacío y no se podía
+      // elegir la empresa de un campus nuevo (#187).
+      client.get('/projects/sociedades').then(r => setSociedades(r.data || [])).catch(() => setSociedades([]));
       if (existing) {
         setForm({
           nombre: existing.nombre || '',
@@ -93,7 +96,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
           razon_social: newSoc.razon_social.trim(),
           serie: newSoc.serie.trim() || null,
         });
-        sociedadId = r.data?.data?.id ?? null;
+        sociedadId = r.data?.id ?? null;
       }
       const payload: Record<string, unknown> = {
         nombre: form.nombre,
@@ -237,7 +240,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted">Cancelar</button>
-              <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+              <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
                 {saving ? 'Guardando...' : (existing ? 'Guardar' : 'Crear proyecto')}
               </button>
             </div>

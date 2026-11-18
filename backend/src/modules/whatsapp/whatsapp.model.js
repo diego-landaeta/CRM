@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { comoIds } from '../../shared/utils/roles.js';
 import { logger } from '../../shared/utils/logger.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
@@ -22,17 +23,29 @@ const TABLA_QUE_NO_ESTA = '42P01';
  * Se avisa al registro del servidor UNA vez, que es donde sirve.
  */
 let avisadoSinTabla = false;
-export async function listTemplates({ projectId, userId }) {
+export async function listTemplates({ projectId, projectIds = null, userId }) {
   try {
     const { rows } = await query(
       `SELECT t.id, t.project_id, t.label, t.body, t.ambito, t.owner_id, t.orden,
+              -- pide_adjunto abre el selector de archivos al elegirla;
+              -- pista es para la gestora y NO se envia.
+              t.pide_adjunto, t.pista,
+              -- El paso del proceso al que pertenece. Sin esto, la cola del dia
+              -- no puede ofrecer «la plantilla de esta persona»: el nombre lo
+              -- dice para quien lo lee, no para el CRM.
+              t.paso_clave,
               u.nombre AS creada_por
          FROM whatsapp_templates t
          LEFT JOIN users u ON u.id = t.created_by
-        WHERE t.project_id = $1 AND t.active
+        -- Con una EMPRESA puesta llegan sus campus y valen los de todos:
+        -- una gestora de CEDIA atiende sus siete, y tener que bajar a uno
+        -- para poder usar una plantilla no significaba nada.
+        WHERE ($3::int[] IS NOT NULL AND t.project_id = ANY($3::int[])
+               OR $3::int[] IS NULL AND t.project_id = $1)
+          AND t.active
           AND (t.ambito = 'compartida' OR t.owner_id = $2)
         ORDER BY t.ambito DESC, t.orden, t.id`,
-      [projectId, userId]
+      [projectId, userId, projectIds && projectIds.length ? projectIds.map(Number) : null]
     );
     return rows;
   } catch (err) {
@@ -52,27 +65,36 @@ export async function getTemplate(id) {
   return rows[0] || null;
 }
 
-export async function createTemplate({ projectId, label, body, ambito, ownerId, createdBy }) {
+export async function createTemplate({ projectId, label, body, ambito, ownerId, createdBy,
+                                       pasoClave = null }) {
   const { rows } = await query(
-    `INSERT INTO whatsapp_templates (project_id, label, body, ambito, owner_id, created_by, orden)
+    `INSERT INTO whatsapp_templates (project_id, label, body, ambito, owner_id, created_by, orden,
+                                     paso_clave)
      VALUES ($1, $2, $3, $4, $5, $6,
-             COALESCE((SELECT MAX(orden) + 1 FROM whatsapp_templates WHERE project_id = $1), 1))
-     RETURNING id, project_id, label, body, ambito, owner_id, orden`,
-    [projectId, label, body, ambito, ambito === 'personal' ? ownerId : null, createdBy]
+             COALESCE((SELECT MAX(orden) + 1 FROM whatsapp_templates WHERE project_id = $1), 1),
+             $7)
+     RETURNING id, project_id, label, body, ambito, owner_id, orden, paso_clave`,
+    [projectId, label, body, ambito, ambito === 'personal' ? ownerId : null, createdBy,
+     pasoClave || null]
   );
   return rows[0];
 }
 
-export async function updateTemplate(id, { label, body, orden }) {
+export async function updateTemplate(id, { label, body, orden, pasoClave }) {
   const { rows } = await query(
     `UPDATE whatsapp_templates
         SET label      = COALESCE($2, label),
             body       = COALESCE($3, body),
             orden      = COALESCE($4, orden),
+            -- Sin mandarlo no se toca; con null explicito se suelta del paso.
+            -- Por eso va un testigo aparte y no un COALESCE: aqui el null es
+            -- un valor que se quiere guardar, no un 'no lo cambies'.
+            paso_clave = CASE WHEN $5 THEN $6 ELSE paso_clave END,
             updated_at = NOW()
       WHERE id = $1
-      RETURNING id, project_id, label, body, ambito, owner_id, orden`,
-    [id, label ?? null, body ?? null, orden ?? null]
+      RETURNING id, project_id, label, body, ambito, owner_id, orden, paso_clave`,
+    [id, label ?? null, body ?? null, orden ?? null,
+     pasoClave !== undefined, pasoClave ?? null]
   );
   return rows[0] || null;
 }
@@ -98,7 +120,8 @@ export async function cola({ projectId, responsableId, estado, productoId, soloS
   const cond = ['l.deleted_at IS NULL', "l.status NOT IN ('convertido', 'no_interesado')"];
   const params = [];
   if (projectId) { params.push(projectId); cond.push(`l.project_id = $${params.length}`); }
-  if (responsableId) { params.push(responsableId); cond.push(`l.responsable_id = $${params.length}`); }
+  // Una gestora o varias (las de un equipo comercial, 09/11/2026).
+  if (responsableId) { params.push(comoIds(responsableId)); cond.push(`l.responsable_id = ANY($${params.length}::int[])`); }
   if (estado) { params.push(estado); cond.push(`l.status = $${params.length}`); }
   if (productoId) { params.push(productoId); cond.push(`l.producto_interes_id = $${params.length}`); }
   // Sin telefono no hay nada que hacer aqui.

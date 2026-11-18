@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { leerFiltroPais } from './pais.js';
 
 export const webhookLeadSchema = z.object({
   nombre: z.string().min(1, 'Nombre requerido').max(200),
@@ -14,11 +15,18 @@ export const webhookLeadSchema = z.object({
   producto_interes_sku: z.string().max(100).optional(),
   notas: z.string().max(2000).optional(),
   landing_url: z.string().url().optional().or(z.literal('')),
+  // La página del formulario con el nombre que usan Elementor y Make («Page
+  // URL» → `page_url`). Si no viene `landing_url`, se usa esta: de ella salen
+  // el canal, el producto y el país de entrada (#221).
+  page_url: z.string().url().optional().or(z.literal('')),
   utm_source: z.string().max(100).optional(),
   utm_medium: z.string().max(100).optional(),
   utm_campaign: z.string().max(255).optional(),
   utm_content: z.string().max(255).optional(),
   utm_term: z.string().max(255).optional(),
+  // De dónde venía la persona (document.referrer). Va junto a las UTM porque
+  // ChatGPT a veces no manda utm_source y a veces no manda referrer (#48).
+  referrer: z.string().max(2000).optional(),
   // Make puede decidir el canal directamente (override de la deteccion automatica)
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
   // Asignacion explicita desde Make (saltea round-robin si vienen).
@@ -50,9 +58,22 @@ export const listLeadsSchema = z.object({
   projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
     .transform((v) => v ? v.split(',').map(Number) : undefined),
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']).optional(),
+  // Por que seguimiento va: 1, 2, 3, 4 o «5 o más». El tope evita que
+  // alguien pida el seguimiento 900 y se lleve una consulta por delante.
+  seguimiento: z.coerce.number().int().min(1).max(20).optional(),
+  // En que PASO del proceso comercial va. Diego, 23/09: «en filtros que diga
+  // proceso de ventas y puedas elegir cuál». La clave y no el id: los pasos son
+  // por proyecto --cada campus tiene los suyos-- y la clave es la misma en
+  // todos, asi que vale igual con un campus que con una empresa entera.
+  pasoProceso: z.string().max(40).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   unassigned: z.coerce.boolean().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
+  // País de entrada (#221): código ISO de dos letras o `sin_pais`.
+  paisEntrada: z.string()
+    .refine((v) => leerFiltroPais(v) !== null, 'País no válido: un código de dos letras (CL, MX…) o sin_pais')
+    .transform((v) => leerFiltroPais(v))
+    .optional(),
   productId: z.coerce.number().int().positive().optional(),
   search: z.string().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -102,6 +123,9 @@ export const checkDuplicateSchema = z.object({
 export const updateStatusSchema = z.object({
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']),
   motivo: z.string().max(500).optional().nullable(),
+  // Solo cuenta al pasar a «no interesado»: que salga el correo de «¿por que
+  // has desistido?» (#169), que se prepare para verlo antes, o que no salga.
+  feedback: z.enum(['enviar', 'revisar', 'no']).optional(),
 }).refine(
   (data) => data.status !== 'no_interesado' || (data.motivo && data.motivo.trim().length >= 1),
   { message: 'Motivo requerido al marcar como no interesado', path: ['motivo'] }
@@ -109,13 +133,17 @@ export const updateStatusSchema = z.object({
 
 export const createInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']),
-  nota: z.string().max(2000).optional(),
+  // 10.000, no 2.000: una nota con el resumen de una llamada larga no cabía y
+  // se rechazaba entera (M.ª Eugenia, seis veces en una tarde). La columna es TEXT.
+  nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
+  // El paso de la cola del día que se está atendiendo (#259): se marca hecho.
+  paso_id: z.number().int().positive().optional(),
 });
 
 export const updateInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']).optional(),
-  nota: z.string().max(2000).optional(),
+  nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo a actualizar' });
 

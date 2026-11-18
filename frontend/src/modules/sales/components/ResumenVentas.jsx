@@ -26,24 +26,30 @@ function Cifra({ icon: Icon, etiqueta, valor, pie }) {
   );
 }
 
-export default function ResumenVentas({ projectId, from, to, responsableId = null }) {
+export default function ResumenVentas({ projectId, issuerId = null, from, to, responsableId = null, paisEntrada = null }) {
   const [d, setD] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    if (!projectId) return undefined;
+    // Sin campus ni empresa es «Todos»: el servidor recorta a lo de quien
+    // pregunta (`proyectosDelAmbito`), igual que «Productos vendidos». Antes
+    // aqui se salia sin pedir nada y las cinco tarjetas se quedaban en gris
+    // para siempre (#218, comprobado en /testeo el 05/11).
     let vivo = true;
     setCargando(true);
-    const p = new URLSearchParams({ projectId: String(projectId) });
+    const p = new URLSearchParams();
+    if (projectId) p.set('projectId', String(projectId));
+    if (issuerId) p.set('issuerId', String(issuerId));
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
+    if (paisEntrada) p.set('paisEntrada', paisEntrada);
     client.get(`/ventas/resumen?${p}`)
       .then((r) => { if (vivo) setD(r.success ? r.data : null); })
       .catch(() => { if (vivo) setD(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId, paisEntrada]);
 
   if (cargando || !d) {
     return (
@@ -56,7 +62,14 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
   }
 
   const cuotas = d.cuotas || {};
+  // Las ventas sin ningún cobro, al lado y sin sumar (#225). Diego, 10/10:
+  // «se enseñan aparte, como "ventas sin cobro (en proformas)": salen de las
+  // proformas sin cobrar, y cuando se cobran pasan a contar como venta».
+  // Con ellas al lado, las cifras de la pantalla se explican: estas tarjetas
+  // más las sin cobro dan lo mismo que Claude.
+  const sinCobro = d.sin_cobro && d.sin_cobro.ventas > 0 ? d.sin_cobro : null;
   return (
+    <div className="space-y-2">
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
       <Cifra icon={Receipt} etiqueta="Ventas" valor={num(d.ventas)}
         pie={`${num(d.clientes)} ${d.clientes === 1 ? 'cliente' : 'clientes'}`} />
@@ -65,12 +78,33 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
       {/* Cobrado DE ESAS VENTAS, aunque el pago entrara despues del periodo.
           La tarta de abajo cuenta otra cosa: el dinero que entro EN el periodo,
           venga de una venta de ahora o de una de hace meses. */}
+      {/* De lo cobrado, cuanto abrio la venta y cuanto son cuotas del plan
+          (#100). Mezclado no habia forma de saber que es dinero NUEVO y que es
+          una cuota de algo vendido hace meses, que es justo lo que hay que
+          mirar para saber como va el mes.
+          Solo se dice cuando hay cuotas: si no las hay, el pie util es cuantas
+          ventas estan saldadas. */}
       <Cifra icon={CheckCircle} etiqueta="Cobrado de esas ventas" valor={eur(d.cobrado)}
-        pie={`${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
+        pie={d.cobrado_cuotas > 0
+          ? `${eur(d.cobrado_matricula)} de la venta · ${eur(d.cobrado_cuotas)} en cuotas`
+          : `${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
       <Cifra icon={Clock} etiqueta="Pendiente" valor={eur(d.pendiente)}
         pie={`${num(d.con_saldo)} con saldo`} />
       <Cifra icon={ChartBar} etiqueta="Cuotas" valor={`${num(cuotas.cobradas)} / ${num(cuotas.total)}`}
         pie={cuotas.vencidas ? `${num(cuotas.vencidas)} vencidas` : `${num(cuotas.pendientes)} por cobrar`} />
+    </div>
+    {sinCobro && (
+      <p className="text-xs text-muted-foreground px-1">
+        <strong className="text-foreground tabular-nums">{num(sinCobro.ventas)}</strong>{' '}
+        {sinCobro.ventas === 1 ? 'venta sin cobro' : 'ventas sin cobro'}
+        {' · '}<strong className="text-foreground tabular-nums">{eur(sinCobro.importe)}</strong> (proformas)
+        {sinCobro.con_proforma < sinCobro.ventas
+          ? ` — ${num(sinCobro.ventas - sinCobro.con_proforma)} aún sin proforma emitida`
+          : ''}
+        . No están en las cifras de arriba: pasan a contar como venta cuando se cobran.
+        Con ellas, {num(d.ventas + sinCobro.ventas)} ventas · {eur(d.importe + sinCobro.importe)}.
+      </p>
+    )}
     </div>
   );
 }

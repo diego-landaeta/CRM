@@ -7,6 +7,7 @@ export async function findAll({ active }) {
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.slug, p.type, p.emoji, p.logo_url, p.logo_key, p.producto_label, p.producto_label_plural,
             p.modules, p.shortcuts, p.external_panels, p.sidebar_labels, p.theme_color, p.auto_email_documents,
+            p.color_cabecera, p.remitente_no_contestar,
             p.webhook_api_key, p.meta_account_id, p.google_account_id,
             p.gsc_property, p.dias_alerta_inactividad, p.active, p.created_at, p.updated_at,
             p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
@@ -29,6 +30,9 @@ export async function findAll({ active }) {
  *
  * Se cachea porque no cambia sin un despliegue. Ante la duda, solo la de leads:
  * es la que lleva años ahi.
+ *
+ * Con la misma cautela va la tabla de países por subdominio (#221, migración
+ * 279): una configuración más del campus que, sin la migración, no se pide.
  */
 let columnasQueHay = null;
 export async function columnasDeListado() {
@@ -37,7 +41,7 @@ export async function columnasDeListado() {
     const { rows } = await query(
       `SELECT column_name FROM information_schema.columns
         WHERE table_name = 'projects'
-          AND column_name IN ('lead_columns', 'client_columns', 'product_columns')`
+          AND column_name IN ('lead_columns', 'client_columns', 'product_columns', 'paises_por_subdominio')`
     );
     columnasQueHay = rows.map((r) => r.column_name);
     if (!columnasQueHay.length) columnasQueHay = ['lead_columns'];
@@ -60,6 +64,7 @@ export async function findById(id) {
   const { rows } = await query(
     `SELECT id, nombre, slug, type, emoji, logo_url, logo_key, producto_label, producto_label_plural,
             modules, shortcuts, external_panels, sidebar_labels, theme_color, auto_email_documents,
+            color_cabecera, remitente_no_contestar,
             webhook_api_key, meta_account_id, google_account_id,
             gsc_property, dias_alerta_inactividad, active, created_at, updated_at,
             ${columnas.join(', ')}
@@ -79,9 +84,11 @@ export async function slugExists(slug, excludeId = null) {
   return rows.length > 0;
 }
 
-export async function create(data) {
+// `db` es el pool o el cliente de una transaccion: el alta va en la misma que
+// darle el campus a los admins de su empresa (#220, project.service.js).
+export async function create(data, db = { query }) {
   const webhookKey = `whk_${data.slug.replace(/-/g, '')}_${crypto.randomUUID()}`;
-  const { rows } = await query(
+  const { rows } = await db.query(
     `INSERT INTO projects (nombre, slug, type, emoji, webhook_api_key, meta_account_id,
                            google_account_id, gsc_property, dias_alerta_inactividad, sociedad_emisora_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -92,7 +99,7 @@ export async function create(data) {
 
   // Inicializar round-robin queue si es CRM
   if (data.type === 'crm') {
-    await query(
+    await db.query(
       `INSERT INTO project_queue_state (project_id, last_assigned_index) VALUES ($1, 0)
        ON CONFLICT DO NOTHING`,
       [rows[0].id]
@@ -102,18 +109,22 @@ export async function create(data) {
   return rows[0];
 }
 
-export async function update(id, fields) {
+export async function update(id, fields, db = { query }) {
   const allowed = ['nombre', 'type', 'emoji', 'meta_account_id', 'google_account_id',
                    'gsc_property', 'dias_alerta_inactividad', 'active',
                    'producto_label', 'producto_label_plural', 'logo_url', 'logo_key', 'modules',
                    'lead_base_fields_config', 'lead_columns', 'client_columns', 'product_columns',
                    'external_panels', 'sidebar_labels',
-                   'theme_color', 'auto_email_documents', 'sociedad_emisora_id'];
+                   'theme_color', 'auto_email_documents', 'sociedad_emisora_id',
+                   // Correos y formularios de la marca (migraciones 177 y 180).
+                   'color_cabecera', 'remitente_no_contestar',
+                   // País por subdominio (#221, migración 279).
+                   'paises_por_subdominio'];
   const sets = [];
   const params = [];
   let idx = 1;
   const jsonbFields = new Set(['modules', 'lead_base_fields_config', 'lead_columns',
-    'client_columns', 'product_columns', 'external_panels', 'sidebar_labels']);
+    'client_columns', 'product_columns', 'external_panels', 'sidebar_labels', 'paises_por_subdominio']);
   for (const k of allowed) {
     if (fields[k] !== undefined) {
       sets.push(`${k} = $${idx++}`);
@@ -123,8 +134,14 @@ export async function update(id, fields) {
   if (!sets.length) return null;
   sets.push(`updated_at = NOW()`);
   params.push(id);
-  const { rows } = await query(`UPDATE projects SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`, params);
+  const { rows } = await db.query(`UPDATE projects SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`, params);
   return rows[0];
+}
+
+/** La empresa de un campus, bloqueando la fila hasta el final de la transaccion. */
+export async function sociedadDelProyecto(id, db = { query }) {
+  const { rows } = await db.query('SELECT sociedad_emisora_id FROM projects WHERE id = $1 FOR UPDATE', [id]);
+  return rows[0] ? (rows[0].sociedad_emisora_id == null ? null : Number(rows[0].sociedad_emisora_id)) : undefined;
 }
 
 // --- Sociedades emisoras (globales, project_id NULL) para el selector de proyecto ---

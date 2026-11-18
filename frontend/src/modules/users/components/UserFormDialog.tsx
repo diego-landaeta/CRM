@@ -1,22 +1,40 @@
-import { useState } from 'react';
-import { X, Key, Info, Lock } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
+import { X, Lock } from '@phosphor-icons/react';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import type { Project, UserRole } from '@/shared/types';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
+import Field from '@/shared/components/ui/Field';
 import { avatarColorFor, getInitials, inputClass } from '@/shared/lib/ui';
 import { toast } from '@/shared/hooks/useToast';
-import type { CrmUser, ProjectAssignment } from '../api/users.api';
+import EquipoComercial from './EquipoComercial';
+import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
+import BrevoBloqueoAviso from './BrevoBloqueoAviso';
+import { listRolesAsignables, type AvisoCambioCorreo, type BrevoBloqueo, type CrmUser, type Empresa, type ProjectAssignment, type RolAsignable } from '../api/users.api';
 import { ASSIGNABLE_ROLES } from '../lib/usersUi';
+import { confirmacionCambioCorreo, problemaDeContrasena } from '../lib/credenciales';
+import { motivoNoAsignable, porRol } from '../lib/rolesAsignables';
 import ProjectSelector from './ProjectSelector';
+import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 
 export interface UserFormValues {
   nombre: string;
   email: string;
   role: UserRole;
+  /** Roles de MAS. Quien lleva prospectos y ademas da clase no tiene que elegir. */
+  roles_extra: UserRole[];
   projects: ProjectAssignment[];
   whatsapp_phone: string;
-  factura_manager: boolean;
-  editar_fechas_factura: boolean;
+  /** Con un correo nuevo: mandarle el enlace para poner contraseña allí (#246). */
+  reenviarEnlace: boolean;
+  /** #694: las excepciones de permisos que van con el alta. */
+  excepciones?: Record<string, boolean>;
+  /**
+   * Empresas enteras de un admin (#220). `undefined` = no se tocan: quien edita
+   * no es super admin, o no hay migración. Vacía = quitarlas (sus campus se quedan).
+   */
+  empresaIds?: number[];
 }
 
 interface Props {
@@ -25,28 +43,87 @@ interface Props {
   projects: Project[];
   /** El cambio de contraseña solo lo puede hacer un superadmin. */
   canResetPassword: boolean;
+  /** Y el del correo, también solo él (#248). */
+  canChangeEmail: boolean;
+  /** Antes de guardar un correo nuevo: si recibe prospectos por Make (#248). */
+  onCheckEmail: () => Promise<AvisoCambioCorreo | null>;
+  /**
+   * Las empresas del grupo, para dar una entera a un admin (#220). Solo llegan
+   * si quien edita es super admin: si no, la casilla no se pinta.
+   */
+  empresas?: Empresa[];
+  /** La migración 203 aún no está: la casilla sale apagada y se dice por qué. */
+  faltaMigracionEmpresas?: boolean;
+  /** Brevo no le entrega los correos (migración 290): la marca de la ficha. */
+  bloqueoBrevo?: BrevoBloqueo | null;
+  /** «Desbloquear en Brevo»: solo con el permiso users.brevo_desbloquear. */
+  onDesbloquearBrevo?: () => Promise<void>;
   loading: boolean;
   onClose: () => void;
   onSubmit: (values: UserFormValues) => void | Promise<void>;
-  onResetPassword: (password: string) => Promise<void>;
+  onResetPassword: (password: string, repetida: string) => Promise<void>;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function UserFormDialog({
-  user, projects, canResetPassword, loading, onClose, onSubmit, onResetPassword,
+  user, projects, canResetPassword, canChangeEmail, loading, onClose, onSubmit, onCheckEmail, onResetPassword,
+  empresas, faltaMigracionEmpresas = false, bloqueoBrevo = null, onDesbloquearBrevo,
 }: Props) {
   const esEdicion = !!user;
+  // Escape cierra, como los demás formularios (#106).
+  useEscapeKey(onClose);
 
   const [nombre, setNombre] = useState(user?.nombre ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [reenviarEnlace, setReenviarEnlace] = useState(false);
+  const cambiaCorreo = esEdicion && canChangeEmail && email.trim().toLowerCase() !== user!.email.toLowerCase();
   const [role, setRole] = useState<UserRole>((user?.role as UserRole) ?? 'gestor');
-  const [seleccionados, setSeleccionados] = useState<ProjectAssignment[]>(user?.projects ?? []);
-  const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
-  const [facturaManager, setFacturaManager] = useState(!!user?.factura_manager);
-  const [editarFechas, setEditarFechas] = useState(!!user?.editar_fechas_factura);
+  // Los roles añadidos. Diego, 22/09: «necesitamos que se pueda colocar más de
+  // un rol a un usuario». El principal sigue mandando —es el que se enseña en
+  // las listas y el que usa medio CRM—; estos solo suman permisos.
+  const [rolesExtra, setRolesExtra] = useState<UserRole[]>(
+    (user?.roles_extra as UserRole[] | undefined) ?? [],
+  );
+  const alternarRolExtra = (r: UserRole) => setRolesExtra((prev) =>
+    prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]);
 
+  // Qué roles puede dar quien da de alta (Tony, 03/11: cinco altas rechazadas
+  // por elegir «Soporte», sin saber por qué). Solo en el alta: al editar, lo
+  // que la persona ya tenía no cuenta como «dar», y su rol no se puede apagar.
+  // Si la lista no llega, el formulario sigue como antes y decide el servidor.
+  const [asignables, setAsignables] = useState<RolAsignable[] | null>(null);
+  useEffect(() => {
+    if (esEdicion) return;
+    let vivo = true;
+    listRolesAsignables().then((l) => { if (vivo) setAsignables(l); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [esEdicion]);
+  const filaDe = porRol(asignables);
+  const motivoPrincipal = (r: UserRole) => motivoNoAsignable(filaDe[r]?.principal);
+  const motivoAnadido = (r: UserRole) => motivoNoAsignable(filaDe[r]?.anadido);
+  // Lo elegido que no se puede dar (el rol de serie, si llega la lista con él apagado).
+  const noDables = [
+    ...(motivoPrincipal(role) ? [role] : []),
+    ...rolesExtra.filter((r) => r !== role && motivoAnadido(r)),
+  ];
+  const [seleccionados, setSeleccionados] = useState<ProjectAssignment[]>(user?.projects ?? []);
+  // Las empresas enteras (#220). Diego, 10/10: «Un admin puede tener los
+  // proyectos futuros, pero de SU empresa: mayormente los admin son por empresa».
+  const puedeDarEmpresas = !!empresas && !faltaMigracionEmpresas;
+  const [empresasEnteras, setEmpresasEnteras] = useState<number[]>(user?.empresa_ids ?? []);
+  // El colaborador también tiene empresa, sin campus (equipo de desarrollo, 26/10/2026).
+  const esColaborador = role === 'colaborador' || rolesExtra.includes('colaborador' as UserRole);
+  const llevaEmpresa = role === 'admin' || esColaborador;
+  const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
+  // Facturación, fechas de facturas y el WhatsApp del CRM ya no son casillas de
+  // aquí (#423): son permisos del catálogo y se dan en el apartado «Permisos» de
+  // la ficha (o ya en el alta, #694), con su registro de quién y cuándo.
+
+  // #694: en el alta, las excepciones viajan con el formulario y se crean con él.
+  const [excepciones, setExcepciones] = useState<Record<string, boolean>>({});
   const [nuevaPass, setNuevaPass] = useState('');
+  const [repetirPass, setRepetirPass] = useState('');
   const [guardandoPass, setGuardandoPass] = useState(false);
 
   function alternarProyecto(projectId: number) {
@@ -56,51 +133,110 @@ export default function UserFormDialog({
       : [...prev, { projectId, recibeLeads: role === 'gestor' }]);
   }
 
+  /** Marcar o quitar de golpe los campus de una empresa (#220). */
+  function marcarVarios(projectIds: number[], marcar: boolean) {
+    setSeleccionados((prev) => {
+      if (!marcar) return prev.filter((p) => !projectIds.includes(p.projectId));
+      const nuevos = projectIds
+        .filter((id) => !prev.some((p) => p.projectId === id))
+        .map((projectId) => ({ projectId, recibeLeads: role === 'gestor' }));
+      return [...prev, ...nuevos];
+    });
+  }
+
+  /**
+   * La casilla de la empresa entera. Al marcarla se marcan ya sus campus de
+   * hoy —es lo que va a guardar el servidor, y así se ve—. Al quitarla, NO se
+   * desmarcan: conserva lo que tiene y solo deja de recibir los nuevos.
+   */
+  function alternarEmpresa(issuerId: number) {
+    const entera = empresasEnteras.includes(issuerId);
+    setEmpresasEnteras((prev) => (entera ? prev.filter((x) => x !== issuerId) : [...prev, issuerId]));
+    // Al colaborador, la empresa no le da campus (26/10/2026): no se le marcan.
+    if (!entera && role === 'admin') {
+      marcarVarios(projects.filter((p) => Number(p.sociedad_emisora_id) === issuerId).map((p) => p.id), true);
+    }
+  }
+
   function alternarRecibeLeads(projectId: number) {
     setSeleccionados((prev) => prev.map((p) => p.projectId === projectId
       ? { ...p, recibeLeads: !p.recibeLeads }
       : p));
   }
 
-  function enviar(e: React.FormEvent) {
+  async function enviar(e: React.FormEvent) {
     e.preventDefault();
+    // Todo lo que falta o está mal, de una vez (#106).
+    // Un admin con una empresa entera ya tiene de dónde le llegan campus,
+    // aunque esa empresa aún no tenga ninguno (#220).
+    const conEmpresa = llevaEmpresa && puedeDarEmpresas && empresasEnteras.length > 0;
+    const faltan: Falta[] = [];
+    if (!nombre.trim()) faltan.push({ title: 'Falta el nombre', description: 'Escríbelo en «Nombre».', que: 'el nombre en «Nombre»' });
     // El backend pide 2 caracteres minimo; validarlo aqui evita el viaje.
-    if (nombre.trim().length < 2) {
-      toast({ title: 'Nombre demasiado corto', description: 'Mínimo 2 caracteres.', variant: 'destructive' });
+    else if (nombre.trim().length < 2) faltan.push({ title: 'Nombre demasiado corto', description: 'En «Nombre», al menos 2 caracteres.', que: 'un nombre de al menos 2 letras en «Nombre»' });
+    if (!esEdicion && !email.trim()) faltan.push({ title: 'Falta el email', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'el email en «Email»' });
+    else if (!esEdicion && !EMAIL_RE.test(email.trim())) {
+      faltan.push({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'un email válido en «Email» (nombre@dominio.com)' });
+    }
+    if (!esEdicion && seleccionados.length === 0 && !conEmpresa) {
+      faltan.push({
+        title: 'Falta el proyecto',
+        description: role === 'admin' && puedeDarEmpresas
+          ? 'Marca al menos un campus o una empresa entera.'
+          : 'Asigna al menos un proyecto.',
+        que: 'al menos un proyecto en «Proyectos asignados»',
+      });
+    }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
+    if (noDables.length) {
+      const nombres = noDables.map((r) => `«${ASSIGNABLE_ROLES.find((x) => x.value === r)?.label ?? r}»`).join(' y ');
+      toast({
+        title: 'Ese rol no lo puedes dar',
+        description: `Quita ${nombres}: le daría permisos que tú no tienes. Si de verdad lo necesita, pídeselo a un superadmin.`,
+        variant: 'destructive',
+      });
       return;
     }
-    if (!esEdicion) {
-      if (!EMAIL_RE.test(email.trim())) {
-        toast({ title: 'Email inválido', description: 'Revisa el formato del email.', variant: 'destructive' });
+    // El correo de otro (#248): solo el super admin, y avisando antes de guardar
+    // de lo que supone, sobre todo si recibe prospectos por Make.
+    const correoNuevo = email.trim().toLowerCase();
+    if (esEdicion && canChangeEmail && correoNuevo !== user!.email.toLowerCase()) {
+      if (!EMAIL_RE.test(correoNuevo)) {
+        toast({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', variant: 'destructive' });
         return;
       }
-      if (seleccionados.length === 0) {
-        toast({ title: 'Falta el proyecto', description: 'Asigna al menos un proyecto.', variant: 'destructive' });
-        return;
-      }
+      const aviso = await onCheckEmail().catch(() => null);
+      if (!window.confirm(confirmacionCambioCorreo(user!.nombre, user!.email, correoNuevo, aviso))) return;
     }
     onSubmit({
       nombre: nombre.trim(),
       email: email.trim(),
       role,
+      // El principal nunca va repetido entre los añadidos.
+      roles_extra: rolesExtra.filter((r) => r !== role),
       projects: seleccionados,
       whatsapp_phone: telefono.trim(),
-      factura_manager: facturaManager,
-      // Poder cambiar fechas sin poder facturar no sirve de nada: la pantalla de
-      // fechas se abre desde la factura. Si se quita lo primero, cae lo segundo.
-      editar_fechas_factura: facturaManager && editarFechas,
+      reenviarEnlace: cambiaCorreo && reenviarEnlace,
+      // Solo si quien edita puede darlas. Para otro rol que no sea admin ni
+      // colaborador, se mandan vacías: una gestora no tiene empresas enteras.
+      ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
+      // #694: solo en el alta; en la ficha cada cambio ya se guarda al momento.
+      ...(!esEdicion && Object.keys(excepciones).length ? { excepciones } : {}),
     });
   }
 
   async function cambiarPassword() {
-    if (nuevaPass.length < 8) {
-      toast({ title: 'Contraseña muy corta', description: 'Mínimo 8 caracteres.', variant: 'destructive' });
+    const problema = problemaDeContrasena(nuevaPass, repetirPass);
+    if (problema) {
+      toast({ title: 'Revisa la contraseña', description: problema, variant: 'destructive' });
       return;
     }
     setGuardandoPass(true);
     try {
-      await onResetPassword(nuevaPass);
+      await onResetPassword(nuevaPass, repetirPass);
       setNuevaPass('');
+      setRepetirPass('');
     } finally {
       setGuardandoPass(false);
     }
@@ -133,7 +269,9 @@ export default function UserFormDialog({
             </button>
           </div>
 
-          <form onSubmit={enviar} className="space-y-4">
+          {/* noValidate: avisa el CRM (enviar), diciendo qué falta y dónde,
+              y no el globo del navegador (#106). */}
+          <form onSubmit={enviar} noValidate className="space-y-4">
             {esEdicion && (
               <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold ${avatarColorFor(user!.id)}`}>
@@ -146,9 +284,12 @@ export default function UserFormDialog({
               </div>
             )}
 
-            <div>
-              <label htmlFor="user-nombre" className="text-xs text-muted-foreground mb-1.5 block px-1">Nombre *</label>
-              <input
+            {esEdicion && bloqueoBrevo && (
+              <BrevoBloqueoAviso bloqueo={bloqueoBrevo} onDesbloquear={onDesbloquearBrevo} />
+            )}
+
+            <Field label="Nombre" required htmlFor="user-nombre">
+              <input autoComplete="off"
                 id="user-nombre"
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
@@ -157,12 +298,11 @@ export default function UserFormDialog({
                 className={inputClass}
                 required
               />
-            </div>
+            </Field>
 
             {!esEdicion ? (
-              <div>
-                <label htmlFor="user-email" className="text-xs text-muted-foreground mb-1.5 block px-1">Email *</label>
-                <input
+              <Field label="Email" required htmlFor="user-email">
+                <input autoComplete="off"
                   id="user-email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -171,30 +311,132 @@ export default function UserFormDialog({
                   className={inputClass}
                   required
                 />
+              </Field>
+            ) : canChangeEmail ? (
+              <div>
+                <Field label="Email" required htmlFor="user-email"
+                  hint="Es con lo que entra: al cambiarlo, con el viejo ya no podrá entrar; una sesión que ya tenga abierta puede seguir hasta 8 horas. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.">
+                  <input autoComplete="off"
+                    id="user-email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    type="email"
+                    maxLength={255}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+                {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
+                    sale ningún correo mientras siga el freno: se dice en vez de esconderlo.
+                    El correo de otra persona cambia al guardar, sin código (Diego,
+                    06/11, #688): el código es solo para quien cambia el suyo. */}
+                {cambiaCorreo && (
+                  role === 'tutor' ? (
+                    <p className="text-secundario text-muted-foreground mt-1.5 px-1">
+                      A los tutores no se les manda ningún correo por ahora: si lo necesita, ponle tú una contraseña abajo y pásasela.
+                    </p>
+                  ) : (
+                    <label className="mt-1.5 flex items-start gap-2 px-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={reenviarEnlace}
+                        onChange={(e) => setReenviarEnlace(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm">
+                        Reenviar enlace de acceso
+                        <span className="block text-secundario text-muted-foreground">
+                          Le llega a la dirección nueva para poner su contraseña.
+                        </span>
+                      </span>
+                    </label>
+                  )
+                )}
               </div>
             ) : (
-              <div>
-                <label className="text-xs text-muted-foreground mb-1.5 block px-1">Email</label>
-                <input value={user!.email} readOnly disabled className={`${inputClass} opacity-60 cursor-not-allowed`} />
-                <p className="text-secundario text-muted-foreground mt-1 px-1 flex items-start gap-1">
-                  <Info size={11} className="mt-px flex-shrink-0" />
-                  El email es la identidad de la cuenta y hoy no se puede cambiar desde aquí.
-                </p>
-              </div>
+              <Field label="Email" disabled htmlFor="user-email-fijo" hint="Solo un superadmin puede cambiar el correo.">
+                <input autoComplete="off" id="user-email-fijo" value={user!.email} readOnly disabled className={`${inputClass} opacity-60 cursor-not-allowed`} />
+              </Field>
             )}
 
-            <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block px-1">Rol *</label>
+            <Field label="Rol" required htmlFor="user-rol" hint={ASSIGNABLE_ROLES.find((r) => r.value === role)?.hint}>
               <Select<UserRole>
+                id="user-rol"
                 value={role}
                 onChange={setRole}
-                options={ASSIGNABLE_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+                options={ASSIGNABLE_ROLES.map((r) => ({
+                  value: r.value,
+                  // En la lista no caben frases: la razón sale debajo y en las casillas de abajo.
+                  label: motivoPrincipal(r.value) ? `${r.label} (no puedes darlo)` : r.label,
+                  disabled: !!motivoPrincipal(r.value),
+                }))}
                 ariaLabel="Rol"
               />
-              <p className="text-secundario text-muted-foreground mt-1 px-1">
-                {ASSIGNABLE_ROLES.find((r) => r.value === role)?.hint}
+            </Field>
+            {/* Los roles que no se pueden dar, con su porqué, a la vista sin abrir la lista. */}
+            {ASSIGNABLE_ROLES.some((r) => motivoPrincipal(r.value)) && (
+              <ul className="-mt-2 space-y-1 px-1 text-secundario text-muted-foreground">
+                {ASSIGNABLE_ROLES.filter((r) => motivoPrincipal(r.value)).map((r) => (
+                  <li key={r.value} data-testid={`rol-no-asignable-${r.value}`}>
+                    <span className="font-medium text-foreground/80">{r.label}.</span> {motivoPrincipal(r.value)}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Y ADEMÁS. Hay quien lleva prospectos y también da clase: antes
+                había que elegir, y lo que no se eligiera se perdía.
+
+                Solo SUMAN: si un rol deja hacer algo, se puede. Nunca quitan,
+                porque entonces añadir un rol recortaría permisos, que es lo
+                contrario de lo que se busca al añadirlo. */}
+            <fieldset>
+              <legend className="mb-1.5 px-1 text-secundario text-muted-foreground">
+                Y además es…
+              </legend>
+              <div className="flex flex-wrap gap-1.5">
+                {ASSIGNABLE_ROLES.filter((r) => r.value !== role).map((r) => {
+                  const puesto = rolesExtra.includes(r.value);
+                  const motivo = motivoAnadido(r.value);
+                  // Uno ya puesto que no se puede dar se deja quitar: quitar no es dar.
+                  const apagado = !!motivo && !puesto;
+                  return (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => alternarRolExtra(r.value)}
+                      aria-pressed={puesto}
+                      disabled={apagado}
+                      title={motivo ?? undefined}
+                      className={
+                        'rounded-md border px-2.5 py-1 text-normal transition-colors '
+                        + 'focus:outline-none focus:ring-2 focus:ring-primary/40 '
+                        + 'disabled:opacity-50 disabled:cursor-not-allowed '
+                        + (puesto
+                          ? 'border-primary bg-primary/10 font-semibold text-primary'
+                          : 'border-border hover:bg-muted')
+                      }
+                    >
+                      {r.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {ASSIGNABLE_ROLES.some((r) => r.value !== role && motivoAnadido(r.value)) && (
+                <ul className="mt-1 space-y-1 px-1 text-secundario text-muted-foreground">
+                  {ASSIGNABLE_ROLES.filter((r) => r.value !== role && motivoAnadido(r.value)).map((r) => (
+                    <li key={r.value} data-testid={`extra-no-asignable-${r.value}`}>
+                      <span className="font-medium text-foreground/80">{r.label}.</span> {motivoAnadido(r.value)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-1 px-1 text-secundario text-muted-foreground">
+                {rolesExtra.length === 0
+                  ? 'Opcional. Suma los permisos de otro rol sin perder los de este.'
+                  : `Podrá hacer lo de ${ASSIGNABLE_ROLES.find((r) => r.value === role)?.label} y también lo de ${rolesExtra.map((x) => ASSIGNABLE_ROLES.find((r) => r.value === x)?.label).join(' y ')}.`}
               </p>
-            </div>
+            </fieldset>
 
             {projects.length > 0 && (
               <ProjectSelector
@@ -203,52 +445,31 @@ export default function UserFormDialog({
                 role={role}
                 onToggle={alternarProyecto}
                 onToggleRecibeLeads={alternarRecibeLeads}
+                onSetMany={marcarVarios}
                 required={!esEdicion}
+                empresas={empresas}
+                empresasEnteras={empresasEnteras}
+                onToggleEmpresa={empresas ? alternarEmpresa : undefined}
+                faltaMigracionEmpresas={faltaMigracionEmpresas}
+                esColaborador={esColaborador}
               />
             )}
 
-            {/* Facturacion. No se deriva del rol: ser «gestor» no decide quien
-                factura. Vanessa lo es y no debe. Un admin puede siempre, por su
-                rol, asi que para el las casillas no cambian nada y no se pintan. */}
-            {(role === 'gestor' || role === 'soporte') && (
-              <div className="rounded-lg border border-border p-3 space-y-2">
-                <p className="text-xs text-muted-foreground px-1">Facturación</p>
-                <label className="flex items-start gap-2 cursor-pointer px-1">
-                  <input
-                    type="checkbox"
-                    checked={facturaManager}
-                    onChange={(e) => setFacturaManager(e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span className="text-sm">
-                    Puede emitir y corregir facturas
-                    <span className="block text-secundario text-muted-foreground">
-                      Solo las de sus propios prospectos.
-                    </span>
-                  </span>
-                </label>
-                <label className={`flex items-start gap-2 px-1 ${facturaManager ? 'cursor-pointer' : 'opacity-50'}`}>
-                  <input
-                    type="checkbox"
-                    checked={facturaManager && editarFechas}
-                    disabled={!facturaManager}
-                    onChange={(e) => setEditarFechas(e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span className="text-sm">
-                    Puede cambiar las fechas de emisión y de pago
-                    <span className="block text-secundario text-muted-foreground">
-                      Sin tocar importes ni conceptos.
-                    </span>
-                  </span>
-                </label>
-              </div>
-            )}
+            {/* Todo lo que puede hacer y de dónde le viene (#423), siempre a la
+                vista en su ficha (#694): su rol, su rol a medida o una excepción
+                suya, y ahí mismo se le cambian (cada cambio se guarda al momento).
+                En el alta, lo que trae el rol, con sus excepciones antes de crearla. */}
+            <div className="rounded-lg border border-border p-3">
+              {esEdicion && user
+                ? <PermisosDePersona userId={user.id} enLinea />
+                : <PermisosDelAlta role={role} rolesExtra={rolesExtra.filter((r) => r !== role)}
+                    projectIds={seleccionados.map((p) => p.projectId)}
+                    excepciones={excepciones} onCambiar={setExcepciones} />}
+            </div>
 
             {esEdicion && (
-              <div>
-                <label htmlFor="user-tel" className="text-xs text-muted-foreground mb-1.5 block px-1">Teléfono (WhatsApp)</label>
-                <input
+              <Field label="Teléfono (WhatsApp)" htmlFor="user-tel" hint="Se usa para el widget de WhatsApp y el contacto del gestor.">
+                <input autoComplete="off"
                   id="user-tel"
                   value={telefono}
                   onChange={(e) => setTelefono(e.target.value)}
@@ -256,11 +477,11 @@ export default function UserFormDialog({
                   maxLength={30}
                   className={inputClass}
                 />
-                <p className="text-secundario text-muted-foreground mt-1 px-1">
-                  Se usa para el widget de WhatsApp y el contacto del gestor.
-                </p>
-              </div>
+              </Field>
             )}
+
+            {/* Las gestoras a su cargo (Carlos, 09/11/2026): componente aparte. */}
+            {esEdicion && user && <EquipoComercial userId={user.id} />}
 
             {esEdicion && !canResetPassword && (
               <div className="border-t border-border pt-3 mt-1">
@@ -273,33 +494,40 @@ export default function UserFormDialog({
             )}
 
             {esEdicion && canResetPassword && (
-              <div className="border-t border-border pt-3 mt-1">
-                <label htmlFor="user-pass" className="text-xs font-semibold flex items-center gap-1.5 mb-1.5 px-1">
-                  <Key size={12} weight="bold" /> Reiniciar contraseña
-                </label>
-                <div className="flex gap-2">
+              <Field label="Reiniciar contraseña" htmlFor="user-pass" className="border-t border-border pt-3 mt-1"
+                hint="Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla no podrá entrar con la anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     id="user-pass"
                     type="text"
                     value={nuevaPass}
                     onChange={(e) => setNuevaPass(e.target.value)}
-                    placeholder="Nueva contraseña (mín. 8)"
+                    placeholder="Nueva contraseña"
+                    autoComplete="new-password"
+                    maxLength={200}
+                    className={`${inputClass} font-mono`}
+                  />
+                  <input
+                    id="user-pass-2"
+                    type="text"
+                    value={repetirPass}
+                    onChange={(e) => setRepetirPass(e.target.value)}
+                    placeholder="Repítela"
+                    aria-label="Repite la contraseña"
+                    autoComplete="new-password"
                     maxLength={200}
                     className={`${inputClass} font-mono`}
                   />
                   <button
                     type="button"
                     onClick={cambiarPassword}
-                    disabled={guardandoPass || nuevaPass.length === 0}
+                    disabled={guardandoPass || nuevaPass.length === 0 || repetirPass.length === 0}
                     className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap"
                   >
                     {guardandoPass ? '…' : 'Cambiar'}
                   </button>
                 </div>
-                <p className="text-secundario text-muted-foreground mt-1 px-1">
-                  Se la comunicas tú al usuario. Al cambiarla se cierran sus sesiones activas.
-                </p>
-              </div>
+              </Field>
             )}
 
             <div className="flex justify-end gap-2 pt-2">
@@ -313,7 +541,7 @@ export default function UserFormDialog({
               <button
                 type="submit"
                 disabled={loading}
-                className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {loading ? 'Guardando…' : esEdicion ? 'Guardar cambios' : 'Crear usuario'}
               </button>

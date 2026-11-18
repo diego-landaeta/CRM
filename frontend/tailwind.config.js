@@ -52,6 +52,14 @@ export default {
           soft: 'hsl(var(--info-soft))',
           'soft-foreground': 'hsl(var(--info-soft-foreground))',
         },
+        // El índigo del tema (#199: «Datos validados» en Matrículas). Se usa
+        // como bg-indigo-soft / text-indigo-soft-foreground, nunca con número.
+        indigo: {
+          DEFAULT: 'hsl(var(--indigo))',
+          foreground: 'hsl(var(--indigo-foreground))',
+          soft: 'hsl(var(--indigo-soft))',
+          'soft-foreground': 'hsl(var(--indigo-soft-foreground))',
+        },
         muted: {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))',
@@ -64,6 +72,16 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+      },
+      // Dos tokens que se usan también como LETRA y como letra no se leían
+      // (#32, medido con la fórmula de contraste WCAG; el mínimo es 4,5:1):
+      // - warning es un fondo pensado para texto oscuro encima: como letra
+      //   daba 2,0:1 en claro. Como letra usa el ámbar de los avisos suaves.
+      // - destructive como letra daba 4,2:1 en oscuro (3,7:1 en una tarjeta).
+      // Solo cambia `text-…`: bg-, border- y ring- siguen con el color de antes.
+      textColor: {
+        warning: { DEFAULT: 'hsl(var(--warning-soft-foreground))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive-text))' },
       },
       borderRadius: {
         '2xl': 'calc(var(--radius) + 4px)',
@@ -100,8 +118,42 @@ export default {
         cifra: ['1.75rem', { lineHeight: '2.25rem', fontWeight: '600' }],
       },
 
+      // El ritmo de la pantalla (#32).
+      //
+      // Medido antes de decidir, igual que los radios. Una tarjeta se rellenaba
+      // de OCHO maneras distintas —p-4 (110 veces), p-5 (70), p-3 (42), p-6
+      // (39), p-8, p-2, p-7, p-12—, y para separar bloques no había ni un valor
+      // dominante: space-y-5 (66), space-y-3 (54), space-y-2 (46), space-y-6
+      // (31), space-y-4 (31). Esa es la razón de que dos pantallas del mismo CRM
+      // no parezcan del mismo CRM aunque los colores ya sean los mismos.
+      //
+      // Tres nombres, uno por papel. No se elige un número: se elige qué es.
+      //
+      //   space-y-bloque   entre los bloques de una pantalla
+      //   p-tarjeta        relleno de una tarjeta      (lo pone <Card>)
+      //   gap-fila         entre controles de una fila
+      //
+      // La escala numérica de Tailwind sigue estando para los casos sueltos;
+      // esto es para las tres decisiones que se repiten en las 82 pantallas.
+      spacing: {
+        bloque: '1.5rem',   // 24px
+        tarjeta: '1rem',    // 16px
+        fila: '0.5rem',     // 8px
+      },
+
+      // Solo hay TRES profundidades, y cada una dice a qué distancia está la
+      // pieza del papel. Había cinco sombras distintas repartidas —`lg`, `xl`,
+      // `2xl` y dos copias literales— para dos cosas.
+      //
+      //   shadow-sm       la tarjeta: está en la página, no encima  (Tailwind)
+      //   shadow-popover  un menú o un aviso: flota un poco
+      //   shadow-dialog   un diálogo: tapa la pantalla
+      //
+      // La regla de la maqueta —«tarjetas planas, no cajas flotando»— es sobre
+      // la primera. Un diálogo SÍ debe despegarse: la sombra es lo que lo separa
+      // de lo que hay debajo.
       boxShadow: {
-        // La sombra de los diálogos estaba copiada tal cual en 7 sitios.
+        popover: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
         dialog: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
       },
     },

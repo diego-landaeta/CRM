@@ -5,7 +5,10 @@ import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
-import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
+import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceComercial, alcanceDeLider } from '../../shared/utils/roles.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -20,14 +23,27 @@ function logoMime(ext) {
   return 'image/jpeg';
 }
 
-function isAdmin(req) {
-  return ['admin', 'superadmin', 'soporte'].includes(req.user?.role);
-}
 
 function projectId(req) {
   const pid = Number(req.query.projectId || req.body?.projectId);
   if (!pid) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
   return pid;
+}
+
+/**
+ * Los campus que puede mirar quien pide la lista o las cifras (#591).
+ *
+ * La lista y `/stats` usaban el `projectId` que llegaba sin más: un admin de un
+ * campus veía las facturas de otro cambiando el número, y con `issuerId` las de
+ * toda la empresa, aunque solo tuviera uno de sus campus. Como en leads: un
+ * campus ajeno es un 403, y por empresa solo cuentan los suyos. `null` es
+ * «todos» (superadmin y soporte).
+ */
+async function campusPermitidos(req, pid) {
+  if (veTodoElCrm(req.user)) return null;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  if (pid && !mios.includes(Number(pid))) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+  return mios.length ? mios : [-1];
 }
 
 export async function list(req, res, next) {
@@ -37,19 +53,34 @@ export async function list(req, res, next) {
     // Vista por SOCIEDAD (todas las facturas de una empresa emisora entre
     // proyectos): global, solo admin/superadmin. Si no, se exige projectId.
     const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    // «Todos los proyectos» (#218): sin campus ni empresa, las de los campus de
+    // quien pide (super admin y soporte, todos menos los de pruebas). Antes,
+    // «projectId requerido» y la pantalla se quedaba tras el muro.
+    const todos = !issuerId && !req.query.projectId;
     let pid = null;
     if (issuerId && isAdmin) {
       pid = req.query.projectId ? Number(req.query.projectId) : null; // opcional en modo sociedad
-    } else {
+    } else if (!todos) {
       pid = projectId(req);
     }
+    const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
-    const responsableId = req.user?.role === 'gestor' ? req.user.userId : null;
-    const data = await model.list({ projectId: pid, issuerId: issuerId && isAdmin ? issuerId : null,
+    // Quien lleva un equipo comercial (09/11/2026), las suyas y las de su equipo.
+    const responsableId = await alcanceComercial(req.user);
+    const data = await model.list({ projectId: pid, projectIds, issuerId: issuerId && isAdmin ? issuerId : null,
       estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
     res.json({ success: true, data: data.rows, pagination: { total: data.total, page: Number(page) || 1, limit: Number(limit) || 50 } });
   } catch (e) { next(e); }
+}
+
+// Los filtros de la lista que tambien mandan en las tarjetas (#233). Solo fechas
+// AAAA-MM-DD y un estado de los que existen: lo demas se ignora.
+const ESTADOS_FACTURA = ['borrador', 'emitida', 'enviada', 'pagada', 'cancelada'];
+function periodo(req) {
+  const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const estado = ESTADOS_FACTURA.includes(req.query.estado) ? req.query.estado : null;
+  return { from: fecha(req.query.from), to: fecha(req.query.to), estado };
 }
 
 export async function stats(req, res, next) {
@@ -57,8 +88,14 @@ export async function stats(req, res, next) {
     const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
     // Con issuerId → stats de la sociedad (opcionalmente acotada a un proyecto).
     // Sin issuerId → stats del proyecto activo (comportamiento clásico).
-    const pid = req.query.projectId ? Number(req.query.projectId) : (issuerId ? null : projectId(req));
-    res.json({ success: true, data: await model.getStats({ projectId: pid, issuerId }) });
+    // Sin campus ni empresa: «Todos los proyectos» (#218), como la lista.
+    const todos = !issuerId && !req.query.projectId;
+    const pid = req.query.projectId ? Number(req.query.projectId) : null;
+    const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
+    // Recortadas como la lista (QA del 09/11/2026): una gestora, las suyas;
+    // quien lleva un equipo comercial, las de su equipo.
+    const personas = await alcanceComercial(req.user);
+    res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req), personas }) });
   } catch (e) { next(e); }
 }
 
@@ -102,6 +139,9 @@ export async function completarDatos(req, res, next) {
 export async function byConversion(req, res, next) {
   try {
     const conversionId = Number(req.params.conversionId);
+    // `?todas=1`: la lista de todas las de la venta (la ficha de la matrícula, 13/11/2026).
+    // La misma guardia de la ruta (campus y, si es gestora, que la venta sea suya).
+    if (req.query.todas === '1') return res.json({ success: true, data: await model.findAllByConversion(conversionId) });
     const inv = await model.findByConversion(conversionId);
     res.json({ success: true, data: inv });
   } catch (e) { next(e); }
@@ -126,16 +166,14 @@ export async function create(req, res, next) {
 
     // Facturas de abono (rectificativas): admin/superadmin o una gestora con permiso
     // factura_manager (sobre sus propias ventas).
-    const esAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
-    // Proforma de una gestora: se queda esperando el visto bueno de quien
-    // lleva la facturacion. No gasta numero mientras tanto.
-    if (d.tipo === 'proforma' && !esAdmin) {
-      const mandaEllaMisma = await model.esFacturaManager(req.user?.userId);
-      if (!mandaEllaMisma) d.requiereAprobacion = true;
+    // Proforma de quien no pone números: se queda esperando el visto bueno de
+    // quien lleva la facturacion. No gasta numero mientras tanto. (#423: por
+    // permiso, «Poner número al cobrar»; antes, el rol o la casilla.)
+    if (d.tipo === 'proforma' && !(await tienePermiso(req, 'facturas.emitir'))) {
+      d.requiereAprobacion = true;
     }
-    if (d.tipo === 'rectificativa' && !esAdmin) {
-      const puede = req.user?.role === 'gestor' && await model.esFacturaManager(req.user.userId);
-      if (!puede) throw new AppError('No tienes permiso para emitir facturas de abono.', 403, 'FORBIDDEN');
+    if (d.tipo === 'rectificativa' && !(await tienePermiso(req, 'facturas.gestionar'))) {
+      throw new AppError('No tienes permiso para emitir facturas de abono.', 403, 'FORBIDDEN');
     }
 
     // REGLA: sin ningún pago no se puede emitir una FACTURA fiscal por la
@@ -176,6 +214,21 @@ export async function create(req, res, next) {
     const enDivisa = moneda !== 'EUR' && d.totalEur != null;
     const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
 
+    // REGLA: la factura de una venta no pasa de lo cobrado y aún sin facturar
+    // (06/10, la 87 de ICTESS y la 0188 de CEDIA). Se compara en euros, que es
+    // en lo que van los cobros; una factura en otra divisa sin su importe en
+    // euros no tiene con qué compararse y no se mira.
+    if (d.conversionId && d.tipo !== 'proforma' && !d.borrador && !d.permitirMasDeLoCobrado
+        && (moneda === 'EUR' || enDivisa)) {
+      const cuadre = await model.cuadreDeVenta(d.conversionId);
+      const motivo = cuadre && model.motivoParaNoFacturarDeMas({
+        total: enDivisa ? eur.total : total,
+        base: enDivisa ? eur.baseImponible : baseImponible,
+        ivaPct, ivaIncluido: !!d.ivaIncluido, ...cuadre,
+      });
+      if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
+    }
+
     const inv = await model.create({
       ...d,
       ivaPct, leyendaIva, moneda,
@@ -215,14 +268,25 @@ export async function update(req, res, next) {
 export async function corregir(req, res, next) {
   try {
     const id = Number(req.params.id);
-    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+    if (!(await model.esFacturaQueGestiona(req.user.userId, req.user.role, id))) {
       throw new AppError('Solo puedes editar tus propias facturas.', 403, 'FORBIDDEN');
     }
     const d = { ...(req.body || {}) };
+    // La factura tal como esta: hace falta para saber de que cobro es y, mas
+    // abajo, para el signo de un abono.
+    const actual = await model.findById(id);
     // Exento → IVA 0. Si no, se recalcula con el pct indicado sobre las líneas.
     if (Array.isArray(d.items)) {
       const exento = d.exento === true || Number(d.ivaPct) === 0;
       const ivaPct = exento ? 0 : (d.ivaPct ?? 0);
+      // La factura de un cobro va por lo cobrado (15/10, venta 643): si los
+      // conceptos suman justo lo cobrado, el IVA va dentro y no encima.
+      if (!d.ivaIncluido && Number(ivaPct) > 0 && actual?.payment_id && actual.tipo === 'normal') {
+        const cobro = await model.cobroDeLaFactura(id);
+        if (service.ivaDentroSiEsLoCobrado({ items: d.items, ivaPct, ivaIncluido: false, cobrado: cobro?.importe })) {
+          d.ivaIncluido = true;
+        }
+      }
       const { baseImponible, ivaImporte, total } = service.calcularImportes({ items: d.items, ivaPct, ivaIncluido: d.ivaIncluido });
       d.baseImponible = baseImponible; d.ivaImporte = ivaImporte; d.total = total; d.ivaPct = ivaPct;
       d.leyendaIva = exento ? (d.leyendaIva || 'Operación exenta de IVA conforme a la normativa aplicable.') : (ivaPct === 0 ? d.leyendaIva : null);
@@ -244,7 +308,6 @@ export async function corregir(req, res, next) {
     // y es lo que se ve en el papel— pero el dato tiene que seguir restando en
     // los informes. Se fuerza aqui y no en la pantalla: asi da igual desde donde
     // llegue la correccion, el signo nunca depende de que el cliente acierte.
-    const actual = await model.findById(id);
     if (actual?.tipo === 'rectificativa') {
       const neg = (n) => -Math.abs(Number(n || 0));
       if (Array.isArray(d.items)) {
@@ -272,7 +335,7 @@ export async function corregir(req, res, next) {
 export async function updateFechas(req, res, next) {
   try {
     const id = Number(req.params.id);
-    if (!(await model.puedeEditarFechas(req.user.userId, req.user.role))) {
+    if (!(await tienePermiso(req, 'facturas.editar_fechas'))) {
       throw new AppError('No tienes permiso para cambiar fechas de facturas.', 403, 'FORBIDDEN');
     }
     const { fechaEmision = null, fechaPago = null } = req.body || {};
@@ -295,7 +358,7 @@ export async function updateFechas(req, res, next) {
 export async function asociarVenta(req, res, next) {
   try {
     const id = Number(req.params.id);
-    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+    if (!(await model.esFacturaQueGestiona(req.user.userId, req.user.role, id))) {
       throw new AppError('No tienes permiso para gestionar esta factura.', 403, 'FORBIDDEN');
     }
     const conversionId = Number(req.body?.conversionId);
@@ -396,6 +459,19 @@ export async function markPaid(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// POST /:id/cobrar-proforma  { importe, fecha, metodo?, notas? }
+// Apunta el cobro en la venta y la proforma pasa a ser la factura (mismo numero).
+export async function cobrarProforma(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Proforma no valida', 400, 'BAD_ID');
+    const parsed = cobrarProformaSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const inv = await service.cobrarProforma(id, parsed.data, req.user);
+    res.json({ success: true, data: inv });
+  } catch (e) { next(e); }
+}
+
 export async function cancel(req, res, next) {
   try {
     await model.cancel(Number(req.params.id));
@@ -408,7 +484,7 @@ export async function cancel(req, res, next) {
 export async function destroy(req, res, next) {
   try {
     const id = Number(req.params.id);
-    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+    if (!(await model.esFacturaQueGestiona(req.user.userId, req.user.role, id))) {
       throw new AppError('Solo puedes eliminar tus propias facturas.', 403, 'FORBIDDEN');
     }
     const inv = await model.deleteInvoice(id);
@@ -423,7 +499,7 @@ export async function destroy(req, res, next) {
 export async function rectificar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+    if (!(await model.esFacturaQueGestiona(req.user.userId, req.user.role, id))) {
       throw new AppError('Solo puedes emitir abonos de tus propias facturas.', 403, 'FORBIDDEN');
     }
     const { motivo, parcial, issuerId } = req.body || {};
@@ -450,17 +526,17 @@ export async function listIssuers(req, res, next) {
 
 export async function createIssuer(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras pueden añadir empresas', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras pueden añadir empresas', 403, 'FORBIDDEN');
     const parsed = issuerSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
-    const iss = await model.createIssuer(parsed.data, req.user?.id);
+    const iss = await model.createIssuer(parsed.data, req.user?.userId);
     res.json({ success: true, data: iss });
   } catch (e) { next(e); }
 }
 
 export async function updateIssuer(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     const parsed = issuerSchema.partial().safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
     const iss = await model.updateIssuer(Number(req.params.id), parsed.data);
@@ -470,7 +546,7 @@ export async function updateIssuer(req, res, next) {
 
 export async function deleteIssuer(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     await model.deleteIssuer(Number(req.params.id));
     res.json({ success: true });
   } catch (e) { next(e); }
@@ -479,7 +555,7 @@ export async function deleteIssuer(req, res, next) {
 // Subir logo de empresa emisora al servidor (no solo URL).
 export async function uploadIssuerLogo(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     const id = Number(req.params.id);
     if (!id) throw new AppError('ID inválido', 400, 'INVALID_ID');
     if (!req.file) throw new AppError('Imagen requerida (campo file)', 400, 'FILE_REQUIRED');
@@ -515,7 +591,7 @@ export async function getIssuerLogo(req, res, next) {
 
 export async function deleteIssuerLogo(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     const id = Number(req.params.id);
     const iss = await model.getIssuer(id);
     if (!iss) throw new AppError('Empresa no encontrada', 404, 'NOT_FOUND');
@@ -548,19 +624,19 @@ export async function resolveRegimen(req, res, next) {
 }
 export async function createRegimen(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     res.json({ success: true, data: await model.createRegimen(req.body) });
   } catch (e) { next(e); }
 }
 export async function updateRegimen(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     res.json({ success: true, data: await model.updateRegimen(Number(req.params.id), req.body) });
   } catch (e) { next(e); }
 }
 export async function deleteRegimen(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     await model.deleteRegimen(Number(req.params.id));
     res.json({ success: true });
   } catch (e) { next(e); }
@@ -579,19 +655,19 @@ export async function getTemplate(req, res, next) {
 }
 export async function createTemplate(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
-    res.json({ success: true, data: await model.createTemplate(req.body, req.user?.id) });
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    res.json({ success: true, data: await model.createTemplate(req.body, req.user?.userId) });
   } catch (e) { next(e); }
 }
 export async function updateTemplate(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     res.json({ success: true, data: await model.updateTemplate(Number(req.params.id), req.body) });
   } catch (e) { next(e); }
 }
 export async function deleteTemplate(req, res, next) {
   try {
-    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    if (!(await tienePermiso(req, 'facturas.configurar'))) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     await model.deleteTemplate(Number(req.params.id));
     res.json({ success: true });
   } catch (e) { next(e); }
@@ -599,8 +675,12 @@ export async function deleteTemplate(req, res, next) {
 
 export async function ventasSinFactura(req, res, next) {
   try {
-    const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+    // Un proyecto O una sociedad entera: el mismo helper que Ventas y Reportes.
+    // Antes solo sabia de un proyecto y con CEDIA elegida no devolvia nada.
+    res.json({ success: true, data: await model.listVentasSinFactura({
+      ...(await proyectosDelAmbito(req)), from: periodo(req).from, to: periodo(req).to,
+      // Una gestora o un equipo comercial, solo lo suyo (QA del 09/11/2026).
+      personas: await alcanceComercial(req.user) }) });
   } catch (e) { next(e); }
 }
 
@@ -613,7 +693,7 @@ export async function listSequences(req, res, next) {
 
 export async function setSequence(req, res, next) {
   try {
-    if (!['admin', 'superadmin', 'soporte'].includes(req.user?.role)) {
+    if (!(await tienePermiso(req, 'facturas.configurar'))) {
       throw new AppError('Solo admin/superadmin/soporte', 403, 'FORBIDDEN');
     }
     const parsed = setSequenceSchema.safeParse(req.body);
@@ -633,7 +713,7 @@ export async function getConfig(req, res, next) {
 
 export async function updateConfig(req, res, next) {
   try {
-    if (!['admin', 'superadmin', 'soporte'].includes(req.user?.role)) {
+    if (!(await tienePermiso(req, 'facturas.configurar'))) {
       throw new AppError('Solo admin/superadmin/soporte', 403, 'FORBIDDEN');
     }
     const parsed = updateConfigSchema.safeParse(req.body);
@@ -648,7 +728,9 @@ export async function facturacionAlDia(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
-    res.json({ success: true, data: await service.getFacturacionAlDia(projectId) });
+    // Con equipo comercial (QA del 09/11/2026), solo lo de ella y su equipo.
+    const personas = await alcanceDeLider(req.user);
+    res.json({ success: true, data: await service.getFacturacionAlDia(projectId, { personas }) });
   } catch (err) { next(err); }
 }
 
@@ -663,10 +745,13 @@ export async function setFacturacionAlDia(req, res, next) {
     }
     // Solo quien lleva la facturacion mueve el corte. El superadmin siempre puede.
     // El flag no viaja en el token, asi que se consulta en la base de datos.
-    if (req.user?.role !== 'superadmin') {
-      if (!(await model.esFacturaManager(req.user?.userId))) {
-        throw new AppError('Solo quien gestiona la facturacion puede mover esta fecha', 403, 'FORBIDDEN');
-      }
+    if (!(await tienePermiso(req, 'facturas.cola'))) {
+      throw new AppError('Solo quien gestiona la facturacion puede mover esta fecha', 403, 'FORBIDDEN');
+    }
+    // La fecha «al día» es de todo el campus: mueve la cola de todas las
+    // gestoras. Quien lleva un equipo comercial no la toca (QA del 09/11/2026).
+    if (await alcanceDeLider(req.user)) {
+      throw new AppError('La fecha «al día» es de todo el campus: la mueve la administración sin equipo', 403, 'LLEVA_EQUIPO');
     }
     const r = await service.setFacturacionAlDia(projectId, alDiaHasta, req.user.userId, req.body?.stripeOkHasta || null);
     res.json({ success: true, data: r });
@@ -679,11 +764,18 @@ export async function generarDeCola(req, res, next) {
     const projectId = parseInt(req.body?.projectId);
     const paymentId = parseInt(req.body?.paymentId);
     if (!projectId || !paymentId) throw new AppError('projectId y paymentId requeridos', 400, 'BAD_REQUEST');
-    if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
+    if (!(await tienePermiso(req, 'facturas.cola'))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
-    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true });
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId, {
+      forzar: req.body?.forzar === true,
+      // El numero que haya elegido quien factura. Sin el, el siguiente libre.
+      numero: req.body?.numero != null && req.body?.numero !== '' ? Number(req.body.numero) : null,
+      // Quien lleva un equipo comercial, solo los de su cola.
+      personas: await alcanceDeLider(req.user),
+      // «Emitir igualmente» tras el aviso de posible duplicada (CRM#819).
+      confirmarDuplicada: req.body?.confirmar_duplicada === true,
+    });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }
@@ -694,9 +786,39 @@ export async function emitirColaHasta(req, res, next) {
     const projectId = parseInt(req.body?.projectId);
     const hasta = req.body?.hasta;
     if (!projectId || !hasta) throw new AppError('projectId y hasta requeridos', 400, 'BAD_REQUEST');
-    if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
+    if (!(await tienePermiso(req, 'facturas.cola'))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
+    }
+    // «Emitir hasta» emite la cola ENTERA del campus: con equipo comercial no
+    // (QA del 09/11/2026); sus cobros, uno a uno desde su cola.
+    if (await alcanceDeLider(req.user)) {
+      throw new AppError('Emitir la cola entera es de administración sin equipo: emite tus cobros uno a uno.', 403, 'FUERA_DE_TU_EQUIPO');
     }
     res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
   } catch (err) { next(err); }
+}
+
+/** PATCH /invoices/:id/entregada — apunta que ya se le paso al cliente. No envia. */
+export async function marcarEntregada(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Factura no valida', 400, 'BAD_ID');
+    const fila = await model.marcarEntregada(id, {
+      entregada: req.body?.entregada !== false,
+      userId: req.user?.userId,
+    });
+    if (!fila) throw new AppError('Esa factura no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: fila });
+  } catch (e) { next(e); }
+}
+
+/** GET /invoices/siguiente-numero — que numero saldria ahora, y los huecos. */
+export async function siguienteNumero(req, res, next) {
+  try {
+    const projectId = Number(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+    const ano = req.query.ano ? Number(req.query.ano) : null;
+    res.json({ success: true, data: await model.siguienteLibre({ projectId, issuerId, ano }) });
+  } catch (e) { next(e); }
 }

@@ -7,7 +7,9 @@ interface MyStats {
   user_id: number;
   nombre?: string;
   ventas: number;
-  facturado: number;
+  /** Lo vendido en el mes (importe total de sus ventas). */
+  vendido: number;
+  /** Lo cobrado en el mes, por la fecha del cobro: lo que cuenta para la meta. */
   cobrado: number;
   meta_ventas: number | null;
   meta_facturacion: number | null;
@@ -20,6 +22,7 @@ interface MyStats {
 
 interface Props {
   projectId?: number | null;
+  issuerId?: number | null;
   className?: string;
   /** Mes 'YYYY-MM' que manda el filtro de la pantalla. 'all' = rango que cruza meses. */
   periodo?: string | null;
@@ -34,7 +37,7 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function MyGoalCard({ projectId, className = '', periodo: periodoProp }: Props) {
+export default function MyGoalCard({ projectId, issuerId = null, className = '', periodo: periodoProp }: Props) {
   const [stats, setStats] = useState<MyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -49,6 +52,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     params.periodo = periodo;
     client.get<MyStats>('/ventas/my-stats', { params })
       .then((r) => { setStats(r?.data || null); })
@@ -56,7 +60,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, issuerId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing && stats) {
@@ -100,7 +104,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Target size={16} weight="duotone" className="text-emerald-600" />
+          <Target size={16} weight="duotone" className="text-success" />
           Mi meta del mes
         </h3>
         <span className="text-[11px] text-muted-foreground">{periodo}</span>
@@ -112,16 +116,19 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
           <p className="text-xl font-bold tabular-nums">{stats.ventas}{stats.meta_ventas != null && <span className="text-sm text-muted-foreground font-normal"> / {stats.meta_ventas}</span>}</p>
           {stats.meta_ventas != null && stats.meta_ventas > 0 && (
             <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div className={`h-full ${pctV >= 100 ? 'bg-emerald-500' : pctV >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${pctV}%` }} />
+              <div className={`h-full ${pctV >= 100 ? 'bg-success' : pctV >= 50 ? 'bg-warning' : 'bg-destructive'}`} style={{ width: `${pctV}%` }} />
             </div>
           )}
         </div>
         <div>
-          <p className="text-[11px] text-muted-foreground mb-0.5">Facturado</p>
-          <p className="text-xl font-bold tabular-nums">{fmt(stats.facturado)}{stats.meta_facturacion != null && <span className="text-sm text-muted-foreground font-normal"> / {fmt(stats.meta_facturacion)}</span>}</p>
+          {/* LO COBRADO, no lo vendido (12/11/2026): los cobros del mes por su
+              fecha, cuotas de ventas anteriores incluidas. Es la cifra del
+              ranking. Antes ponía «Facturado» y era lo vendido en el mes. */}
+          <p className="text-[11px] text-muted-foreground mb-0.5" title="Los cobros del mes por su fecha de cobro, con las cuotas de ventas anteriores. Es la cifra del ranking.">Cobrado</p>
+          <p className="text-xl font-bold tabular-nums">{fmt(stats.cobrado)}{stats.meta_facturacion != null && <span className="text-sm text-muted-foreground font-normal"> / {fmt(stats.meta_facturacion)}</span>}</p>
           {stats.meta_facturacion != null && stats.meta_facturacion > 0 && (
             <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div className={`h-full ${pctF >= 100 ? 'bg-emerald-500' : pctF >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${pctF}%` }} />
+              <div className={`h-full ${pctF >= 100 ? 'bg-success' : pctF >= 50 ? 'bg-warning' : 'bg-destructive'}`} style={{ width: `${pctF}%` }} />
             </div>
           )}
         </div>
@@ -132,14 +139,14 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
           <div className="grid grid-cols-2 gap-2">
             <input type="number" min="0" placeholder="Meta ventas" value={metaVentas} onChange={(e) => setMetaVentas(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-            <input type="number" min="0" step="0.01" placeholder="Meta facturación €" value={metaFact} onChange={(e) => setMetaFact(e.target.value)}
+            <input type="number" min="0" step="0.01" placeholder="Meta cobrado €" value={metaFact} onChange={(e) => setMetaFact(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setEditing(false)} disabled={saving} className="h-8 px-3 rounded-md border border-border text-xs hover:bg-muted flex items-center gap-1">
               <X size={12} /> Cancelar
             </button>
-            <button onClick={save} disabled={saving} className="h-8 px-3 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 flex items-center gap-1">
+            <button onClick={save} disabled={saving} className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1">
               <Check size={12} /> {saving ? 'Guardando…' : 'Guardar'}
             </button>
           </div>

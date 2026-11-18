@@ -9,6 +9,10 @@ import {
   CreditCard, ArrowsClockwise, CheckCircle, XCircle, WarningCircle, ArrowSquareOut,
   Link as LinkIcon, MagnifyingGlass, ArrowCounterClockwise,
 } from '@phosphor-icons/react';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
+import usePermission from '@/shared/hooks/usePermission';
+import CobrosDeIA from '@/modules/ia-dashboard/components/CobrosDeIA';
+import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
 
 type Payment = {
   id: number;
@@ -50,28 +54,66 @@ type Stats = {
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
+/** Un parrafo en blanco dentro de un `confirm`. */
+const BLANCO = '\n\n';
+
 export default function StripePaymentsPage() {
   const { user } = useAuth();
   // Asociar a mano mueve dinero y emite factura: solo admin y superadmin.
   // La gestora ve el correo del cobro, lo pone en la ficha del cliente y
   // sincroniza; el match se hace solo.
-  const puedeAsociar = user?.role === 'admin' || user?.role === 'superadmin';
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const puedeAsociar = (user?.role === 'admin' || user?.role === 'superadmin') && can('stripe.edit');
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id?: number | null; nombre?: string };
+    activeIssuerId: number | null;
+  };
   const pid = activeProject?.id;
+  // Un campus concreto: el corte, la clave y sincronizar son de UNA cuenta de
+  // Stripe. Con una empresa o «Todos» (#218) el id es -1 y no hay una sola.
+  const unCampus = Boolean(pid && pid > 0);
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+
+  /**
+   * ¿Tiene clave de Stripe guardada este proyecto?
+   *
+   * Sin esto, la pantalla vacía decía «pulsa Sincronizar» a alguien que no
+   * puede sincronizar nada: los tres botones fallan hasta que la clave está.
+   * Son dos situaciones distintas --no conectado, y conectado sin cobros--
+   * y solo una tiene algo que hacer.
+   */
+  const [hayClave, setHayClave] = useState<boolean | null>(null);
+  /**
+   * Si este proyecto trae sus cobros por SUPABASE en vez de por Stripe.
+   *
+   * Los dos caminos existen y traen lo mismo --lo que ha entrado-- pero esta
+   * pantalla solo mira `stripe_payments`. Tarot tiene 23 cobros importados de
+   * su Supabase y aqui salia «sin pagos»: la entrada del menu promete «lo que
+   * ha entrado» y enseñaba una pantalla vacia. Peor que un error, porque
+   * parece que no ha entrado nada.
+   */
+  const [porSupabase, setPorSupabase] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [filters, setFilters] = useState({ status: '', linked: '', search: '', from: '', to: '' });
+
+  /** Si hay algun filtro puesto: la barra se enseña aunque no salga nada, o
+   *  no habria forma de quitarlo. */
+  const hayFiltro = Boolean(filters.search || filters.from || filters.to || filters.status || filters.linked);
   const [linkDialog, setLinkDialog] = useState<Payment | null>(null);
   const [disputeDialog, setDisputeDialog] = useState<Payment | null>(null);
 
   const load = useCallback(async () => {
-    if (!pid) return;
+    if (!pid && !activeIssuerId) return;
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ projectId: String(pid), limit: '100' });
+      // Los cobros ya estan en nuestra base, asi que una EMPRESA es leer los de
+      // sus campus --no hablar con varias cuentas de Stripe--.
+      const qs = ponerAmbito(new URLSearchParams({ limit: '100' }), { activeIssuerId, activeProject });
       if (filters.status) qs.set('status', filters.status);
       if (filters.linked) qs.set('linked', filters.linked);
       if (filters.search) qs.set('search', filters.search);
@@ -87,15 +129,43 @@ export default function StripePaymentsPage() {
       if (r1.success) setPayments(r1.data || []);
       if (r2.success) setStats(r2.data || null);
     } finally { setLoading(false); }
-  }, [pid, filters]);
+  }, [pid, activeIssuerId, filters]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function syncNow(fullHistory = false) {
-    if (!pid) return;
+  /*
+    EL CORTE, PARA MARCAR LAS FILAS.
+
+    Con el histórico absoluto traído, en esta tabla conviven cobros que se
+    pueden facturar y cobros que YA se facturaron fuera del CRM. Los segundos
+    siguen fuera del filtro de facturables —ahí no cambia nada—, pero aquí se
+    ven, y a un clic de «ASOCIAR». Sin decirlo, la tabla los presenta igual que
+    a los demás.
+  */
+  const [corte, setCorte] = useState<string | null>(null);
+  useEffect(() => {
+    if (!unCampus) return;
+    let vivo = true;
+    client.get<{ corte: string | null }>(`/stripe-payments/corte?projectId=${pid}`)
+      .then((r) => { if (vivo) setCorte(r?.data?.corte || null); })
+      .catch(() => { if (vivo) setCorte(null); });
+    return () => { vivo = false; };
+  }, [pid, unCampus]);
+  const esAnteriorAlCorte = (fecha: string | number | null) => {
+    if (!corte || !fecha) return false;
+    const d = typeof fecha === 'number' ? new Date(fecha * 1000) : new Date(fecha);
+    return d < new Date(`${String(corte).slice(0, 10)}T00:00:00`);
+  };
+
+  async function syncNow(fullHistory = false, desdeElPrincipio = false) {
+    if (!unCampus) {
+      toast({ title: 'Elige un campus para sincronizar', description: 'Cada campus tiene su propia cuenta de Stripe.' });
+      return;
+    }
     setSyncing(true);
     try {
-      const res = await client.post<{ imported: number; pages: number }>(`/stripe-payments/sync`, { projectId: pid, fullHistory });
+      const res = await client.post<{ imported: number; pages: number }>(
+        `/stripe-payments/sync`, { projectId: pid, fullHistory, desdeElPrincipio });
       if (res.success) {
         toast({ title: '✓ Sincronizado', description: `${res.data?.imported} pagos importados (${res.data?.pages} páginas)` });
         await load();
@@ -108,8 +178,39 @@ export default function StripePaymentsPage() {
     } finally { setSyncing(false); }
   }
 
+  // Si hay clave de Stripe o de Supabase lo dice Integraciones (`integrations.view`):
+  // quien ve los cobros sin ese permiso no lo pregunta, o el servidor le da 403 (#631).
+  const veIntegraciones = can('integrations.view');
+  useEffect(() => {
+    if (!unCampus || !veIntegraciones) return;
+    let vivo = true;
+    client.get(`/integrations/stripe?projectId=${pid}`)
+      .then((r) => { if (vivo) setHayClave(Boolean(r?.data?.has_secret)); })
+      .catch(() => { if (vivo) setHayClave(null); });
+    // Supabase y los «Cobros» de IA son del #44, solo en pruebas: en /crm ni se
+    // pregunta (el servidor de producción tampoco acepta ese proveedor).
+    if (PROYECTOS_IA) {
+      client.get(`/integrations/supabase?projectId=${pid}`)
+        .then((r) => { if (vivo) setPorSupabase(Boolean(r?.data?.has_secret)); })
+        .catch(() => {});
+    }
+    return () => { vivo = false; };
+  }, [pid, unCampus, veIntegraciones]);
+
   if (!pid) {
     return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
+  }
+
+  if (hayClave === false && porSupabase) {
+    return (
+      <div className="space-y-5 pb-8">
+        <PageHeader
+          title="Cobros"
+          subtitle={`Lo que ha entrado en ${activeProject?.nombre || 'el proyecto'}, con sus renovaciones y devoluciones`}
+        />
+        <CobrosDeIA projectId={activeProject.id} nombre={activeProject?.nombre} />
+      </div>
+    );
   }
 
   return (
@@ -119,46 +220,101 @@ export default function StripePaymentsPage() {
         subtitle={`Histórico de pagos sincronizados desde Stripe — ${activeProject?.nombre || ''}`}
         actions={(
           <div className="flex gap-2">
-            <button onClick={() => syncNow(false)} disabled={syncing}
+            <button onClick={() => syncNow(false)} disabled={syncing || hayClave === false}
+              title={hayClave === false ? 'Falta la clave de Stripe de este proyecto' : 'Trae los ultimos 30 dias'}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
               <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
-            <button onClick={() => syncNow(true)} disabled={syncing}
-              title="Trae TODO el histórico desde Stripe (puede tardar varios minutos)"
+            <button onClick={() => syncNow(true)} disabled={syncing || hayClave === false}
+              title="Trae todo desde el alta del proyecto (puede tardar varios minutos)"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
-              <ArrowCounterClockwise size={14} weight="bold" /> Importar histórico completo
+              <ArrowCounterClockwise size={14} weight="bold" /> Importar desde el alta
             </button>
+            {/* EL HISTÓRICO ABSOLUTO, APARTE Y CON AVISO.
+
+                Trae también lo anterior al corte. Sirve para que el CRM cuadre
+                con lo que dice Stripe —la última casilla del #44— y no cambia
+                lo facturable: lo de antes del corte sigue fuera de ese filtro
+                y en la tabla sale marcado. Pero es la vez que más datos entran
+                de golpe, así que se pregunta. */}
+            <button
+              onClick={() => {
+                if (!confirm(
+                  'Se traerá TODO el histórico de la cuenta de Stripe, incluido lo anterior '
+                  + 'a la fecha de alta del proyecto.' + BLANCO
+                  + 'Eso no cambia lo facturable: lo anterior al corte seguirá fuera de ese '
+                  + 'filtro y saldrá marcado en la tabla. Sirve para que el CRM cuadre con Stripe.' + BLANCO
+                  + '¿Seguir?')) return;
+                syncNow(true, true);
+              }}
+              disabled={syncing}
+              title="Incluye lo anterior a la fecha de alta. No lo hace facturable."
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-warning/40 bg-card text-sm font-semibold text-warning hover:bg-warning-soft disabled:opacity-50">
+              <ArrowCounterClockwise size={14} weight="bold" /> Histórico absoluto
+            </button>
+            {/* Solo cuando YA hay cobros: sirve para cuadrar con Stripe, y
+                antes del primer sincronizado no hay nada que cuadrar. Tres
+                botones de traer datos en una pantalla vacia es la forma mas
+                rapida de que se pulse el que no era. */}
+            {payments.length > 0 && (<>
+            {/* EL HISTÓRICO ABSOLUTO, APARTE Y CON AVISO.
+
+                Trae también lo anterior al corte. Sirve para que el CRM cuadre
+                con lo que dice Stripe —la última casilla del #44— y no cambia
+                lo facturable: lo de antes del corte sigue fuera de ese filtro
+                y en la tabla sale marcado. Pero es la vez que más datos entran
+                de golpe, así que se pregunta. */}
+            <button
+              onClick={() => {
+                if (!confirm(
+                  'Se traerá TODO el histórico de la cuenta de Stripe, incluido lo anterior '
+                  + 'a la fecha de alta del proyecto.' + BLANCO
+                  + 'Eso no cambia lo facturable: lo anterior al corte seguirá fuera de ese '
+                  + 'filtro y saldrá marcado en la tabla. Sirve para que el CRM cuadre con Stripe.' + BLANCO
+                  + '¿Seguir?')) return;
+                syncNow(true, true);
+              }}
+              disabled={syncing}
+              title="Incluye lo anterior a la fecha de alta. No lo hace facturable."
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-warning/40 bg-card text-sm font-semibold text-warning hover:bg-warning-soft disabled:opacity-50">
+              <ArrowCounterClockwise size={14} weight="bold" /> Histórico absoluto
+            </button>
+            </>)}
           </div>
         )}
       />
 
-      {/* KPIs */}
-      {stats && (
+      {/* KPIs. Sin un solo cobro son cuatro ceros que no dicen nada y
+          empujan hacia abajo lo unico util, que es como conectar. */}
+      {stats && payments.length > 0 && (
         <div className={`grid grid-cols-2 gap-3 ${puedeAsociar ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
           {/* El importe global de la pasarela es informacion de direccion:
               la gestora ve sus cobros en la ficha de cada cliente, no el total. */}
           {puedeAsociar && (
-            <KpiCard icon={CheckCircle} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+            <KpiCard icon={CheckCircle} iconBg="bg-success-soft text-success-soft-foreground"
               label="Cobrado" numericValue={Number(stats.total_cobrado)} format={(n) => fmt(Number(n))} />
           )}
-          <KpiCard icon={XCircle} iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
+          <KpiCard icon={XCircle} iconBg="bg-destructive-soft text-destructive-soft-foreground"
             label="Fallidos" numericValue={stats.failed} />
-          <KpiCard icon={WarningCircle} iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
+          <KpiCard icon={WarningCircle} iconBg="bg-warning-soft text-warning-soft-foreground"
             label="Disputas activas" numericValue={stats.disputed} />
-          <KpiCard icon={LinkIcon} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
+          <KpiCard icon={LinkIcon} iconBg="bg-info-soft text-info-soft-foreground"
             label="Sin asociar" numericValue={stats.unlinked} badge={stats.unlinked > 0 ? 'Revisar' : 'OK'}
-            badgeColor={stats.unlinked > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'} />
+            badgeColor={stats.unlinked > 0 ? 'bg-warning-soft text-warning-soft-foreground' : 'bg-success-soft text-success-soft-foreground'} />
         </div>
       )}
 
       {stats?.sync && (
         <div className="text-xs text-muted-foreground bg-muted/30 rounded-md p-2 flex items-center justify-between flex-wrap gap-2">
           <span>Última sync: <strong>{fmtDate(stats.sync.last_sync_at)}</strong> · Total importados: <strong>{stats.sync.total_imported}</strong></span>
-          {stats.sync.last_error && <span className="text-red-600">Error último intento: {stats.sync.last_error}</span>}
+          {stats.sync.last_error && <span className="text-destructive">Error último intento: {stats.sync.last_error}</span>}
         </div>
       )}
 
-      {/* Filtros */}
+      {/* Filtros. No se pintan sobre una tabla vacia: filtrar la nada no lleva
+          a ninguna parte, y aqui lo que hace falta es conectar el proyecto.
+          Si hay filtro puesto SI se enseñan, o no habria forma de quitarlo. */}
+      {(payments.length > 0 || hayFiltro) && (
       <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -192,6 +348,7 @@ export default function StripePaymentsPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Tabla */}
       <div className="bg-card border border-border rounded-lg overflow-x-auto">
@@ -200,11 +357,33 @@ export default function StripePaymentsPage() {
         ) : payments.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <CreditCard size={32} className="text-muted-foreground mx-auto" weight="duotone" />
-            <p className="font-semibold text-sm">Sin pagos sincronizados</p>
-            <p className="text-xs text-muted-foreground">
-              Pulsá <strong>Sincronizar</strong> para traer los últimos 30 días o <strong>Importar histórico completo</strong> para todo.
-              Requiere tener la API key de Stripe guardada en <a href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/finanzas/integraciones`} className="text-primary hover:underline">Integraciones</a>.
-            </p>
+            {hayClave === false ? (
+              <>
+                <p className="font-semibold text-sm">
+                  {activeProject?.nombre || 'Este proyecto'} todavía no está conectado a Stripe
+                </p>
+                <p className="mx-auto max-w-md text-xs text-muted-foreground">
+                  {porSupabase
+                    ? 'Sus cobros entran por Supabase, no por Stripe: los verás en Ventas, no en esta pantalla. Conectar Stripe además solo hace falta para el MRR, las bajas y sus motivos.'
+                    : 'Falta su clave. Mientras no esté, los botones de arriba no pueden traer nada. Vale una clave restringida de solo lectura.'}
+                </p>
+                <a
+                  href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}${porSupabase ? '/finanzas/ventas' : '/finanzas/integraciones'}`}
+                  className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  {porSupabase ? 'Ver sus cobros en Ventas' : 'Ir a Integraciones'}
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-sm">Sin cobros todavía</p>
+                <p className="mx-auto max-w-md text-xs text-muted-foreground">
+                  La clave está guardada. Pulsa <strong>Sincronizar</strong> para traer los últimos
+                  treinta días, o <strong>Importar desde el alta</strong> para todo lo posterior a
+                  la fecha de corte del proyecto.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <table className="tabla-cifras w-full text-[13px]">
@@ -223,21 +402,31 @@ export default function StripePaymentsPage() {
                 <tr key={p.id}
                   className={`border-b last:border-0 hover:bg-muted/30 ${
                     !p.conversion_id && p.status === 'succeeded'
-                      ? 'bg-red-50/70 dark:bg-red-950/20 border-l-2 border-l-red-500'
+                      ? 'bg-destructive-soft/70 border-l-2 border-l-destructive'
                       : ''}`}>
-                  <td className="px-3 py-2 whitespace-nowrap">{fmtDate(p.stripe_created_at)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {fmtDate(p.stripe_created_at)}
+                    {esAnteriorAlCorte(p.stripe_created_at) && (
+                      <span
+                        className="block text-[10px] font-bold text-warning"
+                        title="Anterior a la fecha desde la que este proyecto factura. Ya se facturó fuera del CRM: asociarlo emitiría una factura repetida."
+                      >
+                        ANTES DEL CORTE · no facturable
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="font-medium">{p.customer_name || '—'}</div>
                     <div className="text-xs text-muted-foreground">{p.customer_email || '—'}</div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums font-semibold">
                     {fmt(p.amount)}
-                    {p.refunded && <div className="text-[10px] text-red-600">Reembolsado {p.refunded_amount ? fmt(p.refunded_amount) : ''}</div>}
+                    {p.refunded && <div className="text-[10px] text-destructive">Reembolsado {p.refunded_amount ? fmt(p.refunded_amount) : ''}</div>}
                   </td>
                   <td className="px-3 py-2">
                     {p.disputed ? (
                       <button onClick={() => setDisputeDialog(p)}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-foreground hover:bg-warning-soft/70"
                         title="Ver detalle de disputa">
                         DISPUTA ↗
                       </button>
@@ -248,7 +437,7 @@ export default function StripePaymentsPage() {
                   <td className="px-3 py-2">
                     {p.conversion_id ? (
                       <div className="text-[11px] leading-tight">
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                        <span className="inline-flex items-center gap-1 text-success-soft-foreground font-medium">
                           <LinkIcon size={11} weight="bold" /> {p.lead_nombre || `Conv #${p.conversion_id}`}
                           <span className="text-muted-foreground">({p.link_method?.startsWith('auto') ? 'auto' : 'manual'})</span>
                         </span>
@@ -266,14 +455,14 @@ export default function StripePaymentsPage() {
                       puedeAsociar ? (
                       <button onClick={() => setLinkDialog(p)}
                         title="Este cobro no está asociado a ningún cliente: asócialo para que genere su factura"
-                        className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline inline-flex items-center gap-1 text-left">
+                        className="text-[11px] font-bold text-destructive-soft-foreground hover:underline inline-flex items-center gap-1 text-left">
                         <LinkIcon size={11} weight="bold" />
                         NO ASOCIADO A UN CLIENTE · ASOCIAR
                       </button>
                       ) : (
                       <span
                         title={`Pon el correo ${p.customer_email || 'del cobro'} en la ficha del cliente y pulsa Sincronizar: se asocia solo`}
-                        className="text-[11px] font-bold text-red-700 dark:text-red-400 inline-flex items-center gap-1 text-left">
+                        className="text-[11px] font-bold text-destructive-soft-foreground inline-flex items-center gap-1 text-left">
                         <LinkIcon size={11} weight="bold" />
                         NO ASOCIADO · pon el correo en la ficha y sincroniza
                       </span>
@@ -331,12 +520,12 @@ const DISPUTE_STATUS_LABELS: Record<string, string> = {
 };
 
 const MY_DECISION_OPTIONS = [
-  { value: 'pending', label: 'Pendiente de revisión', color: 'bg-amber-100 text-amber-800' },
-  { value: 'contest', label: 'Vamos a impugnarla (es inválida)', color: 'bg-blue-100 text-blue-800' },
-  { value: 'accept_refund', label: 'Aceptamos / reembolsamos', color: 'bg-purple-100 text-purple-800' },
-  { value: 'won', label: 'Ganada', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'lost', label: 'Perdida', color: 'bg-red-100 text-red-800' },
-  { value: 'closed', label: 'Cerrada', color: 'bg-zinc-200 text-zinc-700' },
+  { value: 'pending', label: 'Pendiente de revisión', color: 'bg-warning-soft text-warning-soft-foreground' },
+  { value: 'contest', label: 'Vamos a impugnarla (es inválida)', color: 'bg-info-soft text-info-soft-foreground' },
+  { value: 'accept_refund', label: 'Aceptamos / reembolsamos', color: 'bg-primary/10 text-primary' },
+  { value: 'won', label: 'Ganada', color: 'bg-success-soft text-success-soft-foreground' },
+  { value: 'lost', label: 'Perdida', color: 'bg-destructive-soft text-destructive-soft-foreground' },
+  { value: 'closed', label: 'Cerrada', color: 'bg-muted text-muted-foreground' },
 ];
 
 function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onClose: () => void; onUpdated: () => void }) {
@@ -369,7 +558,7 @@ function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onCl
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
       <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-warning-soft text-warning-soft-foreground flex items-center justify-center flex-shrink-0">
             <WarningCircle size={22} weight="duotone" />
           </div>
           <div className="flex-1">
@@ -383,7 +572,7 @@ function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onCl
         <div className="p-4 space-y-4 text-sm">
           {/* Banner deadline */}
           {dueBy && (
-            <div className={`p-3 rounded-lg border ${overdue ? 'bg-red-50 border-red-300 text-red-900' : daysLeft! <= 2 ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-blue-50 border-blue-200 text-blue-900'}`}>
+            <div className={`p-3 rounded-lg border ${overdue ? 'bg-destructive-soft border-destructive/30 text-destructive-soft-foreground' : daysLeft! <= 2 ? 'bg-warning-soft border-warning/30 text-warning-soft-foreground' : 'bg-info-soft border-info/30 text-info-soft-foreground'}`}>
               <p className="font-semibold text-xs">⏰ Fecha límite para responder a Stripe:</p>
               <p className="text-lg font-bold tabular-nums">{fmtDate(payment.dispute_evidence_due_by)}</p>
               <p className="text-xs">{overdue ? 'VENCIDO — Stripe ya decidió o pronto lo hará' : `Quedan ${daysLeft} días (${hoursLeft}h)`}</p>
@@ -406,7 +595,7 @@ function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onCl
             </div>
             <div>
               <p className="text-muted-foreground">Asociado a lead</p>
-              <p>{payment.lead_nombre || <span className="text-amber-600">Sin asociar</span>}</p>
+              <p>{payment.lead_nombre || <span className="text-warning">Sin asociar</span>}</p>
             </div>
           </div>
 
@@ -452,12 +641,12 @@ function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onCl
 }
 
 function StatusBadge({ status, disputed, refunded }: { status: string; disputed: boolean; refunded: boolean }) {
-  if (disputed) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">DISPUTA</span>;
-  if (refunded) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">REEMBOLSO</span>;
+  if (disputed) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-foreground">DISPUTA</span>;
+  if (refunded) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">REEMBOLSO</span>;
   const map: Record<string, string> = {
-    succeeded: 'bg-emerald-100 text-emerald-800',
-    failed: 'bg-red-100 text-red-800',
-    pending: 'bg-blue-100 text-blue-800',
+    succeeded: 'bg-success-soft text-success-soft-foreground',
+    failed: 'bg-destructive-soft text-destructive-soft-foreground',
+    pending: 'bg-info-soft text-info-soft-foreground',
   };
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${map[status] || 'bg-muted text-muted-foreground'}`}>{status.toUpperCase()}</span>;
 }
@@ -544,7 +733,7 @@ function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Paymen
                     <div className="text-sm font-medium truncate">{l.nombre}</div>
                     <div className="text-xs text-muted-foreground truncate">{l.email || 'sin email'}</div>
                   </div>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ml-2 ${l.status === 'convertido' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ml-2 ${l.status === 'convertido' ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'}`}>
                     {l.status === 'convertido' ? 'CLIENTE' : 'PROSPECTO'}
                   </span>
                 </button>
@@ -560,7 +749,7 @@ function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Paymen
             {loadingVentas ? <p className="text-xs text-muted-foreground py-3">Cargando ventas…</p>
               : ventas.length === 0 ? (
                 <div className="space-y-2">
-                  <p className="text-xs text-amber-600">Este cliente no tiene ventas registradas. Se puede asociar solo al cliente (sin importe ni factura).</p>
+                  <p className="text-xs text-warning">Este cliente no tiene ventas registradas. Se puede asociar solo al cliente (sin importe ni factura).</p>
                   <button onClick={() => link(undefined)} disabled={linking !== null}
                     className="w-full h-9 rounded-md border border-border text-sm hover:bg-muted disabled:opacity-50">
                     {linking !== null ? 'Asociando…' : 'Asociar solo al cliente'}
@@ -576,7 +765,7 @@ function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Paymen
                         <div className="text-sm font-medium truncate">{v.producto_contratado || 'Venta'}</div>
                         <div className="text-[11px] text-muted-foreground">
                           {fmt(num(v.importe_total))} · cobrado {fmt(num(v.importe_pagado))} ·{' '}
-                          <span className={pend > 0.01 ? 'text-amber-600 font-semibold' : 'text-emerald-600'}>
+                          <span className={pend > 0.01 ? 'text-warning font-semibold' : 'text-success'}>
                             {pend > 0.01 ? `pendiente ${fmt(pend)}` : 'saldada'}
                           </span>
                           {v.fecha_conversion ? ` · ${String(v.fecha_conversion).slice(0, 10)}` : ''}

@@ -1,19 +1,20 @@
 import { logger } from '../utils/logger.js';
+import * as plantilla from './email-plantilla.service.js';
 import { getDecryptedValue } from '../../modules/credentials/credentials.model.js';
+import { query } from '../config/db.js';
 import { yaSeEnvio, registrar } from './email-log.service.js';
 import { dejaPasar, porQueSeParo } from './email-freno.service.js';
+import { guardarEnEnviados, hayBuzon } from './copia-en-enviados.service.js';
+import { mandarDesdeBuzon, saleDelBuzon } from './correo-buzon.service.js';
+import { marcaDeLaPersona as marcaDeLaPersonaComun, remitenteDe } from './marca.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
 const FROM_NAME = process.env.BREVO_FROM_NAME || 'CRM MultiProyecto';
 
-async function getApiKey(projectId = null) {
-  // Prioridad: credencial especifica del proyecto > credencial global > env var
+/** La cuenta del CRM: la clave global de la base y, si no hay, la del .env. */
+async function getApiKey() {
   try {
-    if (projectId) {
-      const perProject = await getDecryptedValue('brevo', projectId);
-      if (perProject) return perProject;
-    }
     const fromDb = await getDecryptedValue('brevo', null);
     if (fromDb) return fromDb;
   } catch (err) {
@@ -22,6 +23,36 @@ async function getApiKey(projectId = null) {
   const envKey = process.env.BREVO_API_KEY;
   if (!envKey || envKey === 'test') return null;
   return envKey;
+}
+
+/**
+ * La cuenta de Brevo de la MARCA, si la tiene (Diego, 28/09).
+ *
+ * Los dominios de los campus (fonoaprende.com, ictess.com...) no estan en la
+ * cuenta del CRM, donde vive 360crm.tech, sino en otra. Cada marca guarda la
+ * suya en «Configurar esta marca → APIs → Brevo» —cifrada, en la base: se
+ * cambia desde el panel sin tocar codigo ni servidor— y su «no contestar» en
+ * «General». Con las dos, sus correos salen por su cuenta y con su remitente.
+ *
+ * Una cuenta de marca solo sirve con un remitente de la marca: sin remitente,
+ * nada (y el correo sale por la del CRM, como siempre).
+ */
+async function cuentaDeLaMarca(projectId, fromEmail) {
+  if (!projectId) return null;
+  try {
+    const apiKey = await getDecryptedValue('brevo', projectId);
+    if (!apiKey) return null;
+    // to_jsonb: la columna es de la migracion 177; sin ella, null y no rompe.
+    const { rows } = await query(
+      "SELECT to_jsonb(p) ->> 'remitente_no_contestar' AS r, p.nombre FROM projects p WHERE p.id = $1", [projectId]);
+    const remitente = fromEmail || rows[0]?.r || null;
+    // El nombre de la marca, para el remitente (12/10): «Fono Aprende <no-responder@…>»
+    // y no «CRM <no-responder@fonoaprende.com>».
+    return remitente ? { apiKey, remitente, nombre: rows[0]?.nombre || null } : null;
+  } catch (err) {
+    logger.warn({ err: err.message, projectId }, 'Brevo: error leyendo la cuenta de la marca');
+    return null;
+  }
 }
 
 // Cuantas veces se intenta y cuanto se espera entre intentos. Tres intentos con
@@ -39,7 +70,26 @@ const merecePenaReintentar = (estado) => estado === null || estado === 429 || es
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Manda un correo por Brevo.
+ * La copia en la carpeta «Enviados» del buzon, que es lo que hace un cliente de
+ * correo despues de mandar. Hace falta salga por donde salga: **SMTP tampoco
+ * guarda en Enviados**, eso lo hace siempre el cliente con un APPEND.
+ *
+ * NO se espera a que termine ni se mira si salio bien: el correo YA se mando y
+ * eso no se deshace. Archivar la copia es lo accesorio — si falla, queda en el
+ * registro y punto.
+ */
+function dejarCopiaEnEnviados({ de, deNombre, para, asunto, html, messageId }) {
+  if (!hayBuzon()) return;
+  guardarEnEnviados({ de, deNombre, para, asunto, html, messageId })
+    .then((ok) => { if (!ok) logger.info({ para, asunto }, 'Copia en Enviados: no se guardo'); });
+}
+
+/**
+ * Manda un correo. Es la unica puerta de salida del CRM.
+ *
+ * Sale por el buzon propio si va firmado por su direccion, y por Brevo en todo
+ * lo demas. Quien llama no elige ni se entera: pasa el remitente que le toca y
+ * el tubo se decide aqui.
  *
  * Un parametro opcional que no existia antes:
  *   · clave  — de idempotencia. Si ya salio un correo con esa clave, NO se manda
@@ -52,13 +102,18 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
  *
  * Quien no la pase se comporta exactamente igual que antes, salvo que ahora
  * queda anotado el intento.
+ *
+ *   · cuenta — 'crm' obliga a salir por la cuenta del CRM aunque la marca
+ *              tenga la suya. Sin nada: la de la marca si la tiene
+ *              (`cuentaDeLaMarca`), la del CRM si no.
  */
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, replyTo, attachment, clave = null, cuenta = null }) {
   // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
   // con varios correos separados por comas (los avisos a administradores).
   const destinatarios = Array.isArray(to)
     ? to.map((d) => d?.email || d).filter(Boolean).join(',')
     : (to?.email || to || '');
+  let remitente = fromEmail || FROM_EMAIL;
 
   // EL FRENO, antes que nada.
   //
@@ -76,6 +131,9 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     await registrar({
       clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
       estado: 'bloqueado', intentos: 0, error: porque,
+      // Tambien el bloqueado: saber QUE se iba a mandar es justo lo que hace
+      // falta cuando el freno para algo y no se entiende por que.
+      cuerpoHtml: htmlContent, remitente,
     });
     return { sent: false, reason: 'FRENO_DE_PRUEBAS', motivo: freno.motivo, detalle: porque };
   }
@@ -86,21 +144,66 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     return { sent: false, reason: 'YA_ENVIADO', repetido: true };
   }
 
-  const apiKey = await getApiKey(projectId);
+  // ¿Por que cuenta de Brevo? La de la marca, si la tiene; entonces tambien su
+  // remitente, si quien llama no puso otro.
+  const marca = cuenta === 'crm' ? null : await cuentaDeLaMarca(projectId, fromEmail);
+  if (marca) remitente = marca.remitente;
+  // Sale por la cuenta de la marca: con su nombre, si quien llama no puso otro.
+  if (marca && !fromName && marca.nombre) fromName = marca.nombre;
+
+  // ¿SALE POR EL BUZON PROPIO?
+  //
+  // Va aqui, despues del freno y de la idempotencia y antes de Brevo, porque lo
+  // de arriba vale para cualquier correo del CRM salga por donde salga: que no
+  // se escape uno en pruebas, y que no salga dos veces. Cambiar el tubo no puede
+  // saltarse ninguna de las dos.
+  //
+  // Lo que se gana: sin `List-Unsubscribe`, sin `Feedback-ID`, sin enlaces
+  // reescritos — las cabeceras que hacen que Gmail lo archive en Promociones.
+  // Ver `correo-buzon.service.js`, que lo cuenta con las cabeceras delante.
+  if (saleDelBuzon(remitente)) {
+    const r = await mandarDesdeBuzon({
+      to, subject, htmlContent, textContent,
+      fromName: fromName || FROM_NAME, replyTo, attachment,
+    });
+    if (r.sent) {
+      logger.info({ messageId: r.messageId, to: destinatarios, subject }, 'Correo enviado por el buzon');
+      await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+        cuerpoHtml: htmlContent, remitente, estado: 'enviado', intentos: 1, brevoMsgId: r.messageId });
+      dejarCopiaEnEnviados({
+        de: remitente, deNombre: fromName || FROM_NAME,
+        para: destinatarios, asunto: subject, html: htmlContent,
+        messageId: r.messageId,
+      });
+      return { sent: true, messageId: r.messageId, intentos: 1, via: 'buzon' };
+    }
+    // Si el buzon no esta —Hostinger caido, contraseña cambiada— se sigue por
+    // Brevo. Llegar a Promociones es un fastidio; no llegar es un problema.
+    logger.warn({ motivo: r.reason, to: destinatarios, subject }, 'Buzon: no salio, se intenta por Brevo');
+  }
+
+  const apiKey = marca?.apiKey || await getApiKey();
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
     await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente,
       estado: 'fallido', intentos: 0, error: 'NO_API_KEY' });
     return { sent: false, reason: 'NO_API_KEY' };
   }
 
   const payload = {
-    sender: { email: fromEmail || FROM_EMAIL, name: fromName || FROM_NAME },
+    sender: { email: remitente, name: fromName || FROM_NAME },
     to: Array.isArray(to) ? to : [{ email: to.email || to, name: to.name }],
     subject,
     htmlContent,
     textContent,
   };
+  // A donde contesta quien lo recibe. Brevo, si no se dice, responde al
+  // remitente — que casi siempre es lo que se quiere. Se deja poner aparte
+  // porque hay correos cuyo sentido ES la respuesta: el aviso al tutor le pide
+  // «contesta a este mismo correo con tu factura», y ahi no puede depender de
+  // que nadie cambie el remitente por un `no-reply` mas adelante.
+  if (replyTo) payload.replyTo = typeof replyTo === 'string' ? { email: replyTo } : replyTo;
   // Las etiquetas solo si las hay. Mandar la lista vacia hace que Brevo
   // conteste «400 · tags is blank» y NO envie el correo — y como casi ninguna
   // llamada pasa etiquetas, eso era todos los correos del CRM.
@@ -137,8 +240,16 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
         const data = await res.json();
         logger.info({ messageId: data.messageId, to, subject, intento }, 'Brevo email enviado');
         await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente,
           estado: 'enviado', intentos: intento, brevoMsgId: data.messageId });
-        return { sent: true, messageId: data.messageId, intentos: intento };
+
+        dejarCopiaEnEnviados({
+          de: remitente, deNombre: fromName || FROM_NAME,
+          para: destinatarios, asunto: subject, html: htmlContent,
+          messageId: data.messageId,
+        });
+
+        return { sent: true, messageId: data.messageId, intentos: intento, via: 'brevo' };
       }
 
       const err = await res.text();
@@ -156,7 +267,18 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 
   // Que no salio ya no se queda solo en el log: queda escrito.
   await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente,
     estado: 'fallido', intentos: hechos, error: `${ultimoFallo.reason} · ${ultimoFallo.details ?? ''}` });
+  // Con un remitente que no es el del CRM —el de la marca—, una vez mas por la
+  // cuenta del CRM y con su remitente: que llegue desde 360crm.tech es mejor
+  // que no llegue. Suele ser un dominio aun sin autenticar o una clave caducada.
+  if (cuenta !== 'crm' && remitente !== FROM_EMAIL) {
+    logger.warn({ remitente, to: destinatarios, subject, fallo: ultimoFallo.reason },
+      'Brevo: no salio con el remitente de la marca; se intenta por la cuenta del CRM');
+    const otra = await sendEmail({ to, subject, htmlContent, textContent, tags, projectId,
+      fromEmail: undefined, fromName, replyTo, attachment, clave, cuenta: 'crm' });
+    return { ...otra, primerFallo: ultimoFallo.reason };
+  }
   return { sent: false, ...ultimoFallo, intentos: hechos };
 }
 
@@ -164,64 +286,150 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 // TEMPLATES
 // ============================================================
 
-export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, baseUrl }) {
-  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
-  const subject = 'Bienvenido al CRM - Establece tu contrasena';
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
-      <div style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); padding: 32px; border-radius: 12px; color: white; text-align: center;">
-        <h1 style="margin: 0; font-size: 24px;">Bienvenido al CRM</h1>
-      </div>
-      <div style="background: white; padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
-        <p>Hola <strong>${nombre}</strong>,</p>
-        <p>Se ha creado tu cuenta en el CRM MultiProyecto. Para empezar, establece tu contrasena haciendo click en el siguiente boton:</p>
-        <p style="text-align: center; margin: 32px 0;">
-          <a href="${link}" style="background: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Establecer contrasena</a>
-        </p>
-        <p style="font-size: 13px; color: #6b7280;">O copia este enlace en tu navegador:<br><code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; word-break: break-all;">${link}</code></p>
-        <p style="font-size: 13px; color: #6b7280;">Este enlace expira en 24 horas.</p>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-        <p style="font-size: 12px; color: #9ca3af;">Si no esperabas este email, ignoralo.</p>
-      </div>
-    </body></html>`;
-  const textContent = `Hola ${nombre},\n\nSe ha creado tu cuenta en el CRM. Establece tu contrasena aqui:\n${link}\n\nEste enlace expira en 24 horas.`;
+/**
+ * La marca con la que le llega un correo a una persona del equipo: la de sus
+ * campus (`marca.service.js`). Un campus, el suyo; varios de una empresa, la
+ * EMPRESA («CEDIA»), y no el primero de ellos con remitente —que en CEDIA era
+ * Fono Aprende y le daba la bienvenida «al CRM de Fono Aprende» a quien trabaja
+ * para los ocho (11/11)—; empresas mezcladas o ninguna, la del CRM.
+ */
+async function marcaDeLaPersona(email) {
+  try {
+    return await marcaDeLaPersonaComun({ email });
+  } catch {
+    return null;
+  }
+}
 
+// Bienvenida con la plantilla común y la marca de su campus (Diego, 10/10:
+// «cada correo con un formato completo y lindo, y con el branding»).
+export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, baseUrl }) {
+  const P = plantilla;
+  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+  const marca = await marcaDeLaPersona(email);
+  const subject = `Bienvenida al CRM${marca ? ` de ${marca.nombre}` : ''}: crea tu contraseña`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: marca || MARCA_CORREOS,
+    titulo: 'Te damos la bienvenida al CRM',
+    saludo: nombre,
+    resumen: 'Crea tu contraseña para entrar',
+    bloques: [
+      P.parrafo('Ya tienes cuenta en el CRM. Para entrar, crea tu contraseña:'),
+      P.boton({ texto: 'Crear mi contraseña', url: link }),
+      P.nota(`Entrarás con <strong>${P.esc(email)}</strong>. El enlace caduca en 24 horas.`),
+      letraPequena('Si no esperabas este correo, ignóralo: sin contraseña nadie puede entrar con tu cuenta.'),
+    ],
+  });
   return await sendEmail({
     to: [{ email, name: nombre }],
     subject,
     htmlContent,
     textContent,
+    // La cuenta y el nombre del remitente, los de la marca: con la de una
+    // empresa, la cuenta del CRM y «CEDIA» como nombre.
+    ...remitenteDe(marca),
     tags: ['welcome-user', 'crm'],
   });
 }
 
-export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
-  const link = `${baseUrl}/leads/${lead.id}`;
-  const subject = `Nuevo lead asignado: ${lead.nombre}`;
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
-      <h2 style="color: #3b82f6;">Nuevo lead asignado</h2>
-      <p>Hola <strong>${gestor.nombre}</strong>, te han asignado un nuevo lead.</p>
-      <div style="background: #f9fafb; padding: 16px; border-radius: 8px; border-left: 4px solid #3b82f6;">
-        <p style="margin: 0 0 8px;"><strong>${lead.nombre}</strong></p>
-        <p style="margin: 0 0 4px; font-size: 14px;">${lead.email}</p>
-        ${lead.telefono ? `<p style="margin: 0 0 4px; font-size: 14px;">${lead.telefono}</p>` : ''}
-        <p style="margin: 8px 0 0; font-size: 13px; color: #6b7280;">Proyecto: ${proyecto.nombre}</p>
-      </div>
-      <p style="text-align: center; margin: 24px 0;">
-        <a href="${link}" style="background: #3b82f6; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Ver lead</a>
-      </p>
-      <p style="font-size: 12px; color: #9ca3af;">Contactalo lo antes posible para maximizar la conversion.</p>
-    </body></html>`;
-  const textContent = `Hola ${gestor.nombre},\nNuevo lead asignado:\n${lead.nombre} <${lead.email}>\nProyecto: ${proyecto.nombre}\nVer: ${link}`;
+/**
+ * Aviso a la dirección VIEJA de que el correo con el que se entra al CRM ha
+ * cambiado (#246). Si no lo pidió la persona, es como se entera; y si sí, sabe
+ * con cuál entrar a partir de ahora. Los tutores no lo reciben mientras siga el
+ * freno (`NO_ESCRIBIR_A_TUTORES`): eso lo decide quien llama.
+ */
+/*
+  LOS CORREOS DEL MCP DE CLAUDE Y EL DEL CAMBIO DE CORREO, CON LA PLANTILLA COMÚN
+  (Diego, 07/10: «que se vean bonitos»). La misma cabecera con la marca y la
+  fecha, el mismo botón, la nota y el pie que el resto de avisos del CRM, y su
+  modo oscuro. Todo lo que viene de la base va escapado: un nombre o un
+  User-Agent con «<» no puede romper el correo ni meter HTML.
+*/
+const MARCA_CORREOS = { nombre: 'MultiCRM' };
+const zonaCorreos = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
+const fechaHoraCorreo = (d) => new Date(d).toLocaleString('es-ES', {
+  timeZone: zonaCorreos(), day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+});
+const fechaCorreo = (d) => new Date(d).toLocaleDateString('es-ES', { timeZone: zonaCorreos(), day: 'numeric', month: 'long' });
+/**
+ * «hora de Madrid», para poner junto a las horas (Diego, 13/10): la alerta de
+ * madrugada decía «a las 02:20» sin decir de dónde, y quien la lee puede estar
+ * en otro país. Con otra APP_TIMEZONE, su ciudad («America/Bogota» → «hora de
+ * Bogota»); sin ciudad («UTC»), «hora UTC».
+ */
+const zonaDeLasHoras = () => {
+  const zona = zonaCorreos();
+  if (!zona.includes('/')) return `hora ${zona}`;
+  return `hora de ${zona.split('/').pop().replace(/_/g, ' ')}`;
+};
+const letraPequena = (texto) => plantilla.parrafo(
+  `<span style="font-size:13px;line-height:20px;color:#71717a">${plantilla.esc(texto)}</span>`);
 
+export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
+  const P = plantilla;
+  const subject = 'Ha cambiado el correo con el que entras al CRM';
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Ha cambiado tu correo de acceso',
+    saludo: nombre,
+    resumen: `A partir de ahora entras con ${a}`,
+    bloques: [
+      P.parrafo(`Un administrador ha cambiado el correo con el que entras al CRM (${P.esc(fechaHoraCorreo(new Date()))}):`),
+      P.nota(`${P.esc(de)} → <strong>${P.esc(a)}</strong>`),
+      P.parrafo(`A partir de ahora entra con <strong>${P.esc(a)}</strong>. Con esta dirección ya no podrás, y tendrás que volver a iniciar sesión.`),
+      P.boton({ texto: 'Entrar al CRM', url: P.enlace('login') }),
+      letraPequena('Si no esperabas este cambio, avisa a tu responsable cuanto antes.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
+}
+
+/**
+ * El código para cambiar el correo (#211), a la dirección NUEVA: llegar y
+ * meterlo es lo que demuestra que existe y es de esa persona. Caduca a los
+ * `minutos` minutos.
+ */
+export async function sendCodigoCambioCorreoEmail({ nombre, a, codigo, minutos = 15 }) {
+  const P = plantilla;
+  const subject = `${codigo} es tu código para cambiar el correo del CRM`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Confirma tu nuevo correo',
+    saludo: nombre,
+    resumen: `Tu código: ${codigo}`,
+    bloques: [
+      P.parrafo('Has pedido entrar al CRM con esta dirección. Para confirmarlo, escribe este código en el CRM:'),
+      P.nota(`<strong style="font-size:24px;letter-spacing:4px">${P.esc(codigo)}</strong>`),
+      P.parrafo(`Caduca en ${minutos} minutos. Hasta que lo metas, sigues entrando con tu correo de siempre.`),
+      letraPequena('Si no lo has pedido tú, no hagas nada: sin el código no cambia nada.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: a, name: nombre }], subject, htmlContent, textContent, tags: ['codigo-cambio-correo', 'crm'] });
+}
+
+// Con la plantilla común y la marca del campus del prospecto (Diego, 10/10).
+export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
+  const P = plantilla;
+  const link = `${baseUrl}/leads/${lead.id}`;
+  const subject = `Nuevo prospecto asignado: ${lead.nombre}`;
+  const datos = [lead.email, lead.telefono].filter(Boolean).map((d) => P.esc(d)).join('<br>');
+  const { htmlContent, textContent } = P.correo({
+    proyecto: proyecto || MARCA_CORREOS,
+    titulo: 'Te han asignado un prospecto',
+    saludo: gestor.nombre,
+    resumen: `${lead.nombre}${proyecto?.nombre ? ` · ${proyecto.nombre}` : ''}`,
+    bloques: [
+      P.nota(`<strong>${P.esc(lead.nombre)}</strong>${datos ? `<br>${datos}` : ''}${proyecto?.nombre ? `<br><span style="color:#71717a">${P.esc(proyecto.nombre)}</span>` : ''}`),
+      P.boton({ texto: 'Ver el prospecto', url: link }),
+      letraPequena('Cuanto antes lo contactes, más fácil es que se matricule.'),
+    ],
+  });
   return await sendEmail({
     to: [{ email: gestor.email, name: gestor.nombre }],
     subject,
     htmlContent,
     textContent,
+    projectId: proyecto?.id ?? null,
     tags: ['lead-assigned', 'crm'],
   });
 }
@@ -242,3 +450,235 @@ export async function sendTestEmail(apiKey, toEmail) {
 }
 
 export { sendEmail };
+
+/**
+ * MCP de Claude (#192): una conexión se ha bloqueado por fallar el código de
+ * desbloqueo. Va al dueño de la conexión y a quien vigila (MCP_AVISO_EMAIL o
+ * los super admin). Puede ser un despiste o alguien probando códigos con una
+ * URL que no es suya: el correo lo dice para que lo mire quien sabe.
+ */
+export async function sendMcpBloqueoEmail({ para, persona, hasta, maxFallos }) {
+  const P = plantilla;
+  const conexion = `${persona.conexion} (${persona.prefijo}…)`;
+  const subject = `MCP de Claude bloqueado: ${persona.nombre}`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Conexión de Claude bloqueada',
+    resumen: `${persona.nombre} falló el código ${maxFallos} veces seguidas`,
+    bloques: [
+      P.parrafo(`La conexión <strong>${P.esc(conexion)}</strong> de <strong>${P.esc(persona.nombre)}</strong> ha fallado el código de desbloqueo <strong>${P.esc(maxFallos)} veces seguidas</strong>.`),
+      P.nota(`Queda bloqueada hasta el <strong>${P.esc(fechaHoraCorreo(hasta))}</strong> (${P.esc(zonaDeLasHoras())}): hasta entonces no da datos ni acepta códigos.`),
+      P.parrafo('Puede ser un despiste. Si no has sido tú, revoca esa URL: alguien podría tenerla.'),
+      P.boton({ texto: 'Ir a Conexión → MCP', url: P.enlace('conexion/mcp') }),
+    ],
+  });
+  return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-bloqueo', 'crm'] });
+}
+
+/**
+ * MCP de Claude (#194): sus URLs van a caducar pronto. Un correo por persona,
+ * con todas las que le caducan, y el enlace a la pantalla para sacar otra.
+ */
+export async function sendMcpCaducidadEmail({ persona, urls, enlace }) {
+  const P = plantilla;
+  const una = urls.length === 1;
+  const subject = una ? 'Tu URL de Claude para el CRM caduca pronto' : `${urls.length} URLs de Claude para el CRM caducan pronto`;
+  const fila = (u) => `<li style="margin:0 0 8px"><strong>${P.esc(u.nombre)}</strong>`
+    + ` <span style="color:#71717a">(${P.esc(u.prefijo)}…)</span><br>`
+    + `caduca el <strong>${P.esc(fechaCorreo(u.expires_at))}</strong>`
+    + `${u.conexion ? ` · conexión «${P.esc(u.conexion)}»` : ''}</li>`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: una ? 'Tu URL de Claude caduca pronto' : 'Tus URLs de Claude caducan pronto',
+    saludo: persona.nombre,
+    resumen: una ? `Caduca el ${fechaCorreo(urls[0].expires_at)}` : `${urls.length} URLs caducan pronto`,
+    bloques: [
+      P.parrafo(una ? 'Esta URL, con la que Claude consulta el CRM, va a caducar:' : 'Estas URLs, con las que Claude consulta el CRM, van a caducar:'),
+      P.nota(`<ul style="margin:0;padding-left:18px">${urls.map(fila).join('')}</ul>`),
+      P.parrafo('Cuando caduque, Claude dejará de poder consultar. Para seguir, saca una nueva con el botón <strong>«URL nueva»</strong> de su conexión y cámbiala en tu Claude, en Configuración → Conectores.'),
+      P.boton({ texto: 'Ir a Conexión → MCP', url: enlace || P.enlace('conexion/mcp') }),
+      letraPequena('Si ya no la usas, no hace falta hacer nada: se apagará sola.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: persona.email, name: persona.nombre }], subject, htmlContent, textContent, tags: ['mcp-caducidad', 'crm'] });
+}
+
+/**
+ * «8 consultas, 0 con datos (todas bloqueadas por el código)» (Diego, 13/10).
+ * La alerta de madrugada solo decía «N consultas», y no es lo mismo que Claude
+ * se llevara datos a que el código lo parara todo. Una alerta sin el desglose
+ * (de antes del cambio) se queda en «N consultas».
+ */
+function consultasDeMadrugada(d) {
+  const n = Number(d.consultas) || 0;
+  const consultas = `${n} consulta${n === 1 ? '' : 's'}`;
+  if (d.con_datos === undefined || d.con_datos === null) return consultas;
+  const datos = Number(d.con_datos) || 0;
+  const bloqueadas = Number(d.bloqueadas) || 0;
+  const desbloqueos = Number(d.desbloqueos) || 0;
+  const sin = n - datos;
+  if (sin <= 0) return n === 1 ? `${consultas}, con datos` : `${consultas}, todas con datos`;
+  const base = `${consultas}, ${datos} con datos`;
+  if (bloqueadas === sin) {
+    if (datos === 0) return `${base} (${n === 1 ? 'bloqueada' : 'todas bloqueadas'} por el código)`;
+    return `${base} (${sin === 1 ? 'la otra, bloqueada' : `las otras ${sin}, bloqueadas`} por el código)`;
+  }
+  const resto = [];
+  if (bloqueadas) resto.push(`${bloqueadas} bloqueada${bloqueadas === 1 ? '' : 's'} por el código`);
+  if (desbloqueos) resto.push(`${desbloqueos} para desbloquear`);
+  const otras = sin - bloqueadas - desbloqueos;
+  if (otras > 0) resto.push(`${otras} con otro error`);
+  return `${base} (${resto.join(', ')})`;
+}
+
+/**
+ * MCP de Claude (#195): las alertas de una vuelta, todas en un correo, para
+ * quien vigila (MCP_AVISO_EMAIL o los super admin). También la de URL
+ * compartida (Diego, 13/10), que sale sola y en el momento.
+ */
+export async function sendMcpAlertasEmail({ para, alertas, enlace }) {
+  const P = plantilla;
+  const hora = (d) => new Date(d).toLocaleString('es-ES', { timeZone: zonaCorreos(), day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  // Diego, 13/10: cada hora, con su zona («hora de Madrid»).
+  const zona = P.esc(zonaDeLasHoras());
+  const TITULOS = {
+    rafaga: 'Ráfaga de consultas', ip_nueva: 'Red nueva', cliente_nuevo: 'Cliente nuevo',
+    fallos_desbloqueo: 'Fallos de desbloqueo', madrugada: 'De madrugada', url_compartida: 'URL compartida',
+  };
+  const texto = (a) => {
+    const quien = `<strong>${P.esc(a.persona.nombre)}</strong>${a.persona.email ? ` (${P.esc(a.persona.email)})` : ''}`;
+    const d = a.detalle || {};
+    switch (a.tipo) {
+      case 'rafaga': return `${quien} hizo ${P.esc(d.consultas)} consultas en ${P.esc(d.minutos)} minutos (hasta las ${P.esc(hora(d.hasta))}, ${zona}).`;
+      case 'ip_nueva': return `${quien} consultó desde ${P.esc(d.red)} (${P.esc((d.ips || []).join(', '))}), desde donde no lo había hecho antes.`;
+      case 'cliente_nuevo': return `${quien} consultó con «${P.esc(d.cliente)}», que no había usado antes.`;
+      case 'fallos_desbloqueo': return `${quien} falló el código ${P.esc(d.fallos)} veces en la última hora.`;
+      case 'madrugada': return `${quien} hizo ${P.esc(consultasDeMadrugada(d))}, entre las ${P.esc(hora(d.primera))} y las ${P.esc(hora(d.ultima))} (${zona}; franja ${P.esc(d.franja)}).`;
+      case 'url_compartida': {
+        const url = d.conexion ? `<strong>${P.esc(d.conexion)}</strong>${d.prefijo ? ` (${P.esc(d.prefijo)}…)` : ''}` : 'la URL del MCP';
+        const otra = `<strong>${P.esc(d.usada_por)}</strong>${d.usada_por_email ? ` (${P.esc(d.usada_por_email)})` : ''}`;
+        return `La URL ${url} de ${quien} la está usando ${otra}: a las ${P.esc(hora(d.cuando))} (${zona}) probó en ella un código de desbloqueo suyo. `
+          + 'No vale (un código solo sirve con la URL de quien lo sacó) y no cuenta como fallo. A su Claude se le ha dicho que use su propia URL.';
+      }
+      default: return quien;
+    }
+  };
+  const subject = alertas.length === 1 ? 'Alerta del MCP de Claude' : `${alertas.length} alertas del MCP de Claude`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: subject,
+    resumen: alertas.map((a) => TITULOS[a.tipo] || a.tipo).join(' · '),
+    bloques: [
+      P.parrafo('Claude ha consultado el CRM de una forma que conviene mirar:'),
+      ...alertas.map((a) => P.nota(`<strong>${P.esc(TITULOS[a.tipo] || a.tipo)}</strong><br>${texto(a)}`)),
+      P.parrafo('El detalle de cada consulta está en la pestaña Actividad. Si algo no es de quien dice ser, revoca su URL en esa misma pantalla.'),
+      P.boton({ texto: 'Ver la actividad', url: enlace || P.enlace('conexion/mcp') }),
+    ],
+  });
+  return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-alertas', 'crm'] });
+}
+
+/**
+ * Aviso de ticket nuevo (#38).
+ *
+ * VA A DONDE DIGA `SOPORTE_EMAIL`, Y SI ESTA VACIA NO SE MANDA NADA.
+ *
+ * El ticket pide avisar «al correo de destino» sin decir cual. Inventarse una
+ * direccion es peor que no mandar: el aviso se daria por hecho y no llegaria a
+ * nadie. Vacia, la funcion dice por que no salio y el ticket queda guardado
+ * igual — que es lo que de verdad importaba, porque antes no se guardaba en
+ * ningun sitio.
+ */
+export async function sendTicketNuevoEmail({ ticket, autor }) {
+  const destino = String(process.env.SOPORTE_EMAIL || '').trim();
+  if (!destino) return { sent: false, reason: 'SIN_SOPORTE_EMAIL' };
+
+  const base = (process.env.CRM_BASE_URL || 'http://localhost:5173/crm').replace(/\/+$/, '');
+  const link = `${base}/soporte`;
+  const GRAVEDAD = { low: 'Baja', medium: 'Media', high: 'Alta', critical: 'Critica' };
+  const CLASE = { bug: 'Averia', feature: 'Mejora', question: 'Duda' };
+
+  // Todo lo que escribe quien abre el ticket entra ESCAPADO: es texto libre y
+  // llega a un buzon interno. Sin esto, un titulo con HTML pone enlaces o
+  // contenido ajeno dentro de un correo en el que el equipo confia.
+  const e = plantilla.esc;
+  const saltos = (v) => String(e(v)).split('\n').join('<br>');
+  const campo = (rotulo, valor) => (valor
+    ? `<p style="margin:10px 0"><strong>${rotulo}</strong><br>${saltos(valor)}</p>`
+    : '');
+
+  const subject = `[${CLASE[ticket.kind] || ticket.kind} · ${GRAVEDAD[ticket.severity] || ticket.severity}] ${ticket.title}`;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color:#1f2937; max-width:640px; margin:0 auto; padding:24px;">
+      <p style="margin:0 0 4px; font-size:12px; color:#6b7280;">
+        ${CLASE[ticket.kind] || ticket.kind} · ${GRAVEDAD[ticket.severity] || ticket.severity}${ticket.projectName ? ` · ${e(ticket.projectName)}` : ''}
+      </p>
+      <h2 style="margin:0 0 12px; font-size:19px;">${e(ticket.title)}</h2>
+      <p style="font-size:13px; color:#6b7280; margin:0 0 16px;">
+        Lo abre <strong>${e(autor?.nombre || autor?.email || 'alguien del equipo')}</strong>.
+      </p>
+      ${campo('Que pasa', ticket.description)}
+      ${campo('Pasos para reproducirlo', ticket.steps)}
+      ${campo('Que deberia pasar', ticket.expected)}
+      ${campo('Que pasa en su lugar', ticket.actual)}
+      ${campo('Por que importa', ticket.whyItMatters)}
+      ${ticket.url ? `<p style="margin:10px 0; font-size:13px;"><strong>Donde</strong><br><code style="background:#f3f4f6; padding:3px 6px; border-radius:4px; word-break:break-all;">${e(ticket.url)}</code></p>` : ''}
+      <p style="text-align:center; margin:28px 0;">
+        <a href="${link}" style="background:#3b82f6; color:#fff; padding:11px 22px; border-radius:8px; text-decoration:none; font-weight:bold; display:inline-block;">Abrir en el CRM</a>
+      </p>
+      <p style="font-size:12px; color:#9ca3af;">Ticket #${ticket.id} · responde desde el CRM, no a este correo.</p>
+    </body></html>`;
+
+  const textContent = [
+    subject,
+    '',
+    `Lo abre ${autor?.nombre || 'alguien del equipo'}.`,
+    '',
+    ticket.description || '',
+    ticket.steps ? `Pasos:\n${ticket.steps}` : '',
+    ticket.url ? `Donde: ${ticket.url}` : '',
+    '',
+    `Abrir en el CRM: ${link}`,
+  ].filter(Boolean).join('\n');
+
+  return await sendEmail({
+    to: [{ email: destino }],
+    subject,
+    htmlContent,
+    textContent,
+    tags: ['soporte', 'crm'],
+  });
+}
+
+/**
+ * El correo de «he olvidado la contraseña» (#37).
+ *
+ * Lleva al MISMO sitio que el del alta —`/set-password?token=`—, porque es el
+ * mismo camino. Lo que cambia es el texto: a quien recupera no se le da la
+ * bienvenida, y sobre todo se le dice que hacer si NO ha sido el, que es la
+ * unica señal que tiene alguien de que le estan intentando entrar.
+ */
+export async function sendPasswordResetEmail({ nombre, email, setPasswordToken, baseUrl }) {
+  const P = plantilla;
+  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Recuperar contraseña',
+    saludo: nombre,
+    resumen: 'Pon una contraseña nueva para entrar al CRM',
+    bloques: [
+      P.parrafo('Has pedido recuperar tu contraseña del CRM. Pon una nueva desde aquí:'),
+      P.boton({ texto: 'Poner una contraseña nueva', url: link }),
+      P.nota('El enlace caduca en 24 horas y solo sirve una vez.'),
+      letraPequena('Si no has sido tú, ignora este correo: tu contraseña sigue como estaba y el enlace caduca solo. Si se repite, avisa a quien administra el CRM.'),
+    ],
+  });
+  return await sendEmail({
+    to: [{ email, name: nombre }],
+    subject: 'Recuperar tu contraseña del CRM',
+    htmlContent,
+    textContent,
+    tags: ['password-reset', 'crm'],
+  });
+}
