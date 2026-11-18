@@ -81,6 +81,7 @@ const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPe
 const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashboardPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
+const IncidenciasPage = lazy(() => import('./modules/incidencias/pages/IncidenciasPage'));
 const StatusPage = lazy(() => import('./modules/status/pages/StatusPage'));
 const RegistroPage = lazy(() => import('./modules/registro/pages/RegistroPage'));
 const NovedadesPage = lazy(() => import('./modules/novedades/pages/NovedadesPage'));
@@ -109,6 +110,7 @@ const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripeP
 const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
 // Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
 const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
+const DisputasStripePage = lazy(() => import('./modules/accounting/pages/DisputasStripePage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -360,6 +362,8 @@ function App() {
             <Route path="pendiente-facturar" element={<PendienteFacturarPage />} />
             <Route path="pagos-stripe" element={<StripePaymentsPage />} />
             <Route path="cobros-externos" element={<CobrosExternosPage />} />
+            {/* Disputas de Stripe (#396): solo lectura, por empresa y por campus. */}
+            <Route path="disputas" element={<DisputasStripePage />} />
             <Route path="facturas" element={<InvoicesPage />} />
             <Route path="facturas/nueva" element={<InvoiceCreatePage />} />
             <Route path="facturas/configuracion" element={<InvoicingConfigPage />} />
@@ -411,6 +415,8 @@ function App() {
           <Route path="/informes/feedback" element={<FeedbackPanelPage />} />
           <Route path="/chat-ia" element={PANTALLAS_IA ? <AIChatPage /> : <Navigate to="/" replace />} />
           <Route path="/soporte" element={<SoportePage />} />
+          {/* Incidencias (#253), al lado de Soporte. */}
+          <Route path="/incidencias" element={<IncidenciasPage />} />
           {/* Las direcciones de antes (avisos ya enviados, marcadores): a Certificaciones. */}
           <Route path="/certifex/consultas" element={<Navigate to="/clientes/matriculas/certificaciones?vista=consultas" replace />} />
           <Route path="/certifex/emisiones" element={<Navigate to="/clientes/matriculas/certificaciones" replace />} />

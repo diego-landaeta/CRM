@@ -42,6 +42,9 @@ const ALL_PROJECTS_OK = [
   // Consultas de alumnos (#188, #189): cada fila dice de qué campus es, y el
   // tutor ve lo suyo sin mirar la cabecera.
   /^\/consultas(?:\/.*)?$/,
+  // Incidencias (#253): con una empresa o «Todos», las de sus campus; cada
+  // fila dice de dónde es, y el servidor recorta a cada uno lo suyo.
+  /^\/incidencias$/,
   // Feedback (#170): sin campus ni empresa, el servidor suma todos los que ve
   // cada uno (sin los de pruebas). Diego, 02/11: «el panel de feedback está
   // fallando»: con «Todos los proyectos» salía «Selecciona un proyecto».
@@ -154,6 +157,8 @@ const ALL_PROJECTS_OK = [
   // campus menos los de pruebas. Sincronizar Stripe o crear una nómina sigue
   // pidiendo UN campus: cada uno tiene su cuenta y sus nóminas.
   /^\/finanzas\/pagos-stripe$/,
+  // Disputas de Stripe (#396): por empresa y por campus, en los de quien mira.
+  /^\/finanzas\/disputas$/,
   /^\/finanzas\/nominas$/,
   // #218, tanda 3: pantallas de UN campus que, con una empresa o «Todos», ya no
   // se tapian: piden el campus DENTRO (Proceso comercial, Buscar duplicados,
@@ -391,6 +396,7 @@ const CON_SOCIEDAD_OK = [
   /^\/finanzas\/por-pagar$/,
   /^\/finanzas\/comisiones$/,
   /^\/finanzas\/pagos-stripe$/,
+  /^\/finanzas\/disputas$/,
   /^\/finanzas\/pendiente-facturar$/,
   // Nominas. Las paga la SOCIEDAD, asi que verlas campus a campus obligaba a
   // sumar siete pantallas a mano. Leer acepta varios; crear una nomina,
