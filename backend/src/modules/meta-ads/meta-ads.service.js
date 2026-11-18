@@ -5,11 +5,11 @@ import { logger } from '../../shared/utils/logger.js';
 import * as metaClient from './meta-ads.client.js';
 import { destinoDelCreativo, formacionDelConjunto } from './meta-ads.enlaces.js';
 
-function packToken(plain) {
+export function packToken(plain) {
   const { encrypted, iv, authTag } = encrypt(plain);
   return `${iv}:${authTag}:${encrypted}`;
 }
-function unpackToken(packed) {
+export function unpackToken(packed) {
   const [iv, authTag, encrypted] = String(packed).split(':');
   if (!iv || !authTag || !encrypted) throw new AppError('Token corrupto', 500, 'TOKEN_CORRUPT');
   return decrypt(encrypted, iv, authTag);
@@ -483,6 +483,16 @@ async function despuesDeSincronizar({ account, token, inicio, forzarGastoTotal =
     if (r.asociados || r.quitados) logger.info({ account_id: account.id, ...r }, 'Meta: asociación automática de conjuntos');
   } catch (err) {
     logger.warn({ err: err.message, account_id: account.id }, 'Meta: falló la asociación automática de conjuntos');
+  }
+  // Los prospectos que entraron antes de que llegara su anuncio: ahora ya se sabe
+  // de qué conjunto y anuncio son (puerta 8, CRM#806). Va después de la
+  // asociación automática, que es de donde sale su formación.
+  try {
+    const { rellenarOrigenMeta } = await import('../leads/origen-meta.js');
+    const r = await rellenarOrigenMeta(account.project_id);
+    if (r.anuncios || r.conjuntos || r.campanas || r.formaciones) logger.info({ account_id: account.id, ...r }, 'Meta: origen de los prospectos completado');
+  } catch (err) {
+    logger.warn({ err: err.message, account_id: account.id }, 'Meta: no se pudo completar el origen de los prospectos');
   }
 }
 
