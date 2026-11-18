@@ -72,4 +72,18 @@ ALTER TABLE stripe_sync_state
 COMMENT ON TABLE stripe_disputes IS
   'Disputas de Stripe de cada campus (#396). Solo lectura de Stripe; avisos a los admins de su empresa.';
 
+-- Como en la 245 y la 247: en el servidor la migracion la pasa postgres y la API
+-- entra como crm_user (crm_iseie_user en la gemela). Sin esto, la pantalla y el
+-- sondeo dan «permiso denegado».
+DO $$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['crm_user', 'crm_iseie_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON stripe_disputes TO %I', r);
+      EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE stripe_disputes_id_seq TO %I', r);
+    END IF;
+  END LOOP;
+END $$;
+
 COMMIT;

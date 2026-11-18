@@ -516,7 +516,7 @@ if (process.env.NODE_ENV !== 'test') {
     startPaypalCobrosSyncScheduler();
     // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
     startMonitaskSyncScheduler();
-    // Disputas de Stripe (#396): traerlas de cada cuenta y avisar a los admins.
+    // Disputas de Stripe (#396): traerlas de cada cuenta y avisar a los admins. Solo con STRIPE_DISPUTAS_ACTIVO=1.
     startStripeDisputasScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
