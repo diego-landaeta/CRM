@@ -111,6 +111,12 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Formación terminada sin pedir diploma', agrupa: false,
     descripcion: 'Moodle da la formación por terminada y el alumno aún no ha pedido su diploma',
   },
+  // Confirmación de datos del diploma (#768): a administración del campus, cuando el
+  // alumno confirma o corrige sus datos, vence su plazo o lo corregido no entra en Certifex.
+  diploma_confirmacion: {
+    clase: ACCION, etiqueta: 'Datos del diploma confirmados', agrupa: false,
+    descripcion: 'Un alumno confirma o corrige los datos de su diploma, o vence el plazo para hacerlo',
+  },
   rfc_created: {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',
@@ -212,6 +218,11 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
     descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',
   },
+  // Control de subidas (#771): solo campana, a quien lleva las subidas del campus.
+  curso_pendiente_subida_vencida: {
+    clase: ACCION, etiqueta: 'Subidas de un curso atrasadas', agrupa: false,
+    descripcion: 'Un curso entregado tiene vídeos, módulos o datos de directores sin subir pasada su fecha límite',
+  },
   // Consultas de alumnos (#190, decisión 4): al tutor, cuando una consulta
   // abierta llega a las 3/4 partes del plazo; a administración del campus,
   // cuando se pasa (para reasignarla). Y al tutor, la carga sin actualizar.
@@ -228,6 +239,13 @@ export const TIPOS = {
   entregas_sin_corregir: {
     clase: ACCION, etiqueta: 'Entregas sin corregir', agrupa: false,
     descripcion: 'Entregas de tus alumnos que llevan más de 48 h sin corregir',
+  },
+  // El segundo escalón (#769): a administración del campus, las que siguen sin corregir
+  // pasado el plazo (5 días o «Recordarme calificar antes de») y las de cursos sin tutora
+  // en el CRM. Un aviso por campus y vuelta (tutores/tutor.entregasAdministracion.js).
+  entregas_fuera_de_plazo: {
+    clase: ACCION, etiqueta: 'Entregas sin corregir fuera de plazo', agrupa: false,
+    descripcion: 'Entregas de alumnos de tus campus que siguen sin corregir pasado el plazo, o de cursos sin tutora en el CRM',
   },
   carga_desactualizada: {
     clase: ACCION, etiqueta: 'Carga de trabajo sin actualizar', agrupa: false,
