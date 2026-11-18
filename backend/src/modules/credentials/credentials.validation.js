@@ -16,7 +16,7 @@ const SERVICES = [
   // Migracion 220 (#335): el Moodle de cada campus, para el MCP. El valor es un
   // JSON {"url":"https://…","token":"…"}.
   'moodle',
-  // Migracion 254 (CRM#737): el tablero ↔ GitHub. JSON {"webhook_secret":"…","token":"…"};
+  // Migracion 299 (CRM#737): el tablero ↔ GitHub. JSON {"webhook_secret":"…","token":"…"};
   // se pone desde Configurar tablero › GitHub.
   'github',
 ];
