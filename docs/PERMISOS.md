@@ -661,8 +661,12 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | verConfig | `GET /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` o `links_pago.crear` |
 | guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
+| crear | `POST /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` |
+| anular | `POST /api/links-pago/:id/anular` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 
 ## make
 
@@ -1619,7 +1623,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Crear links de pago | `links_pago.crear` | Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos. | Admin, Gestora, Soporte |  |
 | Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno). | Admin |  |
-| Configurar los links de pago | `links_pago.configurar` | El descuento máximo de cada campus sobre el precio del catálogo. | Admin |  |
+| Configurar los links de pago | `links_pago.configurar` | Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe. | Admin |  |
 
 ### Facturas de colaboradores
 
