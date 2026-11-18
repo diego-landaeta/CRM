@@ -8,6 +8,7 @@ import { tituloDeRuta } from './shared/lib/rutasTitulos';
 import { SOLO_EN_PRUEBAS } from './shared/lib/soloEnPruebas';
 import { PANTALLAS_IA } from './shared/lib/pantallasIA';
 import ConPermiso from './shared/components/layout/ConPermiso';
+import RedirigeA from './shared/components/RedirigeA';
 import { MARCA } from '@/shared/config/marca';
 const APP_BASE_URL = import.meta.env.BASE_URL || '';
 const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/');
@@ -92,6 +93,8 @@ const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPag
 const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
+// El formulario de datos fiscales de la factura automática (#764): sin sesión, desde el correo.
+const DatosFiscalesPage = lazy(() => import('./modules/factura-automatica/pages/DatosFiscalesPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
 const AIChatPage = lazy(() => import('./modules/ai-chat/pages/AIChatPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
@@ -102,6 +105,10 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
+// Cobros de PayPal y extractos del banco (#766).
+const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
+// Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
+const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -231,6 +238,8 @@ function App() {
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         {/* Sin sesion: la abre desde el correo quien no compro. */}
         <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
+        {/* Sin sesion: el alumno da sus datos para la factura (#764). El enlace es la llave. */}
+        <Route path="/datos-fiscales/:token" element={<DatosFiscalesPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave. */}
@@ -350,6 +359,7 @@ function App() {
             <Route path="integraciones" element={<IntegrationsPage />} />
             <Route path="pendiente-facturar" element={<PendienteFacturarPage />} />
             <Route path="pagos-stripe" element={<StripePaymentsPage />} />
+            <Route path="cobros-externos" element={<CobrosExternosPage />} />
             <Route path="facturas" element={<InvoicesPage />} />
             <Route path="facturas/nueva" element={<InvoiceCreatePage />} />
             <Route path="facturas/configuracion" element={<InvoicingConfigPage />} />
@@ -422,6 +432,8 @@ function App() {
           <Route path="/tareas/revisar" element={<Navigate to="/tareas/historial" replace />} />
           <Route path="/tareas/configurar" element={<TaskBoardConfigPage />} />
           <Route path="/mi-factura" element={<MiFacturaPage />} />
+          {/* Monitask (#236): la pantalla dice si el servidor lo tiene apagado (MONITASK_ACTIVO). */}
+          <Route path="/equipo/actividad" element={<ConPermiso permiso="monitask.view"><MonitaskActividadPage /></ConPermiso>} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
@@ -455,6 +467,16 @@ function App() {
           <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
           <Route path="/ai-chat" element={<Navigate to={PANTALLAS_IA ? '/chat-ia' : '/'} replace />} />
           <Route path="/configuracion/email-templates" element={<Navigate to="/configuracion/plantillas-email" replace />} />
+          {/* Prospectos, productos, formularios y webhooks con su dirección de
+              antes (CRM#633). Siguen guardadas en los atajos de cada proyecto
+              (la base copia la ruta al guardarlos), en avisos ya creados y en
+              el Registro; con `RedirigeA` no se pierden ni el id ni el `?new=1`. */}
+          <Route path="/leads" element={<RedirigeA a="/prospectos" />} />
+          <Route path="/leads/:id" element={<RedirigeA a="/prospectos/:id" />} />
+          <Route path="/products" element={<RedirigeA a="/productos" />} />
+          <Route path="/products/:id" element={<RedirigeA a="/productos/:id" />} />
+          <Route path="/formularios" element={<RedirigeA a="/captacion" />} />
+          <Route path="/webhooks" element={<RedirigeA a="/captacion/webhooks" />} />
           {/* Finanzas sin su prefijo (CRM#633). Eran las direcciones de antes de
               agrupar Finanzas bajo /finanzas: alguien las tiene guardadas y la
               auditoría del 03/11 las encontró dando «página no encontrada». */}

@@ -81,6 +81,7 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 // Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -221,6 +222,11 @@ export const NAV_SECTIONS = [
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /testeo y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'Actividad', to: '/equipo/actividad', detail: 'Horas de Monitask y cotejo', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'monitask.view' }]
+        : []),
     ],
   },
   {
@@ -230,7 +236,8 @@ export const NAV_SECTIONS = [
     items: [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences', permiso: 'email_sequences.view' },
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms', permiso: 'forms.view' },
-      // Make y Webhooks estaban aquí: desde la #690, en Conexión › Webhooks.
+      // Make y Webhooks estaban aquí: desde la #690, en Conexión › Webhooks. Lo
+      // que Webhooks pedía además (`forms.view`, #842) va con su parte y su pestaña.
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'], permiso: 'widget.view' },
       // Próximamente (#216): enseñaban datos de ejemplo. El gasto real de Meta, en Publicidad.
       { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'], comingSoon: true },
@@ -327,6 +334,11 @@ export const NAV_SECTIONS = [
       { label: 'Nóminas', salvoTipo: ['ia'], to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'stripe.view' },
+      // Registro automático de cobros (#766): solo en /testeo y en local hasta que
+      // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'PayPal y banco', to: '/finanzas/cobros-externos', detail: 'Cobros de PayPal y extractos', icon: Wallet, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }]
+        : []),
       { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
       // Facturas de colaboradores (#202): en evaluación, solo en /testeo y en local.
       { label: 'Facturas de colaboradores', to: '/finanzas/facturas-colaboradores', detail: 'Las que suben cada mes', icon: Receipt, roles: ['superadmin', 'admin'], permiso: 'facturas_colaborador.ver_todas' },
@@ -364,7 +376,7 @@ export const NAV_SECTIONS = [
       { label: 'Clientes', to: '/clientes', detail: 'Quién ya compró', icon: UserCheck, module: 'clients', permiso: 'clients.view' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
       { label: 'Buscar duplicados', to: '/prospectos/duplicados', detail: 'Buscarlos a mano', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
-      { label: 'Matrículas', to: '/clientes/matriculas', detail: 'Altas en cada curso', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
+      { label: 'Solicitud de admisión', to: '/clientes/matriculas', detail: 'Las que llegan del formulario', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Los mismos roles que la API (`soloRoles` admin/superadmin),
       // y además, para VERLO en solo lectura, quien tenga `diplomas.view` (#384,
@@ -400,7 +412,8 @@ export const NAV_SECTIONS = [
         // Cada entrada de antes con su permiso, su módulo y su sección (Captación ›
         // Webhooks llevaba `module: 'webhooks'`; Captación › Make, `module: 'make'`;
         // y Captación no sale en un proyecto IA, `salvoTipo: ['ia']`).
-        partes: [{ permiso: 'webhooks.view', module: 'webhooks', salvoTipo: ['ia'] }, { permiso: 'make.view', module: 'make', salvoTipo: ['ia'] }, { permiso: 'webhooks_salientes.view' }],
+        // La de Webhooks pedía además `forms.view` (#842): la pantalla lee `/api/forms`.
+        partes: [{ permiso: 'webhooks.view', tambienPermiso: 'forms.view', module: 'webhooks', salvoTipo: ['ia'] }, { permiso: 'make.view', module: 'make', salvoTipo: ['ia'] }, { permiso: 'webhooks_salientes.view' }],
         // Para que el buscador (Ctrl K) los siga encontrando por su nombre de antes,
         // también escrito entero («Webhook de transferencias»: `fuzzyScore` busca
         // la frase seguida). El buscador enseña lo mismo que el menú, así que no
@@ -576,6 +589,12 @@ const SIN_ENTRADA = {
   // hay tutores aquí» en vez de que no tiene acceso (#188).
   '/consultas/tutores': 'consultas.view',
 };
+// Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
+// del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que
+// lee y escribe en `/api/forms` (#842): con `webhooks.view` solo, daba 403.
+const SIN_ENTRADA_TAMBIEN = {
+  '/conexion/webhooks/prospectos': 'forms.view',
+};
 
 export function rutaPermitida(pathname, can) {
   const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
@@ -588,10 +607,43 @@ export function rutaPermitida(pathname, can) {
   };
   for (const s of NAV_SECTIONS) recorrer(s.items);
   // Rutas sin entrada propia en el menú: su permiso, aquí.
-  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta], tambienPermiso: SIN_ENTRADA_TAMBIEN[ruta] });
   if (!suyas.length) return true;
-  return suyas.some((it) => !it.permiso || pasaPermisoDeRoles(it, can)
-    || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true)));
+  return suyas.some((it) => tieneLosDeMas(it, can) && (!it.permiso || pasaPermisoDeRoles(it, can)
+    || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true))));
+}
+
+/**
+ * `tambienPermiso`: lo que pide ADEMÁS la pantalla, porque es lo que mira el
+ * servidor. Todos, no basta uno. Captación › Webhooks pide `webhooks.view`
+ * —lo que dice el catálogo— pero la pantalla lee y escribe en `/api/forms`
+ * (los webhooks de captación son formularios con `kind='webhook'`), que pide
+ * `forms.*`: con uno solo de los dos la pantalla se abría y daba 403.
+ */
+export function tieneLosDeMas(item, can) {
+  if (!item?.tambienPermiso) return true;
+  return typeof can === 'function' && [].concat(item.tambienPermiso).every((p) => can(p) === true);
+}
+
+/**
+ * La clave del permiso que le falta para abrir esta pantalla (CRM#820), para
+ * que «No tienes acceso» ofrezca pedir ESE. Con la misma regla que
+ * `rutaPermitida`: la primera clave del catálogo que pide su entrada del menú y
+ * no tiene. `null` si la puede abrir o no se sabe cuál es.
+ */
+export function permisoQueFalta(pathname, can) {
+  if (rutaPermitida(pathname, can)) return null;
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const claves = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta && it.permiso) claves.push(...[].concat(it.permiso));
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]), ...[].concat(SIN_ENTRADA_TAMBIEN[ruta] || []));
+  return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 
 export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {
@@ -613,12 +665,15 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   // `permiso` también puede ser una lista: basta con uno (Diplomas: ver O emitir).
   const tienePermisoDeLaPantalla = !item.permiso || (typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true));
   if (!tienePermisoDeLaPantalla) return false;
+  if (!tieneLosDeMas(item, can)) return false;
   // Una entrada que junta varias (Conexión › Webhooks, #690): sale si alguna de
-  // sus `partes` se puede abrir, cada una con su permiso, su módulo y el tipo
-  // de proyecto en que no salía (`salvoTipo`: Make y Webhooks estaban en
-  // Captación, que un proyecto IA no tiene), como salían las entradas que
-  // sustituye. Con Make y Webhooks apagados, quien solo tenía esas dos no la ve.
+  // sus `partes` se puede abrir, cada una con su permiso (y lo que pide además,
+  // `tambienPermiso`, #842), su módulo y el tipo de proyecto en que no salía
+  // (`salvoTipo`: Make y Webhooks estaban en Captación, que un proyecto IA no
+  // tiene), como salían las entradas que sustituye. Con Make y Webhooks
+  // apagados, quien solo tenía esas dos no la ve.
   if (Array.isArray(item.partes) && !item.partes.some((p) => (!p.permiso || (typeof can === 'function' && can(p.permiso) === true))
+    && tieneLosDeMas(p, can)
     && !(p.module && modules && modules[p.module] === false)
     && !(Array.isArray(p.salvoTipo) && p.salvoTipo.includes(projectType)))) return false;
   // Y al reves: lo que en un tipo de proyecto NO EXISTE.
@@ -1586,6 +1641,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}
+                {/* CRM#820: un alta, un permiso, un campus o Claude, a soporte como ticket. Para todos. */}
+                <UserMenuItem
+                  icon={Key}
+                  label="Pedir acceso o permiso"
+                  onClick={() => { setUserMenuOpen(false); abrirPedirAcceso(); onNavigate?.(); }}
+                />
                 <UserMenuItem
                   icon={theme === 'dark' ? Sun : Moon}
                   label={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}

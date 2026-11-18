@@ -21,14 +21,14 @@ Une la mensajería de cada campus con el CRM:
 La lectura cada 5 minutos del CRM sigue funcionando como respaldo. Si un aviso se
 pierde, se recoge en la siguiente vuelta.
 
-**Todo viene apagado de serie (1.10.0, revisión de la #689).**
+**Lo que cambia lo que ve el alumno viene apagado de serie (1.10.0, revisión de la #689).**
 - En el **CRM**, lo del plugin es solo de pruebas (/testeo y local) hasta que se apruebe con
   `PLUGIN_MOODLE_EN_PRODUCCION=1`: sin eso, en producción no se dan códigos, no se aceptan
   avisos (`/api/moodle-avisos` no existe), no se repasa ningún campus y la respuesta de la
   tutora sale con su token, como antes.
-- En el **campus**, el chat de grupo y la actualización automática vienen apagados; se
-  encienden a mano en los ajustes del plugin. Al actualizar desde una versión anterior se
-  apagan también.
+- En el **campus**, el chat de grupo viene apagado; se enciende a mano en los ajustes del
+  plugin. La actualización automática, en cambio, viene **encendida** desde la 1.10.6 (de la
+  1.10.0 a la 1.10.5 venía apagada): ver «Actualización automática».
 
 | | |
 |---|---|
@@ -163,9 +163,23 @@ El plugin hace lo mismo sin el mapa a mano y vale también para los cursos con v
 Cada noche (entre las 3 y las 5) el plugin pregunta al CRM si hay versión nueva. Si la
 hay y **está firmada por el CRM**, guarda una copia de la instalada, pone la nueva y la
 actualiza; si algo falla, vuelve a la copia. En «Conectar con el CRM» se ve la versión, lo
-último que pasó y el botón «Buscar actualización ahora». **Viene apagado** (desde la
-1.10.0): se enciende en los ajustes («Actualizar el plugin solo»). Apagado, solo avisa de
+último que pasó y el botón «Buscar actualización ahora». **Viene encendido** (1.10.6) y se
+apaga en los ajustes («Actualizar el plugin solo»), campus a campus. Apagado, solo avisa de
 que hay versión nueva.
+
+De la 1.10.0 a la 1.10.5 venía apagado (revisión de la #689) y la 1.10.0 lo apagó también
+en los campus que ya tenían el plugin. Al actualizar a la 1.10.6 se **enciende** en todos,
+salvo donde alguien lo apagó a mano: si el último cambio del ajuste guardado en la página de
+ajustes (registro de cambios de configuración de Moodle, `config_log`) fue de encendido a
+apagado, se queda apagado. Lo que apagó la propia 1.10.0 no cuenta como «a mano». Si un
+campus no lo quiere, se apaga después de actualizar y ya no se vuelve a encender solo.
+
+Es seguro dejarlo encendido sin que nadie lo mire porque:
+- solo instala lo que trae la **firma del CRM** (RSA sobre componente, versión y huella del
+  ZIP) que reconoce la clave pública de `crm/classes/claves.php`; una versión sin firma o con
+  el manifiesto alterado no se instala («no trae una firma válida»);
+- solo habla con el CRM al que está conectado el campus;
+- guarda copia de la versión instalada y vuelve a ella si la actualización falla.
 
 No instala nada si la firma no cuadra, si el sitio tiene `$CFG->disableupdateautodeploy`
 o si Moodle no puede escribir en `local/crm`: en esos casos avisa de que hay versión nueva

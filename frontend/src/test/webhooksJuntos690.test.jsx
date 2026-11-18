@@ -84,7 +84,12 @@ describe('un solo apartado en el menú', () => {
     const solo = (clave) => (p) => p === clave;
     expect(rutaPermitida('/conexion/webhooks/make', solo('make.view'))).toBe(true);
     expect(rutaPermitida('/conexion/webhooks/make', solo('webhooks.view'))).toBe(false);
-    expect(rutaPermitida('/conexion/webhooks/prospectos', solo('webhooks.view'))).toBe(true);
+    // Prospectos era Captación › Webhooks, que desde la #842 pide además
+    // «Ver formularios»: la pantalla lee `/api/forms` y con uno solo daba 403.
+    const los = (...claves) => (p) => claves.includes(p);
+    expect(rutaPermitida('/conexion/webhooks/prospectos', los('webhooks.view', 'forms.view'))).toBe(true);
+    expect(rutaPermitida('/conexion/webhooks/prospectos', solo('webhooks.view'))).toBe(false);
+    expect(rutaPermitida('/conexion/webhooks/prospectos', solo('forms.view'))).toBe(false);
     expect(rutaPermitida('/conexion/webhooks/transferencias', solo('webhooks_salientes.view'))).toBe(true);
   });
 
@@ -111,7 +116,8 @@ describe('un solo apartado en el menú', () => {
     const [t] = TRASLADOS_DE_MENU;
     expect(t.a).toBe('Conexión › Webhooks');
     for (const d of t.de) {
-      const solo = (p) => p === d.permiso;
+      // Con lo que pedía la entrada vieja: su permiso y, si lo tenía, el de más (#842).
+      const solo = (p) => p === d.permiso || [].concat(d.tambienPermiso || []).includes(p);
       expect(PERMISOS_WEBHOOKS, d.entrada).toContain(d.permiso);
       expect(rutaPermitida('/conexion/webhooks', solo), d.entrada).toBe(true);
       expect(rutaPermitida(d.a, solo), d.a).toBe(true);

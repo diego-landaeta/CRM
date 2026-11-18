@@ -158,8 +158,6 @@ export interface UpdateUserPayload {
   email?: string;
   /** Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246). */
   reenviarEnlace?: boolean;
-  /** #211: el correo nuevo no se aplica todavía; le llega un código a esa dirección. */
-  conCodigo?: boolean;
   role?: UserRole;
   /** Roles de MAS. Una lista vacia los quita todos, que es lo que se espera. */
   roles_extra?: UserRole[];
@@ -191,13 +189,6 @@ export async function updateUser(id: number, payload: UpdateUserPayload): Promis
   return normalizeUser(res.data);
 }
 
-/** #211: el código que le llegó a la persona a su dirección nueva. */
-export async function confirmarCorreoDeUsuario(id: number, codigo: string): Promise<{ cambiado: boolean; email: string }> {
-  const res = await client.post(`/users/${id}/email/confirmar`, { codigo });
-  if (!res.success) throw new Error(res.error || 'No se pudo confirmar el correo');
-  return res.data;
-}
-
 export async function deactivateUser(id: number): Promise<{ leads_huerfanizados?: number; leads_reasignados?: number }> {
   const res = await client.delete(`/users/${id}`);
   if (!res.success) throw new Error(res.error || 'No se pudo desactivar el usuario');
@@ -210,7 +201,8 @@ export async function reactivateUser(id: number): Promise<void> {
 }
 
 /**
- * Reset de contraseña por un superadmin. Cierra las sesiones activas del usuario.
+ * Reset de contraseña por un superadmin. Revoca sus refresh tokens: con la anterior
+ * ya no entra, pero el JWT de acceso dura hasta 8 h y sus URL del MCP siguen vivas (#262).
  * Repetida, con las reglas de «Establece tu contraseña» (#248).
  */
 export async function setUserPassword(id: number, password: string, confirmPassword: string): Promise<void> {
@@ -265,4 +257,37 @@ export async function listRolesAsignables(): Promise<RolAsignable[]> {
   const res = await client.get('/users/roles-asignables');
   if (!res.success) throw new Error(res.error || 'No se pudo saber qué roles puedes dar');
   return (res.data || []) as RolAsignable[];
+}
+
+/**
+ * Un correo del equipo que Brevo se niega a entregar (migración 290). Caso real
+ * de ISEIE (17/11/2026): una gestora tres semanas sin avisos por un rebote duro.
+ */
+export interface BrevoBloqueo {
+  id: number;
+  user_id: number;
+  /** El código de Brevo: hardBounce, contactFlaggedAsSpam, unsubscribedViaEmail… */
+  codigo: string | null;
+  /** Ya en castellano. */
+  motivo: string | null;
+  bloqueado_desde: string | null;
+  detectado_at: string | null;
+}
+
+export interface BrevoBloqueos {
+  /** Si la vigilancia está encendida (BREVO_BLOQUEADOS_ACTIVO). Apagada, no hay marcas. */
+  activo: boolean;
+  bloqueos: BrevoBloqueo[];
+}
+
+export async function listBrevoBloqueos(): Promise<BrevoBloqueos> {
+  const res = await client.get('/users/brevo-bloqueos');
+  if (!res.success) throw new Error(res.error || 'No se pudieron leer los bloqueos de Brevo');
+  return { activo: !!res.data?.activo, bloqueos: (res.data?.bloqueos || []) as BrevoBloqueo[] };
+}
+
+/** «Desbloquear en Brevo». Si el buzón sigue sin existir, Brevo lo vuelve a bloquear. */
+export async function desbloquearBrevo(id: number): Promise<void> {
+  const res = await client.delete(`/users/${id}/brevo-bloqueo`);
+  if (!res.success) throw new Error(res.error || 'Brevo no lo desbloqueó');
 }

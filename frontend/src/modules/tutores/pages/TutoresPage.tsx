@@ -98,7 +98,9 @@ export default function TutoresPage() {
   const puede = can('tutores.gestionar');
   // El correo de un tutor, solo el super admin (#248). La contraseña, también el
   // admin (Diego, 09/10, #246).
-  const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
+  // Basta el permiso (el superadmin lo tiene siempre): se le da a quien administración diga
+  // desde su ficha de permisos. Antes pedía además ser superadmin y la excepción no servía.
+  const puedeCambiarCorreo = can('tutores.cambiar_correo');
   const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
@@ -163,6 +165,9 @@ export default function TutoresPage() {
   // Se lee una vez, al abrir, de la dirección: sin el hook del router, que esta
   // pantalla no necesitaba (y sus pruebas la montan sin él).
   const [busca, setBusca] = useState(() => new URLSearchParams(window.location.search).get('buscar') ?? '');
+  // `?formacion=` lo trae «Asignar tutor» desde Formaciones sin tutor: al abrir
+  // «Añadir formación», esa formación ya va elegida. Se lee igual que `buscar`.
+  const [formacionDeLaUrl] = useState<number | null>(() => Number(new URLSearchParams(window.location.search).get('formacion')) || null);
   const [popupClave, setPopupClave] = useState(false);
   const [popupPago, setPopupPago] = useState(false);
   // «Cobra desde» en Editar tutor (Diego, 13/10): la fecha de inicio de TODAS
@@ -332,7 +337,7 @@ export default function TutoresPage() {
 
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
-  function abrirColab() { setCursoColab(null); setPopupColab(true); }
+  function abrirColab() { setCursoColab(formacionDeLaUrl); setPopupColab(true); }
 
   function abrirClave() {
     const clave = generarContrasena();
@@ -351,7 +356,7 @@ export default function TutoresPage() {
     try {
       const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva, claveRepetida);
       if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella. Sus sesiones abiertas se han cerrado.` });
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella, y con la anterior no. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setPopupClave(false);
       cargar();
     } catch (err) {
@@ -451,7 +456,7 @@ export default function TutoresPage() {
     e.preventDefault();
     if (!elegido) return;
     const f = new FormData(e.currentTarget);
-    const correoEscrito = esSuperadmin ? String(f.get('email') || '') : '';
+    const correoEscrito = puedeCambiarCorreo ? String(f.get('email') || '') : '';
     if (avisar(faltaNombre(String(f.get('nombre') || ''))
       || (correoEscrito.trim() ? correoMalo(correoEscrito) : null))) return;
     setProcesando(true);
@@ -459,7 +464,7 @@ export default function TutoresPage() {
       const nombre = String(f.get('nombre') || '').trim();
       // El correo solo lo cambia el super admin (#248); a los demás el campo les
       // sale bloqueado y el servidor les contesta 403.
-      const email = esSuperadmin ? String(f.get('email') || '').trim().toLowerCase() : '';
+      const email = puedeCambiarCorreo ? String(f.get('email') || '').trim().toLowerCase() : '';
       const cambiaCorreo = Boolean(email) && email !== String(elegido.email || '').toLowerCase();
       if (cambiaCorreo) {
         const aviso = await avisoCambioCorreo(elegido.id).catch(() => null);
@@ -1128,15 +1133,15 @@ export default function TutoresPage() {
               </Field>
 
               <div>
-                <Field label="Correo" disabled={!esSuperadmin} htmlFor="pago-email"
-                  hint={esSuperadmin
+                <Field label="Correo" disabled={!puedeCambiarCorreo} htmlFor="pago-email"
+                  hint={puedeCambiarCorreo
                     ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.'
-                    : 'Solo un superadmin puede cambiar el correo.'}>
+                    : 'Solo quien tiene el permiso «Correo de un tutor» puede cambiarlo.'}>
                   <input autoComplete="off" id="pago-email" name="email" type="email" defaultValue={elegido.email || ''}
-                    readOnly={!esSuperadmin} disabled={!esSuperadmin}
-                    className={`${inputClass} ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+                    readOnly={!puedeCambiarCorreo} disabled={!puedeCambiarCorreo}
+                    className={`${inputClass} ${puedeCambiarCorreo ? '' : 'opacity-60 cursor-not-allowed'}`} />
                 </Field>
-                {esSuperadmin && !sinCorreos && (
+                {puedeCambiarCorreo && !sinCorreos && (
                   <label className="mt-1.5 px-1 flex items-center gap-2 text-secundario text-muted-foreground">
                     <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
                     Mandarle el enlace para poner contraseña en la dirección nueva

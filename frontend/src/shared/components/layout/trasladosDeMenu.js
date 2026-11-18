@@ -25,7 +25,8 @@ export const TRASLADOS_DE_MENU = [
     que: 'Make, Webhooks (de Captación) y el webhook de transferencias (de Conexión) pasan a una sola entrada: «Conexión › Webhooks», con una pestaña para cada uno.',
     de: [
       { entrada: 'Captación › Make', ruta: '/captacion/make', a: '/conexion/webhooks/make', permiso: 'make.view' },
-      { entrada: 'Captación › Webhooks', ruta: '/captacion/webhooks', a: '/conexion/webhooks/prospectos', permiso: 'webhooks.view' },
+      // Pedía además `forms.view` (#842): su pantalla lee y escribe en `/api/forms`.
+      { entrada: 'Captación › Webhooks', ruta: '/captacion/webhooks', a: '/conexion/webhooks/prospectos', permiso: 'webhooks.view', tambienPermiso: 'forms.view' },
       { entrada: 'Conexión › Webhook de transferencias', ruta: '/conexion/webhook-transferencias', a: '/conexion/webhooks/transferencias', permiso: 'webhooks_salientes.view' },
     ],
     a: 'Conexión › Webhooks',

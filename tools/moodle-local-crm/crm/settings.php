@@ -31,8 +31,10 @@ if ($hassiteconfig) {
     $settings = new admin_settingpage('local_crm', get_string('pluginname', 'local_crm'));
     $ADMIN->add('localplugins', $settings);
     $settings->add(new \local_crm\ajuste_conectar());
+    // De serie, encendido (1.10.6): solo instala versiones firmadas por el CRM, y nada si el
+    // sitio tiene $CFG->disableupdateautodeploy. Se apaga aquí, campus a campus.
     $settings->add(new admin_setting_configcheckbox('local_crm/autoactualizar', get_string('autoactualizar', 'local_crm'),
-        get_string('autoactualizar_desc', 'local_crm'), 0));
+        get_string('autoactualizar_desc', 'local_crm'), 1));
     // De serie, apagado (revisión de la #689): cambia lo que ven los alumnos en el campus.
     $settings->add(new admin_setting_configcheckbox('local_crm/chat_grupo', get_string('chat_grupo', 'local_crm'),
         get_string('chat_grupo_desc', 'local_crm'), 0));
