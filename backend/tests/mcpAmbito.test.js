@@ -157,10 +157,13 @@ const ARGS = {
   resumen_prospectos: { desde: '2026-01-01' },
   listar_ventas: { texto: 'master', pendiente: true, desde: '2026-01-01', pagina: 1, limite: 25 },
   resumen_ventas: { hasta: '2026-09-01' },
+  listar_pagos_stripe: { desde: '2026-11-09', hasta: '2026-11-15', estado: 'reembolsado', sin_asociar: false, pagina: 1, limite: 25 },
   listar_facturas: { estado: 'pagada', tipo: 'normal', texto: 'F-1', pagina: 1, limite: 25 },
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
   meta_ads: { vista: 'campanas', desde: '2026-01-01', hasta: '2026-09-01', limite: 30 },
+  meta_conjuntos: { desde: '2026-09-01', hasta: '2026-09-30', estado: 'todos', cuenta_id: 'act_1', texto: 'máster', creados_desde: '2026-09-01', pagina: 1, limite: 25 },
+  meta_anuncios: { desde: '2026-09-01', hasta: '2026-09-30', estado: 'pausados', conjunto_id: '1', pagina: 1, limite: 25 },
   clientes: { texto: 'ana', desde: '2026-01-01', hasta: '2026-09-01', pagina: 1, limite: 25 },
   equipo: { incluir_inactivos: true },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
@@ -263,7 +266,7 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     expect(responsableImpuesto(lider)).toEqual([7, 8, 9]);
     // La publicidad (cuentas y campañas de Meta) es del campus, no de una
     // gestora: la ve por su permiso, como la pantalla de Meta Ads. No se mira aquí.
-    await ejecutarTodas(lider, {}, ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias', 'meta_ads']);
+    await ejecutarTodas(lider, {}, ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias', 'meta_ads', 'meta_conjuntos', 'meta_anuncios']);
     const deDatos = consultas.filter((c) =>
       /\b(leads l|conversions c|invoices i)\b/.test(c.sql) && !/lead_interactions|WHERE c\.lead_id/.test(c.sql));
     expect(deDatos.length).toBeGreaterThan(10);
@@ -296,6 +299,11 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     // 19/10/2026; sigue siendo solo de admin. Si un
     // informe nuevo hace lo mismo, esta prueba lo caza antes de que Claude le
     // cuente a una gestora los totales de todo el campus.
+    //
+    // La excepción, a propósito: lo que la gestora ya ve ENTERO en su pantalla se le
+    // cuenta entero de SUS campus (nunca de otros). Diego, 17/11/2026: Solicitud de
+    // admisión (`matriculas`), «que todas las gestoras puedan ver la información».
+    const DEL_CAMPUS_PARA_LA_GESTORA = ['matriculas'];
     const informe = HERRAMIENTAS.find((h) => h.nombre === 'informe');
     for (const tipo of Object.keys(INFORMES)) {
       consultas.length = 0;
@@ -303,6 +311,12 @@ describe('cada consulta va acotada a los campus de la persona', () => {
       if (r instanceof Error) {
         expect(r.code).toBe('MCP_INFORME_SOLO_ADMIN');
         expect(consultas).toEqual([]);
+      } else if (DEL_CAMPUS_PARA_LA_GESTORA.includes(tipo)) {
+        expect(consultas.length).toBeGreaterThan(0);
+        for (const { params } of consultas) {
+          const lista = (params || []).find((p) => Array.isArray(p));
+          expect([...(lista || [])].sort(), `${tipo}: ${JSON.stringify(params)}`).toEqual(PROYECTOS.map((p) => p.id).sort());
+        }
       } else {
         expect(consultas.length).toBeGreaterThan(0);
         for (const { params } of consultas) expect(llevaSoloA7(params)).toBe(true);
@@ -443,7 +457,8 @@ describe('el catálogo (#215: «¿cuánto cuesta el Máster X en Psiko?»)', () 
 });
 
 describe('la publicidad (#235: «¿cuánto hemos gastado en Meta y cuánto ha vendido?»)', () => {
-  const PUBLICIDAD = ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias'];
+  // Y los conjuntos y anuncios de Meta (#362).
+  const PUBLICIDAD = ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias', 'meta_conjuntos', 'meta_anuncios'];
 
   it('a una gestora se le niega sin llegar a la base', async () => {
     for (const n of PUBLICIDAD) {
