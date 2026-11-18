@@ -265,6 +265,8 @@ CAMBIOS_POR_DATOS.push({
 export const CAMBIOS_DE_MENU = [
   {
     id: 'menu-mi-factura-con-ficha',
+    // Solo se esconde del menú: la ruta sigue abierta y responde igual que antes (solo lo suyo).
+    soloMenu: true,
     que: '«Mi factura» la ve quien tiene ficha viva en Facturas de colaboradores (colaborador, tutor redactor o vendedora de la lista, CRM#710); el super admin sin ficha deja de verla.',
     motivo: 'Las vendedoras de la lista suben su factura del mes, y las cuatro excepciones de la issue no tienen sección de factura (criterio 4 de la issue). El super admin lo puede todo, así que el menú se la enseñaba aunque no factura a nadie. El acceso no cambia: la ruta sigue abierta y solo devuelve lo suyo.',
     perfiles: {
