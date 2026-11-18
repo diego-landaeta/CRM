@@ -85,6 +85,7 @@ import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import linksPagoModule from './modules/links-pago/index.js';
 // Registro automático de cobros: PayPal y extractos del banco (#766). Cada parte, con su interruptor.
 import cobrosExternosModule from './modules/cobros-externos/index.js';
+import monitaskModule from './modules/monitask/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -92,9 +93,11 @@ import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.j
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
+import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -126,6 +129,7 @@ import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColabora
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
@@ -363,6 +367,8 @@ const ALL_MODULES = [
   ...(linksPagoActivos() ? [{ name: 'links-pago', mod: linksPagoModule }] : []),
   // Siempre montado: cada ruta contesta 404 con su interruptor apagado (#766).
   { name: 'cobros-externos', mod: cobrosExternosModule },
+  // Monitask (#236): siempre montado; cada ruta contesta 404 con MONITASK_ACTIVO apagado.
+  { name: 'monitask', mod: monitaskModule },
 ];
 if (!linksPagoActivos()) logger.info('Modulo SKIP (solo en pruebas): /api/links-pago');
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
@@ -504,9 +510,13 @@ if (process.env.NODE_ENV !== 'test') {
     startReminderScheduler();
     startStripePaymentsSyncScheduler();
     startPaypalCobrosSyncScheduler();
+    // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
+    startMonitaskSyncScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
+    // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
+    startMetaTokensScheduler();
     startTutorCommissionsScheduler();
     startTutoresCampusScheduler();
     startConsultasCampusScheduler();
@@ -545,6 +555,8 @@ if (process.env.NODE_ENV !== 'test') {
     startFacturacionAuditoriaScheduler();
     // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
     startInformeMensualScheduler();
+    // Apagada de serie (BREVO_BLOQUEADOS_ACTIVO): apagada no arranca ni pregunta a Brevo.
+    startBrevoBloqueadosScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
