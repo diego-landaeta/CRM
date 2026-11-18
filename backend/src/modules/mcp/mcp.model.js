@@ -390,7 +390,19 @@ export async function equipoDeLosCampus({ projectIds, incluirInactivos = false }
 
 // ─── Prospectos ───────────────────────────────────────────────────────────
 
-function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal }) {
+/**
+ * La publicidad de Meta de la que vino el prospecto (puerta 8, CRM#806): ids y
+ * nombres de campaña, conjunto y anuncio. Los nombres salen de las tablas de Meta
+ * del MISMO campus; si aún no se han sincronizado, sale el id solo.
+ */
+const ORIGEN_META = `lu.meta_campaign_id AS meta_campana_id, mca.nombre AS meta_campana,
+            lu.meta_adset_id AS meta_conjunto_id, mas.nombre AS meta_conjunto,
+            lu.meta_ad_id AS meta_anuncio_id, mad.nombre AS meta_anuncio`;
+const JOINS_ORIGEN_META = `LEFT JOIN meta_campaigns mca ON mca.campaign_id = lu.meta_campaign_id AND mca.project_id = l.project_id
+       LEFT JOIN meta_adsets mas ON mas.adset_id = lu.meta_adset_id AND mas.project_id = l.project_id
+       LEFT JOIN meta_ads mad ON mad.ad_id = lu.meta_ad_id AND mad.project_id = l.project_id`;
+
+function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal, conjuntoId, conjunto, anuncioId }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
   if (responsableId) f.add('l.responsable_id = ANY(?::int[])', comoIds(responsableId));
@@ -405,6 +417,14 @@ function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, est
   }
   if (estado) f.add('l.status::text = ?', estado);
   if (canal) f.add('EXISTS (SELECT 1 FROM lead_utms cu WHERE cu.lead_id = l.id AND cu.canal_detectado::text = ?)', canal);
+  // Por la publicidad de Meta de la que vino (puerta 8, CRM#806): el conjunto por
+  // su id o por parte de su nombre, y el anuncio por su id.
+  if (conjuntoId) f.add('EXISTS (SELECT 1 FROM lead_utms mu WHERE mu.lead_id = l.id AND mu.meta_adset_id = ?)', String(conjuntoId));
+  if (conjunto) {
+    f.add(`EXISTS (SELECT 1 FROM lead_utms mu JOIN meta_adsets ms ON ms.adset_id = mu.meta_adset_id AND ms.project_id = l.project_id
+                    WHERE mu.lead_id = l.id AND ${SIN_TILDES('ms.nombre')} LIKE ?)`, `%${comoTexto(conjunto)}%`);
+  }
+  if (anuncioId) f.add('EXISTS (SELECT 1 FROM lead_utms mu WHERE mu.lead_id = l.id AND mu.meta_ad_id = ?)', String(anuncioId));
   if (texto) f.add(`(l.nombre ILIKE ? OR l.email ILIKE ? OR l.telefono ILIKE ?)`, `%${texto}%`, `%${texto}%`, `%${texto}%`);
   if (desde) f.add(`${fechaLocal('COALESCE(l.fecha_solicitud, l.created_at)')} >= ?::date`, desde);
   if (hasta) f.add(`${fechaLocal('COALESCE(l.fecha_solicitud, l.created_at)')} <= ?::date`, hasta);
@@ -419,6 +439,7 @@ export async function buscarProspectos(filtros) {
             l.fecha_solicitud, l.project_id AS proyecto_id, p.nombre AS proyecto,
             pr.nombre AS producto_interes, u.nombre AS responsable,
             lu.canal_detectado AS canal,
+            ${ORIGEN_META},
             EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS es_cliente,
             -- Lo que hace falta para decidir a quién llamar (#325): cuándo se le tocó por última vez,
             -- cuándo toca la próxima, en qué paso del proceso va y cuánto ha comprado.
@@ -431,6 +452,7 @@ export async function buscarProspectos(filtros) {
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
        LEFT JOIN users u ON u.id = l.responsable_id
        LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+       ${JOINS_ORIGEN_META}
       ${f.where()}
       ORDER BY COALESCE(l.fecha_solicitud, l.created_at) DESC, l.id DESC
       LIMIT ${limit} OFFSET ${offset}`,
@@ -451,12 +473,14 @@ export async function verProspecto({ id, projectIds, responsableId }) {
             l.fecha_solicitud, l.created_at, l.project_id AS proyecto_id, p.nombre AS proyecto,
             pr.nombre AS producto_interes, u.nombre AS responsable,
             l.reincidente, l.lead_duplicado_de AS duplicado_de,
-            lu.canal_detectado AS canal, lu.utm_source, lu.utm_medium, lu.utm_campaign
+            lu.canal_detectado AS canal, lu.utm_source, lu.utm_medium, lu.utm_campaign, lu.utm_content, lu.utm_term,
+            ${ORIGEN_META}, lu.meta_origen_por, mad.url_destino AS meta_anuncio_url
        FROM leads l
        JOIN projects p ON p.id = l.project_id
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
        LEFT JOIN users u ON u.id = l.responsable_id
        LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+       ${JOINS_ORIGEN_META}
       ${f.where()}`,
     f.params
   );
@@ -611,6 +635,143 @@ export async function resumenVentas(filtros) {
     cobrado: n('cobrado'),
     pendiente: n('importe_vendido') - n('cobrado'),
     por_proyecto: rows,
+  };
+}
+
+// ─── Pagos de Stripe, uno a uno (puerta 3, CRM#806) ─────────────────────
+//
+// Los cargos que deja el sincronizador en `stripe_payments`, los mismos que
+// Finanzas → Pagos Stripe. Por cada uno: estado, lo reembolsado, la venta y la
+// formación si está asociado, y si es el primer pago, una cuota u otro pago.
+//
+// Monedas. `amount` se guarda ya liquidado en euros (con `metadata.original_amount`
+// cuando el cargo era en otra moneda), pero `refunded_amount` va en la moneda
+// ORIGINAL del cargo (amount_refunded de Stripe): en un cargo en otra moneda se
+// pasa a euros con la proporción de ese mismo cargo. Hasta el 21/07 (3ec0cb81)
+// los cargos en otra moneda se guardaban SIN convertir: esos salen con su moneda
+// y fuera de las cifras en euros (`sin_convertir`), en vez de sumar pesos como euros.
+const SIN_CONVERTIR = `(UPPER(COALESCE(sp.currency, 'EUR')) <> 'EUR' AND NOT (COALESCE(sp.metadata, '{}'::jsonb) ? 'original_amount'))`;
+
+// Lo reembolsado en la moneda de `amount`, con tope: nunca más que el cargo (un
+// reembolso total sin `refunded_amount` vale el cargo entero).
+const REEMBOLSADO = `(CASE
+  WHEN sp.refunded THEN sp.amount
+  WHEN COALESCE(sp.refunded_amount, 0) = 0 THEN 0
+  WHEN (sp.metadata->>'original_amount') ~ '^[0-9.]+$' AND (sp.metadata->>'original_amount')::numeric > 0
+    THEN LEAST(sp.amount, ROUND(sp.refunded_amount * sp.amount / (sp.metadata->>'original_amount')::numeric, 2))
+  ELSE LEAST(sp.amount, sp.refunded_amount) END)`;
+
+const ESTADO_PAGO_STRIPE = `(CASE
+  WHEN sp.status = 'succeeded' AND ${REEMBOLSADO} >= sp.amount THEN 'reembolsado'
+  WHEN sp.status = 'succeeded' AND ${REEMBOLSADO} > 0 THEN 'reembolsado_en_parte'
+  WHEN sp.status = 'succeeded' THEN 'cobrado'
+  WHEN sp.status = 'failed' THEN 'fallido'
+  ELSE sp.status END)`;
+
+function filtrosPagosStripe({ projectIds, responsableId, desde, hasta, estado, sinAsociar }) {
+  const f = condiciones('sp.project_id', projectIds);
+  // Quien ve solo lo suyo o lo de su equipo (una líder con rol de admin): los
+  // cargos de SUS ventas, con la misma regla que «listar_ventas». Un cargo sin
+  // asociar no es de nadie y no le sale.
+  if (responsableId) {
+    f.add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = sp.conversion_id AND r.vendedora_id = ANY(?::int[]))', comoIds(responsableId));
+  }
+  // Días de Madrid, como el resto del conector.
+  if (desde) f.add(`${fechaLocal('sp.stripe_created_at')} >= ?::date`, desde);
+  if (hasta) f.add(`${fechaLocal('sp.stripe_created_at')} <= ?::date`, hasta);
+  if (estado === 'cobrado') f.cond.push(`sp.status = 'succeeded' AND NOT sp.refunded AND COALESCE(sp.refunded_amount, 0) = 0`);
+  if (estado === 'reembolsado') f.cond.push(`sp.status = 'succeeded' AND (sp.refunded OR COALESCE(sp.refunded_amount, 0) > 0)`);
+  if (estado === 'fallido') f.cond.push(`sp.status = 'failed'`);
+  if (sinAsociar === true) f.cond.push(`sp.status = 'succeeded' AND sp.conversion_id IS NULL`);
+  if (sinAsociar === false) f.cond.push('sp.conversion_id IS NOT NULL');
+  return f;
+}
+
+export async function listarPagosStripe(filtros) {
+  const f = filtrosPagosStripe(filtros);
+  const { limit, offset } = paginado(filtros.pagina, filtros.limite);
+  // Primero la página (CTE) y después, solo para esas filas, la venta, la cuota
+  // y el primer pago: así las subconsultas no corren por cada cargo del filtro.
+  const { rows } = await query(
+    `WITH pagina AS (
+       SELECT sp.* FROM stripe_payments sp
+        ${f.where()}
+        ORDER BY sp.stripe_created_at DESC, sp.id DESC
+        LIMIT ${limit} OFFSET ${offset}
+     )
+     SELECT sp.id, sp.stripe_id,
+            (sp.stripe_created_at AT TIME ZONE '${TZ}') AS fecha,
+            sp.amount AS importe,
+            CASE WHEN ${SIN_CONVERTIR} THEN UPPER(sp.currency) ELSE 'EUR' END AS moneda,
+            ${ESTADO_PAGO_STRIPE} AS estado,
+            ${REEMBOLSADO} AS importe_reembolsado,
+            CASE WHEN sp.status = 'succeeded' THEN sp.amount - ${REEMBOLSADO} ELSE 0 END AS neto,
+            sp.disputed AS disputado,
+            CASE WHEN sp.disputed THEN sp.dispute_status END AS estado_disputa,
+            sp.metadata->>'original_currency' AS moneda_original,
+            sp.metadata->>'original_amount' AS importe_original,
+            COALESCE(l.nombre, sp.customer_name) AS cliente,
+            sp.customer_email AS cliente_email,
+            sp.project_id AS proyecto_id, p.nombre AS campus,
+            sp.conversion_id AS venta_id,
+            COALESCE(pr.nombre, cv.producto_contratado) AS formacion,
+            CASE
+              WHEN sp.conversion_id IS NULL THEN NULL
+              WHEN cuota.numero IS NOT NULL THEN 'cuota ' || cuota.numero || ' de ' || cuota.de
+              WHEN sp.conversion_payment_id IS NULL THEN 'sin cobro apuntado'
+              WHEN primero.id = sp.conversion_payment_id THEN 'primer pago'
+              ELSE 'pago'
+            END AS tipo_de_pago
+       FROM pagina sp
+       JOIN projects p ON p.id = sp.project_id
+       LEFT JOIN conversions cv ON cv.id = sp.conversion_id
+       -- El cliente: el prospecto del cargo o, si no lo tiene apuntado, el de su venta.
+       LEFT JOIN leads l ON l.id = COALESCE(sp.lead_id, cv.lead_id)
+       LEFT JOIN products pr ON pr.id = cv.producto_contratado_id
+       LEFT JOIN LATERAL (
+         SELECT ci.numero,
+                (SELECT COUNT(*) FROM conversion_installments x WHERE x.conversion_id = ci.conversion_id)::int AS de
+           FROM conversion_installments ci
+          WHERE ci.payment_id = sp.conversion_payment_id
+          LIMIT 1
+       ) cuota ON sp.conversion_payment_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT cp.id FROM conversion_payments cp
+          WHERE cp.conversion_id = sp.conversion_id
+          ORDER BY cp.fecha, cp.id
+          LIMIT 1
+       ) primero ON sp.conversion_id IS NOT NULL
+      ORDER BY sp.stripe_created_at DESC, sp.id DESC`,
+    f.params
+  );
+  // Las cifras del periodo ENTERO con esos filtros, no solo de esta página. En
+  // euros: los cargos antiguos sin convertir se cuentan aparte.
+  const { rows: c } = await query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE sp.status = 'failed')::int AS fallidos,
+            COUNT(*) FILTER (WHERE sp.status = 'succeeded' AND sp.conversion_id IS NULL)::int AS sin_asociar,
+            COUNT(*) FILTER (WHERE ${SIN_CONVERTIR})::int AS sin_convertir,
+            COALESCE(SUM(sp.amount) FILTER (WHERE sp.status = 'succeeded' AND NOT ${SIN_CONVERTIR}), 0) AS cobrado,
+            COALESCE(SUM(${REEMBOLSADO}) FILTER (WHERE sp.status = 'succeeded' AND NOT ${SIN_CONVERTIR}), 0) AS reembolsado
+       FROM stripe_payments sp ${f.where()}`,
+    f.params
+  );
+  const cifras = c[0];
+  const pagina = filtros.pagina || 1;
+  const limite = filtros.limite || 25;
+  return {
+    total: cifras.total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(cifras.total / limite)),
+    cifras: {
+      cobrado: Number(cifras.cobrado),
+      reembolsado: Number(cifras.reembolsado),
+      neto: Math.round((Number(cifras.cobrado) - Number(cifras.reembolsado)) * 100) / 100,
+      fallidos: cifras.fallidos,
+      sin_asociar: cifras.sin_asociar,
+      sin_convertir: cifras.sin_convertir,
+    },
+    pagos: rows,
   };
 }
 
@@ -952,9 +1113,13 @@ export async function listarFormaciones({ projectIds, texto, incluirInactivas = 
   const { limit, offset } = paginado(pagina, limite);
   const { rows } = await query(
     `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id,
-            p.precio, p.moneda, p.url_info AS enlace, p.modalidad, p.sku, p.active AS activa
+            p.precio, p.moneda, p.url_info AS enlace, p.modalidad, p.sku, p.active AS activa,
+            -- La categoría (curso, diplomado, máster…), como en la ficha (#362, puerta 4).
+            cat.nombre AS categoria, sub.nombre AS subcategoria
        FROM products p
        JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN product_categories cat ON cat.id = p.categoria_id
+       LEFT JOIN product_categories sub ON sub.id = p.subcategoria_id
       ${f.where()}
       ORDER BY pr.nombre, p.nombre, p.id
       LIMIT ${limit} OFFSET ${offset}`,
@@ -1354,6 +1519,229 @@ export async function campanasPublicitarias({ projectIds, desde, hasta, limite =
   };
 }
 
+// ─── Conjuntos y anuncios de Meta (#362) ──────────────────────────────────
+//
+// Para «qué formaciones cambiamos esta semana, cuáles se quedan y qué
+// creativos cambiamos» (Manuel). Parten de las tablas de conjuntos y anuncios,
+// NO de las diarias: salen también los pausados y los que no han gastado en el
+// periodo. El gasto del periodo se suma de las diarias, como la pantalla; el de
+// toda la vida es el que da Meta (`lifetime_*`), que NO es `total_spend`: eso es
+// solo lo de los días sincronizados (desde 90 días antes de conectar la cuenta).
+// La cuenta sale siempre aparte: un campus puede tener varias (Psiko, tres).
+
+const ESTADOS_META = {
+  activos: ['ACTIVE'],
+  pausados: ['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'],
+  archivados: ['ARCHIVED', 'DELETED'],
+};
+
+export const AVISO_GASTO_TOTAL = '«gasto_total» es el de toda la vida, tal como lo da Meta. Donde viene vacío, aún no se ha pedido a Meta: '
+  + '«gasto_sincronizado» es solo lo de los días que tiene el CRM (desde 90 días antes de conectar la cuenta), no lo digas como total.';
+
+/** La cuenta de Meta tal como la guarda el CRM: «act_» y el número. */
+export const cuentaDeMeta = (v) => (v == null ? null : (/^\d+$/.test(String(v)) ? `act_${v}` : String(v)));
+
+/** Las condiciones de las dos consultas. `t` es la tabla de la que se lista (ma o mad). */
+function filtrosMeta(t, { projectIds, cuenta, campanaId, conjuntoId, estado, texto, creadosDesde, creadosHasta }) {
+  const f = condiciones(`${t}.project_id`, projectIds);
+  if (cuenta) f.add('mc.ad_account_id = ?', cuentaDeMeta(cuenta));
+  if (campanaId) f.add(`${t}.campaign_id = ?`, String(campanaId));
+  if (conjuntoId) f.add(`${t}.adset_id = ?`, String(conjuntoId));
+  if (estado && ESTADOS_META[estado]) f.add(`COALESCE(${t}.effective_status, ${t}.status) = ANY(?::text[])`, ESTADOS_META[estado]);
+  if (texto) f.add(`${SIN_TILDES(`${t}.nombre`)} LIKE ?`, `%${comoTexto(texto)}%`);
+  if (creadosDesde) f.add(`${fechaLocal(`${t}.created_time`)} >= ?::date`, creadosDesde);
+  if (creadosHasta) f.add(`${fechaLocal(`${t}.created_time`)} <= ?::date`, creadosHasta);
+  return f;
+}
+
+/** El gasto del periodo, de la tabla diaria (`g.gasto`, `g.impresiones`, `g.clics`). */
+function gastoDelPeriodo(f, { diaria, id, t, desde, hasta }) {
+  const cond = [`d.${id} = ${t}.${id}`];
+  if (desde) { f.params.push(desde); cond.push(`d.date >= $${f.params.length}::date`); }
+  if (hasta) { f.params.push(hasta); cond.push(`d.date <= $${f.params.length}::date`); }
+  return `LEFT JOIN LATERAL (
+         SELECT SUM(d.spend) AS gasto, SUM(d.impressions) AS impresiones, SUM(d.clicks) AS clics
+           FROM ${diaria} d WHERE ${cond.join(' AND ')}
+       ) g ON TRUE`;
+}
+
+const dinero = (v) => (v == null ? null : redondeo(Number(v)));
+const entero0 = (v) => (v == null ? null : Number(v));
+
+/** Lo común de una fila de conjunto o de anuncio: campus, cuenta, campaña y cifras. */
+function cifrasMeta(r) {
+  const sinTotal = r.lifetime_spend == null;
+  return {
+    campus_id: r.campus_id,
+    campus: r.campus,
+    cuenta: { id: r.cuenta_id || null, nombre: r.cuenta_nombre || null },
+    campana: { id: r.campaign_id || null, nombre: r.campana || null },
+    moneda: r.moneda || null,
+    gasto_periodo: dinero(r.gasto) ?? 0,
+    impresiones_periodo: Number(r.impresiones || 0),
+    clics_periodo: Number(r.clics || 0),
+    gasto_total: dinero(r.lifetime_spend),
+    impresiones_totales: entero0(r.lifetime_impressions),
+    clics_totales: entero0(r.lifetime_clicks),
+    gasto_total_al: r.lifetime_synced_at || null,
+    ...(sinTotal ? { gasto_sincronizado: dinero(r.total_spend) ?? 0 } : {}),
+  };
+}
+
+const COLUMNAS_COMUNES = (t) => `
+       ${t}.status, ${t}.effective_status, ${t}.created_time,
+       ${t}.total_spend, ${t}.lifetime_spend, ${t}.lifetime_impressions, ${t}.lifetime_clicks, ${t}.lifetime_synced_at,
+       pr.id AS campus_id, pr.nombre AS campus,
+       mc.ad_account_id AS cuenta_id, acc.ad_account_nombre AS cuenta_nombre, acc.currency AS moneda,
+       mc.campaign_id, mc.nombre AS campana,
+       COALESCE(g.gasto, 0) AS gasto, COALESCE(g.impresiones, 0) AS impresiones, COALESCE(g.clics, 0) AS clics`;
+
+// La cuenta, por campus Y por id: la misma cuenta puede estar en dos campus.
+const JOIN_CUENTA = `LEFT JOIN meta_ad_accounts acc ON acc.project_id = mc.project_id AND acc.ad_account_id = mc.ad_account_id`;
+
+/**
+ * Los conjuntos de anuncios de esos campus, con su cuenta, campaña, estado,
+ * fechas, gasto del periodo y de toda la vida, cuántos anuncios tienen y la
+ * formación (o formaciones) a la que están asociados.
+ */
+export async function conjuntosDeMeta({ projectIds, desde, hasta, cuenta, campanaId, estado, texto, creadosDesde, creadosHasta, soloConGasto = false, pagina = 1, limite = 25 }) {
+  const f = filtrosMeta('ma', { projectIds, cuenta, campanaId, estado, texto, creadosDesde, creadosHasta });
+  const gasto = gastoDelPeriodo(f, { diaria: 'meta_adsets_daily', id: 'adset_id', t: 'ma', desde, hasta });
+  if (soloConGasto) f.cond.push('COALESCE(g.gasto, 0) > 0');
+  const desdeDonde = `FROM meta_adsets ma
+       JOIN meta_campaigns mc ON mc.campaign_id = ma.campaign_id
+       JOIN projects pr ON pr.id = ma.project_id
+       ${JOIN_CUENTA}
+       ${gasto}`;
+  const { limit, offset } = paginado(pagina, limite);
+  const [{ rows }, { rows: porCuenta }] = await Promise.all([
+    query(
+      `SELECT ma.adset_id, ma.nombre, ma.daily_budget, ma.start_time, ma.end_time, ${COLUMNAS_COMUNES('ma')},
+              an.anuncios, an.anuncios_activos, fp.formaciones
+       ${desdeDonde}
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS anuncios,
+                COUNT(*) FILTER (WHERE COALESCE(ad.effective_status, ad.status) = 'ACTIVE')::int AS anuncios_activos
+           FROM meta_ads ad WHERE ad.adset_id = ma.adset_id
+       ) an ON TRUE
+       -- Las formaciones: las del conjunto (a mano o automáticas) y las de su campaña.
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('id', p.id, 'nombre', p.nombre, 'origen', x.origen) ORDER BY p.nombre, x.origen) AS formaciones
+           FROM (SELECT mp.product_id, mp.origen::text AS origen FROM meta_adset_products mp WHERE mp.adset_id = ma.adset_id
+                 UNION ALL
+                 SELECT cp.product_id, 'campaña'::text FROM meta_campaign_products cp WHERE cp.campaign_id = ma.campaign_id) x
+           JOIN products p ON p.id = x.product_id
+       ) fp ON TRUE
+      ${f.where()}
+      ORDER BY COALESCE(g.gasto, 0) DESC, ma.nombre, ma.adset_id
+      LIMIT ${limit} OFFSET ${offset}`,
+      f.params
+    ),
+    query(
+      `SELECT pr.nombre AS campus, mc.ad_account_id AS cuenta_id, acc.ad_account_nombre AS cuenta_nombre, acc.currency AS moneda,
+              COUNT(*)::int AS conjuntos,
+              COUNT(*) FILTER (WHERE COALESCE(ma.effective_status, ma.status) = 'ACTIVE')::int AS activos,
+              COALESCE(SUM(g.gasto), 0) AS gasto
+       ${desdeDonde}
+      ${f.where()}
+      GROUP BY pr.nombre, mc.ad_account_id, acc.ad_account_nombre, acc.currency
+      ORDER BY pr.nombre, acc.ad_account_nombre, mc.ad_account_id`,
+      f.params
+    ),
+  ]);
+  const total = porCuenta.reduce((s, c) => s + Number(c.conjuntos || 0), 0);
+  const conjuntos = rows.map((r) => ({
+    conjunto_id: r.adset_id,
+    nombre: r.nombre,
+    estado: r.effective_status || r.status || null,
+    estado_configurado: r.status || null,
+    ...cifrasMeta(r),
+    fecha_creacion: r.created_time || null,
+    fecha_inicio: r.start_time || null,
+    fecha_fin: r.end_time || null,
+    presupuesto_diario: numero(r.daily_budget),
+    anuncios: Number(r.anuncios || 0),
+    anuncios_activos: Number(r.anuncios_activos || 0),
+    formaciones: Array.isArray(r.formaciones) ? r.formaciones : [],
+  }));
+  return {
+    desde: desde || null,
+    hasta: hasta || null,
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / limite)),
+    por_cuenta: porCuenta.map((c) => ({
+      campus: c.campus, cuenta: { id: c.cuenta_id || null, nombre: c.cuenta_nombre || null }, moneda: c.moneda || null,
+      conjuntos: Number(c.conjuntos || 0), activos: Number(c.activos || 0), gasto_periodo: dinero(c.gasto) ?? 0,
+    })),
+    ...(conjuntos.some((c) => c.gasto_total == null) ? { aviso_gasto_total: AVISO_GASTO_TOTAL } : {}),
+    conjuntos,
+  };
+}
+
+/**
+ * Los anuncios (creativos) de esos campus: conjunto, estado, fechas, gasto del
+ * periodo y de toda la vida, y la URL de destino que se saca del creativo.
+ */
+export async function anunciosDeMeta({ projectIds, desde, hasta, cuenta, campanaId, conjuntoId, estado, texto, creadosDesde, creadosHasta, soloConGasto = false, pagina = 1, limite = 25 }) {
+  const f = filtrosMeta('mad', { projectIds, cuenta, campanaId, conjuntoId, estado, texto, creadosDesde, creadosHasta });
+  const gasto = gastoDelPeriodo(f, { diaria: 'meta_ads_daily', id: 'ad_id', t: 'mad', desde, hasta });
+  if (soloConGasto) f.cond.push('COALESCE(g.gasto, 0) > 0');
+  const desdeDonde = `FROM meta_ads mad
+       JOIN meta_adsets ma ON ma.adset_id = mad.adset_id
+       JOIN meta_campaigns mc ON mc.campaign_id = mad.campaign_id
+       JOIN projects pr ON pr.id = mad.project_id
+       ${JOIN_CUENTA}
+       ${gasto}`;
+  const { limit, offset } = paginado(pagina, limite);
+  const [{ rows }, { rows: [cuenta0] }] = await Promise.all([
+    query(
+      `SELECT mad.ad_id, mad.nombre, mad.creative_id, mad.url_destino, mad.urls_destino, mad.formato_creativo,
+              mad.lead_form_id, mad.url_tags, ${COLUMNAS_COMUNES('mad')},
+              ma.adset_id, ma.nombre AS conjunto, ma.start_time AS inicio_conjunto
+       ${desdeDonde}
+      ${f.where()}
+      ORDER BY COALESCE(g.gasto, 0) DESC, mad.nombre, mad.ad_id
+      LIMIT ${limit} OFFSET ${offset}`,
+      f.params
+    ),
+    query(`SELECT COUNT(*)::int AS total ${desdeDonde} ${f.where()}`, f.params),
+  ]);
+  const total = Number(cuenta0?.total || 0);
+  const anuncios = rows.map((r) => {
+    const urls = Array.isArray(r.urls_destino) ? r.urls_destino : [];
+    return {
+      anuncio_id: r.ad_id,
+      nombre: r.nombre,
+      estado: r.effective_status || r.status || null,
+      estado_configurado: r.status || null,
+      conjunto: { id: r.adset_id || null, nombre: r.conjunto || null },
+      ...cifrasMeta(r),
+      fecha_creacion: r.created_time || null,
+      // Un anuncio no tiene fecha de inicio propia en Meta: empieza con su conjunto.
+      fecha_inicio_del_conjunto: r.inicio_conjunto || null,
+      url_destino: r.url_destino || null,
+      ...(urls.length > 1 ? { todas_las_urls: urls } : {}),
+      formato: r.formato_creativo || null,
+      ...(r.lead_form_id ? { formulario_id: r.lead_form_id } : {}),
+      creativo_id: r.creative_id || null,
+      ...(r.url_tags ? { parametros_url: r.url_tags } : {}),
+    };
+  });
+  return {
+    desde: desde || null,
+    hasta: hasta || null,
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / limite)),
+    ...(anuncios.some((a) => a.gasto_total == null) ? { aviso_gasto_total: AVISO_GASTO_TOTAL } : {}),
+    ...(anuncios.some((a) => a.formato == null) ? {
+      aviso_url: 'Donde «formato» viene vacío, el anuncio no se ha vuelto a sincronizar desde que el CRM guarda la URL: no es que no tenga.',
+    } : {}),
+    anuncios,
+  };
+}
+
 // ─── Actividad por comercial (#203, parte A) ──────────────────────────────
 //
 // Ficha de Diego del 07/10. Cada contacto cuenta para QUIÉN LO HIZO
@@ -1501,10 +1889,10 @@ const enteros = (fila, claves) => Object.fromEntries(claves.map((k) => [k, enter
  * la titulación previa de la persona). Las que se crean a mano sin venta salen
  * como «Sin producto».
  *
- * A quien ve solo lo suyo se le cuentan las matrículas de sus ventas (la
- * vendedora de la venta o, si no la tiene, la responsable del prospecto), igual
- * que en las facturas. La pantalla las enseña todas a las gestoras; por Claude
- * no se sacan cifras de las demás.
+ * `asesoraId` recorta a las matrículas de las ventas de una persona (la
+ * vendedora de la venta o, si no la tiene, la responsable del prospecto). La
+ * herramienta `matriculas` ya no lo pasa (17/11/2026): una gestora ve en la
+ * pantalla todas las solicitudes de sus campus, y por Claude cuenta lo mismo.
  */
 export async function resumenMatriculas({ projectIds, asesoraId = null, from = null, to = null }) {
   const f = condiciones('m.project_id', projectIds);
