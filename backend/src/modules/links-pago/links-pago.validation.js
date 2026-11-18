@@ -58,7 +58,7 @@ const moneda = z.string({ invalid_type_error: 'La moneda va en código ISO de tr
   que mandar; lo que no venga no se toca. Las reglas entre campos (la caducidad
   por defecto no pasa de la máxima, la moneda por defecto está entre las
   admitidas) se miran con lo ya guardado, en el controlador, y la base las
-  vuelve a mirar con sus CHECK (migración 299).
+  vuelve a mirar con sus CHECK (migración 300).
 */
 const CAMPOS_DE_CONFIG = ['descuento_max_pct', 'caducidad_dias', 'caducidad_max_dias', 'cuotas_admitidas',
   'cuotas_max', 'monedas', 'moneda_defecto'];

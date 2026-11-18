@@ -1,4 +1,4 @@
--- 299 · Links de pago: lo que configura el admin en la tarjeta (#680, fase 2)
+-- 300 · Links de pago: lo que configura el admin en la tarjeta (#680, fase 2)
 --
 -- Diego, 17/11: «todo lo de Stripe se configura desde la web», en Integraciones ›
 -- Links de pago, por campus y con el permiso `links_pago.configurar`. La 250 ya
@@ -21,6 +21,8 @@
 -- (el importe editado por la gestora). Se guarda para poder rastrearlo.
 --
 -- Se puede pasar dos veces.
+-- (Nació como 299; renumerada al fusionar: en staging la 299 es la del tablero
+-- de GitHub, CRM#737.)
 
 BEGIN;
 
@@ -56,17 +58,17 @@ BEGIN
 END $$;
 
 COMMENT ON COLUMN projects.links_pago_caducidad_dias IS
-  'Días que dura un link de pago si la gestora no elige otra cosa (#680, 299).';
+  'Días que dura un link de pago si la gestora no elige otra cosa (#680, 300).';
 COMMENT ON COLUMN projects.links_pago_caducidad_max_dias IS
-  'Máximo de días que la gestora puede dar a un link de pago (#680, 299).';
+  'Máximo de días que la gestora puede dar a un link de pago (#680, 300).';
 COMMENT ON COLUMN projects.links_pago_cuotas_admitidas IS
-  'Si el campus admite links de pago en cuotas mensuales (#680, 299; se crean desde la fase 4).';
+  'Si el campus admite links de pago en cuotas mensuales (#680, 300; se crean desde la fase 4).';
 COMMENT ON COLUMN projects.links_pago_cuotas_max IS
-  'Número máximo de cuotas de un link de pago (#680, 299).';
+  'Número máximo de cuotas de un link de pago (#680, 300).';
 COMMENT ON COLUMN projects.links_pago_monedas IS
-  'Monedas en las que se pueden crear links de pago en este campus (#680, 299).';
+  'Monedas en las que se pueden crear links de pago en este campus (#680, 300).';
 COMMENT ON COLUMN projects.links_pago_moneda_defecto IS
-  'Moneda que sale elegida al crear un link de pago (#680, 299). Una de links_pago_monedas.';
+  'Moneda que sale elegida al crear un link de pago (#680, 300). Una de links_pago_monedas.';
 
 ALTER TABLE payment_links ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(255);
 

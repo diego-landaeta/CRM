@@ -120,7 +120,7 @@ function configDeFila(r) {
   };
 }
 
-/** Las reglas de los links del campus (migraciones 250 y 299). null si no existe. */
+/** Las reglas de los links del campus (migraciones 250 y 300). null si no existe. */
 export async function config(projectId) {
   const { rows } = await query(`SELECT ${COLUMNAS_CONFIG} FROM projects WHERE id = $1`, [projectId]);
   return configDeFila(rows[0]);

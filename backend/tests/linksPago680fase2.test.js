@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
  * Links de pago, fase 2 (#680): crear, anular y caducar un link de pago único,
  * las reglas del campus en la tarjeta y el webhook de la cuenta.
  *
- *   · la migración 299 se aplica dos veces y sus CHECK sujetan lo que importa;
+ *   · la migración 300 se aplica dos veces y sus CHECK sujetan lo que importa;
  *   · la tarjeta guarda caducidad, cuotas y monedas (solo quien configura);
  *   · una gestora crea un link de SU prospecto, dentro del tope de descuento, y
  *     el CRM manda a Stripe un Price y un Payment Link con la marca y un solo pago;
@@ -84,9 +84,9 @@ const lead = {};
 const prod = {};
 let venta;
 
-const SQL_299 = fs.readFileSync(path.join(AQUI, '../migrations/299_links_pago_config.sql'), 'utf8');
+const SQL_300 = fs.readFileSync(path.join(AQUI, '../migrations/300_links_pago_config.sql'), 'utf8');
 
-// Las migraciones de los links (250 y 299) cambian tablas que el resto de las
+// Las migraciones de los links (250 y 300) cambian tablas que el resto de las
 // pruebas usan a la vez (projects, stripe_payments). Pasadas en paralelo, Postgres
 // puede contestar «deadlock detected» (40P01) y abortar una de las dos: entre
 // ellas se pasan de una en una con un cerrojo compartido, y si el choque es con
@@ -115,7 +115,7 @@ async function ponerClave(projectId, provider, clave, config = {}) {
 }
 
 beforeAll(async () => {
-  await aplicarMigracion(SQL_299);
+  await aplicarMigracion(SQL_300);
   const campus = async (n) => {
     const r = await one('INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
       [`${MARCA} ${n}`, `${MARCA.toLowerCase()}-${n}`, `${MARCA}-k-${n}`]);
@@ -196,9 +196,9 @@ const filas = (projectId) => q('SELECT * FROM payment_links WHERE project_id = $
 
 // ─── 1. La migración ────────────────────────────────────────────────────────
 
-describe('la migración 299', () => {
+describe('la migración 300', () => {
   it('se puede pasar otra vez y deja los valores de arranque', async () => {
-    await aplicarMigracion(SQL_299);
+    await aplicarMigracion(SQL_300);
     const r = await one(`SELECT links_pago_caducidad_dias AS d, links_pago_caducidad_max_dias AS m,
       links_pago_cuotas_admitidas AS ca, links_pago_cuotas_max AS cm, links_pago_monedas::text[] AS mon,
       links_pago_moneda_defecto AS md FROM projects WHERE id = $1`, [A]);

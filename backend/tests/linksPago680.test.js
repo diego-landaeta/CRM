@@ -67,7 +67,7 @@ const link = {};
 
 const SQL_250 = fs.readFileSync(path.join(AQUI, '../migrations/250_links_de_pago.sql'), 'utf8');
 
-// Las migraciones de los links (250 y 299) cambian tablas que el resto de las
+// Las migraciones de los links (250 y 300) cambian tablas que el resto de las
 // pruebas usan a la vez (projects, stripe_payments). Pasadas en paralelo, Postgres
 // puede contestar «deadlock detected» (40P01) y abortar una de las dos: entre
 // ellas se pasan de una en una con un cerrojo compartido, y si el choque es con
