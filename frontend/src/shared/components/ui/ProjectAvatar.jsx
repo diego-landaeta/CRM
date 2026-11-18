@@ -114,4 +114,63 @@ export function ProjectAvatar({ project, size = 'md', soloIniciales = false }) {
   );
 }
 
+/**
+ * La dirección del logo de una EMPRESA (`invoice_issuers`): la de fuera tal
+ * cual, la del logo subido al CRM (pública) con la base delante. Sin logo, null.
+ */
+export function resolverLogoEmpresa(empresa) {
+  if (!empresa) return null;
+  const url = String(empresa.logo_url || '').trim();
+  const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith('/')) return url.startsWith(base) ? url : `${base}${url}`;
+  if (empresa.logo_subido) return `${base}/api/invoices/issuers/${empresa.id}/logo`;
+  return null;
+}
+
+/**
+ * La marca de una EMPRESA elegida en el selector (11/11): su logo si lo tiene
+ * y, si no, su nombre corto («CEDIA») escrito. NUNCA el logo de uno de sus
+ * campus: con CEDIA puesta, el menú enseñaba el de Fono Aprende.
+ */
+export function EmpresaAvatar({ empresa, size = 'md' }) {
+  const [falloImagen, setFalloImagen] = useState(false);
+  useEffect(() => { setFalloImagen(false); }, [empresa?.id, empresa?.logo_url]);
+  // Ancho: el del nombre o el del logo, con tope. Plegado el menú (md), cabe en 48 px.
+  const dim = size === 'lg'
+    ? 'h-12 min-w-[3rem] max-w-[7.5rem]'
+    : size === 'sm' ? 'h-7 min-w-[1.75rem] max-w-[3rem]' : 'h-8 min-w-[2rem] max-w-[3rem]';
+  const src = resolverLogoEmpresa(empresa);
+  const nombre = empresa?.nombreCorto || empresa?.nombre || '';
+
+  if (src && !falloImagen) {
+    return (
+      <span
+        className={`${dim} rounded-lg bg-white ring-1 ring-black/5 dark:ring-white/10 flex items-center justify-center overflow-hidden flex-shrink-0 px-1`}
+        title={empresa?.nombre || nombre}
+        data-marca="empresa"
+      >
+        <img
+          src={src}
+          alt={nombre}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-auto max-w-full object-contain p-[3px]"
+          onError={() => setFalloImagen(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className={`${dim} ${size === 'lg' ? 'px-2' : 'px-1'} rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 font-bold tracking-tight truncate ${size === 'lg' ? 'text-sm' : 'text-[9px]'}`}
+      title={empresa?.nombre || nombre}
+      data-marca="empresa"
+    >
+      {nombre}
+    </div>
+  );
+}
+
 export default ProjectAvatar;

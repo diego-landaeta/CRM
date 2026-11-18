@@ -30,6 +30,7 @@ import {
   ShoppingBag,
   BookOpen,
   Headset,
+  WarningDiamond,
   ActivityIcon as Activity,
   ClipboardText,
   FilePdf,
@@ -72,7 +73,7 @@ import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
-import { ProjectAvatar } from '@/shared/components/ui/ProjectAvatar';
+import { ProjectAvatar, EmpresaAvatar } from '@/shared/components/ui/ProjectAvatar';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
@@ -82,6 +83,7 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 // Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -213,6 +215,11 @@ export const NAV_SECTIONS = [
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /testeo y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'Actividad', to: '/equipo/actividad', detail: 'Horas de Monitask y cotejo', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'monitask.view' }]
+        : []),
     ],
   },
   {
@@ -223,7 +230,7 @@ export const NAV_SECTIONS = [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences', permiso: 'email_sequences.view' },
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms', permiso: 'forms.view' },
       { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make', permiso: 'make.view' },
-      { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks', permiso: 'webhooks.view' },
+      { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks', permiso: 'webhooks.view', tambienPermiso: 'forms.view' },
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'], permiso: 'widget.view' },
       // Próximamente (#216): enseñaban datos de ejemplo. El gasto real de Meta, en Publicidad.
       { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'], comingSoon: true },
@@ -320,6 +327,13 @@ export const NAV_SECTIONS = [
       { label: 'Nóminas', salvoTipo: ['ia'], to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'stripe.view' },
+      // Registro automático de cobros (#766): solo en /testeo y en local hasta que
+      // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'PayPal y banco', to: '/finanzas/cobros-externos', detail: 'Cobros de PayPal y extractos', icon: Wallet, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }]
+        : []),
+      // Disputas de Stripe (#396): solo admin y super admin, cada uno las de sus campus.
+      { label: 'Disputas de Stripe', to: '/finanzas/disputas', detail: 'Abiertas, por empresa y campus', icon: Warning, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'stripe.edit' },
       { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
       // Facturas de colaboradores (#202): en evaluación, solo en /testeo y en local.
       { label: 'Facturas de colaboradores', to: '/finanzas/facturas-colaboradores', detail: 'Las que suben cada mes', icon: Receipt, roles: ['superadmin', 'admin'], permiso: 'facturas_colaborador.ver_todas' },
@@ -357,7 +371,7 @@ export const NAV_SECTIONS = [
       { label: 'Clientes', to: '/clientes', detail: 'Quién ya compró', icon: UserCheck, module: 'clients', permiso: 'clients.view' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
       { label: 'Buscar duplicados', to: '/prospectos/duplicados', detail: 'Buscarlos a mano', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
-      { label: 'Matrículas', to: '/clientes/matriculas', detail: 'Altas en cada curso', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
+      { label: 'Solicitud de admisión', to: '/clientes/matriculas', detail: 'Las que llegan del formulario', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Los mismos roles que la API (`soloRoles` admin/superadmin),
       // y además, para VERLO en solo lectura, quien tenga `diplomas.view` (#384,
@@ -402,6 +416,9 @@ export const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
+      // Incidencias (#253). Diego: «en el menú, al lado de Soporte». Los mismos
+      // roles que traen `incidencias.view` de serie (la gestora ve las suyas).
+      { label: 'Incidencias', to: '/incidencias', detail: 'Lo que salió mal y cómo se arregló', icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
       // Claves y variables (#80). Desde CRM#632 (03/11) también el admin, que
       // ve las de sus campus; guardar y revelar siguen siendo de soporte.
       { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'admin', 'soporte'], permiso: 'credentials.view' },
@@ -566,8 +583,41 @@ export function rutaPermitida(pathname, can) {
   // Rutas sin entrada propia en el menú: su permiso, aquí.
   if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
   if (!suyas.length) return true;
-  return suyas.some((it) => !it.permiso || pasaPermisoDeRoles(it, can)
-    || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true)));
+  return suyas.some((it) => tieneLosDeMas(it, can) && (!it.permiso || pasaPermisoDeRoles(it, can)
+    || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true))));
+}
+
+/**
+ * `tambienPermiso`: lo que pide ADEMÁS la pantalla, porque es lo que mira el
+ * servidor. Todos, no basta uno. Captación › Webhooks pide `webhooks.view`
+ * —lo que dice el catálogo— pero la pantalla lee y escribe en `/api/forms`
+ * (los webhooks de captación son formularios con `kind='webhook'`), que pide
+ * `forms.*`: con uno solo de los dos la pantalla se abría y daba 403.
+ */
+export function tieneLosDeMas(item, can) {
+  if (!item?.tambienPermiso) return true;
+  return typeof can === 'function' && [].concat(item.tambienPermiso).every((p) => can(p) === true);
+}
+
+/**
+ * La clave del permiso que le falta para abrir esta pantalla (CRM#820), para
+ * que «No tienes acceso» ofrezca pedir ESE. Con la misma regla que
+ * `rutaPermitida`: la primera clave del catálogo que pide su entrada del menú y
+ * no tiene. `null` si la puede abrir o no se sabe cuál es.
+ */
+export function permisoQueFalta(pathname, can) {
+  if (rutaPermitida(pathname, can)) return null;
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const claves = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta && it.permiso) claves.push(...[].concat(it.permiso));
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 
 export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {
@@ -589,6 +639,7 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   // `permiso` también puede ser una lista: basta con uno (Diplomas: ver O emitir).
   const tienePermisoDeLaPantalla = !item.permiso || (typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true));
   if (!tienePermisoDeLaPantalla) return false;
+  if (!tieneLosDeMas(item, can)) return false;
   // Y al reves: lo que en un tipo de proyecto NO EXISTE.
   //
   // Un proyecto IA no tiene tutores, ni comisiones, ni nominas, ni campañas
@@ -1270,7 +1321,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           entero. */}
       <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
         <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
-          {activeProject && activeProject.id !== -1 ? (
+          {/* Con una EMPRESA elegida, la marca de la empresa (11/11): su logo o
+              su nombre corto. Antes caía en el primer campus (Fono Aprende). */}
+          {activeIssuer ? (
+            <EmpresaAvatar empresa={activeIssuer} size={collapsed ? 'md' : 'lg'} />
+          ) : activeProject && activeProject.id !== -1 ? (
             <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
           ) : (
             <div className={cn(
@@ -1299,7 +1354,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
               <span className="font-semibold text-sm text-foreground truncate">{MARCA}</span>
               {BETA_MODE && (
                 <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
-                  BETA {BETA_VERSION}
+                  BETA{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
                 </span>
               )}
             </div>
@@ -1550,6 +1605,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}
+                {/* CRM#820: un alta, un permiso, un campus o Claude, a soporte como ticket. Para todos. */}
+                <UserMenuItem
+                  icon={Key}
+                  label="Pedir acceso o permiso"
+                  onClick={() => { setUserMenuOpen(false); abrirPedirAcceso(); onNavigate?.(); }}
+                />
                 <UserMenuItem
                   icon={theme === 'dark' ? Sun : Moon}
                   label={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}

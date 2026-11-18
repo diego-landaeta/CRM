@@ -4,7 +4,8 @@
   Por cada campus donde está matriculada (tutor_campus activa, con su usuario de
   Moodle) y cada curso que IMPARTE allí (rol de profesor):
 
-    · los alumnos matriculados (activos), con su último acceso;
+    · los alumnos matriculados (activos), con su último acceso y su % hecho (el
+      avance de Moodle, el mismo que da la ficha del alumno: #532);
     · sus dudas abiertas en el CRM (Consultas), las de alumnos de ese curso;
     · las tareas con entregas SIN CORREGIR, con el enlace para corregirlas en Moodle.
 
@@ -17,17 +18,22 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError,
+  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 
 const ROLES_PROFESOR = new Set(['editingteacher', 'teacher']);
 const CACHE_MS = 2 * 60 * 1000;
 const PARALELO = 4;
+/**
+ * Cursos por llamada al leer las tareas. Todos en una sola llamada pasaba del tiempo de
+ * espera con una tutora de muchos cursos, y entonces NINGÚN curso enseñaba sus tareas.
+ * Por tandas, si una falla, solo sus cursos lo dicen; los demás salen enteros.
+ */
+const CURSOS_POR_TANDA = 10;
 
-/** Quien tiene uno de estos roles no es alumno. El resto sí, aunque el rol se llame distinto de «student». */
-const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 'coursecreator']);
-export const esAlumno = (g) => g.roles.length > 0 && !g.roles.some((r) => ROLES_DE_EQUIPO.has(r));
+/** Quien tiene un rol del equipo no es alumno; el resto sí (vive en moodle.client.js). */
+export { esAlumno };
 
 /**
  * Los alumnos que le tocan a la profesora `yo` en ese curso. Una profesora SIN permiso de
@@ -43,6 +49,40 @@ export function alumnosDe(gente, yo) {
   return alumnos.filter((a) => (a.grupos || []).some((x) => misGrupos.has(x)));
 }
 const cache = new Map();
+
+/**
+ * Con más alumnos que esto en un campus, no se pide el % hecho de cada uno: son una
+ * llamada por alumno y el campus no tiene por qué aguantarlas cada vez que una tutora
+ * abre su página. Se dice en el curso, no se enseña un 0.
+ */
+const maxProgreso = () => parseInt(process.env.MI_CAMPUS_MAX_PROGRESO || '300', 10);
+
+/**
+ * El % hecho de los alumnos de esos cursos: { alumnoId: { cursoId: % | null } }.
+ *
+ * Moodle lo da alumno por alumno (`core_enrol_get_users_courses`, la llamada de `cursosDe`),
+ * pero de TODOS sus cursos a la vez: un alumno en dos cursos de la tutora cuesta una sola
+ * llamada. Los cursos sin seguimiento de finalización no se preguntan: su «—» ya se sabe.
+ */
+export async function progresoDeAlumnos(conexion, cursos, opciones) {
+  const conSeguimiento = new Set(cursos.filter((k) => k.seguimiento).map((k) => k.id));
+  const ids = [...new Set(cursos.filter((k) => conSeguimiento.has(k.id)).flatMap((k) => k.alumnos.map((a) => a.id)))];
+  const porAlumno = new Map();
+  if (!ids.length) return { porAlumno, aviso: null };
+  if (ids.length > maxProgreso()) {
+    return { porAlumno, aviso: `Con más de ${maxProgreso()} alumnos en el campus no se lee el % hecho de cada uno.` };
+  }
+  let fallos = 0;
+  await enTandas(ids, PARALELO, async (id) => {
+    try {
+      const suyos = await cursosDe(conexion, id, opciones);
+      porAlumno.set(id, new Map(suyos.filter((k) => conSeguimiento.has(k.id)).map((k) => [k.id, k.progreso])));
+    } catch {
+      fallos += 1;
+    }
+  });
+  return { porAlumno, aviso: fallos === ids.length ? 'No se ha podido leer el % hecho de los alumnos.' : null };
+}
 
 /** Como Promise.all, pero de `n` en `n`: un campus no aguanta 95 peticiones a la vez. */
 async function enTandas(lista, n, fn) {
@@ -117,7 +157,7 @@ async function pendientesDeDesarrollar(tutorId) {
 }
 
 /** Un campus: sus cursos de profesora, cada uno con alumnos, dudas y tareas por corregir. */
-async function unCampus(tutorId, c, opciones) {
+async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
   const base = { projectId: c.projectId, campus: c.campus, url: null, error: null, cursos: [], dudasSinCurso: [] };
   const conexion = await conexionDelCampus(c.projectId);
   if (!conexion) return { ...base, error: 'Este campus no está conectado en Integraciones.' };
@@ -145,17 +185,12 @@ async function unCampus(tutorId, c, opciones) {
   });
   const imparte = conGente.filter(Boolean);
 
-  // Las tareas y sus entregas sin corregir: dos llamadas para todos los cursos.
-  let tareas = new Map();
-  let entregas = new Map();
-  let errorTareas = null;
-  try {
-    tareas = await tareasDeCursos(conexion, imparte.map((x) => x.id), opciones);
-    const ids = [...tareas.values()].flat().map((t) => t.id);
-    entregas = await entregasSinCorregir(conexion, ids, opciones);
-  } catch (err) {
-    errorTareas = mensaje(err, 'No se han podido leer las tareas del campus.');
-  }
+  // Las tareas y sus entregas sin corregir, por tandas de cursos (`CURSOS_POR_TANDA`).
+  const { tareas, entregas, sinPermiso, errorDe } = await tareasPorTandas(conexion, imparte.map((x) => x.id), opciones);
+
+  const { porAlumno, aviso: avisoProgreso } = conProgreso
+    ? await progresoDeAlumnos(conexion, imparte, opciones)
+    : { porAlumno: new Map(), aviso: null };
 
   const dudas = await dudasAbiertas(tutorId, c.projectId);
   const usadas = new Set();
@@ -165,7 +200,11 @@ async function unCampus(tutorId, c, opciones) {
     susDudas.forEach((d) => usadas.add(d.consultaId));
     const susTareas = (tareas.get(curso.id) || []).map((t) => {
       const sin = (entregas.get(t.id) || []).filter((e) => alumnos.has(e.alumnoId))
-        .map((e) => ({ ...e, alumno: alumnos.get(e.alumnoId)?.nombre || null }));
+        .map((e) => ({
+          ...e, alumno: alumnos.get(e.alumnoId)?.nombre || null,
+          // Esa entrega, abierta en el calificador de Moodle.
+          corregirUrl: `${url}/mod/assign/view.php?id=${t.cmid}&action=grader&userid=${e.alumnoId}`,
+        }));
       return {
         // En grupo, Moodle guarda la entrega a nombre del grupo: no se cuenta aquí, se corrige allí.
         id: t.id, nombre: t.nombre, entrega: t.entrega, sinCorregir: t.enGrupo ? [] : sin, notaMax: t.notaMax,
@@ -173,12 +212,19 @@ async function unCampus(tutorId, c, opciones) {
         corregirUrl: `${url}/mod/assign/view.php?id=${t.cmid}&action=grading`,
       };
     });
-    const sinPermiso = tareas.sinPermiso?.has(curso.id)
+    const avisoPermiso = sinPermiso.has(curso.id)
       ? 'Moodle no deja leer las tareas de este curso con el token del campus: revisa sus permisos.' : null;
     return {
-      id: curso.id, nombre: curso.nombre, url: `${url}/course/view.php?id=${curso.id}`, error: curso.error || errorTareas || sinPermiso,
+      id: curso.id, nombre: curso.nombre, url: `${url}/course/view.php?id=${curso.id}`, error: curso.error || errorDe.get(curso.id) || avisoPermiso,
+      // Sin seguimiento de finalización, el % de sus alumnos es «—» (no 0 %).
+      seguimiento: Boolean(curso.seguimiento),
+      avisoProgreso: curso.seguimiento ? avisoProgreso : null,
       alumnos: curso.alumnos
-        .map((a) => ({ id: a.id, nombre: a.nombre, email: a.email, ultimoAcceso: a.ultimoAcceso, mensajeUrl: `${url}/message/index.php?id=${a.id}` }))
+        .map((a) => ({
+          id: a.id, nombre: a.nombre, email: a.email, ultimoAcceso: a.ultimoAcceso,
+          progreso: curso.seguimiento ? (porAlumno.get(a.id)?.get(curso.id) ?? null) : null,
+          mensajeUrl: `${url}/message/index.php?id=${a.id}`,
+        }))
         .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')),
       dudas: susDudas,
       tareas: susTareas,
@@ -189,6 +235,32 @@ async function unCampus(tutorId, c, opciones) {
   return base;
 }
 
+/**
+ * Las tareas de esos cursos y sus entregas por corregir, de `CURSOS_POR_TANDA` en
+ * `CURSOS_POR_TANDA` cursos. Lo que falla en una tanda se apunta a sus cursos (`errorDe`)
+ * y no borra lo que ya se ha leído de las demás.
+ */
+export async function tareasPorTandas(conexion, cursoIds, opciones) {
+  const tareas = new Map();
+  const entregas = new Map();
+  const sinPermiso = new Set();
+  const errorDe = new Map();
+  for (let i = 0; i < cursoIds.length; i += CURSOS_POR_TANDA) {
+    const tanda = cursoIds.slice(i, i + CURSOS_POR_TANDA);
+    try {
+      const t = await tareasDeCursos(conexion, tanda, opciones);
+      const e = await entregasSinCorregir(conexion, [...t.values()].flat().map((x) => x.id), opciones);
+      for (const [k, v] of t) tareas.set(k, v);
+      for (const id of t.sinPermiso || []) sinPermiso.add(id);
+      for (const [k, v] of e) entregas.set(k, v);
+    } catch (err) {
+      const m = mensaje(err, 'No se han podido leer las tareas del campus.');
+      for (const id of tanda) errorDe.set(id, m);
+    }
+  }
+  return { tareas, entregas, sinPermiso, errorDe };
+}
+
 /** Lo que tiene pendiente un curso: entregas por corregir y dudas abiertas. */
 const porHacer = (curso) => curso.tareas.reduce((n, t) => n + t.sinCorregir.length, 0) + curso.dudas.length;
 
@@ -197,10 +269,11 @@ export function olvidarMiCampus(tutorId) {
   cache.delete(tutorId);
 }
 
-/** Todo «Mi campus» de una tutora. Con `refrescar`, sin la copia de dos minutos. */
-export async function miCampus(tutorId, { refrescar = false, ...opciones } = {}) {
-  const guardado = cache.get(tutorId);
-  if (!refrescar && guardado && Date.now() - guardado.at < CACHE_MS) return guardado.datos;
+/**
+ * Sus campus leídos de Moodle, sin copia. Con `conProgreso: false`, sin el % hecho de cada
+ * alumno (una llamada por alumno): el aviso de entregas sin corregir no lo necesita.
+ */
+export async function leerSusCampus(tutorId, opciones = {}) {
   const campus = [];
   for (const c of await campusDeLaTutora(tutorId)) {
     try {
@@ -210,6 +283,14 @@ export async function miCampus(tutorId, { refrescar = false, ...opciones } = {})
       campus.push({ projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', cursos: [], dudasSinCurso: [] });
     }
   }
+  return campus;
+}
+
+/** Todo «Mi campus» de una tutora. Con `refrescar`, sin la copia de dos minutos. */
+export async function miCampus(tutorId, { refrescar = false, ...opciones } = {}) {
+  const guardado = cache.get(tutorId);
+  if (!refrescar && guardado && Date.now() - guardado.at < CACHE_MS) return guardado.datos;
+  const campus = await leerSusCampus(tutorId, opciones);
   const datos = {
     leidoAt: new Date().toISOString(), campus, pendientes: await pendientesDeDesarrollar(tutorId),
     sinConectar: await campusSinConectar(tutorId),

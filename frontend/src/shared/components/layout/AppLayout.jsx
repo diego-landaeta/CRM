@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Toaster from './Toaster';
+import ErrorBoundary from './ErrorBoundary';
 import CommandPalette from './CommandPalette';
 import { List, X } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
@@ -11,9 +12,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { tieneWhatsapp } from '@/shared/lib/roles';
 import NeedsProjectBanner from '@/shared/components/ui/NeedsProjectBanner';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import { LockKey } from '@phosphor-icons/react';
+import { LockKey, Key } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
-import { rutaPermitida } from './Sidebar';
+import { rutaPermitida, permisoQueFalta } from './Sidebar';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 
 // Rutas que SÍ funcionan en modo "Todos los proyectos" (vista global).
 // El resto requiere un proyecto concreto (catálogo, settings, finanzas, etc.).
@@ -40,6 +42,9 @@ const ALL_PROJECTS_OK = [
   // Consultas de alumnos (#188, #189): cada fila dice de qué campus es, y el
   // tutor ve lo suyo sin mirar la cabecera.
   /^\/consultas(?:\/.*)?$/,
+  // Incidencias (#253): con una empresa o «Todos», las de sus campus; cada
+  // fila dice de dónde es, y el servidor recorta a cada uno lo suyo.
+  /^\/incidencias$/,
   // Feedback (#170): sin campus ni empresa, el servidor suma todos los que ve
   // cada uno (sin los de pruebas). Diego, 02/11: «el panel de feedback está
   // fallando»: con «Todos los proyectos» salía «Selecciona un proyecto».
@@ -141,6 +146,8 @@ const ALL_PROJECTS_OK = [
   // campus menos los de pruebas. Sincronizar Stripe o crear una nómina sigue
   // pidiendo UN campus: cada uno tiene su cuenta y sus nóminas.
   /^\/finanzas\/pagos-stripe$/,
+  // Disputas de Stripe (#396): por empresa y por campus, en los de quien mira.
+  /^\/finanzas\/disputas$/,
   /^\/finanzas\/nominas$/,
   // #218, tanda 3: pantallas de UN campus que, con una empresa o «Todos», ya no
   // se tapian: piden el campus DENTRO (Proceso comercial, Buscar duplicados,
@@ -370,6 +377,7 @@ const CON_SOCIEDAD_OK = [
   /^\/finanzas\/por-pagar$/,
   /^\/finanzas\/comisiones$/,
   /^\/finanzas\/pagos-stripe$/,
+  /^\/finanzas\/disputas$/,
   /^\/finanzas\/pendiente-facturar$/,
   // Nominas. Las paga la SOCIEDAD, asi que verlas campus a campus obligaba a
   // sumar siete pantallas a mano. Leer acepta varios; crear una nomina,
@@ -439,12 +447,26 @@ function PantallaConPermiso({ pathname, children }) {
   // Sin el mapa de permisos todavía (al entrar), `can` dice que no a todo: no se
   // decide nada hasta que llegue, o saldría un «No tienes acceso» falso.
   if (!permissions || rutaPermitida(pathname, can)) return children;
+  // CRM#820: en vez de «pídeselo a un administrador» (¿a quién, por dónde?), el
+  // botón pide ESE permiso a soporte, con su clave ya puesta.
+  const falta = permisoQueFalta(pathname, can);
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <EmptyState
         icon={LockKey}
         title="No tienes acceso a esta pantalla"
-        description="Si crees que deberías verla, pídeselo a un administrador."
+        description={falta
+          ? `Te falta el permiso «${falta}». Si lo necesitas, pídeselo a soporte: lo preparan y lo confirma quien pueda darlo.`
+          : 'Si crees que deberías verla, pídeselo a soporte: lo preparan y lo confirma quien pueda darlo.'}
+        action={(
+          <button
+            type="button"
+            onClick={() => abrirPedirAcceso(falta ? { tipo: 'permiso', permiso: falta } : {})}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
+          >
+            <Key size={14} weight="bold" /> {falta ? 'Pedir este permiso' : 'Pedir acceso o permiso'}
+          </button>
+        )}
       />
     </div>
   );
@@ -477,6 +499,9 @@ const PWAInstallPrompt = lazy(() => import('./PWAInstallPrompt'));
 const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'));
 const OfflineBanner = lazy(() => import('./OfflineBanner'));
+const PedirAcceso = lazy(() => import('@/modules/soporte/components/PedirAcceso'));
+// Facturación pausada por la auditoría (#765): solo superadmin y admin, en todas las pantallas.
+const AvisoFacturacionPausada = lazy(() => import('@/modules/invoices/components/AvisoFacturacionPausada'));
 // Avisa de una llamada de WhatsApp desde cualquier pantalla del CRM. Va aqui
 // y no en el modulo de WhatsApp a proposito: la llamada se pierde justo
 // cuando la gestora esta en otra parte y el movil no lo tiene delante.
@@ -674,6 +699,11 @@ export default function AppLayout() {
           tabIndex={-1}
           className="p-4 lg:p-6 xl:p-8 focus:outline-none"
         >
+        {/* El aviso de la facturación pausada (#765). Fuera del `key` de la ruta:
+            no parpadea al cambiar de pantalla. Sin permiso o apagada, no pinta nada. */}
+        <Suspense fallback={null}>
+          <AvisoFacturacionPausada />
+        </Suspense>
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -681,11 +711,15 @@ export default function AppLayout() {
         }>
           {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
           <div key={pathname} className="animate-in fade-in duration-200">
-            <PantallaConPermiso pathname={pathname}>
-              <AllProjectsGuard pathname={pathname}>
-                <Outlet />
-              </AllProjectsGuard>
-            </PantallaConPermiso>
+            {/* Una pantalla que revienta no se lleva el menú, y al cambiar de
+                pantalla el aviso se va: el `key` lo vuelve a montar (CRM#625). */}
+            <ErrorBoundary dentro>
+              <PantallaConPermiso pathname={pathname}>
+                <AllProjectsGuard pathname={pathname}>
+                  <Outlet />
+                </AllProjectsGuard>
+              </PantallaConPermiso>
+            </ErrorBoundary>
           </div>
           </Suspense>
         </main>
@@ -714,6 +748,11 @@ export default function AppLayout() {
       </Suspense>
       <Suspense fallback={null}>
         <OfflineBanner />
+      </Suspense>
+      {/* «Pedir acceso o permiso» (CRM#820): se abre desde el menú de usuario y
+          desde «No tienes acceso», en cualquier pantalla. */}
+      <Suspense fallback={null}>
+        <PedirAcceso />
       </Suspense>
       {!sinWhatsapp && (
         <Suspense fallback={null}>

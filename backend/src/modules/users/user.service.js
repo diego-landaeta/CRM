@@ -9,6 +9,7 @@ import { comoLista } from '../../shared/utils/roles.js';
 import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
 import { sendWelcomeUserEmail, sendCorreoCambiadoEmail, sendEmail } from '../../shared/services/brevo.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
+import { marcaDeLaPersona, remitenteDe } from '../../shared/services/marca.service.js';
 
 // A LOS TUTORES NO SE LES MANDA NADA. TODAVIA NO.
 //
@@ -45,25 +46,9 @@ const SET_PASSWORD_EXPIRY_HOURS = 24;
  * nombre —«Albertoj@iseie.com»— que no existe, asi que el enlace de bienvenida
  * no llego a nadie y ninguno de ellos habia entrado jamas.
  */
-export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUserId = null, ip = null, rolFinal = null } = {}) {
-  const nuevo = String(email).trim().toLowerCase();
-  const user = await userModel.findById(id);
-  if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
-  // El de un super admin, solo otro super admin (Diego, 09/10, #246: «sí»). Hasta
-  // entonces no se podía nunca (#248). Se mira quién lo pide en la base, no en el
-  // token: así vale igual desde Usuarios, desde Tutores o desde «Mi perfil».
-  if (user.role === 'superadmin') {
-    const quien = porUserId ? await userModel.findById(porUserId) : null;
-    if (quien?.role !== 'superadmin') {
-      throw new AppError('Solo otro superadmin puede cambiar el correo de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
-    }
-  }
-  if (String(user.email).toLowerCase() === nuevo) return { cambiado: false, email: user.email };
-
-  const otro = await userModel.findByEmail(nuevo);
-  if (otro && otro.id !== id) {
-    throw new AppError('Ese correo ya lo usa otro usuario', 409, 'EMAIL_EXISTS');
-  }
+export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUserId = null, ip = null, rolFinal = null, rolAntes = null } = {}) {
+  const { user, nuevo, mismo } = await comprobarCambioDeCorreo(id, email, { porUserId });
+  if (mismo) return { cambiado: false, email: user.email };
 
   // Si se va a reenviar el enlace, el token se emite en la MISMA operacion que
   // el cambio: si se hicieran por separado y fallara el segundo, el usuario se
@@ -90,7 +75,16 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
     );
   }
 
-  // Las sesiones abiertas se cierran: la credencial ha cambiado.
+  // Un código pendiente para otra dirección ya no vale (revisión de Diego,
+  // #688): si no, al meterlo después desharía este cambio (el superadmin le pone
+  // Y y luego su código de X le devuelve a X). Si el cambio viene de un código,
+  // su petición ya está confirmada y esto no la toca.
+  await query(`UPDATE cambios_de_correo SET anulado_at = NOW()
+                WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL`, [id]);
+
+  // La credencial ha cambiado: se revocan sus refresh tokens. OJO, no cierra
+  // nada al momento (#262): el JWT de acceso vale hasta que caduca (8 h) y sus
+  // URL del MCP siguen vivas. Los textos de las pantallas dicen eso, no más.
   try { await revokeAllUserTokens(id); } catch { /* no bloqueante */ }
 
   logger.info({ userId: id, de: user.email, a: nuevo, reenviarEnlace }, 'Correo de usuario cambiado');
@@ -101,8 +95,9 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
   // tutor, nada mientras siga el freno (Diego, #246: «el correo a la dirección
   // vieja tiene que pasar por NO_ESCRIBIR_A_TUTORES»).
   // Tutor ANTES o DESPUES de este guardado (#262): si en la misma edicion se le
-  // pasa a tutor, el freno tiene que valer igual.
-  const esTutor = [user.role, rolFinal].includes('tutor');
+  // pasa a tutor, el freno tiene que valer igual. `rolAntes` hace falta porque
+  // desde Usuarios el correo va al final, con el rol nuevo ya guardado.
+  const esTutor = [user.role, rolFinal, rolAntes].includes('tutor');
   if (NO_ESCRIBIR_A_TUTORES && esTutor) {
     logger.warn({ userId: id }, 'correo de tutor cambiado SIN avisar a la dirección vieja: los avisos a tutores estan cortados (15/09)');
   } else {
@@ -122,6 +117,34 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
   }
 
   return { cambiado: true, email: nuevo, enlaceReenviado: Boolean(rawToken) };
+}
+
+/**
+ * Lo que puede hacer que un cambio de correo no se haga (404, 403, 409), SIN
+ * cambiar nada. Desde Usuarios se llama antes de guardar el resto (#262): así,
+ * si el correo no vale, no se guarda nada, y si lo que falla es el resto, el
+ * correo tampoco ha cambiado.
+ */
+export async function comprobarCambioDeCorreo(id, email, { porUserId = null } = {}) {
+  const nuevo = String(email).trim().toLowerCase();
+  const user = await userModel.findById(id);
+  if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+  // El de un super admin, solo otro super admin (Diego, 09/10, #246: «sí»). Hasta
+  // entonces no se podía nunca (#248). Se mira quién lo pide en la base, no en el
+  // token: así vale igual desde Usuarios, desde Tutores o desde «Mi perfil».
+  if (user.role === 'superadmin') {
+    const quien = porUserId ? await userModel.findById(porUserId) : null;
+    if (quien?.role !== 'superadmin') {
+      throw new AppError('Solo otro superadmin puede cambiar el correo de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    }
+  }
+  if (String(user.email).toLowerCase() === nuevo) return { user, nuevo, mismo: true };
+
+  const otro = await userModel.findByEmail(nuevo);
+  if (otro && otro.id !== id) {
+    throw new AppError('Ese correo ya lo usa otro usuario', 409, 'EMAIL_EXISTS');
+  }
+  return { user, nuevo, mismo: false };
 }
 
 /**
@@ -148,15 +171,11 @@ export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
     targetUserIds: gente.map((g) => g.id), type: 'tutor_correo_cambiado', title: titulo, message: texto,
     link_path: '/tutores', metadata: { tutor_id: tutorId, de, a }, triggered_by_user_id: tutorId,
   });
-  // Con la plantilla común y la marca de su campus (Diego, 10/10: «cada correo
-  // con un formato completo y lindo, y con el branding»). Antes iba en texto plano.
-  const { rows: [marca] } = await query(
-    `SELECT p.id, p.nombre, p.slug, p.logo_url, p.emoji
-       FROM user_projects up JOIN projects p ON p.id = up.project_id AND p.active = true
-      WHERE up.user_id = $1
-      ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1`,
-    [tutorId]
-  );
+  // Con la plantilla común y la marca del tutor (Diego, 10/10: «cada correo
+  // con un formato completo y lindo, y con el branding»). La de su campus si es
+  // uno; si son varios de una empresa, la de la EMPRESA (11/11), y no la del
+  // primero con remitente, que en CEDIA era Fono Aprende.
+  const marca = await marcaDeLaPersona({ userId: tutorId }).catch(() => null);
   for (const g of gente) {
     const { htmlContent, textContent } = P.correo({
       proyecto: marca || {},
@@ -171,7 +190,7 @@ export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
       ],
     });
     sendEmail({
-      to: g.email, subject: titulo, htmlContent, textContent, projectId: marca?.id ?? null,
+      to: g.email, subject: titulo, htmlContent, textContent, ...remitenteDe(marca),
       tags: ['tutor-correo-cambiado'],
       clave: `tutor-correo-${tutorId}-${g.id}-${a}`,
     }).catch((err) => logger.error({ err: err.message, a: g.id }, 'Fallo avisando del correo de tutor cambiado'));

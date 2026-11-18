@@ -9,7 +9,8 @@ import { avatarColorFor, getInitials, inputClass } from '@/shared/lib/ui';
 import { toast } from '@/shared/hooks/useToast';
 import EquipoComercial from './EquipoComercial';
 import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
-import { listRolesAsignables, type AvisoCambioCorreo, type CrmUser, type Empresa, type ProjectAssignment, type RolAsignable } from '../api/users.api';
+import BrevoBloqueoAviso from './BrevoBloqueoAviso';
+import { listRolesAsignables, type AvisoCambioCorreo, type BrevoBloqueo, type CrmUser, type Empresa, type ProjectAssignment, type RolAsignable } from '../api/users.api';
 import { ASSIGNABLE_ROLES } from '../lib/usersUi';
 import { confirmacionCambioCorreo, problemaDeContrasena } from '../lib/credenciales';
 import { motivoNoAsignable, porRol } from '../lib/rolesAsignables';
@@ -29,11 +30,6 @@ export interface UserFormValues {
   reenviarEnlace: boolean;
   /** #694: las excepciones de permisos que van con el alta. */
   excepciones?: Record<string, boolean>;
-  /**
-   * #211: de serie, el correo nuevo no se aplica hasta meter el código que le
-   * llega a esa dirección. Marcado, se aplica al momento (queda en el registro).
-   */
-  aplicarSinCodigo?: boolean;
   /**
    * Empresas enteras de un admin (#220). `undefined` = no se tocan: quien edita
    * no es super admin, o no hay migración. Vacía = quitarlas (sus campus se quedan).
@@ -58,6 +54,10 @@ interface Props {
   empresas?: Empresa[];
   /** La migración 203 aún no está: la casilla sale apagada y se dice por qué. */
   faltaMigracionEmpresas?: boolean;
+  /** Brevo no le entrega los correos (migración 290): la marca de la ficha. */
+  bloqueoBrevo?: BrevoBloqueo | null;
+  /** «Desbloquear en Brevo»: solo con el permiso users.brevo_desbloquear. */
+  onDesbloquearBrevo?: () => Promise<void>;
   loading: boolean;
   onClose: () => void;
   onSubmit: (values: UserFormValues) => void | Promise<void>;
@@ -68,7 +68,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function UserFormDialog({
   user, projects, canResetPassword, canChangeEmail, loading, onClose, onSubmit, onCheckEmail, onResetPassword,
-  empresas, faltaMigracionEmpresas = false,
+  empresas, faltaMigracionEmpresas = false, bloqueoBrevo = null, onDesbloquearBrevo,
 }: Props) {
   const esEdicion = !!user;
   // Escape cierra, como los demás formularios (#106).
@@ -77,7 +77,6 @@ export default function UserFormDialog({
   const [nombre, setNombre] = useState(user?.nombre ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [reenviarEnlace, setReenviarEnlace] = useState(false);
-  const [aplicarSinCodigo, setAplicarSinCodigo] = useState(false);
   const cambiaCorreo = esEdicion && canChangeEmail && email.trim().toLowerCase() !== user!.email.toLowerCase();
   const [role, setRole] = useState<UserRole>((user?.role as UserRole) ?? 'gestor');
   // Los roles añadidos. Diego, 22/09: «necesitamos que se pueda colocar más de
@@ -218,8 +217,7 @@ export default function UserFormDialog({
       roles_extra: rolesExtra.filter((r) => r !== role),
       projects: seleccionados,
       whatsapp_phone: telefono.trim(),
-      reenviarEnlace: cambiaCorreo && aplicarSinCodigo && reenviarEnlace,
-      aplicarSinCodigo: cambiaCorreo && aplicarSinCodigo,
+      reenviarEnlace: cambiaCorreo && reenviarEnlace,
       // Solo si quien edita puede darlas. Para otro rol que no sea admin ni
       // colaborador, se mandan vacías: una gestora no tiene empresas enteras.
       ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
@@ -286,6 +284,10 @@ export default function UserFormDialog({
               </div>
             )}
 
+            {esEdicion && bloqueoBrevo && (
+              <BrevoBloqueoAviso bloqueo={bloqueoBrevo} onDesbloquear={onDesbloquearBrevo} />
+            )}
+
             <Field label="Nombre" required htmlFor="user-nombre">
               <input autoComplete="off"
                 id="user-nombre"
@@ -325,28 +327,10 @@ export default function UserFormDialog({
                   />
                 </Field>
                 {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
-                    sale ningún correo mientras siga el freno: se dice en vez de esconderlo. */}
-                {/* #211: con código de serie. «Aplicar sin código», para casos como
-                    una dirección que la persona ya no puede abrir. */}
+                    sale ningún correo mientras siga el freno: se dice en vez de esconderlo.
+                    El correo de otra persona cambia al guardar, sin código (Diego,
+                    06/11, #688): el código es solo para quien cambia el suyo. */}
                 {cambiaCorreo && (
-                  <label className="mt-1.5 flex items-start gap-2 px-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={aplicarSinCodigo}
-                      onChange={(e) => setAplicarSinCodigo(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <span className="text-sm">
-                      Aplicar sin código
-                      <span className="block text-secundario text-muted-foreground">
-                        {aplicarSinCodigo
-                          ? 'Cambia al guardar, sin comprobar que la dirección nueva existe. Queda en el registro.'
-                          : 'Al guardar le llega un código de 6 cifras a la dirección nueva; el correo cambia cuando metas el código que te diga.'}
-                      </span>
-                    </span>
-                  </label>
-                )}
-                {cambiaCorreo && aplicarSinCodigo && (
                   role === 'tutor' ? (
                     <p className="text-secundario text-muted-foreground mt-1.5 px-1">
                       A los tutores no se les manda ningún correo por ahora: si lo necesita, ponle tú una contraseña abajo y pásasela.

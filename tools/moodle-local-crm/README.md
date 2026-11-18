@@ -21,14 +21,14 @@ Une la mensajería de cada campus con el CRM:
 La lectura cada 5 minutos del CRM sigue funcionando como respaldo. Si un aviso se
 pierde, se recoge en la siguiente vuelta.
 
-**Todo viene apagado de serie (1.10.0, revisión de la #689).**
+**Lo que cambia lo que ve el alumno viene apagado de serie (1.10.0, revisión de la #689).**
 - En el **CRM**, lo del plugin es solo de pruebas (/testeo y local) hasta que se apruebe con
   `PLUGIN_MOODLE_EN_PRODUCCION=1`: sin eso, en producción no se dan códigos, no se aceptan
   avisos (`/api/moodle-avisos` no existe), no se repasa ningún campus y la respuesta de la
   tutora sale con su token, como antes.
-- En el **campus**, el chat de grupo y la actualización automática vienen apagados; se
-  encienden a mano en los ajustes del plugin. Al actualizar desde una versión anterior se
-  apagan también.
+- En el **campus**, el chat de grupo viene apagado; se enciende a mano en los ajustes del
+  plugin. La actualización automática, en cambio, viene **encendida** desde la 1.10.6 (de la
+  1.10.0 a la 1.10.5 venía apagada): ver «Actualización automática».
 
 | | |
 |---|---|
@@ -71,6 +71,16 @@ Al pulsar Conectar, el plugin:
 - comprueba que el código apunta a un CRM de la lista **CRM permitidos** (de serie,
   `360crm.tech` y `crm.iseie.com`; se cambia en los ajustes del plugin);
 - se presenta al CRM.
+
+**Cambiar de CRM pide confirmación (1.10.4).** El plugin habla con UN solo CRM: guarda una
+dirección y una clave. Si el campus ya está conectado y el código pegado es de otro CRM
+(otra dirección de la API: por ejemplo, producción `360crm.tech/crm` y pruebas
+`360crm.tech/testeo`, que comparten dominio y por eso la lista de CRM permitidos no las
+separa), «Conectar» no cambia nada: enseña a qué CRM está conectado ahora, de cuál es el
+código, y que el de ahora dejará de recibir los mensajes. Solo cambia marcando «Entiendo
+que…» y pulsando «Cambiar a…». Con un código del mismo CRM, reconecta sin preguntar, como
+siempre. La ficha «Conexión con el CRM» enseña el CRM con su ruta (`360crm.tech/crm
+(producción)`), no solo el dominio.
 
 El CRM, por su parte:
 - comprueba que es un Moodle de verdad con el plugin;
@@ -153,9 +163,23 @@ El plugin hace lo mismo sin el mapa a mano y vale también para los cursos con v
 Cada noche (entre las 3 y las 5) el plugin pregunta al CRM si hay versión nueva. Si la
 hay y **está firmada por el CRM**, guarda una copia de la instalada, pone la nueva y la
 actualiza; si algo falla, vuelve a la copia. En «Conectar con el CRM» se ve la versión, lo
-último que pasó y el botón «Buscar actualización ahora». **Viene apagado** (desde la
-1.10.0): se enciende en los ajustes («Actualizar el plugin solo»). Apagado, solo avisa de
+último que pasó y el botón «Buscar actualización ahora». **Viene encendido** (1.10.6) y se
+apaga en los ajustes («Actualizar el plugin solo»), campus a campus. Apagado, solo avisa de
 que hay versión nueva.
+
+De la 1.10.0 a la 1.10.5 venía apagado (revisión de la #689) y la 1.10.0 lo apagó también
+en los campus que ya tenían el plugin. Al actualizar a la 1.10.6 se **enciende** en todos,
+salvo donde alguien lo apagó a mano: si el último cambio del ajuste guardado en la página de
+ajustes (registro de cambios de configuración de Moodle, `config_log`) fue de encendido a
+apagado, se queda apagado. Lo que apagó la propia 1.10.0 no cuenta como «a mano». Si un
+campus no lo quiere, se apaga después de actualizar y ya no se vuelve a encender solo.
+
+Es seguro dejarlo encendido sin que nadie lo mire porque:
+- solo instala lo que trae la **firma del CRM** (RSA sobre componente, versión y huella del
+  ZIP) que reconoce la clave pública de `crm/classes/claves.php`; una versión sin firma o con
+  el manifiesto alterado no se instala («no trae una firma válida»);
+- solo habla con el CRM al que está conectado el campus;
+- guarda copia de la versión instalada y vuelve a ella si la actualización falla.
 
 No instala nada si la firma no cuadra, si el sitio tiene `$CFG->disableupdateautodeploy`
 o si Moodle no puede escribir en `local/crm`: en esos casos avisa de que hay versión nueva
@@ -193,6 +217,15 @@ En el mismo repaso le vuelve a mandar la lista de tutoras «No disponible».
 
 En el CRM, en Integraciones, el bloque del plugin dice «Al día · repasado a las … · plugin 1.8.0»,
 o el error y cuándo fue el último repaso bueno.
+
+Con el plugin al día, la **lectura de cada 5 minutos** del CRM (la de antes del plugin, con
+los tokens) **se salta ese campus** (#689): ya entra por el aviso y por el repaso, y leerlo
+además era leerlo tres veces. «Al día» es plugin activo, sin error en el repaso y con un
+repaso bueno en los últimos 35 minutos (dos repasos y cinco de margen). Si deja de estarlo
+(plugin desconectado, token revocado, Moodle caído), la lectura de 5 minutos vuelve a
+leerlo sola. Con el plugin apagado en el CRM (`PLUGIN_MOODLE_EN_PRODUCCION`) o el repaso
+apagado (`MOODLE_SINCRONIZACION_DISABLED=1`) se leen todos, como antes. «Leer ahora», en
+Consultas, lee siempre.
 
 ## Probar en local con Docker
 
@@ -235,6 +268,8 @@ Hay un Moodle 4.5 de pruebas con datos inventados y la lista de lo que hay que p
   Moodle. Desconectar lo revoca.
 - **Solo CRM de confianza.** Un código lo puede fabricar cualquiera: el plugin solo se
   conecta a los CRM de su lista, así que un código falso no se lleva el token.
+- **Cambiar de CRM, solo confirmado** (1.10.4). Un código de otro CRM no desconecta el
+  campus del de ahora sin una confirmación expresa en la página del plugin.
 - **Enviar y calificar en nombre de la tutora.** `local_crm_enviar_mensaje` y
   `local_crm_calificar` exigen `local/crm:enviarcomo`, que solo tiene el rol del servicio.
   Al calificar se comprueba que la tutora puede calificar esa tarea y, con grupos

@@ -155,16 +155,15 @@ export const CAMBIOS = [
   },
 ];
 
-// #211 (05/11): propuesta de Hugo, a la espera de Diego. Si dice que solo el
-// tutor, se quita esta entrada y los roles de `cuenta.cambiar_correo`.
+// #211: decisión de Diego del 06/11 (en la #688): todos los roles.
 CAMBIOS.push({
   id: 'correo-propio-con-codigo',
-  que: 'Cambiar su propio correo desde «Mi perfil», con un código a la dirección nueva y su contraseña actual: también admin, gestora y soporte. Hasta ahora solo el tutor, y sin código.',
+  que: 'Cambiar su propio correo desde «Mi perfil», con un código a la dirección nueva y su contraseña actual: todos los roles (admin, gestora, soporte, project manager, colaborador y tutor redactor, #708). Hasta ahora solo el tutor, y sin código. Al tutor y al tutor redactor no les sale el código mientras siga el freno de correos a tutores.',
   motivo: '#211: el correo es la credencial y se cambiaba sin comprobar nada (así quedaron 39 de 45 tutores de ISEIE sin poder entrar). Con el código, nadie se queda con una dirección que no existe.',
   filas: ['PATCH /api/auth/me/email', 'POST /api/auth/me/email/codigo'],
-  roles: ['admin', 'gestor', 'soporte'],
+  roles: ['admin', 'gestor', 'soporte', 'project_manager', 'colaborador', 'tutor_redactor'],
   sentido: 'gana',
-  aprobadoPor: null,
+  aprobadoPor: 'Diego, 06/11',
 });
 
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */
@@ -242,6 +241,17 @@ export const CAMBIOS_POR_DATOS = [
     aprobadoPor: DIEGO,
   },
 ];
+
+// #694 / #752 (Diego, 12/11): «MCP del colaborador: bloqueado siempre». Va por DATOS:
+// de serie el colaborador no lo traía; lo pierde solo el que lo tenía con la casilla
+// (o una excepción). Su `mcp.usar` ahora es `nunca` / `nuncaPrincipal`.
+CAMBIOS_POR_DATOS.push({
+  id: 'colaborador-sin-mcp',
+  que: 'El colaborador no puede usar el MCP, ni con la casilla ni con excepción ni con un rol de más, como el tutor y el tutor redactor. El colaborador que lo tenía con la casilla lo pierde. En su ficha sale la casilla bloqueada, con el motivo.',
+  motivo: 'Diego, 11/11 en la #694 («Nunca para ese rol: WhatsApp y el MCP para tutor, tutor redactor y colaborador») y 12/11 en la #752, sabiendo que el colaborador con la casilla lo pierde: «bloqueado siempre».',
+  explica: ({ persona, fila, antes, despues }) => persona.role === 'colaborador' && fila.modulo === 'mcp' && antes === true && despues === false,
+  aprobadoPor: 'Diego, 12/11',
+});
 
 /**
  * Lo que cambia en el MENÚ, por perfil (QA de Diego, punto 6: «soporte pierde
@@ -470,6 +480,22 @@ export const CAMBIOS_DE_MENU = [
       'Catálogo › Cursos pendientes': 'GET /api/cursos-pendientes/',
     },
     aprobadoPor: 'Diego, 06/11',
+  },
+  {
+    id: 'menu-disputas-stripe-396',
+    que: '«Finanzas › Disputas de Stripe»: las disputas abiertas de cada cuenta de Stripe, por empresa y por campus, solo lectura (CRM#396). La ve quien tiene `stripe.edit` («llevar las disputas»), cada uno en sus campus.',
+    motivo: 'Tarea #396 del tablero (Manuel): ver las disputas abiertas por empresa y proyecto. No cambia el acceso: `stripe.edit` ya decidía las disputas en Pagos Stripe.',
+    perfiles: {
+      superadmin: ['+ Finanzas › Disputas de Stripe'],
+      admin: ['+ Finanzas › Disputas de Stripe'],
+      soporte: ['+ Finanzas › Disputas de Stripe'],
+      'gestora+admin': ['+ Finanzas › Disputas de Stripe'],
+    },
+    rutas: {
+      'Finanzas › Disputas de Stripe': 'GET /api/stripe-payments/disputas',
+    },
+    // Pendiente del visto bueno de Diego en la PR.
+    aprobadoPor: null,
   },
 ];
 

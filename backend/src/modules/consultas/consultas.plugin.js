@@ -82,6 +82,49 @@ export async function estado(projectId) {
   };
 }
 
+/** Cada cuánto repasa el CRM los campus con el plugin (moodleSincronizacionScheduler.js). */
+const REPASO_POR_DEFECTO_MS = 15 * 60 * 1000;
+
+/**
+ * Cuánto puede tardar el último repaso bueno para dar el campus por al día: dos repasos
+ * y cinco minutos de margen (35 min con el de serie). Un repaso que falla una vez no
+ * basta para volver a leerlo cada 5 minutos; dos seguidos, sí.
+ */
+export function minutosPluginAlDia(env = process.env) {
+  const tick = parseInt(env.MOODLE_SINCRONIZACION_TICK_MS || '', 10);
+  const ms = Number.isFinite(tick) && tick > 0 ? tick : REPASO_POR_DEFECTO_MS;
+  return Math.ceil((2 * ms) / 60000) + 5;
+}
+
+/**
+ * Los campus que el plugin tiene al día (#689, 8b): la lectura de cada 5 minutos se los
+ * salta, porque ya entran por el plugin dos veces (el aviso al momento y el repaso de
+ * cada 15 minutos, que recoge lo que se pierda). Sin esto, cada campus se leía tres veces.
+ *
+ * Al día = plugin activo en el CRM, sin error en el repaso y con un repaso bueno reciente
+ * (`minutosPluginAlDia`). Vuelve a la lectura de 5 minutos, sola, en cuanto deja de estarlo:
+ * plugin desconectado, repaso con error (token revocado, plugin desinstalado o viejo) o sin
+ * repaso bueno reciente (Moodle caído). Y ninguno se salta si el plugin está apagado en este
+ * CRM (PLUGIN_MOODLE_EN_PRODUCCION) o el repaso lo está (MOODLE_SINCRONIZACION_DISABLED=1):
+ * sin repaso, un aviso perdido no lo recogería nadie.
+ *
+ * @returns {Promise<Set<number>>} ids de proyecto.
+ */
+export async function campusConPluginAlDia(env = process.env) {
+  if (!pluginMoodleActivo(env) || env.MOODLE_SINCRONIZACION_DISABLED === '1') return new Set();
+  try {
+    const { rows } = await query(
+      `SELECT project_id FROM moodle_plugin_campus
+        WHERE activo AND sincronizacion_error IS NULL
+          AND sincronizado_at > NOW() - make_interval(mins => $1::int)`, [minutosPluginAlDia(env)]);
+    return new Set(rows.map((r) => Number(r.project_id)));
+  } catch (err) {
+    // Sin la tabla (falta la 245) o con la base tropezando: se leen todos, como antes.
+    logger.warn({ err: err.message }, 'consultas/plugin: no se sabe qué campus tienen el plugin al día; se leen todos');
+    return new Set();
+  }
+}
+
 /** ¿Responde este campus por el plugin? */
 export async function pluginActivo(projectId) {
   const { rows } = await query(
@@ -314,9 +357,10 @@ export async function sincronizarCampus(projectId, { procesar, desdeFecha = null
   let desdeId = c.sincronizado_hasta_id != null ? Number(c.sincronizado_hasta_id) : 0;
   // La primera vez, desde que se encendió «Leer las consultas» (o la última hora).
   const desde = desdeFecha ? Math.floor(new Date(desdeFecha).getTime() / 1000) : Math.floor(Date.now() / 1000) - 3600;
-  const r = { projectId, mensajes: 0, nuevos: 0, paginas: 0, version: null };
+  const r = { projectId, mensajes: 0, nuevos: 0, paginas: 0, version: null, descartados: 0 };
+  let atascado = null;
   try {
-    for (let i = 0; i < PAGINAS_POR_REPASO; i++) {
+    for (let i = 0; i < PAGINAS_POR_REPASO && !atascado; i++) {
       const pagina = await llamar(conexion, 'local_crm_mensajes_desde',
         desdeId > 0 ? { desdeid: desdeId, limite: 200 } : { desdefecha: desde, limite: 200 }, opciones);
       r.paginas += 1;
@@ -330,12 +374,32 @@ export async function sincronizarCampus(projectId, { procesar, desdeFecha = null
           if (hecho && !['repetido', 'ignorado'].includes(hecho.resultado)) r.nuevos += 1;
         } catch (err) {
           logger.warn({ projectId, mensaje: aviso?.mensaje?.id, err: err.message }, 'consultas/plugin: un mensaje del repaso no se ha podido guardar');
+          // Un aviso que no vale (400) no valdrá nunca: se sigue sin él. Cualquier otro fallo
+          // (la base, un tropiezo) puede salir bien en el siguiente repaso: el cursor se queda
+          // JUSTO ANTES de ese mensaje. Antes avanzaba igual y ese mensaje no volvía a pedirse
+          // nunca: si además se había perdido su aviso, no llegaba al CRM.
+          const idMensaje = Number(aviso?.mensaje?.id);
+          if (err?.statusCode === 400 || !(idMensaje > desdeId)) {
+            r.descartados += 1;
+            continue;
+          }
+          atascado = { id: idMensaje, motivo: err.message };
+          break;
         }
       }
-      if (Number(pagina?.hastaid) > desdeId) desdeId = Number(pagina.hastaid);
+      if (atascado) desdeId = atascado.id - 1;
+      else if (Number(pagina?.hastaid) > desdeId) desdeId = Number(pagina.hastaid);
       // Hasta dónde se ha llegado, página a página: si algo corta, se sigue desde aquí.
       await query('UPDATE moodle_plugin_campus SET sincronizado_hasta_id = $2 WHERE project_id = $1', [projectId, desdeId || null]);
       if (!pagina?.mas) break;
+    }
+    if (atascado) {
+      // Con error, el campus vuelve también a la lectura de cada 5 minutos (campusConPluginAlDia)
+      // y el panel lo enseña. El siguiente repaso empieza por ese mensaje.
+      const mensaje = `El mensaje ${atascado.id} del campus no se ha podido guardar (${atascado.motivo}); el próximo repaso lo vuelve a intentar.`;
+      await query('UPDATE moodle_plugin_campus SET sincronizacion_error = $2, version_plugin = COALESCE($3, version_plugin) WHERE project_id = $1',
+        [projectId, mensaje, r.version]);
+      return { ...r, error: mensaje };
     }
     await avisarDisponibilidad([projectId], opciones);
     await query(

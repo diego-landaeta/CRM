@@ -26,6 +26,9 @@ vi.mock('../src/shared/config/db.js', () => ({
     }
     if (/FROM users u\s+WHERE u.active AND u.email IS NOT NULL/.test(sql)) return { rows: [{ id: 1, email: 'sa@x.com', nombre: 'Super' }, { id: 7, email: 'ad@x.com', nombre: 'Admin' }] };
     if (/FROM user_projects up JOIN projects p/.test(sql)) return { rows: [{ id: 3, nombre: 'ISEIH', slug: 'iseih', logo_url: null, emoji: null }] };
+    // La marca del tutor, por `marca.service` (11/11): sus campus y, con uno, el suyo.
+    if (/JOIN user_projects up ON up.user_id = u.id/.test(sql)) return { rows: [{ project_id: 3 }] };
+    if (/p\.id = ANY\(\$1::int\[\]\)/.test(sql)) return { rows: [{ id: 3, nombre: 'ISEIH', slug: 'iseih', logo_url: null, emoji: null, sociedad_id: 8 }] };
     return { rows: [] };
   }),
 }));
@@ -47,6 +50,8 @@ vi.mock('../src/modules/tutores/tutor.model.js', () => ({ tieneAlgunCampus: vi.f
 // («123456») el cambio de verdad pasa por `cambiarCorreo`, como en producción.
 vi.mock('../src/modules/users/cambio-de-correo.js', () => ({
   MINUTOS: 15,
+  MENSAJE_FRENADO: 'frenado',
+  codigoFrenadoPara: () => false,
   pedirCodigo: vi.fn(async () => ({ enviado: true })),
   confirmarCodigo: vi.fn(async ({ userId, codigo, porUserId, ip }) => {
     if (codigo !== '123456') throw Object.assign(new Error('Código incorrecto'), { statusCode: 400, code: 'CODIGO_INCORRECTO' });
@@ -154,10 +159,17 @@ describe('3 · el tutor cambia su correo y se avisa a administración', () => {
     expect(cuerpo.data.cambiado).toBe(true);
     expect(notifyUsers).not.toHaveBeenCalled();
   });
-  it('el project manager y el colaborador, no: 403', async () => {
+  it('el project manager y el colaborador, también (Diego, 06/11, #688: todos los roles)', async () => {
     for (const role of ['project_manager', 'colaborador']) {
-      const { error } = await llamar(conGuardia('cuenta.cambiar_correo', authController.updateMyEmail), { body: { codigo: '123456' }, user: registrar({ userId: 9, role }) });
-      expect(error?.statusCode, role).toBe(403);
+      usuarios.set(9, { id: 9, nombre: 'Otra', email: 'ges@viejo.com', role });
+      // `conGuardia` no espera al permiso (es asíncrono): se espera a la respuesta.
+      let error = null; let cuerpo = null;
+      conGuardia('cuenta.cambiar_correo', authController.updateMyEmail)(
+        { ip: '1.1.1.1', headers: {}, socket: {}, body: { codigo: '123456' }, user: registrar({ userId: 9, role }) },
+        { json: (b) => { cuerpo = b; }, status() { return this; } }, (e) => { error = e; });
+      await vi.waitFor(() => expect(cuerpo || error, role).toBeTruthy());
+      expect(error?.message, role).toBeUndefined();
+      expect(cuerpo.data.cambiado, role).toBe(true);
     }
   });
 });

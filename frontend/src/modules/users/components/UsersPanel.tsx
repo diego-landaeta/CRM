@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, WarningCircle, Lock } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,9 +8,10 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import Card from '@/shared/components/ui/Card';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  avisoCambioCorreo, createUser, deactivateUser, listEmpresas, reactivateUser, setUserPassword, updateUser, confirmarCorreoDeUsuario,
-  type CrmUser, type Empresa,
+  avisoCambioCorreo, createUser, deactivateUser, desbloquearBrevo, listBrevoBloqueos, listEmpresas, reactivateUser,
+  setUserPassword, updateUser, type BrevoBloqueo, type CrmUser, type Empresa,
 } from '../api/users.api';
+import { porPersona } from '../lib/brevoBloqueo';
 import useUsers from '../hooks/useUsers';
 import useAvailabilityMap from '../hooks/useAvailabilityMap';
 import UsersToolbar from './UsersToolbar';
@@ -71,6 +72,29 @@ export default function UsersPanel() {
     if (!esSuperadmin) return;
     listEmpresas().then(setEmpresas).catch(() => setEmpresas(undefined));
   }, [esSuperadmin]);
+  // Correos que Brevo no entrega (migración 290). Si falla o está apagado, sin marcas:
+  // la lista sigue funcionando igual.
+  const [bloqueosBrevo, setBloqueosBrevo] = useState<Map<number, BrevoBloqueo>>(new Map());
+  const cargarBloqueosBrevo = useCallback(() => {
+    listBrevoBloqueos()
+      .then((r) => setBloqueosBrevo(porPersona(r.bloqueos)))
+      .catch(() => setBloqueosBrevo(new Map()));
+  }, []);
+  useEffect(() => { cargarBloqueosBrevo(); }, [cargarBloqueosBrevo]);
+
+  async function desbloquearEnBrevo(user: CrmUser) {
+    try {
+      await desbloquearBrevo(user.id);
+      toast({
+        title: 'Desbloqueado en Brevo',
+        description: `Los correos del CRM vuelven a salir hacia ${user.email}. Si el buzón no existe, Brevo lo volverá a bloquear.`,
+      });
+      cargarBloqueosBrevo();
+    } catch (err: any) {
+      toast({ title: 'No se pudo desbloquear', description: err?.message, variant: 'destructive' });
+    }
+  }
+
   // Sin la migración 203 el listado trae `empresa_ids: null` en todos.
   const faltaMigracionEmpresas = lista.visibles.length > 0 && lista.visibles.every((u) => u.empresa_ids === null);
 
@@ -106,8 +130,8 @@ export default function UsersPanel() {
         const cambiaCorreo = esSuperadmin && correoNuevo !== dialogo.user.email.toLowerCase();
         await updateUser(dialogo.user.id, {
           nombre: values.nombre,
-          // #211: con código de serie; «aplicar sin código», al momento.
-          ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: values.reenviarEnlace, conCodigo: !values.aplicarSinCodigo } : {}),
+          // Al momento y sin código (Diego, 06/11, #688).
+          ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: values.reenviarEnlace } : {}),
           role: values.role,
           // Se manda SIEMPRE, aunque venga vacia: una lista vacia significa
           // «quitale los de mas», y omitirla dejaria imposible volver atras.
@@ -121,30 +145,13 @@ export default function UsersPanel() {
           // Las empresas enteras (#220): solo viajan si las ha podido tocar.
           ...(values.empresaIds !== undefined ? { empresaIds: values.empresaIds } : {}),
         });
-        // #211: el código le ha llegado a la persona; quien edita lo mete aquí.
-        const conCodigo = cambiaCorreo && !values.aplicarSinCodigo;
-        let correoConfirmado = false;
-        if (conCodigo) {
-          for (let intento = 0; intento < 5 && !correoConfirmado; intento++) {
-            const codigo = window.prompt(`Le hemos mandado un código de 6 cifras a ${correoNuevo}. Escribe el que te diga ${values.nombre} (caduca en 15 minutos):`);
-            if (codigo === null) break;
-            try {
-              await confirmarCorreoDeUsuario(dialogo.user.id, codigo.trim());
-              correoConfirmado = true;
-            } catch (e: any) {
-              toast({ title: 'Ese código no vale', description: e?.message, variant: 'destructive' });
-            }
-          }
-        }
         toast(sinProyectos
           ? {
             title: 'Usuario actualizado, sin proyectos',
             description: `${values.nombre} ya no tiene ningún proyecto asignado: al entrar no verá nada.`,
           }
-          : conCodigo && !correoConfirmado
-            ? { title: 'Usuario actualizado, el correo no', description: `Sigue entrando con ${dialogo.user.email}. Para cambiarlo, vuelve a guardar ${correoNuevo} y mete el código que le llegue.` }
           : cambiaCorreo
-            ? { title: 'Usuario actualizado', description: `${values.nombre} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+            ? { title: 'Usuario actualizado', description: `${values.nombre} entra ahora con ${correoNuevo}. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` }
             : { title: 'Usuario actualizado', description: values.nombre });
       }
       setDialogo(null);
@@ -166,7 +173,7 @@ export default function UsersPanel() {
       await setUserPassword(dialogo.user.id, password, repetida);
       toast({
         title: 'Contraseña actualizada',
-        description: `${dialogo.user.nombre} deberá entrar con la nueva. Sus sesiones se han cerrado.`,
+        description: `${dialogo.user.nombre} deberá entrar con la nueva. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.`,
       });
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message, variant: 'destructive' });
@@ -306,6 +313,7 @@ export default function UsersPanel() {
           users={lista.visibles}
           projects={projects || []}
           disponibilidad={disponibilidad.porUsuario}
+          bloqueosBrevo={bloqueosBrevo}
           openMenuId={openMenuId}
           onOpenMenu={setOpenMenuId}
           onEdit={(u) => { setOpenMenuId(null); setDialogo({ modo: 'editar', user: u }); }}
@@ -339,6 +347,10 @@ export default function UsersPanel() {
           onResetPassword={reiniciarPassword}
           empresas={esSuperadmin && can('users.empresas') ? empresas : undefined}
           faltaMigracionEmpresas={faltaMigracionEmpresas}
+          bloqueoBrevo={dialogo.modo === 'editar' ? bloqueosBrevo.get(dialogo.user.id) ?? null : null}
+          onDesbloquearBrevo={dialogo.modo === 'editar' && can('users.brevo_desbloquear')
+            ? () => desbloquearEnBrevo(dialogo.user)
+            : undefined}
         />
       )}
 
