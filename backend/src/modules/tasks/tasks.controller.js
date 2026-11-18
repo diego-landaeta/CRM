@@ -7,6 +7,7 @@ import {
   moveTaskSchema,
   returnTaskSchema,
   listTasksQuerySchema,
+  historialQuerySchema,
   metricsQuerySchema,
   ambitoQuerySchema,
   addChecklistItemSchema,
@@ -135,14 +136,11 @@ export const approve = accion(async (req, res) => {
   res.json({ success: true, data });
 });
 
-export const reviewTasks = accion(async (req, res) => {
-  const data = await taskService.getReviewTasks(quien(req), validar(ambitoQuerySchema, req.query));
-  res.json({ success: true, data });
-});
-
-export const reviewCount = accion(async (req, res) => {
-  const data = await taskService.getReviewCount(quien(req), validar(ambitoQuerySchema, req.query));
-  res.json({ success: true, data });
+// «Historial de tareas» (CRM#707): sustituye a «Por revisar» y su contador.
+export const historial = accion(async (req, res) => {
+  const { data, por_persona, pagination } = await taskService.getHistorial(quien(req), validar(historialQuerySchema, req.query));
+  // `por_persona`: las fichas «por integrante» (11/11/2026), del mismo alcance que la lista.
+  res.json({ success: true, data, por_persona, pagination });
 });
 
 /* --- Personas, Etiquetas y Métricas --- */

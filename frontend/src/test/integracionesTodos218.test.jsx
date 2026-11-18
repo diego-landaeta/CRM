@@ -12,6 +12,9 @@ const get = vi.hoisted(() => vi.fn());
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ctx.valor }));
 vi.mock('@/shared/api/client', () => ({ default: { get, put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+// La tarjeta de links de pago (#680) mira los permisos de quien entra.
+const permisos = vi.hoisted(() => ({ mapa: {} }));
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
 
 const { default: IntegrationsPage } = await import('@/modules/accounting/pages/IntegrationsPage');
 
@@ -63,5 +66,33 @@ describe('#218 · Integraciones con «Todos»', () => {
     await vi.waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringContaining('/integrations/stripe?projectId=1')));
     expect(screen.queryByRole('table', { name: 'Estado de las integraciones por campus' })).toBeNull();
     expect(get).not.toHaveBeenCalledWith('/integrations/estado', expect.anything());
+  });
+});
+
+describe('#680 · la tarjeta de links de pago', () => {
+  const CAMPUS_1 = { activeProject: { id: 1, nombre: 'Psiko Aprende', type: 'crm' }, isAllProjects: false, activeIssuerId: null };
+
+  it('sale con un campus elegido, con su clave aparte y los permisos que necesita', async () => {
+    permisos.mapa = { 'integrations.view': true, 'integrations.edit': true };
+    ctx.valor = CAMPUS_1;
+    render(<IntegrationsPage />);
+    await vi.waitFor(() => expect(get).toHaveBeenCalledWith('/integrations/stripe_links?projectId=1'));
+    expect(screen.getByRole('heading', { name: /Links de pago/ })).toBeTruthy();
+    expect(screen.getByLabelText(/Clave restringida de escritura/)).toBeTruthy();
+    expect(screen.getByText('Checkout Sessions')).toBeTruthy();
+    // Sin «Configurar los links de pago», ni el campo del descuento ni su petición.
+    expect(screen.queryByLabelText(/Descuento máximo/)).toBeNull();
+    expect(get).not.toHaveBeenCalledWith(expect.stringContaining('/links-pago/config'));
+  });
+
+  it('con «Configurar los links de pago», el descuento máximo del campus', async () => {
+    permisos.mapa = { 'integrations.view': true, 'integrations.edit': true, 'links_pago.configurar': true };
+    get.mockImplementation(async (url) => (url.startsWith('/links-pago/config')
+      ? { success: true, data: { project_id: 1, descuento_max_pct: 10 } }
+      : { success: true, data: null }));
+    ctx.valor = CAMPUS_1;
+    render(<IntegrationsPage />);
+    const campo = await screen.findByLabelText(/Descuento máximo/);
+    await vi.waitFor(() => expect(campo.value).toBe('10'));
   });
 });

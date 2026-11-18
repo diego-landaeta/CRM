@@ -12,6 +12,7 @@ import {
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import usePermission from '@/shared/hooks/usePermission';
 import CobrosDeIA from '@/modules/ia-dashboard/components/CobrosDeIA';
+import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
 
 type Payment = {
   id: number;
@@ -186,9 +187,13 @@ export default function StripePaymentsPage() {
     client.get(`/integrations/stripe?projectId=${pid}`)
       .then((r) => { if (vivo) setHayClave(Boolean(r?.data?.has_secret)); })
       .catch(() => { if (vivo) setHayClave(null); });
-    client.get(`/integrations/supabase?projectId=${pid}`)
-      .then((r) => { if (vivo) setPorSupabase(Boolean(r?.data?.has_secret)); })
-      .catch(() => {});
+    // Supabase y los «Cobros» de IA son del #44, solo en pruebas: en /crm ni se
+    // pregunta (el servidor de producción tampoco acepta ese proveedor).
+    if (PROYECTOS_IA) {
+      client.get(`/integrations/supabase?projectId=${pid}`)
+        .then((r) => { if (vivo) setPorSupabase(Boolean(r?.data?.has_secret)); })
+        .catch(() => {});
+    }
     return () => { vivo = false; };
   }, [pid, unCampus, veIntegraciones]);
 

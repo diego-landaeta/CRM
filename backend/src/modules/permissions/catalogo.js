@@ -64,6 +64,8 @@ export const ROLES_FIJOS = [
   { clave: 'project_manager', nombre: 'Project manager', descripcion: 'Lleva las solicitudes de cambio y ve todas las pantallas de sus campus, sin tocarlas; en lo demás, como una gestora.' },
   { clave: 'tutor', nombre: 'Tutor', descripcion: 'Da clase: sus cursos, sus comisiones y su perfil.' },
   { clave: 'colaborador', nombre: 'Colaborador', descripcion: 'Externo: su tablero de tareas y su factura del mes. Nada más.' },
+  // CRM#708: los «Tutores-redactores», que hacen los cursos y responden en Moodle.
+  { clave: 'tutor_redactor', nombre: 'Tutor redactor', descripcion: 'Hace los cursos y responde en Moodle: su tablero de tareas, su factura del mes, sus consultas de alumnos y sus cursos. Nada de prospectos, ventas ni finanzas.' },
 ];
 
 export const SECCIONES = [
@@ -109,12 +111,12 @@ export const SECCIONES = [
           // (chat.controller.js · usuarioObjetivo, el banco): un rol de más no sumaba, y un tutor o un
           // project manager con otro rol de más seguía sin WhatsApp (QA de Diego, punto 6).
           a('usar', 'Usar su WhatsApp', 'Enlazar su número y atender sus chats desde el CRM.', COMERCIAL,
-            { nunca: ['tutor', 'colaborador'], nuncaPrincipal: ['tutor', 'colaborador', 'project_manager'], soloPrincipal: true, propia: true }),
-          a('supervisar', 'Supervisar el WhatsApp de otros', 'Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas.', ADMIN, { nunca: ['tutor', 'colaborador'], soloPrincipal: true }),
+            { nunca: ['tutor', 'colaborador', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'colaborador', 'tutor_redactor', 'project_manager'], soloPrincipal: true, propia: true }),
+          a('supervisar', 'Supervisar el WhatsApp de otros', 'Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas.', ADMIN, { nunca: ['tutor', 'colaborador', 'tutor_redactor'], soloPrincipal: true }),
           // Diego, 04/11 («el project manager ve todo»): el banco, en solo lectura y de las líneas de
           // sus campus, sin entrar en la sesión de nadie (eso es supervisar, que también deja escribir).
           a('banco', 'Ver el banco de mensajes', 'Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura.', [PM],
-            { nunca: ['tutor', 'colaborador'], nuncaPrincipal: ['tutor', 'colaborador'], soloPrincipal: true }),
+            { nunca: ['tutor', 'colaborador', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'colaborador', 'tutor_redactor'], soloPrincipal: true }),
           a('cola', 'Ver la cola de WhatsApp', 'Los prospectos que esperan respuesta por WhatsApp.', TODOS),
           a('plantillas', 'Sus plantillas', 'Crear y usar sus propias plantillas de mensaje.', TODOS, { propia: true }),
           a('plantillas_compartidas', 'Plantillas compartidas', 'Crear y cambiar las plantillas de todo el equipo, y las de otras personas.', ADMIN_SOPORTE, { requiere: ['whatsapp.plantillas'], soloPrincipal: true }),
@@ -140,14 +142,16 @@ export const SECCIONES = [
         clave: 'tasks', nombre: 'Tablero de tareas', acciones: [
           // El tutor, el suyo (Diego, 04/11): sus tareas y las de su equipo de TUTORES. Lo
           // de desarrollo no lo ve: no es de ese equipo (tasks.equipos.model.js).
-          a('view_own', 'Ver su tablero', 'Entrar al tablero y ver las tareas que tiene asignadas.', ['admin', 'colaborador', 'tutor']),
+          // El tutor redactor (CRM#708), como un colaborador: ver, crearse y mover las suyas.
+          a('view_own', 'Ver su tablero', 'Entrar al tablero y ver las tareas que tiene asignadas.', ['admin', 'colaborador', 'tutor', 'tutor_redactor']),
           a('view_all', 'Ver todo el equipo', 'El tablero de cualquiera, «Todo el equipo» y las métricas.', ADMIN),
-          a('create', 'Crear tareas', 'Crearse tareas.', ['admin', 'colaborador'], { requiere: ['tasks.view_own'] }),
+          a('create', 'Crear tareas', 'Crearse tareas.', ['admin', 'colaborador', 'tutor_redactor'], { requiere: ['tasks.view_own'] }),
           a('assign', 'Asignar tareas', 'Asignar o reasignar tareas a otras personas.', ADMIN, { requiere: ['tasks.view_own'] }),
           // El tutor, para mover las suyas (04/11): mover y comentar siguen siendo solo de quien la lleva o la supervisa.
-          a('edit', 'Editar tareas', 'Cambiar, mover y completar las tareas que puede ver.', ['admin', 'colaborador', 'tutor'], { requiere: ['tasks.view_own'] }),
+          a('edit', 'Editar tareas', 'Cambiar, mover y completar las tareas que puede ver.', ['admin', 'colaborador', 'tutor', 'tutor_redactor'], { requiere: ['tasks.view_own'] }),
           a('delete', 'Archivar tareas', 'Archivar cualquier tarea y borrar comentarios ajenos.', ADMIN, { requiere: ['tasks.view_own'] }),
-          a('close', 'Aprobar y cerrar', 'Aprobar, devolver, cerrar y reabrir tareas en «Por revisar».', ADMIN, { requiere: ['tasks.view_own'] }),
+          // CRM#707: cada uno cierra lo suyo (y la que tiene supervisor, su supervisor: 11/11/2026); esta clave es la del admin para devolverla.
+          a('close', 'Devolver tareas', 'Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver.', ADMIN, { requiere: ['tasks.view_own'] }),
           a('manage', 'Configurar el tablero', 'Columnas, áreas y proyectos del tablero.', ADMIN, { requiere: ['tasks.view_own'] }),
           // Diego, 26/10/2026: «Admin y superadmin pueden crear, renombrar y archivar
           // equipos y gestionar sus miembros y encargados».
@@ -259,7 +263,7 @@ export const SECCIONES = [
     recursos: [
       {
         clave: 'tutores', nombre: 'Tutores', acciones: [
-          a('mis_cursos', 'Sus cursos y comisiones', 'El tutor ve sus colaboraciones, sus cursos y sus comisiones.', ['tutor'], { propia: true }),
+          a('mis_cursos', 'Sus cursos y comisiones', 'El tutor ve sus colaboraciones, sus cursos y sus comisiones.', ['tutor', 'tutor_redactor'], { propia: true }),
           a('gestionar', 'Gestionar colaboraciones', 'Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus.', ADMIN),
           a('avisar', 'Avisar de comisiones', 'Ver el aviso de comisiones y mandarlo al tutor.', TODOS),
           a('liquidar', 'Liquidar comisiones', 'Pagar o revertir las comisiones de un tutor (mueve dinero).', ADMIN, { requiere: ['tutores.gestionar'] }),
@@ -273,7 +277,7 @@ export const SECCIONES = [
         clave: 'consultas', nombre: 'Consultas de alumnos', acciones: [
           a('view', 'Ver el panel de consultas', 'Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos.', yPM(ADMIN_SOPORTE)),
           a('gestionar', 'Gestionar consultas', 'Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor.', ADMIN_SOPORTE),
-          a('atender', 'Atender sus consultas', 'Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas.', ['tutor'], { independiente: true, propia: true }),
+          a('atender', 'Atender sus consultas', 'Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas.', ['tutor', 'tutor_redactor'], { independiente: true, propia: true }),
         ],
       },
     ],
@@ -311,6 +315,7 @@ export const SECCIONES = [
           a('emitir', 'Poner número al cobrar', 'Que el cobro salga facturado y la proforma sin esperar visto bueno.', ADMIN),
           a('gestionar', 'Corregir y abonar', 'Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas).', ADMIN),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
+          a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', ADMIN),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', ADMIN_SOPORTE),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),
@@ -355,8 +360,24 @@ export const SECCIONES = [
         ],
       },
       {
+        // Registro automático de cobros (#766): PayPal y los extractos del banco.
+        clave: 'cobros_externos', nombre: 'Cobros de PayPal y del banco', acciones: [
+          a('view', 'Ver cobros de PayPal y del banco', 'Los cobros que entran por PayPal y los abonos de los extractos del banco.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Registrar cobros de PayPal y del banco', 'Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso.', ADMIN_SOPORTE),
+        ],
+      },
+      {
+        // Links de pago (#680). Sin `view`: cada una ve los que creó con `crear`,
+        // y los de las demás de sus campus con `ver_todos`. Siempre en SUS campus.
+        clave: 'links_pago', nombre: 'Links de pago', acciones: [
+          a('crear', 'Crear links de pago', 'Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos.', COMERCIAL),
+          a('ver_todos', 'Ver los links de todos', 'Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno).', ADMIN),
+          a('configurar', 'Configurar los links de pago', 'El descuento máximo de cada campus sobre el precio del catálogo.', ADMIN),
+        ],
+      },
+      {
         clave: 'facturas_colaborador', nombre: 'Facturas de colaboradores', acciones: [
-          a('subir', 'Subir su factura', '«Mi factura»: el colaborador sube la suya del mes.', ['colaborador'], { propia: true }),
+          a('subir', 'Subir su factura', '«Mi factura»: el colaborador sube la suya del mes.', ['colaborador', 'tutor_redactor'], { propia: true }),
           a('ver_todas', 'Ver las facturas', 'Las facturas de los colaboradores de sus empresas.', yPM(ADMIN)),
           a('gestionar', 'Gestionar colaboradores', 'Dar de alta colaboradores y reenviarles el enlace.', ADMIN),
           a('anular', 'Anular facturas de colaboradores', 'Anular una factura recibida.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
@@ -364,9 +385,20 @@ export const SECCIONES = [
         ],
       },
       {
+        // Monitask (#236): qué hace cada colaborador y el cotejo de horas con sus
+        // facturas. Solo admin y superadmin (Manuel, 05/10): es actividad de personas.
+        clave: 'monitask', nombre: 'Monitask', acciones: [
+          a('view', 'Ver la actividad de Monitask', 'Horas, % de actividad, proyectos y tareas de cada persona, y el cotejo con las horas de sus facturas (de sus empresas).', ADMIN),
+          a('configurar', 'Configurar Monitask', 'Conectar la cuenta de Monitask, sincronizar y emparejar sus personas con las del CRM.', ADMIN, { independiente: true }),
+        ],
+      },
+      {
         clave: 'integrations', nombre: 'Integraciones', acciones: [
           a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
+          // CRM#533: la salud de las conexiones de cada campus (y «Comprobar ahora»,
+          // que prueba sin cambiar nada). Solo superadmin y admin, cada uno en lo suyo.
+          a('salud', 'Ver la salud de las conexiones', 'Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora.', ADMIN),
         ],
       },
     ],
@@ -381,6 +413,8 @@ export const SECCIONES = [
           a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', yPM(ADMIN)),
           a('editar_baremo', 'Cambiar el baremo de la tasa de cierre', 'Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin.', ADMIN),
           a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', yPM(ADMIN_SOPORTE), { requiere: ['reports.mis_informes'], independiente: true }),
+          // #772: el informe del mes por equipo y comercial y el ZIP de facturas de la empresa para la gestoría.
+          a('informe_mensual', 'Informe mensual para la gestoría', 'Ver y bajar el informe de ventas del mes por equipo y por comercial, y el ZIP con las facturas emitidas de una empresa.', yPM(ADMIN)),
         ],
       },
       {
@@ -421,12 +455,12 @@ export const SECCIONES = [
         ],
       },
       {
-        clave: 'matriculas', nombre: 'Matrículas', acciones: [
-          a('view', 'Ver matrículas', 'Las matrículas y sus documentos.', yPM(COMERCIAL)),
-          a('create', 'Crear matrículas', 'Una matrícula nueva.', COMERCIAL),
-          a('edit', 'Editar matrículas', 'Cambiar datos y subir documentos.', COMERCIAL),
-          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una matrícula.', ADMIN_SOPORTE),
-          a('delete', 'Borrar matrículas', 'Quitar una matrícula.', ADMIN_SOPORTE),
+        clave: 'matriculas', nombre: 'Solicitud de admisión', acciones: [
+          a('view', 'Ver solicitudes de admisión', 'Las solicitudes de admisión de sus campus, con sus datos y sus documentos.', yPM(COMERCIAL)),
+          a('create', 'Crear solicitudes de admisión', 'Una solicitud de admisión nueva.', COMERCIAL),
+          a('edit', 'Editar solicitudes de admisión', 'Cambiar datos y subir documentos.', COMERCIAL),
+          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una solicitud de admisión.', ADMIN_SOPORTE),
+          a('delete', 'Borrar solicitudes de admisión', 'Quitar una solicitud de admisión.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -457,7 +491,7 @@ export const SECCIONES = [
         clave: 'mcp', nombre: 'MCP (Claude)', acciones: [
           // Antes lo decidía el rol principal (mcp.acceso.js · puedeUsarMcp): admin de serie, el
           // resto con la casilla, y un tutor nunca, aunque tuviera otro rol de más (QA, punto 6).
-          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor'], nuncaPrincipal: ['tutor'], soloPrincipal: true }),
+          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'tutor_redactor'], soloPrincipal: true }),
           a('administrar', 'Administrar el MCP', 'Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado.', ADMIN),
           a('supervisar', 'Apagar el MCP', 'El interruptor de emergencia y rechazar conexiones ajenas.', NADIE),
         ],
@@ -503,6 +537,19 @@ export const SECCIONES = [
       {
         clave: 'mensajes', nombre: 'Mensajes internos', acciones: [
           a('usar', 'Usar los mensajes', 'Escribirse con el resto del equipo.', TODOS_Y_TUTOR),
+        ],
+      },
+      {
+        // CRM#820 (17/11): las peticiones de acceso entran como tickets de Soporte
+        // del tipo «acceso». Pedir lo puede cualquiera con sesión, también quien
+        // tiene la lista de rutas cerrada (tutor, colaborador, tutor redactor):
+        // es justo quien más acaba pidiendo. Ver y gestionar, soporte y admin
+        // (y el superadmin, siempre). Nada de esto crea usuarios ni da permisos.
+        clave: 'accesos', nombre: 'Peticiones de acceso', acciones: [
+          a('pedir', 'Pedir acceso o permiso', 'Pedir un alta, un permiso, un campus o Claude: queda como ticket de Soporte para que lo prepare soporte.',
+            ['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador', 'tutor_redactor'], { propia: true, independiente: true }),
+          a('view', 'Ver las peticiones de acceso', 'Las peticiones de acceso del equipo (un admin, las de sus campus).', ADMIN_SOPORTE),
+          a('gestionar', 'Gestionar las peticiones de acceso', 'Marcarlas en preparación, hechas o rechazadas y contestar a quien las pidió.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -583,6 +630,16 @@ export const SECCIONES = [
           a('contrasena', 'Contraseña de otros', 'Ponerle contraseña a otra persona (un admin, a tutores de sus campus).', ADMIN),
           a('empresas', 'Empresas enteras y correos', 'Dar empresas enteras a un admin y cambiar el correo de alguien.', NADIE),
           a('aviso_correo', 'Aviso de cambio de correo', 'Ver el aviso que recibe quien cambia de correo.', NADIE),
+          // 17/11/2026: una gestora de ISEIE, tres semanas sin avisos por un rebote duro en Brevo.
+          a('brevo_desbloquear', 'Desbloquear correos en Brevo', 'Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos.', ADMIN),
+        ],
+      },
+      {
+        // Carlos, 09/11/2026: una administradora puede llevar a unas gestoras
+        // concretas y ver solo lo de ellas (migración 246, `alcanceComercial`).
+        // Decidir quiénes son es cosa del superadmin; a otro, por excepción.
+        clave: 'equipos', nombre: 'Equipos comerciales', acciones: [
+          a('gestionar', 'Equipo de una administradora', 'Decidir qué gestoras tiene a su cargo una administradora', NADIE, { requiere: ['users.view'] }),
         ],
       },
       {
@@ -622,7 +679,11 @@ export const SECCIONES = [
       },
       {
         clave: 'cuenta', nombre: 'Su cuenta', acciones: [
-          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra (el de su factura).', ['tutor'], { propia: true }),
+          // #211: con un código a la dirección nueva y su contraseña actual. Antes
+          // solo el tutor, y sin código (#246). Diego, 06/11 (#688): TODOS los
+          // roles, también project manager y colaborador. A un tutor no le sale
+          // el código mientras siga el freno (cambio-de-correo.js).
+          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor', 'project_manager', 'colaborador', 'tutor_redactor'], { propia: true }),
         ],
       },
     ],

@@ -101,6 +101,18 @@ describe('#218 tanda 4: el Registro (Diego, 04/11)', () => {
   });
 });
 
+describe('#218: el detalle de una venta (Diego, /testeo 06/11)', () => {
+  // La flecha de Finanzas › Ventas lleva aquí. Con una empresa ya abría; con
+  // «Todos» salía el muro. El servidor ya acota la venta (`ventaPorId`).
+  it('se abre con «Todos» y con una empresa', () => {
+    expect(pathAllowsAll('/finanzas/ventas/123')).toBe(true);
+    expect(rutaAceptaSociedad('/finanzas/ventas/123')).toBe(true);
+  });
+  it('pero no lo que no es un id', () => {
+    expect(pathAllowsAll('/finanzas/ventas/nueva')).toBe(false);
+  });
+});
+
 describe('#218: Campañas, que solo dice «Aún no conectado» (#216)', () => {
   it.each(['/campanas', '/campanas/google', '/campanas/seo'])('%s se abre con «Todos» y con una empresa', (ruta) => {
     expect(pathAllowsAll(ruta)).toBe(true);

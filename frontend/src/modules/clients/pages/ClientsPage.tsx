@@ -214,7 +214,8 @@ export default function ClientsPage() {
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
     const projectFilter = !isAllProjects && activeProject?.id ? `&projectId=${activeProject.id}` : '';
-    client.get(`/users?active=true&role=gestor&limit=100${projectFilter}`).then((r) => {
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?active=true&role=gestor&limit=100&alcance=comercial${projectFilter}`).then((r) => {
       if (r.success) setGestores(((r.data as Array<{ id: number; nombre: string }>) || []));
     }).catch(() => setGestores([]));
   }, [user?.role, activeProject?.id, isAllProjects]);
@@ -410,7 +411,7 @@ export default function ClientsPage() {
             // sea una plataforma de suscripción, donde no existen. Ver
             // `ofreceMatriculas`.
             ...(ofreceMatriculas(activeProject) ? [
-              { label: 'Matrículas', detail: `Altas en cada ${etiqueta.singular.toLowerCase()}`, icon: GraduationCap, to: '/clientes/matriculas' },
+              { label: 'Solicitud de admisión', detail: `Las que llegan para cada ${etiqueta.singular.toLowerCase()}`, icon: GraduationCap, to: '/clientes/matriculas' },
             ] : []),
             { label: 'Por cobrar', detail: 'Cuotas pendientes', icon: Wallet, to: '/finanzas/por-cobrar' },
             { label: 'Ventas', detail: 'Registrar y consultar', icon: Receipt, to: '/finanzas/ventas' },

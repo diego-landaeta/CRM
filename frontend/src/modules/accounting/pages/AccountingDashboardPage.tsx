@@ -25,6 +25,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { formatDate } from '@/shared/lib/format';
 import { ponerAmbito, ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
+import { esProyectoIA } from '@/shared/lib/proyectosIA';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -49,7 +50,8 @@ export default function AccountingDashboardPage() {
    * Lo que si aplica se queda: lo cobrado, los gastos --que los hay, del
    * software de la propia app-- y el balance.
    */
-  const esIA = activeProject?.type === 'ia';
+  // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
+  const esIA = esProyectoIA(activeProject);
 
   /**
    * Y lo que SÍ tiene un proyecto IA, aqui mismo.
@@ -115,6 +117,11 @@ export default function AccountingDashboardPage() {
   if (!data) return null;
 
   const { ingresos, egresos, balance, cuentas_por_cobrar, trend } = data;
+  // Quien lleva un equipo comercial (QA del 09/11/2026): el servidor le
+  // recorta las cifras a ella y su equipo y no le manda egresos ni balance,
+  // que son de la empresa. Aquí no se pintan, y se dice por qué.
+  const soloAdmin: string[] = Array.isArray(data.solo_administracion) ? data.solo_administracion : [];
+  const sinEgresos = soloAdmin.includes('egresos');
 
   // Merge trend ingresos + egresos
   // El backend manda los totales reales; el listado viene con LIMIT 50.
@@ -155,16 +162,22 @@ export default function AccountingDashboardPage() {
               aria-label="Fecha hasta"
               className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
-            <button
+            {!sinEgresos && <button
               onClick={() => navigate('/finanzas/egresos')}
               aria-label="Nuevo egreso"
               className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Egreso</span>
-            </button>
+            </button>}
           </>
         }
       />
+
+      {sinEgresos && (
+        <p className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-md px-3 py-2">
+          Cifras de tu equipo comercial. Egresos y balance: solo para administración sin equipo.
+        </p>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -201,6 +214,7 @@ export default function AccountingDashboardPage() {
           trend="down"
         />
         </>)}
+        {!sinEgresos && (<>
         <KpiCard
           icon={TrendDown}
           iconBg="bg-destructive-soft text-destructive-soft-foreground"
@@ -215,6 +229,7 @@ export default function AccountingDashboardPage() {
           label="Balance neto"
           value={fmt(balance)}
         />
+        </>)}
       </div>
 
       {/* Lo recurrente: lo que de verdad define a una suscripcion. Solo
@@ -242,7 +257,7 @@ export default function AccountingDashboardPage() {
       )}
 
       {/* Graficas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 ${sinEgresos ? '' : 'lg:grid-cols-2'} gap-4`}>
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-semibold mb-3">Evolución mensual (12 meses)</h3>
           <ResponsiveContainer width="100%" height={220} minHeight={200}>
@@ -253,12 +268,12 @@ export default function AccountingDashboardPage() {
               <Tooltip formatter={(v) => fmt(v)} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2} name="Ingresos" dot={{ fill: '#10b981', r: 3 }} />
-              <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" dot={{ fill: '#ef4444', r: 3 }} />
+              {!sinEgresos && <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" dot={{ fill: '#ef4444', r: 3 }} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-4">
+        {!sinEgresos && <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-semibold mb-3">Egresos por categoría</h3>
           {egresos.por_categoria.length === 0 ? (
             <EmptyState icon={Receipt} title="Sin egresos" description="No hay gastos registrados en este período" />
@@ -273,7 +288,7 @@ export default function AccountingDashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Ventas por vendedora. En IA no hay: la gente se suscribe sola. */}

@@ -98,7 +98,9 @@ export default function TutoresPage() {
   const puede = can('tutores.gestionar');
   // El correo de un tutor, solo el super admin (#248). La contraseña, también el
   // admin (Diego, 09/10, #246).
-  const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
+  // Basta el permiso (el superadmin lo tiene siempre): se le da a quien administración diga
+  // desde su ficha de permisos. Antes pedía además ser superadmin y la excepción no servía.
+  const puedeCambiarCorreo = can('tutores.cambiar_correo');
   const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
@@ -451,7 +453,7 @@ export default function TutoresPage() {
     e.preventDefault();
     if (!elegido) return;
     const f = new FormData(e.currentTarget);
-    const correoEscrito = esSuperadmin ? String(f.get('email') || '') : '';
+    const correoEscrito = puedeCambiarCorreo ? String(f.get('email') || '') : '';
     if (avisar(faltaNombre(String(f.get('nombre') || ''))
       || (correoEscrito.trim() ? correoMalo(correoEscrito) : null))) return;
     setProcesando(true);
@@ -459,7 +461,7 @@ export default function TutoresPage() {
       const nombre = String(f.get('nombre') || '').trim();
       // El correo solo lo cambia el super admin (#248); a los demás el campo les
       // sale bloqueado y el servidor les contesta 403.
-      const email = esSuperadmin ? String(f.get('email') || '').trim().toLowerCase() : '';
+      const email = puedeCambiarCorreo ? String(f.get('email') || '').trim().toLowerCase() : '';
       const cambiaCorreo = Boolean(email) && email !== String(elegido.email || '').toLowerCase();
       if (cambiaCorreo) {
         const aviso = await avisoCambioCorreo(elegido.id).catch(() => null);
@@ -1128,15 +1130,15 @@ export default function TutoresPage() {
               </Field>
 
               <div>
-                <Field label="Correo" disabled={!esSuperadmin} htmlFor="pago-email"
-                  hint={esSuperadmin
+                <Field label="Correo" disabled={!puedeCambiarCorreo} htmlFor="pago-email"
+                  hint={puedeCambiarCorreo
                     ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.'
-                    : 'Solo un superadmin puede cambiar el correo.'}>
+                    : 'Solo quien tiene el permiso «Correo de un tutor» puede cambiarlo.'}>
                   <input autoComplete="off" id="pago-email" name="email" type="email" defaultValue={elegido.email || ''}
-                    readOnly={!esSuperadmin} disabled={!esSuperadmin}
-                    className={`${inputClass} ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+                    readOnly={!puedeCambiarCorreo} disabled={!puedeCambiarCorreo}
+                    className={`${inputClass} ${puedeCambiarCorreo ? '' : 'opacity-60 cursor-not-allowed'}`} />
                 </Field>
-                {esSuperadmin && !sinCorreos && (
+                {puedeCambiarCorreo && !sinCorreos && (
                   <label className="mt-1.5 px-1 flex items-center gap-2 text-secundario text-muted-foreground">
                     <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
                     Mandarle el enlace para poner contraseña en la dirección nueva
@@ -1260,7 +1262,11 @@ export default function TutoresPage() {
                 </Field>
               </section>
 
-              {projects.length > 1 && (
+              {/* Las marcas de lo que hay arriba (#219, Diego 05/11): con una
+                  empresa, solo sus campus, igual que el desplegable «Campus»
+                  (#346). Una marca que ya tuviera de otra empresa no se pierde:
+                  sigue en `marcas`, solo no se ofrece aquí. */}
+              {campus.length > 1 && (
                 <section className="space-y-2 border-t border-border pt-4">
                   <h3 className="text-tabla uppercase text-muted-foreground">
                     En qué marcas da clase
@@ -1268,8 +1274,8 @@ export default function TutoresPage() {
                   <p className="px-1 text-secundario text-muted-foreground">
                     Solo podrá cobrar de cursos de las marcas que marques aquí.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {projects.map((p) => {
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="En qué marcas da clase">
+                    {campus.map((p) => {
                       const puesta = marcas.includes(p.id);
                       return (
                         <button key={p.id} type="button"

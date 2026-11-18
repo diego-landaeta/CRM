@@ -15,10 +15,11 @@ vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { role: 'supe
 
 // La cabecera: una empresa (CEDIA) con dos campus, sin campus elegido.
 const CEDIA = vi.hoisted(() => ({ id: 7, nombre: 'CEDIA' }));
-const CAMPUS = vi.hoisted(() => ({ lista: [{ id: 1, nombre: 'Psiko' }, { id: 2, nombre: 'Fono' }] }));
+const CAMPUS = vi.hoisted(() => ({ lista: [{ id: 1, nombre: 'Psiko' }, { id: 2, nombre: 'Fono' }], todos: null }));
 const CABECERA = vi.hoisted(() => ({ activeProject: { id: -1 } }));
 vi.mock('@/contexts/ProjectContext', () => ({
-  useProjectContext: () => ({ activeProject: CABECERA.activeProject, projects: CAMPUS.lista, activeIssuer: CEDIA, activeIssuerId: 7 }),
+  // `projects` son TODOS los campus de quien mira; `useProyectosDelAmbito`, los de la empresa de arriba.
+  useProjectContext: () => ({ activeProject: CABECERA.activeProject, projects: CAMPUS.todos || CAMPUS.lista, activeIssuer: CEDIA, activeIssuerId: 7 }),
 }));
 vi.mock('@/shared/hooks/useAmbito', () => ({ useProyectosDelAmbito: () => CAMPUS.lista }));
 
@@ -43,6 +44,7 @@ const FORMACIONES = {
 beforeEach(() => {
   vi.clearAllMocks();
   CAMPUS.lista = [{ id: 1, nombre: 'Psiko' }, { id: 2, nombre: 'Fono' }];
+  CAMPUS.todos = null;
   CABECERA.activeProject = { id: -1 };
   get.mockImplementation((url) => {
     const m = url.match(/projectId=(\d+)/);
@@ -75,6 +77,14 @@ describe('Nuevo tutor con una empresa o «Todos» arriba (#219)', () => {
     expect(campus).toBeTruthy();
     expect([...campus.options].map((o) => o.textContent)).toEqual(['Elige el campus…', 'Psiko', 'Fono']);
     expect(screen.queryByText(/elige un campus para dar de alta/i)).toBeNull();
+  });
+
+  // Diego (05/11): «En qué marcas da clase» seguía ofreciendo las 9 marcas con CEDIA arriba.
+  it('«En qué marcas da clase», solo las de la empresa de arriba', async () => {
+    CAMPUS.todos = [...CAMPUS.lista, { id: 3, nombre: 'ICTESS' }, { id: 4, nombre: 'ACADEMIA IA' }];
+    await abrirAlta();
+    const marcas = screen.getByRole('group', { name: 'En qué marcas da clase' });
+    expect([...marcas.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Psiko', 'Fono']);
   });
 
   it('sin campus no se da de alta, y lo dice', async () => {

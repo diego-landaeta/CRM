@@ -16,6 +16,7 @@ import {
 } from '@/shared/components/layout/Sidebar';
 import { isBetaAllowed } from '@/shared/config/betaConfig';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { tipoDelMenu } from '@/shared/lib/proyectosIA';
 import { rolesDe } from '@/shared/lib/roles';
 import client from '@/shared/api/client';
 import {
@@ -90,7 +91,8 @@ export function paginasDelBuscador({ user, can, activeProject }) {
   const soloColab = esSoloColaboraciones(user);
   const userRoles = rolesDe(user);
   const modules = activeProject?.modules;
-  const projectType = activeProject?.type;
+  // Como el menú: apagado lo del #44, un proyecto IA busca lo de siempre.
+  const projectType = tipoDelMenu(activeProject?.type);
   const labelOverrides = activeProject?.sidebar_labels;
   const abre = (it) => it.to && !it.href && !it.comingSoon && isBetaAllowed(it.to);
 

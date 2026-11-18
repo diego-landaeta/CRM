@@ -11,7 +11,13 @@
 // Se activa con VITE_BETA_MODE=true (lo pone el build de producción).
 // ============================================================
 
-export const BETA_VERSION = '2.6.0';
+import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
+
+// La versión que enseña el menú. Ya no se escribe a mano: salía «BETA 2.2.0»
+// con producción en la 2.5.24 (11/11). La pone Vite al compilar, de la etiqueta
+// de Git (`scripts/versionDeLaApp.js`); en las pruebas no hay compilación y
+// queda vacía.
+export const BETA_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
 
 export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').toLowerCase() === 'true';
 
@@ -43,7 +49,8 @@ export const BETA_ROUTES: readonly string[] = [
   // El resumen de un proyecto IA (#44). La pantalla existe desde hace
   // semanas y salia como «Proximamente»: es la de MRR, altas, bajas y por
   // que se van, y es la primera que se abre de una marca IA.
-  '/stripe',                 // Proyecto IA › Resumen
+  // Solo en pruebas hasta que se apruebe el #44: en /crm sigue «Próximamente».
+  ...(PROYECTOS_IA ? ['/stripe'] : []), // Proyecto IA › Resumen
   '/manual',                 // Manual de usuario
   '/preferencias',            // Mis preferencias
   '/perfil',                // Perfil

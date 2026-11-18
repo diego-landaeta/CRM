@@ -11,6 +11,8 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mcp.acceso.js';
+import { personaDelInforme, alcanceDeLider, enElAlcance, gestorasACargo, comoIds } from '../../shared/utils/roles.js';
+import { leerFiltroPais } from '../leads/pais.js';
 
 // A que proyectos se acota el informe.
 //
@@ -33,6 +35,10 @@ export async function overview(req, res, next) {
       ...(await proyectosDelInforme(req)),
       from: from || null,
       to: to || null,
+      // El modelo ya sabía recortar por persona y nadie se lo pedía: quien lleva
+      // un equipo comercial veía el ranking de todas las gestoras del campus
+      // (QA del 09/11/2026). Lo mismo que el resto de informes.
+      asesoraId: await asesoraDelInforme(req),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -41,13 +47,11 @@ export async function overview(req, res, next) {
 // Factory para los reportes descargables: todos comparten firma {projectId, from, to}.
 // A quien se recorta el informe. Una gestora solo ve lo suyo, y se decide aqui
 // —no con lo que llegue por la URL— para que no pueda pedir lo de otra.
-// Admin y superadmin ven todo, o lo de una en concreto si lo piden.
+// Admin y superadmin ven todo, o lo de una en concreto si lo piden. Quien lleva
+// un equipo comercial (09/11/2026), lo de su equipo o lo de una de ellas: puede
+// devolver una LISTA de personas, y los informes la aceptan.
 export function asesoraDelInforme(req) {
-  const rol = req.user?.role;
-  if (rol === 'admin' || rol === 'superadmin') {
-    return req.query.asesoraId ? Number(req.query.asesoraId) : null;
-  }
-  return req.user?.userId || -1;
+  return personaDelInforme(req.user, req.query.asesoraId ? Number(req.query.asesoraId) : null);
 }
 
 function makeReport(fn) {
@@ -58,7 +62,9 @@ function makeReport(fn) {
         ...(await proyectosDelInforme(req)),
         from: from || null,
         to: to || null,
-        asesoraId: asesoraDelInforme(req),
+        asesoraId: await asesoraDelInforme(req),
+        // País de entrada (#221): un código ISO o `sin_pais`.
+        paisEntrada: leerFiltroPais(req.query.paisEntrada),
       });
       res.json({ success: true, data });
     } catch (err) { next(err); }
@@ -87,12 +93,15 @@ async function rangoDeQuery(req) {
     to: re.test(req.query.to || '') ? req.query.to : null,
     // Por aqui pasan el panel del Resumen, los rankings y el detalle. Sin esto
     // una gestora veia los numeros de todos.
-    asesoraId: asesoraDelInforme(req),
+    asesoraId: await asesoraDelInforme(req),
     // Base de conteo: 'factura' (que se emitio este mes) o 'cobro' (cuanto
     // dinero entro). Por defecto factura, que es como cuenta la contabilidad;
     // con cobro se caian del mes las facturas emitidas en un mes y cobradas en
     // el anterior.
     base: req.query.base === 'cobro' ? 'cobro' : 'factura',
+    // País de entrada (#221): lo aplican los informes que pasan por
+    // `buildFilter` (descargas, países, canales, formaciones, tasa de cierre…).
+    paisEntrada: leerFiltroPais(req.query.paisEntrada),
   };
 }
 
@@ -120,6 +129,12 @@ export async function miPuesto(req, res, next) {
   try {
     const esJefe = await tienePermiso(req, 'reports.puesto_ajeno');
     const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
+    // Quien lleva un equipo comercial (QA del 09/11/2026): el puesto de una
+    // gestora de fuera, no; y de la tabla, solo las filas de su equipo.
+    const lider = await alcanceDeLider(req.user);
+    if (esJefe && pedido && !enElAlcance(lider, pedido)) {
+      throw new AppError('Esa gestora no está en tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+    }
     const userId = esJefe && pedido ? pedido : req.user.userId;
     const { from, to, ...ambito } = await rangoDeQuery(req);
     // Por defecto, EL MES EN CURSO. Con el historico entero el puesto casi no
@@ -133,14 +148,21 @@ export async function miPuesto(req, res, next) {
     // `asesoraId` se queda fuera a proposito: recorta el informe a UNA persona
     // y aqui hace falta la tabla entera para saber en que puesto va.
     const { asesoraId, base, ...sinAsesora } = ambito;
-    res.json({ success: true, data: await model.miPuesto({
+    const data = await model.miPuesto({
       userId, from: desde, to: hasta, ...sinAsesora,
       // El jefe se lleva la tabla entera; una gestora, solo lo suyo.
       esJefe,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
       base: req.query.base === 'factura' ? 'factura' : 'cobro',
-    }) });
+    });
+    if (lider && Array.isArray(data?.tabla)) {
+      data.tabla = data.tabla.filter((f) => enElAlcance(lider, f.user_id));
+      // «Sin gestora» y el total son del campus entero: para ella, no.
+      data.sin_gestora = null;
+      data.total = null;
+    }
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 
@@ -164,6 +186,14 @@ export async function seguimiento(req, res, next) {
 export async function paises(req, res, next) {
   try {
     res.json({ success: true, data: await model.paisesMasVendidos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/paises-entrada -> prospectos y ventas por campus y país de
+// entrada, el del subdominio por el que entró el prospecto (#221).
+export async function paisesEntrada(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.paisesDeEntrada(await rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
@@ -289,6 +319,8 @@ export async function avisoSinFactura(req, res, next) {
     const r = await rangoDeQuery(req);
     res.json({ success: true, data: await model.ventasSinFacturaEnRango({
       projectId: r.projectId, projectIds: r.projectIds, from: r.from, to: r.to,
+      // Clientes e importes: una gestora, los suyos; un equipo, los de su equipo (09/11/2026).
+      asesoraId: r.asesoraId,
     })});
   } catch (err) { next(err); }
 }
@@ -306,7 +338,7 @@ export async function resumenDia(req, res, next) {
       .split(',').map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
     const datos = await resumenDelDia({
       projectIds: ids.length ? ids : null,
-      asesoraId: asesoraDelInforme(req),
+      asesoraId: await asesoraDelInforme(req),
     });
     res.json({ success: true, data: datos });
   } catch (e) { next(e); }
@@ -323,7 +355,9 @@ async function ambitoDeActividad(req) {
   // Un campus de pruebas solo se ve si se elige él o su empresa (migración
   // 148); con «Todos», no. Claude no los ve nunca.
   const eligeAlgo = Boolean(req.query.projectId || req.query.issuerId);
-  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }));
+  // Con su equipo comercial, si lleva uno (09/11/2026): se ve a sí misma y a ellas.
+  const equipo = await gestorasACargo(user.id);
+  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }), equipo);
   const projectIds = acotarProyectos(ambito, {
     proyecto_id: req.query.projectId ? Number(req.query.projectId) : null,
     sociedad_id: req.query.issuerId ? Number(req.query.issuerId) : null,
@@ -371,7 +405,14 @@ export async function actividadComercialDetalle(req, res, next) {
     if (!TIPOS_DE_DETALLE.includes(tipo)) {
       throw new AppError(`Tipo no válido: ${tipo || '(vacío)'}.`, 400, 'TIPO_NO_VALIDO');
     }
-    const userId = responsableId ?? Number(req.query.userId);
+    // Una gestora, la suya pida lo que pida; quien lleva un equipo, una de él.
+    const pedido = Number(req.query.userId);
+    const alcance = comoIds(responsableId);
+    let userId = pedido;
+    if (alcance && alcance.length === 1) userId = alcance[0];
+    else if (alcance && Number.isInteger(pedido) && !alcance.includes(pedido)) {
+      throw new AppError('Esa comercial no es de tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
+    }
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new AppError('Falta la comercial (userId).', 400, 'FALTA_COMERCIAL');
     }

@@ -107,7 +107,8 @@ describe('#631 · rutaPermitida', () => {
       '/productos/categorias': ['products.categorias'],
       '/prospectos/duplicados': ['leads.duplicados'],
       '/tutores': ['tutores.gestionar'],
-      '/tareas/revisar': ['tasks.close'],
+      // «Por revisar» pasó a «Historial de tareas» (CRM#707): lo ve quien tiene tablero.
+      '/tareas/historial': ['tasks.view_own'],
       // Y verlo (`whatsapp.banco`): el project manager, que ve todo (Diego, 04/11).
       '/whatsapp/banco': ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'],
       // La vuelta en local con cada rol (#631): a la gestora y al project manager

@@ -75,6 +75,9 @@ describe('voz o texto', () => {
 
 describe('quién ve qué (#245)', () => {
   const req = (user, q = {}) => ({ user, query: q });
+  // Antes de contar, se mira si quien pide lleva un equipo comercial (09/11/2026):
+  // la consulta de voz y texto es la que no es esa.
+  const deVoz = () => query.mock.calls.find(([sql]) => !/equipo_comercial/.test(sql));
 
   it('el ámbito sale de proyectosDelAmbito, no de lo que diga la URL', async () => {
     // Alguien de CEDIA pide los proyectos 90 y 91, que son de otra empresa.
@@ -85,7 +88,7 @@ describe('quién ve qué (#245)', () => {
     await vozOTextoDeLaPeticion(req({ role: 'admin', userId: 5 }, { projectIds: '90,91' }));
 
     expect(ambito).toHaveBeenCalledTimes(1);
-    expect(query.mock.calls[0][1][0]).toEqual([1, 2]);
+    expect(deVoz()[1][0]).toEqual([1, 2]);
   });
 
   it('un proyecto suelto también pasa por ahí', async () => {
@@ -94,7 +97,7 @@ describe('quién ve qué (#245)', () => {
 
     await vozOTextoDeLaPeticion(req({ role: 'admin', userId: 5 }, { projectId: '7' }));
 
-    expect(query.mock.calls[0][1][0]).toEqual([7]);
+    expect(deVoz()[1][0]).toEqual([7]);
   });
 
   it('una gestora solo ve su propia fila', async () => {
@@ -103,9 +106,21 @@ describe('quién ve qué (#245)', () => {
 
     await vozOTextoDeLaPeticion(req({ role: 'gestor', userId: 42 }));
 
-    const [sql, par] = query.mock.calls[0];
-    expect(sql).toMatch(/AND m\.enviado_por = \$\d::int/);
-    expect(par).toContain(42);
+    const [sql, par] = deVoz();
+    expect(sql).toMatch(/AND m\.enviado_por = ANY\(\$\d::int\[\]\)/);
+    expect(par).toContainEqual([42]);
+  });
+
+  it('quien lleva un equipo comercial ve su fila y la de su equipo (09/11/2026)', async () => {
+    ambito.mockResolvedValue({ projectId: null, projectIds: [1] });
+    query.mockImplementation(async (sql) => (/equipo_comercial/.test(sql)
+      ? { rows: [{ gestora_id: 8 }, { gestora_id: 12 }] } : { rows: [] }));
+
+    await vozOTextoDeLaPeticion(req({ role: 'admin', userId: 9 }));
+
+    const [sql, par] = deVoz();
+    expect(sql).toMatch(/AND m\.enviado_por = ANY\(\$\d::int\[\]\)/);
+    expect(par).toContainEqual([9, 8, 12]);
   });
 
   it('admin, superadmin y soporte ven a todas las de su ámbito', async () => {
@@ -116,7 +131,7 @@ describe('quién ve qué (#245)', () => {
 
       await vozOTextoDeLaPeticion(req({ role, userId: 9 }));
 
-      expect(query.mock.calls[0][0], role).not.toMatch(/AND m\.enviado_por/);
+      expect(deVoz()[0], role).not.toMatch(/AND m\.enviado_por/);
     }
   });
 
@@ -135,7 +150,7 @@ describe('quién ve qué (#245)', () => {
     await vozOTextoDeLaPeticion(req({ role: 'superadmin', userId: 1 },
       { desde: '2026-09-01', hasta: '2026-09-18' }));
 
-    expect(query.mock.calls[0][1]).toEqual(['2026-09-01', '2026-09-18']);
+    expect(deVoz()[1]).toEqual(['2026-09-01', '2026-09-18']);
   });
 
   it('las fechas mal escritas se ignoran en vez de llegar al SQL', async () => {
@@ -145,7 +160,7 @@ describe('quién ve qué (#245)', () => {
     await vozOTextoDeLaPeticion(req({ role: 'superadmin', userId: 1 },
       { desde: "2026-09-01'; DROP TABLE x;--", hasta: 'ayer' }));
 
-    const [sql, par] = query.mock.calls[0];
+    const [sql, par] = deVoz();
     expect(sql).not.toMatch(/m.ts >=/);
     expect(par).toEqual([]);
   });

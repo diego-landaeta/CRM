@@ -1,6 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 // Los mismos roles con tablero que tasks.model.js (ROLES_TAREAS); aquí copiados para no importarse en círculo.
-const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 /*
   Equipos de tutores (migración «equipos_de_tutores»; Diego, 04/11/2026): «un tablero
@@ -43,6 +43,15 @@ export function sqlConTablero(u, idx, tipos) {
 
 /** El tipo de un equipo en SQL: sin la migración, todos son de colaboradores. */
 const colTipo = (t, tipos) => (tipos ? `${t}.tipo` : `'colaboradores'::text`);
+
+/*
+  `task_teams.de_programacion` (migración 252, CRM#707) YA NO SE USA (Diego,
+  11/11/2026). Decía qué equipos cerraba el supervisor, pero «Desarrollo y SEO»
+  es un solo equipo y la gente de SEO tampoco podía cerrar. Ahora lo decide la
+  tarea: si tiene supervisor, la cierra él (`tasks.reglas.js`, `puedeCerrar`).
+  La columna se queda en la base (ya está aplicada) y aquí no se lee ni se
+  escribe: no la vuelvas a usar.
+*/
 
 /*
   Equipos del tablero, con cargos por nivel (migración 226; Diego, 26/10/2026).

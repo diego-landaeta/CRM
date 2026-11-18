@@ -6,6 +6,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { useStripeMonitor } from '../hooks/useStripeMonitor';
 import MetricLabel from '@/shared/components/ui/MetricLabel';
 import PorQueSeVan from '../components/PorQueSeVan';
+import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
 import useCountUp from '@/shared/hooks/useCountUp';
 import {
   CurrencyEur, Users, TrendDown, ArrowUp, ArrowDown,
@@ -263,11 +264,11 @@ export default function IADashboardPage() {
           </div>
 
           {/* Por que se van (#44). Va al final y no arriba: primero se mira
-              cuanto entra, y esto explica lo que se pierde. */}
-          <PorQueSeVan
+              cuanto entra, y esto explica lo que se pierde. Solo en pruebas. */}
+          {PROYECTOS_IA && <PorQueSeVan
             datos={metrics.porQueSeVan}
             comentarios={metrics.comentariosDeBaja}
-          />
+          />}
         </>
       )}
     </div>

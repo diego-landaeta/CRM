@@ -12,7 +12,7 @@ import { deducirCanal } from './canal.js';
 import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
 import { avanzarPorContacto } from '../../shared/services/estado-prospecto.service.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { soloLoSuyo, ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 
 // Dispara secuencias de email activas que tengan el trigger indicado
 async function triggerSequences(triggerEvent, leadId, projectId) {
@@ -108,6 +108,12 @@ async function _createLeadCore(project, leadData) {
   // llego con `utm_source=fb` dentro de la direccion y se guardo como «directo».
   //
   // Este es el sitio por el que pasan las dos.
+  //
+  // La página también puede llegar como `page_url` (Elementor, Make): sin
+  // `landing_url`, se usa esa. De ella salen el canal, el producto y el país (#221).
+  if (!leadData.landing_url && typeof leadData.page_url === 'string' && leadData.page_url.trim()) {
+    leadData.landing_url = leadData.page_url.trim();
+  }
   for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
     if (!leadData[k]) {
       const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
@@ -702,7 +708,9 @@ export async function reassign(leadId, newResponsableId, userId) {
     `SELECT nombre, role, COALESCE(gestor_colaboraciones, false) AS colaboraciones
        FROM users WHERE id = $1 AND active = true`, [newResponsableId]);
   if (!destino.length) throw new AppError('Esa persona no existe o está desactivada', 400, 'DESTINO_INVALIDO');
-  if (destino[0].role === 'tutor') {
+  const quien = destino[0];
+  // El tutor redactor (CRM#708) tampoco lleva prospectos.
+  if (ROLES_DE_TUTOR.includes(quien.role)) {
     throw new AppError(`${destino[0].nombre} es profesor: no lleva prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
   }
   if (destino[0].colaboraciones) {

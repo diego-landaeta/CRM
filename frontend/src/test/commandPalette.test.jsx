@@ -120,9 +120,9 @@ describe('qué encuentra cada perfil (tabla de la #591)', () => {
     for (const r of FINANZAS_RESTRINGIDAS) expect(rutas).not.toContain(r);
   });
 
-  it('project manager: como una gestora, con clientes', () => {
+  it('project manager: ve todo, de sus campus (Diego, 04/11, pm-ve-todo), también Finanzas', () => {
     expect(buscaDe(PERFILES.project_manager)).toMatchObject({ personas: true, clientes: true });
-    for (const r of FINANZAS_RESTRINGIDAS) expect(rutasDe(PERFILES.project_manager)).not.toContain(r);
+    for (const r of FINANZAS_RESTRINGIDAS) expect(rutasDe(PERFILES.project_manager)).toContain(r);
   });
 
   it('tutor: ni personas ni productos, porque el catálogo ya no se los da (Diego, 03/11); solo lo suyo', () => {
@@ -337,7 +337,9 @@ describe('ventas, facturas, tareas y consultas (punto 6)', () => {
     expect(buscaDe(PERFILES.superadmin).usuarios).toBe(true);
     expect(buscaDe(PERFILES.admin).usuarios).toBe(true);
     expect(buscaDe(PERFILES.soporte).usuarios).toBe(true);
-    for (const p of ['gestora', 'project_manager', 'tutor', 'colaborador']) {
+    // El project manager los ve (users.view, pm-ve-todo), sin tocarlos.
+    expect(buscaDe(PERFILES.project_manager).usuarios).toBe(true);
+    for (const p of ['gestora', 'tutor', 'colaborador']) {
       expect(buscaDe(PERFILES[p]).usuarios, p).toBe(false);
     }
   });
@@ -372,7 +374,10 @@ describe('tutores, facturas de colaboradores, diplomas y cursos de Moodle (punto
     expect(tipos(PERFILES.superadmin)).toEqual(todo);
     expect(tipos(PERFILES.admin)).toEqual(todo);
     const nada = { tutores: false, facturasColaborador: false, diplomas: false, cursosMoodle: false };
-    for (const p of ['soporte', 'gestora', 'project_manager', 'tutor', 'colaborador']) {
+    // El project manager, desde pm-ve-todo (04/11): facturas de colaboradores,
+    // diplomas y cursos de Moodle sí (los tiene en el menú); tutores, no.
+    expect(tipos(PERFILES.project_manager)).toEqual({ tutores: false, facturasColaborador: true, diplomas: true, cursosMoodle: true });
+    for (const p of ['soporte', 'gestora', 'tutor', 'colaborador']) {
       expect(tipos(PERFILES[p]), p).toEqual(nada);
     }
   });
