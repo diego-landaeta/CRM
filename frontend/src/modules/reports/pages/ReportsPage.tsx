@@ -20,11 +20,13 @@ import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
 import DondePonerElDinero from '../components/DondePonerElDinero';
+import PaisesDeEntrada from '../components/PaisesDeEntrada';
 import PanelResumen from '@/shared/components/PanelResumen';
 import TasaDeCierre from '../components/TasaDeCierre';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import FeedbackEnReportes, { feedbackEnCsv } from '@/modules/feedback/components/FeedbackEnReportes';
 import ActividadPorComercial from '../components/ActividadPorComercial';
+import InformeMensual from '../components/InformeMensual';
 
 function exportReportCSV(data, project, range, panel, seguimiento, feedback = null) {
   const sections = [];
@@ -601,6 +603,9 @@ function PantallaDeReportes() {
       {/* Paises y formaciones: en pantalla, no solo descargables. */}
       <RankingsPanel from={range.from} to={range.to} />
 
+      {/* Por campus y país de entrada (#221): solo si algún campus separa por país. */}
+      <PaisesDeEntrada from={range.from} to={range.to} issuerId={issuerEfectivo} project={proyectoEfectivo} />
+
       {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
       <DondePonerElDinero from={range.from} to={range.to} />
 
@@ -609,6 +614,9 @@ function PantallaDeReportes() {
         project={proyectoEfectivo} onDatos={setPanelFeedback} />
 
       <ReportsDownloadSection projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo} projectName={nombreAmbito} from={range.from} to={range.to} />
+
+      {/* El informe del mes por equipo y comercial, y el ZIP de facturas para la gestoría (#772). */}
+      <InformeMensual issuerId={issuerEfectivo} />
 
       {/* AQUI ESTABA «Reportes disponibles», el catalogo de reportes PREVISTOS.
           No descargaba nada y repetia los temas de «Reportes descargables», que

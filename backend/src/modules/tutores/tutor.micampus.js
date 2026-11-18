@@ -17,17 +17,22 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError,
+  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 
 const ROLES_PROFESOR = new Set(['editingteacher', 'teacher']);
 const CACHE_MS = 2 * 60 * 1000;
 const PARALELO = 4;
+/**
+ * Cursos por llamada al leer las tareas. Todos en una sola llamada pasaba del tiempo de
+ * espera con una tutora de muchos cursos, y entonces NINGÚN curso enseñaba sus tareas.
+ * Por tandas, si una falla, solo sus cursos lo dicen; los demás salen enteros.
+ */
+const CURSOS_POR_TANDA = 10;
 
-/** Quien tiene uno de estos roles no es alumno. El resto sí, aunque el rol se llame distinto de «student». */
-const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 'coursecreator']);
-export const esAlumno = (g) => g.roles.length > 0 && !g.roles.some((r) => ROLES_DE_EQUIPO.has(r));
+/** Quien tiene un rol del equipo no es alumno; el resto sí (vive en moodle.client.js). */
+export { esAlumno };
 
 /**
  * Los alumnos que le tocan a la profesora `yo` en ese curso. Una profesora SIN permiso de
@@ -145,17 +150,8 @@ async function unCampus(tutorId, c, opciones) {
   });
   const imparte = conGente.filter(Boolean);
 
-  // Las tareas y sus entregas sin corregir: dos llamadas para todos los cursos.
-  let tareas = new Map();
-  let entregas = new Map();
-  let errorTareas = null;
-  try {
-    tareas = await tareasDeCursos(conexion, imparte.map((x) => x.id), opciones);
-    const ids = [...tareas.values()].flat().map((t) => t.id);
-    entregas = await entregasSinCorregir(conexion, ids, opciones);
-  } catch (err) {
-    errorTareas = mensaje(err, 'No se han podido leer las tareas del campus.');
-  }
+  // Las tareas y sus entregas sin corregir, por tandas de cursos (`CURSOS_POR_TANDA`).
+  const { tareas, entregas, sinPermiso, errorDe } = await tareasPorTandas(conexion, imparte.map((x) => x.id), opciones);
 
   const dudas = await dudasAbiertas(tutorId, c.projectId);
   const usadas = new Set();
@@ -173,10 +169,10 @@ async function unCampus(tutorId, c, opciones) {
         corregirUrl: `${url}/mod/assign/view.php?id=${t.cmid}&action=grading`,
       };
     });
-    const sinPermiso = tareas.sinPermiso?.has(curso.id)
+    const avisoPermiso = sinPermiso.has(curso.id)
       ? 'Moodle no deja leer las tareas de este curso con el token del campus: revisa sus permisos.' : null;
     return {
-      id: curso.id, nombre: curso.nombre, url: `${url}/course/view.php?id=${curso.id}`, error: curso.error || errorTareas || sinPermiso,
+      id: curso.id, nombre: curso.nombre, url: `${url}/course/view.php?id=${curso.id}`, error: curso.error || errorDe.get(curso.id) || avisoPermiso,
       alumnos: curso.alumnos
         .map((a) => ({ id: a.id, nombre: a.nombre, email: a.email, ultimoAcceso: a.ultimoAcceso, mensajeUrl: `${url}/message/index.php?id=${a.id}` }))
         .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')),
@@ -187,6 +183,32 @@ async function unCampus(tutorId, c, opciones) {
     || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
   base.dudasSinCurso = dudas.filter((d) => !usadas.has(d.consultaId));
   return base;
+}
+
+/**
+ * Las tareas de esos cursos y sus entregas por corregir, de `CURSOS_POR_TANDA` en
+ * `CURSOS_POR_TANDA` cursos. Lo que falla en una tanda se apunta a sus cursos (`errorDe`)
+ * y no borra lo que ya se ha leído de las demás.
+ */
+export async function tareasPorTandas(conexion, cursoIds, opciones) {
+  const tareas = new Map();
+  const entregas = new Map();
+  const sinPermiso = new Set();
+  const errorDe = new Map();
+  for (let i = 0; i < cursoIds.length; i += CURSOS_POR_TANDA) {
+    const tanda = cursoIds.slice(i, i + CURSOS_POR_TANDA);
+    try {
+      const t = await tareasDeCursos(conexion, tanda, opciones);
+      const e = await entregasSinCorregir(conexion, [...t.values()].flat().map((x) => x.id), opciones);
+      for (const [k, v] of t) tareas.set(k, v);
+      for (const id of t.sinPermiso || []) sinPermiso.add(id);
+      for (const [k, v] of e) entregas.set(k, v);
+    } catch (err) {
+      const m = mensaje(err, 'No se han podido leer las tareas del campus.');
+      for (const id of tanda) errorDe.set(id, m);
+    }
+  }
+  return { tareas, entregas, sinPermiso, errorDe };
 }
 
 /** Lo que tiene pendiente un curso: entregas por corregir y dudas abiertas. */
