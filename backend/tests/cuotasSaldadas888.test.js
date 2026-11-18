@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import supertest from 'supertest';
-import app from '../src/app.js';
 import pool from '../src/shared/config/db.js';
 import * as conversionModel from '../src/modules/conversions/conversion.model.js';
 import * as conversionService from '../src/modules/conversions/conversion.service.js';
 import * as installmentsModel from '../src/modules/conversions/installments.model.js';
 import * as stripeService from '../src/modules/stripe-payments/stripe-payments.service.js';
+import * as salesService from '../src/modules/sales/sales.service.js';
 
 /**
  * CRM#888 (gemela CRM-ISEIE#559) · Cada cobro salda su cuota, en orden y con su
@@ -22,7 +21,6 @@ import * as stripeService from '../src/modules/stripe-payments/stripe-payments.s
  */
 
 const MARCA = `C888_${Date.now().toString(36)}`;
-const request = supertest(app);
 const q = (sql, params) => pool.query(sql, params).then((r) => r.rows);
 let proyecto;
 let lead;
@@ -142,37 +140,22 @@ describe('#888 · cada cobro salda su cuota, en orden y con su fecha', () => {
   });
 
   it('el pago inicial del formulario de Ventas salda la cuota 1', async () => {
-    const login = await request.post('/api/auth/login').send({ email: 'diego@empresa.com', password: 'CrmTemp2026!' });
-    const token = login.body.data.accessToken;
     const [l] = await q(
-      `INSERT INTO leads (project_id, nombre, email, status, responsable_id, created_at, fecha_solicitud)
-       VALUES (1, $1, $2, 'en_seguimiento', 2, '2026-07-01', '2026-07-01') RETURNING id`,
-      [`${MARCA} ventas`, `${MARCA.toLowerCase()}-v@prueba.test`]);
-    const res = await request.post('/api/ventas').set('Authorization', `Bearer ${token}`).send({
-      project_id: 1, lead_id: l.id, importe_total: 335, importe_pagado: 167.5, metodo_pago: 'fraccionado',
+      `INSERT INTO leads (project_id, nombre, email, status, created_at, fecha_solicitud)
+       VALUES ($1, $2, $3, 'en_seguimiento', '2026-07-01', '2026-07-01') RETURNING id`,
+      [proyecto.id, `${MARCA} ventas`, `${MARCA.toLowerCase()}-v@prueba.test`]);
+    const r = await salesService.createSale({
+      project_id: proyecto.id, lead_id: l.id, importe_total: 335, importe_pagado: 167.5, metodo_pago: 'fraccionado',
       fecha_pago: '2026-07-03',
       installments: [
         { importe_previsto: 167.5, fecha_vencimiento: '2026-07-03' },
         { importe_previsto: 167.5, fecha_vencimiento: '2026-07-20' },
       ],
-    });
-    const id = res.body?.data?.conversion_id;
-    try {
-      expect(res.status, JSON.stringify(res.body)).toBe(201);
-      const [c1, c2] = await cuotas(id);
-      expect(c1.fecha_cobro).toBe('2026-07-03');
-      expect(c1.payment_id).not.toBeNull();
-      expect(c2.fecha_cobro).toBeNull();
-    } finally {
-      if (id) {
-        await q('DELETE FROM invoices WHERE conversion_id = $1', [id]);
-        await q('DELETE FROM conversion_installments WHERE conversion_id = $1', [id]);
-        await q('DELETE FROM conversion_payments WHERE conversion_id = $1', [id]);
-        await q('DELETE FROM conversions WHERE id = $1', [id]);
-      }
-      await q('DELETE FROM lead_status_history WHERE lead_id = $1', [l.id]);
-      await q('DELETE FROM leads WHERE id = $1', [l.id]);
-    }
+    }, { userId: null, role: 'superadmin' });
+    const [c1, c2] = await cuotas(r.conversion_id);
+    expect(c1.fecha_cobro).toBe('2026-07-03');
+    expect(c1.payment_id).not.toBeNull();
+    expect(c2.fecha_cobro).toBeNull();
   });
 
   it('rehacer el plan con una cuota ya cobrada numera las nuevas detrás (antes chocaba con la 1)', async () => {
