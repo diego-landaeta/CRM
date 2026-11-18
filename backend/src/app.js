@@ -71,6 +71,7 @@ import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
 import soporteModule from './modules/soporte/index.js';
+import incidenciasModule from './modules/incidencias/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
@@ -94,6 +95,7 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
+import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
@@ -111,6 +113,7 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
+import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
@@ -120,6 +123,7 @@ import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js'
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
+import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
@@ -364,6 +368,8 @@ const ALL_MODULES = [
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
   { name: 'soporte', mod: soporteModule },
+  // Incidencias (#253), al lado de Soporte: sobre todo las de capa 8. Migración 238.
+  { name: 'incidencias', mod: incidenciasModule },
   // Links de pago (#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
   ...(linksPagoActivos() ? [{ name: 'links-pago', mod: linksPagoModule }] : []),
   // Siempre montado: cada ruta contesta 404 con su interruptor apagado (#766).
@@ -513,6 +519,8 @@ if (process.env.NODE_ENV !== 'test') {
     startPaypalCobrosSyncScheduler();
     // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
     startMonitaskSyncScheduler();
+    // Disputas de Stripe (#396): traerlas de cada cuenta y avisar a los admins. Solo con STRIPE_DISPUTAS_ACTIVO=1.
+    startStripeDisputasScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
@@ -534,9 +542,12 @@ if (process.env.NODE_ENV !== 'test') {
     // Ventas a plazos: cerrar la suscripción de Stripe al completar el pago (#747).
     startSuscripcionesPlazosScheduler();
     startCursosPendientesScheduler();
+    // Lee Moodle y escribe a las tutoras (#681): con el resto de la #689, apagado en producción hasta aprobarlo.
+    if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startFacturaAutomaticaScheduler();
+    startMatriculaMoodleScheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
