@@ -66,10 +66,13 @@ import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
 import moodleAvisos from './modules/consultas/consultas.webhook.js';
+import githubWebhook from './modules/tasks/tasks.github.webhook.js';
+import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 import soporteModule from './modules/soporte/index.js';
 import incidenciasModule from './modules/incidencias/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
@@ -122,6 +125,7 @@ import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js'
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
+import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
 import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
@@ -180,6 +184,12 @@ app.use('/api/woocommerce/webhook', wcWebhook);
 // ningún campus puede conectarse ni avisar al CRM de producción.
 if (pluginMoodleActivo()) app.use('/api/moodle-avisos', moodleAvisos);
 else logger.info('Rutas SKIP (solo en pruebas): /api/moodle-avisos (plugin del CRM en Moodle)');
+
+// El aviso de GitHub (CRM#737): las issues del repositorio, al tablero. Firmado
+// (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
+// GITHUB_TABLERO_ACTIVO encendido (apagado de serie): si no, 404.
+if (tareasActivas() && githubTableroActivo()) app.use('/api/github/webhook', githubWebhook);
+else logger.info('Rutas SKIP (GITHUB_TABLERO_ACTIVO apagado): /api/github/webhook');
 
 // El aviso de Stripe (#680), igual: en bruto y ANTES del express.json general. La firma
 // se calcula sobre el cuerpo tal cual llega; el express.json de abajo lo convertía en
@@ -361,6 +371,8 @@ const ALL_MODULES = [
   { name: 'mcp', mod: mcpModule },
   { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
+  // El alumno confirma los datos de su diploma antes de emitirlo (#768). Apagado de serie.
+  { name: 'diploma-confirmacion', mod: diplomaConfirmacionModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
@@ -544,6 +556,7 @@ if (process.env.NODE_ENV !== 'test') {
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startFacturaAutomaticaScheduler();
+    startDiplomaConfirmacionScheduler();
     startMatriculaMoodleScheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
