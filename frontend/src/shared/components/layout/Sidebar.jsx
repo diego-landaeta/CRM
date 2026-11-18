@@ -82,6 +82,7 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 // Lo del #44 (proyectos IA) solo en pruebas: apagado, un proyecto IA ve el menú de siempre.
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -213,6 +214,11 @@ export const NAV_SECTIONS = [
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       { label: 'Mi factura', to: '/mi-factura', detail: 'Sube tu factura del mes', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /testeo y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'Actividad', to: '/equipo/actividad', detail: 'Horas de Monitask y cotejo', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'monitask.view' }]
+        : []),
     ],
   },
   {
@@ -362,7 +368,7 @@ export const NAV_SECTIONS = [
       { label: 'Clientes', to: '/clientes', detail: 'Quién ya compró', icon: UserCheck, module: 'clients', permiso: 'clients.view' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
       { label: 'Buscar duplicados', to: '/prospectos/duplicados', detail: 'Buscarlos a mano', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads', permiso: 'leads.duplicados' },
-      { label: 'Matrículas', to: '/clientes/matriculas', detail: 'Altas en cada curso', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
+      { label: 'Solicitud de admisión', to: '/clientes/matriculas', detail: 'Las que llegan del formulario', icon: GraduationCap, module: 'matriculas', permiso: 'matriculas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Los mismos roles que la API (`soloRoles` admin/superadmin),
       // y además, para VERLO en solo lectura, quien tenga `diplomas.view` (#384,
@@ -573,6 +579,27 @@ export function rutaPermitida(pathname, can) {
   if (!suyas.length) return true;
   return suyas.some((it) => !it.permiso || pasaPermisoDeRoles(it, can)
     || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true)));
+}
+
+/**
+ * La clave del permiso que le falta para abrir esta pantalla (CRM#820), para
+ * que «No tienes acceso» ofrezca pedir ESE. Con la misma regla que
+ * `rutaPermitida`: la primera clave del catálogo que pide su entrada del menú y
+ * no tiene. `null` si la puede abrir o no se sabe cuál es.
+ */
+export function permisoQueFalta(pathname, can) {
+  if (rutaPermitida(pathname, can)) return null;
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const claves = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta && it.permiso) claves.push(...[].concat(it.permiso));
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 
 export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {
@@ -1559,6 +1586,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}
+                {/* CRM#820: un alta, un permiso, un campus o Claude, a soporte como ticket. Para todos. */}
+                <UserMenuItem
+                  icon={Key}
+                  label="Pedir acceso o permiso"
+                  onClick={() => { setUserMenuOpen(false); abrirPedirAcceso(); onNavigate?.(); }}
+                />
                 <UserMenuItem
                   icon={theme === 'dark' ? Sun : Moon}
                   label={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
