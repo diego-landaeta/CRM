@@ -100,3 +100,26 @@ describe('#680 · el aviso de Stripe entra por la app completa', () => {
     expect((await enviar(tocado, firmar(original))).status).toBe(400);
   });
 });
+
+
+  it('#860 · un cuerpo vacío responde 400 "cuerpo vacío" y no se anota como rechazo de Stripe', async () => {
+    const antes = (await query(
+      'SELECT rechazados FROM webhook_recepciones WHERE fuente = $1 AND project_id = $2',
+      ['stripe', ids.project]
+    )).rows[0]?.rechazados ?? 0;
+
+    const r = await supertest(app).post(`/api/stripe-webhook/${ids.project}`)
+      .set('Content-Type', 'application/json')
+      .set('Stripe-Signature', firmar(''))
+      .send();
+
+    expect(r.status, r.text).toBe(400);
+    expect(r.text).toMatch(/cuerpo vac[ií]o/i);
+
+    const despues = (await query(
+      'SELECT rechazados FROM webhook_recepciones WHERE fuente = $1 AND project_id = $2',
+      ['stripe', ids.project]
+    )).rows[0]?.rechazados ?? 0;
+    expect(despues).toBe(antes);
+  });
+
