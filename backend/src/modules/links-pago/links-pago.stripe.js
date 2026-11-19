@@ -131,10 +131,10 @@ export function crearLink(apiKey, { priceId, metadata, metadataDelCargo = metada
   });
 }
 
-/** Volver a activar un link (el de respaldo de una cuota cuyo cobro automático falló). */
-export function activarLink(apiKey, paymentLinkId) {
+/** Desactivar un link (caducado o anulado). Un link de Stripe no se borra. */
+export function desactivarLink(apiKey, paymentLinkId) {
   return llamar(apiKey, 'POST', `/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
-    cuerpo: { active: true },
+    cuerpo: { active: false },
   });
 }
 

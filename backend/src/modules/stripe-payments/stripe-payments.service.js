@@ -347,9 +347,9 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
 
   const destino = delLink
     ? await cobroDelLink.ventaDelLink(projectId, payment, delLink.link)
-    : delPlan || v2
+    : delPlan || (v2
       ? await ventaConLasReglasNuevas(projectId, payment, dbRow, { compraDirecta, sinEsperarALaTienda })
-      : await ventaComoSiempre(projectId, payment, dbRow);
+      : await ventaComoSiempre(projectId, payment, dbRow));
   if (destino?.aplazado) return { aplazado: true };
   if (!destino) return;
   const { conv, ficha, metodoAuto, email } = destino;

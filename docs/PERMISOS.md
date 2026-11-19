@@ -6,7 +6,7 @@
 > falla si el código cambia y esto no.
 
 925 rutas en 73 módulos, y 31 acciones con condición dentro de una ruta.
-**25 rutas con un guardia sin clasificar.**
+Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
 además a superadmin y a soporte; `soloRoles` no. «Quién podía» lo calcula

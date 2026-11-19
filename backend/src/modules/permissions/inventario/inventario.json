@@ -3068,10 +3068,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3092,10 +3088,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3120,10 +3112,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3144,10 +3132,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3172,10 +3156,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.edit"
@@ -3196,10 +3176,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3224,10 +3200,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3248,10 +3220,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3276,10 +3244,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.edit"
@@ -3300,10 +3264,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3328,10 +3288,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3352,10 +3308,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3380,10 +3332,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3404,10 +3352,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3432,10 +3376,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3456,10 +3396,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3484,10 +3420,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3508,10 +3440,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3536,10 +3464,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3560,10 +3484,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3588,10 +3508,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.reparto"
@@ -3612,10 +3528,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3640,10 +3552,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.devoluciones"
@@ -3666,10 +3574,6 @@
     "tipo": "token"
    },
    {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
-   },
-   {
     "tipo": "puede",
     "claves": [
      "conversions.devoluciones"
@@ -3690,10 +3594,6 @@
   "guardias": [
    {
     "tipo": "token"
-   },
-   {
-    "tipo": "sin_regla",
-    "nombre": "anónima"
    },
    {
     "tipo": "puede",
