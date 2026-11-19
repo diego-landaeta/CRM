@@ -11,6 +11,7 @@ import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 import { alcanceDeLider } from '../../shared/utils/roles.js';
+import { linksPagoActivos, pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -158,6 +159,8 @@ export async function me(req, res, next) {
           // Para que la pantalla no pregunte por WhatsApp a quien lo tiene
           // apagado (QA de Diego, 22/10, punto 8). null = sin la columna.
           usa_whatsapp: user.usa_whatsapp ?? null,
+          // «Mi factura» (CRM#710): con ficha viva en Facturas de colaboradores.
+          factura_propia: !!user.factura_propia,
           // El equipo comercial (QA del 09/11/2026), igual que en CRM-ISEIE.
           // La pantalla lo usa para no enseñar lo que el servidor le negaría
           // (corregir o abonar facturas, egresos y balance).
@@ -166,6 +169,14 @@ export async function me(req, res, next) {
           // para cambiar su correo (Diego, 06/11, #688): la pantalla lo explica
           // de entrada en vez de pedirle la contraseña para nada.
           correo_propio_frenado: codigoFrenadoPara(user) ? MENSAJE_FRENADO : null,
+          // Lo que el SERVIDOR tiene encendido con su interruptor del `.env`. La
+          // pantalla enseña los links de pago (#680) solo si aquí dice que sí:
+          // en /crm, con LINKS_PAGO_EN_PRODUCCION=1; en /testeo y en local, siempre.
+          // Quién los usa lo dicen después los permisos `links_pago.*`.
+          // El plugin del CRM en Moodle (#850), igual: lo mismo que decide qué
+          // rutas del plugin se montan (PLUGIN_MOODLE_EN_PRODUCCION). Para
+          // encenderlo en /crm basta con el `.env`, sin recompilar el frontal.
+          funciones: { links_pago: linksPagoActivos(), plugin_moodle: pluginMoodleActivo() },
         },
         permissions,
         // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].

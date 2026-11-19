@@ -13,7 +13,12 @@ import {
   canSeeItem,
   applyLabel,
   esSoloColaboraciones,
+  rutaPermitida,
 } from '@/shared/components/layout/Sidebar';
+import { pestanasDe, TABS } from '@/modules/webhooks/lib/pestanas';
+import { TRASLADOS_DE_MENU } from '@/shared/components/layout/trasladosDeMenu';
+import { reubicar } from '@/shared/components/layout/bloquesDelMenu';
+import { esCampusMio } from '@/shared/hooks/useCampusMio';
 import { isBetaAllowed } from '@/shared/config/betaConfig';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { tipoDelMenu } from '@/shared/lib/proyectosIA';
@@ -45,10 +50,57 @@ import {
 const RECENT_KEY = 'crm.palette.recents';
 const MAX_RECENTS = 5;
 
+/**
+ * Las direcciones que cambiaron de sitio: las de `TRASLADOS_DE_MENU` (#690,
+ * los webhooks juntos en Conexión › Webhooks), sin copiarlas aquí. Un reciente
+ * guardado con la de antes lleva a la nueva en vez de desaparecer.
+ */
+/**
+ * Cada dirección movida: de dónde a dónde, y su sección, entrada y pestaña de
+ * serie («Conexión › Webhooks» → «Conexión» y «Webhooks»; la pestaña,
+ * «Prospectos», «Make»…), para que el nombre diga adónde va.
+ */
+export function movidasDe(traslados = TRASLADOS_DE_MENU, pestanas = TABS) {
+  return traslados.flatMap((t) => t.de.map((d) => {
+    // `t.a` va con los nombres de antes del reparto por bloques (#534, parte 3):
+    // la sección que se enseña es la de ahora («Conexión» → «Configuración»).
+    const a = reubicar(t.a);
+    const [seccion, entrada = seccion] = a.includes(' › ') ? a.split(' › ') : [a];
+    const pestana = pestanas.find((x) => x.to === d.a)?.label;
+    return { antes: d.ruta, ahora: d.a, seccion, entrada, pestana };
+  }));
+}
+const MOVIDAS = movidasDe();
+const movidaDe = (to) => MOVIDAS.find(({ antes }) => to === antes
+  || ['/', '?', '#'].some((sep) => to?.startsWith(`${antes}${sep}`)));
+export function rutaDeHoy(to) {
+  const m = movidaDe(to);
+  return m ? `${m.ahora}${to.slice(m.antes.length)}` : to;
+}
+const nombreMovido = (entrada, pestana) => (pestana ? `${entrada} › ${pestana}` : entrada);
+
+/**
+ * El reciente con su dirección de hoy y, si se movió, con su nombre y su sección
+ * de hoy («Webhooks › Prospectos» · «Conexión»). `movido`: su sección es la de
+ * serie, y al pintarlo se le pone el nombre que le dé el campus (`applyLabel`).
+ */
+export function recienteDeHoy(e) {
+  if (!e?.to) return e;
+  const m = movidaDe(e.to);
+  // Guardado ya con la dirección nueva (al pulsarlo, o por una versión anterior
+  // que marcaba `movido: true`): se recompone desde su destino.
+  const ya = !m && MOVIDAS.find(({ ahora }) => e.to === ahora || ['/', '?', '#'].some((sep) => e.to.startsWith(`${ahora}${sep}`)));
+  const de = m || (e.movido ? ya : null);
+  if (!de) return e;
+  const movido = { entrada: de.entrada, pestana: de.pestana, seccion: de.seccion };
+  return { ...e, to: rutaDeHoy(e.to), label: nombreMovido(de.entrada, de.pestana), sublabel: de.seccion, movido };
+}
+
 function getRecents() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const lista = raw ? JSON.parse(raw) : [];
+    return Array.isArray(lista) ? lista.map(recienteDeHoy) : [];
   } catch { return []; }
 }
 function pushRecent(entry) {
@@ -180,7 +232,27 @@ export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nom
 // La factura de un colaborador: el Historial, con su colaborador y su mes.
 export const destinoDeFacturaColaborador = (f) => `/finanzas/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
 // Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
-export const destinoDeDiploma = (d) => `/clientes/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+// #624: un número revertido (anulado) no está en Emitidos. Si hoy vale otro número para esa
+// matrícula (`vigente`), lleva a ese en Emitidos. Si no, a Revertidos, con el número anulado, y
+// ahí dice en cuál de estos casos está:
+//  · curso cerrado (se revocó un diploma de ese curso): no se vuelve a emitir;
+//  · se volvió a emitir, y ese también se revirtió;
+//  · todavía no se volvió a emitir: su matrícula está en «Aprobados sin diploma».
+// Un Certifex anterior no manda `vigente`: entonces vale `sustituidaPor`.
+const vigenteDe = (d) => (d.anulacion && 'vigente' in d.anulacion ? d.anulacion.vigente : d.anulacion?.sustituidaPor) || null;
+export const destinoDeDiploma = (d) => {
+  if (d.anulada) {
+    const v = vigenteDe(d);
+    return v
+      ? `/clientes/matriculas/diplomas?pestana=enviados&buscar=${encodeURIComponent(v)}`
+      : `/clientes/matriculas/diplomas?pestana=revertidos&buscar=${encodeURIComponent(d.nexpediente || d.alumno || '')}`;
+  }
+  return `/clientes/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+};
+// Lo que dice la fila de un diploma anulado: si hoy vale otro número, cuál.
+export const rotuloAnulado = (d) => (d.anulacion?.cursoCerrado
+  ? 'Anulado (revertido) · se revocó un diploma de ese curso: curso cerrado'
+  : vigenteDe(d) ? `Anulado (revertido) · hoy vale ${vigenteDe(d)}` : 'Anulado (revertido)');
 // Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
 export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;
 
@@ -210,8 +282,21 @@ export const terminoDeFactura = (q) => q.trim().replace(/^f\s*-?\s*(?=\d)/i, '')
  * Un reciente solo se enseña si hoy se podría volver a encontrar: si a alguien
  * le quitan un permiso, el reciente de esa pantalla desaparece con él.
  */
-export function recienteSigueValiendo(to, { pages, busca }) {
+export function recienteSigueValiendo(to, { pages, busca, can, modules, projectType }) {
   if (pages.some((p) => p.to === to)) return true;
+  // Una pestaña de Conexión › Webhooks o la ficha de un webhook (#690; los
+  // recientes de las direcciones de antes llegan aquí traducidos, `rutaDeHoy`).
+  // El buscador no las lista (enseña lo mismo que el menú), pero un reciente
+  // vale si hoy se puede abrir, con las reglas de su barra de pestañas
+  // (`SubNav`): el permiso de su ruta, el módulo y el tipo del campus. Solo las
+  // que existen: la de transferencias no tiene ficha (App.jsx).
+  const pestana = /^(\/conexion\/webhooks\/(?:prospectos|make|transferencias))(?:[?#].*)?$/.exec(to)
+    || /^(\/conexion\/webhooks\/(?:prospectos|make))\/\d+(?:[?#].*)?$/.exec(to);
+  if (pestana) {
+    return pages.some((p) => p.to === '/conexion/webhooks')
+      && typeof can === 'function' && rutaPermitida(pestana[1], can)
+      && pestanasDe(modules, projectType).some((t) => t.to === pestana[1]);
+  }
   if (/^\/prospectos\/\d+$/.test(to)) return busca.personas;
   if (/^\/clientes\/\d+$/.test(to)) return busca.clientes;
   if (/^\/productos\/\d+$/.test(to)) return busca.productos;
@@ -366,6 +451,8 @@ export default function CommandPalette() {
     const nada = { success: true, data: [] };
 
     const catalogoDe = (pid) => {
+      // Solo de un campus suyo: si no, 403 PROJECT_FORBIDDEN (CRM#859).
+      if (!esCampusMio(projects, pid)) return Promise.resolve([]);
       if (!catalogos.current.has(pid)) {
         catalogos.current.set(pid, client.get(`/products?projectId=${pid}`)
           .then((r) => (r.success && Array.isArray(r.data) ? r.data : []))
@@ -466,7 +553,7 @@ export default function CommandPalette() {
     } finally {
       if (vigente()) setSearching(false);
     }
-  }, [activeProject?.id, activeIssuerId, idsDelAmbito, busca]);
+  }, [activeProject?.id, activeIssuerId, idsDelAmbito, busca, projects]);
 
   useEffect(() => {
     // Cerrado no busca: si se cierra con Escape dejando texto y luego cambia la
@@ -487,14 +574,16 @@ export default function CommandPalette() {
 
     if (!q) {
       // Estado inicial: recientes + acciones rápidas
-      const vigentes = recents.filter((r) => recienteSigueValiendo(r.to, { pages, busca }));
+      const vigentes = recents.filter((r) => recienteSigueValiendo(r.to, { pages, busca, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type) }));
       if (vigentes.length > 0) {
         out.push({
           label: 'Recientes',
           items: vigentes.map((r) => ({
             type: 'recent',
-            label: r.label,
-            sublabel: r.sublabel,
+            // Movido: con los nombres que este campus da a su menú, desde los de serie.
+            label: r.movido ? nombreMovido(applyLabel(r.movido.entrada, activeProject?.sidebar_labels), r.movido.pestana) : r.label,
+            sublabel: r.movido ? applyLabel(r.movido.seccion, activeProject?.sidebar_labels) : r.sublabel,
+            movido: r.movido,
             to: r.to,
             tipo: r.tipo,
             projectId: r.projectId,
@@ -596,14 +685,14 @@ export default function CommandPalette() {
     }));
     grupo('Diplomas', otros.diplomas, (d) => ({
       type: 'diploma', label: d.alumno || d.nexpediente, icon: Certificate, to: destinoDeDiploma(d),
-      sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : ''].filter(Boolean).join(' · '),
+      sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : d.anulada ? rotuloAnulado(d) : ''].filter(Boolean).join(' · '),
     }));
     grupo('Cursos de Moodle', otros.cursosMoodle, (c) => ({
       type: 'curso_moodle', label: c.nombre, icon: GraduationCap, to: destinoDeCursoMoodle(c, c.campus),
       sublabel: [c.nombre_corto, c.categoria, legible(c.estado)].filter(Boolean).join(' · '),
     }));
     return out;
-  }, [query, recents, quickActions, projectActions, pages, busca, leadResults, productResults, otros]);
+  }, [query, recents, quickActions, projectActions, pages, busca, can, activeProject?.modules, activeProject?.type, activeProject?.sidebar_labels, leadResults, productResults, otros]);
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
@@ -623,7 +712,11 @@ export default function CommandPalette() {
       return;
     }
     if (item.to) {
-      pushRecent({ label: item.label, sublabel: item.sublabel, to: item.to, tipo: item.tipo || item.type, projectId: item.projectId });
+      // Un reciente movido se guarda con sus nombres de serie y `movido`: así, en
+      // otro campus, sale con los nombres de ese campus.
+      pushRecent(item.movido
+        ? { label: nombreMovido(item.movido.entrada, item.movido.pestana), sublabel: item.movido.seccion, to: item.to, tipo: item.tipo || item.type, projectId: item.projectId, movido: item.movido }
+        : { label: item.label, sublabel: item.sublabel, to: item.to, tipo: item.tipo || item.type, projectId: item.projectId });
       const pid = campusAlAbrir(item, { unCampus: activeProject?.id > 0, todos: isAllProjects });
       if (pid) switchProject(pid);
       navigate(item.to);

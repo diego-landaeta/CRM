@@ -1,3 +1,4 @@
+import { appPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, WarningCircle, Lock } from '@phosphor-icons/react';
@@ -113,10 +114,9 @@ export default function UsersPanel() {
           ...(values.excepciones && Object.keys(values.excepciones).length ? { excepciones: values.excepciones } : {}),
         });
         if (setPasswordToken) {
-          const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
           setInvitacion({
             email: values.email,
-            url: `${window.location.origin}${base}/set-password?token=${setPasswordToken}`,
+            url: appPublicUrl(`/set-password?token=${setPasswordToken}`),
           });
           toast({ title: 'Usuario creado', description: 'Comparte el link de invitación que aparece arriba.' });
         } else {
@@ -151,7 +151,7 @@ export default function UsersPanel() {
             description: `${values.nombre} ya no tiene ningún proyecto asignado: al entrar no verá nada.`,
           }
           : cambiaCorreo
-            ? { title: 'Usuario actualizado', description: `${values.nombre} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+            ? { title: 'Usuario actualizado', description: `${values.nombre} entra ahora con ${correoNuevo}. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` }
             : { title: 'Usuario actualizado', description: values.nombre });
       }
       setDialogo(null);
@@ -173,7 +173,7 @@ export default function UsersPanel() {
       await setUserPassword(dialogo.user.id, password, repetida);
       toast({
         title: 'Contraseña actualizada',
-        description: `${dialogo.user.nombre} deberá entrar con la nueva. Sus sesiones se han cerrado.`,
+        description: `${dialogo.user.nombre} deberá entrar con la nueva. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.`,
       });
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message, variant: 'destructive' });
