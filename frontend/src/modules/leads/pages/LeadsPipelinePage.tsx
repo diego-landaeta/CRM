@@ -180,6 +180,9 @@ export default function LeadsPipelinePage() {
 
   const fetchAllLeads = useCallback(async () => {
     if (isAllProjects && (!projects || projects.length === 0)) return;
+    // Con el ámbito aún sin cargar iría `projectIds=` vacío, y el servidor lo
+    // rechaza con 400 (CRM#859).
+    if (isAllProjects && idsDelAmbito.length === 0) return;
     if (!isAllProjects && !pid) return;
     setLoading(true);
     try {
@@ -242,6 +245,17 @@ export default function LeadsPipelinePage() {
     e.preventDefault();
     setDragOverCol(null);
     if (!dragLead || dragLead.estado === targetEstado) {
+      setDragLead(null);
+      return;
+    }
+    // «Convertido» no se pone arrastrando: hay que registrar la venta, como en
+    // la ficha y en el cambio rápido (QuickStatusChange). Se abre su ficha.
+    if (targetEstado === 'convertido') {
+      toast({
+        title: 'Registra la compra desde la ficha',
+        description: 'Para marcar como convertido entra al lead y registra la conversión con importe.',
+      });
+      setDrawerLeadId(dragLead.id);
       setDragLead(null);
       return;
     }

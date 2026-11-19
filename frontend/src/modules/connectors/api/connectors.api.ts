@@ -1,4 +1,5 @@
-import client, { API_BASE_URL } from '@/shared/api/client';
+import client from '@/shared/api/client';
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import type { McpEstadoCodigo } from '@/modules/mcp/api/mcp.api';
 
 /**
@@ -24,7 +25,7 @@ export const TIPOS = [
 export const DESTINOS = [
   { id: 'product', label: 'Productos' },
   { id: 'lead', label: 'Prospectos' },
-  { id: 'matricula', label: 'Matrículas' },
+  { id: 'matricula', label: 'Solicitud de admisión' },
   { id: 'category', label: 'Categorías' },
 ] as const;
 
@@ -112,7 +113,7 @@ export function opcionesDeAlcance(proyectos: Campus[], esSuperadmin: boolean) {
  * La URL para pegar en Claude («Agregar conector personalizado»). La URL
  * personal del MCP de Diana, con el token de este conector.
  */
-export const urlParaClaude = (token: string) => `${window.location.origin}${API_BASE_URL}/mcp/u/${token}`;
+export const urlParaClaude = (token: string) => apiPublicUrl(`/mcp/u/${token}`);
 
 export interface Conector {
   id: number;

@@ -1,3 +1,4 @@
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -103,7 +104,7 @@ export default function WebhooksTab({ project }: { project: Project | null | und
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Crea webhooks para recibir solicitudes de admisión desde formularios externos. Cada solicitud crea una matrícula en estado <strong>solicitud_admision</strong>. Dedupe automático por DNI o email.</p>
+        <p className="text-xs text-muted-foreground">Crea webhooks para recibir solicitudes de admisión desde formularios externos. Cada solicitud aparece en esta sección en estado <strong>solicitud_admision</strong>. Dedupe automático por DNI o email.</p>
         <button
           onClick={() => setCreating(true)}
           aria-label="Nuevo webhook"
@@ -140,7 +141,7 @@ export default function WebhooksTab({ project }: { project: Project | null | und
 }
 
 function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit: () => void; onDelete: () => void }) {
-  const url = `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/webhook-tokens/receive/${token.token}`;
+  const url = apiPublicUrl(`/webhook-tokens/receive/${token.token}`);
   return (
     <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -240,7 +241,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
     onSave({ notas, active, field_mapping: mapping, aviso_emails });
   }
 
-  const url = token?.token ? `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/webhook-tokens/receive/${token.token}` : null;
+  const url = token?.token ? apiPublicUrl(`/webhook-tokens/receive/${token.token}`) : null;
 
   return (
     // Solo el fondo cierra: un clic en la ventanita de «Mapear» (que va dentro, por el

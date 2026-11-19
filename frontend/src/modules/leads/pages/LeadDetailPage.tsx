@@ -17,6 +17,7 @@ import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
 // Las becas de esta persona: a cual se le ofrecio y en que quedo.
 import ConvocatoriasDelProspecto from '@/modules/convocatorias/components/ConvocatoriasDelProspecto';
+import FeedbackDeLaFicha from '@/modules/feedback/components/FeedbackDeLaFicha';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
 import LeadRemindersCard, { ReminderDialog } from '../components/lead-detail/LeadRemindersCard';
@@ -27,6 +28,8 @@ import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
 import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
+// Links de pago (#680): solo en pruebas; la tarjeta se esconde sola en /crm.
+import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 
 function LoadingSkeleton() {
   return (
@@ -240,6 +243,10 @@ export default function LeadDetailPage() {
           <LeadInfoCard lead={lead} onUpdate={updateLead}
             onLlamada={(nota) => addInteraction('llamada', nota)}
             onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
+          {/* El correo de «¿por qué has desistido?» y lo que contestó (#169).
+              El aviso «Te han contestado al feedback» trae aquí, no al panel
+              lateral: sin esto, la gestora llegaba y no veía la respuesta (#593). */}
+          <FeedbackDeLaFicha leadId={lead.id} />
           <AgendaDelProspecto
             leadId={lead.id}
             // Marcar un paso mueve el estado del prospecto: sin esto la
@@ -276,6 +283,7 @@ export default function LeadDetailPage() {
             onCompose={() => setEmailOpen(true)}
             refreshKey={emailRefreshKey}
           />
+          <LinksDePagoCard projectId={lead.project_id} leadId={lead.id} productoId={lead.producto_interes_id} />
           <div data-section="compras" className="bg-card p-5 rounded-lg border border-border">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <CurrencyEur size={16} weight="regular" /> Historial de compras

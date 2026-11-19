@@ -83,13 +83,26 @@ export default function MatriculasPage() {
   const nombreAmbito = activeIssuerId ? (activeIssuer?.nombre || 'esta empresa')
     : campusElegido ? (campusElegido.nombre || 'este campus') : 'todos los campus';
   const { can, tieneRol } = usePermission();
-  const [tab, setTab] = useState('list');
   // Certificaciones tiene dirección propia (/clientes/matriculas/certificaciones):
   // la campana enlaza ahí y no depende del proyecto elegido, porque Certifex va por
   // campus de Certifex, no por proyecto del CRM.
   const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  // `?pestana=webhooks` abre la de webhooks: el apartado Conexión › Webhooks (#690)
+  // enlaza aquí el de admisión. Al pasar a otra pestaña se quita de la dirección,
+  // para que recargar no devuelva a la de webhooks.
+  const [tab, setTab] = useState(() => (params.get('pestana') === 'webhooks' ? 'webhooks' : 'list'));
+  useEffect(() => {
+    if (params.get('pestana') === 'webhooks') setTab('webhooks');
+  }, [params]);
+  useEffect(() => {
+    if (tab !== 'webhooks' && params.has('pestana')) {
+      const sin = new URLSearchParams(params);
+      sin.delete('pestana');
+      setParams(sin, { replace: true });
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   // Certificaciones y Diplomas (Certifex) se encienden por configuración
   // (VITE_CERTIFEX_PANEL, ver shared/lib/certifexPanel.ts): apagadas en producción
   // mientras no se enlace Certifex; apagadas, la dirección cae en el listado.
@@ -226,19 +239,21 @@ export default function MatriculasPage() {
   return (
     <div className="space-y-5 pb-8">
       <PageHeader
-        title="Matrículas"
+        title="Solicitud de admisión"
         subtitle={enDiplomas
           ? 'Diplomas: lo que piden los alumnos al terminar, y los diplomas emitidos, enviados y revocados'
           : enCertificaciones
           ? 'Certificaciones: quien termina la formación se aprueba aquí, y Certifex emite su título'
-          : `${stats.total || 0} matrículas en ${campusDelServidor.find((c) => String(c.id) === filtros.campusId)?.nombre || nombreAmbito}`}
+          : `${stats.total || 0} ${stats.total === 1 ? 'solicitud' : 'solicitudes'} en ${campusDelServidor.find((c) => String(c.id) === filtros.campusId)?.nombre || nombreAmbito}`}
       />
 
       <div className="flex overflow-x-auto border-b border-border [&>button]:shrink-0">
         <button
           onClick={() => { setTab('list'); if (enCertifex) navigate('/clientes/matriculas'); }}
-          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && tab === 'list' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && (tab === 'list' || (tab === 'webhooks' && !verEmisiones)) ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
         >
+          {/* Con `?pestana=webhooks` y sin permiso para esa pestaña se enseña el
+              listado (más abajo): se marca el listado, no ninguna. */}
           <GraduationCap size={14} /> Listado
         </button>
         {/* Los webhooks, como en la API: solo admin y super admin (#198). */}
@@ -275,7 +290,7 @@ export default function MatriculasPage() {
           <EmptyState icon={SealCheck} title="Solo administración" description="Los diplomas los aprueba, envía y revoca administración. Para verlos, pide que te den «Diplomas (Certifex) · Ver»." />
         ) : (
           <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} />
+            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} puedeRevertir={can('diplomas.revertir')} />
           </Suspense>
         )
       ) : enCertificaciones ? (
@@ -305,7 +320,7 @@ export default function MatriculasPage() {
               </div>
             )}
             <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida />}
+              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida puedeEditar={can('diplomas.emit')} />}
             </Suspense>
           </div>
         )
@@ -349,7 +364,7 @@ export default function MatriculasPage() {
           // Los textos de Diego (#199): sin filtros, cómo empezar; con filtros,
           // decirlo y dejar quitarlos.
           hayFiltros ? (
-            <EmptyState icon={GraduationCap} title="Ninguna matrícula con estos filtros" description={undefined}
+            <EmptyState icon={GraduationCap} title="Ninguna solicitud con estos filtros" description={undefined}
               action={(
                 <button type="button" onClick={quitarFiltros}
                   className="h-9 px-3 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40">
@@ -406,7 +421,7 @@ export default function MatriculasPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setDetail(m)}
-                          aria-label="Ver detalle de matrícula"
+                          aria-label="Ver la solicitud de admisión"
                           className="p-1.5 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
                         >
                           <Eye size={14} />
@@ -441,7 +456,7 @@ export default function MatriculasPage() {
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => setDetail(m)}
-                      aria-label="Ver detalle de matrícula"
+                      aria-label="Ver la solicitud de admisión"
                       className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
                     >
                       <Eye size={14} />
@@ -465,17 +480,18 @@ export default function MatriculasPage() {
 
       </>}
 
-      {/* Los botones de estado, solo para quien puede usarlos: el servidor deja
-          cambiar el estado a admin y super admin (a la gestora le daba 403). La
-          clave con el estado vuelve a montar la ficha con lo nuevo tras validar. */}
+      {/* Los botones de estado, solo para quien puede usarlos: el servidor pide
+          `matriculas.cambiar_estado` (a la gestora le daba 403; soporte lo trae
+          de serie y no le salían). La clave con el estado vuelve a montar la
+          ficha con lo nuevo tras validar. */}
       {detail && (
         <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={cerrarFicha} onChange={() => load()}
-          onEstado={tieneRol('superadmin', 'admin') ? handleEstado : undefined} pausada={!!rechazoTarget}
+          onEstado={can('matriculas.cambiar_estado') ? handleEstado : undefined} pausada={!!rechazoTarget}
           puedeAsignar={can('leads.assign')} verFacturas={can('facturas.view')} />
       )}
       <PromptDialog
         open={!!rechazoTarget}
-        title="Rechazar matrícula"
+        title="Rechazar la solicitud"
         message="Indica el motivo del rechazo para que el solicitante pueda recibirlo."
         placeholder="Ej: documentación incompleta o ilegible…"
         multiline

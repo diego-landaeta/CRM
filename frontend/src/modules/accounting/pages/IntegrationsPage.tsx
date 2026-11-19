@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import CorteDeFacturacion from '../components/CorteDeFacturacion';
 import ProyectosIAConectados from '../components/ProyectosIAConectados';
 import EstadoDeLasIntegraciones from '../components/EstadoDeLasIntegraciones';
+import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
 import { TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
 import SupabaseCard from '../components/SupabaseCard';
@@ -12,13 +13,17 @@ import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
+import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
 import { esProyectoIA, PROYECTOS_IA } from '@/shared/lib/proyectosIA';
-import { PLUGIN_MOODLE } from '@/shared/lib/pluginMoodle';
+import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
-  LinkSimple, Percent, MinusCircle,
+  LinkSimple, MinusCircle, Copy,
 } from '@phosphor-icons/react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
@@ -58,13 +63,16 @@ const EVENTOS_DEL_WEBHOOK = [
   'charge.succeeded', 'charge.updated', 'charge.refunded', 'charge.failed',
   'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed',
   'payment_intent.succeeded', 'payment_intent.payment_failed',
+  // Los links de pago (#680, fase 3): el pago del link y sus intentos. Fuera de
+  // ellos el CRM no hace nada con un checkout (sin la marca del CRM, se descarta).
+  'checkout.session.completed', 'checkout.session.async_payment_succeeded',
+  'checkout.session.async_payment_failed', 'checkout.session.expired',
 ] as const;
 
+// Con la base de la compilación: sin ella salía https://360crm.tech/api/...,
+// sin el /crm, y Stripe recibía un 404 (ver shared/lib/direccionesPublicas).
 function urlWebhook(projectId: number | null | undefined): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined)
-    || `${window.location.origin}/api`;
-  const raiz = base.replace(/\/+$/, '');
-  return `${raiz}/stripe-webhook/${projectId ?? ''}`;
+  return apiPublicUrl(`/stripe-webhook/${projectId ?? ''}`);
 }
 
 const EMPTY = (provider: Provider): Integration => ({
@@ -89,6 +97,14 @@ export default function IntegrationsPage() {
   const pid = vistaGeneral ? null : activeProject?.id;
   // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
   const esIA = esProyectoIA(activeProject);
+  // La salud de las conexiones (CRM#533): superadmin y admin, de «Todos», de una
+  // empresa o de un campus.
+  const { can } = usePermission();
+  const verSalud = can('integrations.salud');
+  // Links de pago (#680): si el servidor los tiene encendidos (`/auth/me`) y
+  // quien mira puede poner la clave o las reglas.
+  const linksPago = useLinksPagoEncendidos()
+    && (can('links_pago.configurar') || can('integrations.edit'));
 
   return (
     <div className="space-y-5 pb-8">
@@ -102,6 +118,9 @@ export default function IntegrationsPage() {
         subtitle={vistaGeneral
           ? 'El estado de las conexiones (Stripe, Brevo, el campus Moodle) de cada campus.'
           : `Configura conexiones externas (Stripe, Brevo, el campus Moodle${esIA ? ', Supabase' : ''}) para ${activeProject?.nombre || 'el proyecto activo'}.`}
+        /* El recorrido de Stripe y los links (18/11): con un campus elegido, que es
+           cuando salen sus tarjetas. */
+        actions={pid ? <VerRecorrido id="integraciones-stripe" /> : null}
       />
 
       <div className="bg-info-soft border border-info/30 rounded-lg p-4 text-sm space-y-2">
@@ -133,6 +152,7 @@ export default function IntegrationsPage() {
           Se pinta sola solo si hay proyectos IA. Solo en pruebas (#44). */}
       {PROYECTOS_IA && <ProyectosIAConectados />}
 
+      {verSalud && (vistaGeneral || pid) && <SaludDeLasConexiones />}
       {/* Monitask (#236): de todo el CRM, no de un campus. Sale sola si el servidor
           lo tiene encendido (MONITASK_ACTIVO) y quien mira puede configurarlo. */}
       <MonitaskCard />
@@ -146,11 +166,12 @@ export default function IntegrationsPage() {
       ) : (
         <div className="space-y-5">
           <StripeCard projectId={pid} />
-          {/* Links de pago (#680, fase 1): la clave de escritura, aparte de la
-              de lectura de arriba. Solo en /testeo y local hasta que Diego lo apruebe. */}
+          {/* Links de pago (#680): la clave de escritura, aparte de la de
+              lectura de arriba. Sale si el servidor los tiene encendidos: en
+              producción, con LINKS_PAGO_EN_PRODUCCION=1. */}
           {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
               enseñaba un momento el descuento del campus anterior. */}
-          {SOLO_EN_PRUEBAS && <StripeLinksCard key={pid} projectId={pid} />}
+          {linksPago && <StripeLinksCard key={pid} projectId={pid} />}
           {/* Supabase solo en los proyectos IA: es donde vive su app. En un
               proyecto CRM la tarjeta no diría nada. */}
           {esIA && <SupabaseCard projectId={pid} />}
@@ -165,6 +186,15 @@ export default function IntegrationsPage() {
 }
 
 // ─── Stripe ───────────────────────────────────────────────────────────────
+async function copiarDireccion(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    toast({ title: 'Dirección copiada', description: 'Pégala en Stripe tal cual.' });
+  } catch {
+    toast({ title: 'No se ha podido copiar', description: url, variant: 'destructive' });
+  }
+}
+
 function StripeCard({ projectId }: { projectId: number }) {
   const [data, setData] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
@@ -341,7 +371,7 @@ function StripeCard({ projectId }: { projectId: number }) {
             pegarla, no despues. */}
         <CorteDeFacturacion projectId={projectId} />
 
-        <div>
+        <div data-recorrido="stripe-clave">
           <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
             Access token {data?.has_secret && <span className="font-normal text-muted-foreground/80 ml-1">(actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code> — deja vacío para no cambiar)</span>}
           </label>
@@ -382,7 +412,7 @@ function StripeCard({ projectId }: { projectId: number }) {
             secretos de firma--. Presentarlo como obligatorio dejaba el alta a
             medias en apariencia, y empujaba a publicar un endpoint que sin
             secreto se rechaza igual. Va plegado. */}
-        <details className="rounded-md border border-border bg-muted/20 p-3">
+        <details className="rounded-md border border-border bg-muted/20 p-3" data-recorrido="stripe-webhook">
           <summary className="text-[11px] font-semibold cursor-pointer select-none">
             Webhook <span className="font-normal text-muted-foreground">— opcional, solo para no esperar los cinco minutos</span>
           </summary>
@@ -405,9 +435,17 @@ function StripeCard({ projectId }: { projectId: number }) {
           <label className="text-[11px] font-semibold text-muted-foreground mt-3 mb-1 block">
             Direccion que hay que pegar en Stripe
           </label>
-          <code className="block w-full px-3 py-2 rounded-md border border-border bg-muted/40 text-xs font-mono break-all">
-            {urlWebhook(projectId)}
-          </code>
+          <div className="flex items-stretch gap-2">
+            <code className="block flex-1 min-w-0 px-3 py-2 rounded-md border border-border bg-muted/40 text-xs font-mono break-all">
+              {urlWebhook(projectId)}
+            </code>
+            {/* Copiarla tal cual (18/11): a mano se perdía un trozo. */}
+            <button type="button" onClick={() => copiarDireccion(urlWebhook(projectId))}
+              aria-label="Copiar la dirección del webhook"
+              className="inline-flex items-center gap-1 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted">
+              <Copy size={13} weight="bold" aria-hidden="true" /> Copiar
+            </button>
+          </div>
           </div>
         </details>
 
@@ -450,6 +488,9 @@ const PERMISOS_DE_LA_CLAVE: ReadonlyArray<{ clave: string; nombre: string; nivel
   { clave: 'products', nombre: 'Products', nivel: 'Escritura' },
   { clave: 'prices', nombre: 'Prices', nivel: 'Escritura' },
   { clave: 'checkout_sessions', nombre: 'Checkout Sessions', nivel: 'Lectura' },
+  // Fase 2: para ver y cambiar el webhook de la cuenta desde aquí. No se prueba
+  // con «Probar conexión»: si falta, lo dice el bloque del webhook.
+  { clave: 'webhook_endpoints', nombre: 'Webhook Endpoints', nivel: 'Escritura' },
 ];
 
 type Permisos = Record<string, boolean | null>;
@@ -465,10 +506,6 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [permisos, setPermisos] = useState<Permisos | null>(null);
-  // El tope de descuento vive en el campus, no en la clave (migración 250).
-  const [descuento, setDescuento] = useState('');
-  const [descuentoGuardado, setDescuentoGuardado] = useState<number | null>(null);
-  const [guardandoDescuento, setGuardandoDescuento] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -478,23 +515,6 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
     } catch {/* ignore */} finally { setLoading(false); }
   }, [projectId]);
   useEffect(() => { load(); setPermisos(null); }, [load]);
-
-  useEffect(() => {
-    setDescuento('');
-    setDescuentoGuardado(null);
-    if (!puedeConfigurar) return undefined;
-    // Una respuesta que llega tarde, de otro campus, no pisa la de este.
-    let vigente = true;
-    client.get<{ descuento_max_pct: number }>(`/links-pago/config?projectId=${projectId}`)
-      .then((res) => {
-        if (vigente && res.success) {
-          setDescuentoGuardado(res.data.descuento_max_pct);
-          setDescuento(String(res.data.descuento_max_pct));
-        }
-      })
-      .catch(() => { /* la tarjeta sigue sirviendo para la clave */ });
-    return () => { vigente = false; };
-  }, [projectId, puedeConfigurar]);
 
   async function save() {
     if (!apiKey.trim()) {
@@ -544,32 +564,11 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
     }
   }
 
-  async function guardarDescuento() {
-    const n = Number(descuento.replace(',', '.'));
-    if (!Number.isFinite(n) || n < 0 || n > 100) {
-      toast({ title: 'Descuento no válido', description: 'Un número de 0 a 100.', variant: 'destructive' });
-      return;
-    }
-    setGuardandoDescuento(true);
-    try {
-      const res = await client.put<{ descuento_max_pct: number }>('/links-pago/config', { projectId, descuento_max_pct: n });
-      if (res.success) {
-        setDescuentoGuardado(res.data.descuento_max_pct);
-        setDescuento(String(res.data.descuento_max_pct));
-        toast({ title: 'Descuento máximo guardado', description: `${res.data.descuento_max_pct} % sobre el precio del catálogo.` });
-      }
-    } catch (e: unknown) {
-      const err = e as { data?: { error?: string }; message?: string };
-      toast({ title: 'No se ha podido guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
-    } finally { setGuardandoDescuento(false); }
-  }
-
   const modo = data?.config_public?.modo;
   const restringida = String(data?.config_public?.restringida) === 'true';
   // Lo de la última prueba: el servidor lo guarda, así se ve también al volver.
   const vistos: Permisos | null = permisos
     ?? ((data?.config_public as unknown as { permisos?: Permisos | null } | undefined)?.permisos || null);
-  const descuentoCambiado = descuento.trim() !== '' && Number(descuento.replace(',', '.')) !== descuentoGuardado;
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -580,11 +579,13 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
             Links de pago
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            {SOLO_EN_PRUEBAS && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            )}
           </h3>
           <p className="text-xs text-muted-foreground">
             La clave con la que el CRM <strong>creará</strong> links de pago en la cuenta de Stripe de este campus.
-            Va aparte de la de lectura de arriba, que no se toca. Todavía no se crea ningún link: esto deja la clave lista.
+            Va aparte de la de lectura de arriba, que no se toca. Con ella se crean los links desde la ficha del prospecto y de la venta.
           </p>
         </div>
         <StatusPill data={data} />
@@ -619,7 +620,7 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
           </p>
         </div>
 
-        <div>
+        <div data-recorrido="links-clave">
           <label htmlFor={`stripe-links-key-${projectId}`} className="text-[11px] font-semibold text-muted-foreground mb-1 block">
             Clave restringida de escritura
             {data?.has_secret && (
@@ -653,28 +654,9 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
           )}
         </div>
 
-        {puedeConfigurar && (
-          <div className="rounded-md border border-border p-3 space-y-2">
-            <label htmlFor={`links-descuento-${projectId}`} className="text-sm font-semibold flex items-center gap-1.5">
-              <Percent size={14} weight="bold" aria-hidden="true" /> Descuento máximo en este campus
-            </label>
-            <p className="text-xs text-muted-foreground">
-              Lo que una gestora puede rebajar sobre el precio del catálogo al crear un link. Con 0, solo el admin descuenta.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-28">
-                <input id={`links-descuento-${projectId}`} type="number" inputMode="decimal" min={0} max={100} step={0.5}
-                  value={descuento} onChange={(e) => setDescuento(e.target.value)}
-                  className="w-full h-10 pl-3 pr-7 rounded-md border border-border bg-card text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">%</span>
-              </div>
-              <button onClick={guardarDescuento} disabled={guardandoDescuento || !descuentoCambiado}
-                className="inline-flex items-center gap-1.5 h-10 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
-                <FloppyDisk size={14} weight="bold" /> {guardandoDescuento ? 'Guardando…' : 'Guardar descuento'}
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Las reglas del campus y el webhook de la cuenta (#680, fase 2): solo quien configura. */}
+        {puedeConfigurar && <ReglasDeLosLinks key={`reglas-${projectId}`} projectId={projectId} />}
+        {puedeConfigurar && data?.has_secret && <WebhookDeLaCuentaBloque key={`webhook-${projectId}`} projectId={projectId} />}
 
         <TestStatus data={data} />
 
@@ -887,8 +869,7 @@ const EVENTOS_PAYPAL = [
 ] as const;
 
 function urlWebhookPaypal(projectId: number): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined) || `${window.location.origin}/api`;
-  return `${base.replace(/\/+$/, '')}/paypal-webhook/${projectId}`;
+  return apiPublicUrl(`/paypal-webhook/${projectId}`);
 }
 
 function PaypalSiEstaEncendido({ projectId }: { projectId: number }) {
@@ -1078,6 +1059,8 @@ function PaypalCard({ projectId }: { projectId: number }) {
 // config_public.url y el token, cifrado, como las demás claves. Con él, el CRM
 // comprueba que el correo de cada tutor es usuario del campus.
 function MoodleCard({ projectId }: { projectId: number }) {
+  // El plugin del CRM: en /testeo y en local, o si el servidor lo tiene aprobado (#850).
+  const pluginMoodle = usePluginMoodle();
   const [data, setData] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -1174,9 +1157,9 @@ function MoodleCard({ projectId }: { projectId: number }) {
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#679). Solo en
-            pruebas hasta aprobarlo (`shared/lib/pluginMoodle`): en /crm, como siempre. */}
-        {PLUGIN_MOODLE && (
+        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#679). En /crm,
+            solo con PLUGIN_MOODLE_EN_PRODUCCION=1 en el servidor (`shared/lib/pluginMoodle`). */}
+        {pluginMoodle && (
           <>
             <PluginDelCrm projectId={projectId} alConectar={load} />
             <p className="text-xs font-semibold text-muted-foreground">O, sin el plugin, a mano:</p>

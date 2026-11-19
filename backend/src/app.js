@@ -66,11 +66,15 @@ import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
 import moodleAvisos from './modules/consultas/consultas.webhook.js';
+import githubWebhook from './modules/tasks/tasks.github.webhook.js';
+import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 import soporteModule from './modules/soporte/index.js';
+import incidenciasModule from './modules/incidencias/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
@@ -81,7 +85,7 @@ import mcpModule from './modules/mcp/index.js';
 import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
-// Links de pago (#680). Fase 1: solo lectura y el tope de descuento; no llama a Stripe.
+// Links de pago (#680): las vistas, las reglas del campus y, desde la fase 2, crear y anular links.
 import linksPagoModule from './modules/links-pago/index.js';
 // Registro automático de cobros: PayPal y extractos del banco (#766). Cada parte, con su interruptor.
 import cobrosExternosModule from './modules/cobros-externos/index.js';
@@ -94,6 +98,7 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
+import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
@@ -106,10 +111,13 @@ import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
+import { startCertifexReversionesScheduler } from './jobs/certifexReversionesScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
+import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
+import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
@@ -119,6 +127,8 @@ import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js'
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
+import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
+import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
@@ -176,6 +186,12 @@ app.use('/api/woocommerce/webhook', wcWebhook);
 // ningún campus puede conectarse ni avisar al CRM de producción.
 if (pluginMoodleActivo()) app.use('/api/moodle-avisos', moodleAvisos);
 else logger.info('Rutas SKIP (solo en pruebas): /api/moodle-avisos (plugin del CRM en Moodle)');
+
+// El aviso de GitHub (CRM#737): las issues del repositorio, al tablero. Firmado
+// (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
+// GITHUB_TABLERO_ACTIVO encendido (apagado de serie): si no, 404.
+if (tareasActivas() && githubTableroActivo()) app.use('/api/github/webhook', githubWebhook);
+else logger.info('Rutas SKIP (GITHUB_TABLERO_ACTIVO apagado): /api/github/webhook');
 
 // El aviso de Stripe (#680), igual: en bruto y ANTES del express.json general. La firma
 // se calcula sobre el cuerpo tal cual llega; el express.json de abajo lo convertía en
@@ -357,12 +373,16 @@ const ALL_MODULES = [
   { name: 'mcp', mod: mcpModule },
   { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
+  // El alumno confirma los datos de su diploma antes de emitirlo (#768). Apagado de serie.
+  { name: 'diploma-confirmacion', mod: diplomaConfirmacionModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
   { name: 'soporte', mod: soporteModule },
+  // Incidencias (#253), al lado de Soporte: sobre todo las de capa 8. Migración 238.
+  { name: 'incidencias', mod: incidenciasModule },
   // Links de pago (#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
   ...(linksPagoActivos() ? [{ name: 'links-pago', mod: linksPagoModule }] : []),
   // Siempre montado: cada ruta contesta 404 con su interruptor apagado (#766).
@@ -512,6 +532,8 @@ if (process.env.NODE_ENV !== 'test') {
     startPaypalCobrosSyncScheduler();
     // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
     startMonitaskSyncScheduler();
+    // Disputas de Stripe (#396): traerlas de cada cuenta y avisar a los admins. Solo con STRIPE_DISPUTAS_ACTIVO=1.
+    startStripeDisputasScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
@@ -526,14 +548,20 @@ if (process.env.NODE_ENV !== 'test') {
     startConsultasResumenScheduler();
     startConsultasPlazoScheduler();
     startConsultasCargaScheduler();
+    // Diplomas revertidos que el CRM no llegó a apuntar (#624).
+    startCertifexReversionesScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
     // Ventas a plazos: cerrar la suscripción de Stripe al completar el pago (#747).
     startSuscripcionesPlazosScheduler();
     startCursosPendientesScheduler();
+    // Lee Moodle y escribe a las tutoras (#681): con el resto de la #689, apagado en producción hasta aprobarlo.
+    if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startFacturaAutomaticaScheduler();
+    startDiplomaConfirmacionScheduler();
+    startMatriculaMoodleScheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
@@ -549,6 +577,8 @@ if (process.env.NODE_ENV !== 'test') {
     if (facturasColaboradorActivas()) startFacturasColaboradorScheduler();
     // Los avisos a la empresa: «Han llegado N facturas» y «Faltan por pagar» (Diego, 04/11).
     if (facturasColaboradorActivas()) startFacturasColaboradorAvisosScheduler();
+    // Links de pago (#680, fase 2): desactivar en Stripe los que caducan sin pagar.
+    if (linksPagoActivos()) startLinksPagoCaducidadScheduler();
     // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
     startCopiaDiariaScheduler();
     // La auditoría de facturación cada 2 horas (#765). Apagada de serie: FACTURACION_AUDITORIA_ACTIVA.
