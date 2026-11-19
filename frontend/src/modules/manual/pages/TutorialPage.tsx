@@ -8,6 +8,17 @@ import TextoTutorial from '../tutoriales/TextoTutorial';
 import { TEMAS, tutorialPorId, type RecorridoDelTutorial } from '../tutoriales/tutoriales';
 import { CAPTURAS_POR_NOMBRE, textoDe } from '../tutoriales/contenido';
 
+/** «Ayuda › Tutoriales › tema», con la vuelta a la lista (la cabecera es la misma en los dos CRM). */
+function Migas({ tema }: { tema?: string }) {
+  return (
+    <span className="text-xs text-muted-foreground">
+      Ayuda ›{' '}
+      <Link to="/manual/tutoriales" className="font-medium text-primary hover:underline">Tutoriales</Link>
+      {tema ? ` › ${tema}` : ''}
+    </span>
+  );
+}
+
 /**
  * Un tutorial de Ayuda › Tutoriales (Diego, 18/11). Sin su permiso no se abre,
  * tampoco escribiendo la dirección. «Ver recorrido» lleva a la pantalla que
@@ -31,7 +42,7 @@ export default function TutorialPage() {
   if (!permitido || !tutorial || !md) {
     return (
       <div className="mx-auto max-w-3xl pb-12">
-        <PageHeader title="Tutorial" backTo="/manual/tutoriales" backLabel="Tutoriales" />
+        <PageHeader title="Tutorial" breadcrumbs={<Migas />} />
         <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm" role="status">
           <LockKey size={28} weight="duotone" className="mx-auto mb-2 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-semibold text-foreground">Este tutorial no está disponible para tu usuario</p>
@@ -55,9 +66,7 @@ export default function TutorialPage() {
       <PageHeader
         title={tutorial.titulo}
         subtitle={tutorial.resumen}
-        backTo="/manual/tutoriales"
-        backLabel="Tutoriales"
-        breadcrumbs={<span className="text-xs text-muted-foreground">Ayuda › Tutoriales › {TEMAS[tutorial.tema].titulo}</span>}
+        breadcrumbs={<Migas tema={TEMAS[tutorial.tema].titulo} />}
       />
 
       <p className="mb-4 inline-flex rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
