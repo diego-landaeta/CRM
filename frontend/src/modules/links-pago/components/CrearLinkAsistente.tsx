@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LinkSimple, Copy, CheckCircle, MagnifyingGlass, ArrowSquareOut, WhatsappLogo, EnvelopeSimple, WarningCircle,
@@ -8,7 +8,8 @@ import Portal from '@/shared/components/ui/portal';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
-import LeadEmailDialog from '@/modules/leads/components/LeadEmailDialog';
+// El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
+const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
 import {
   crearLink, verConfig, ventasDelProspecto,
   type ConfigLinks, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto,
@@ -472,6 +473,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
         </div>
       </div>
       {correoAbierto && lead && hecho?.url && (
+        <Suspense fallback={null}>
         <LeadEmailDialog
           open
           encima
@@ -482,6 +484,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
           cuerpoInicial={`Hola${lead.nombre ? ` ${lead.nombre.split(' ')[0]}` : ''},\n\nAquí tienes el link para pagar${curso ? ` ${curso.nombre}` : ''} (${dinero(hecho.importe, hecho.moneda)}):\n\n${hecho.url}\n\nEl link caduca el ${cuando(hecho.caduca_el)}. Si tienes cualquier duda, responde a este correo.\n\nUn saludo.`}
           onClose={() => setCorreoAbierto(false)}
         />
+        </Suspense>
       )}
     </Portal>
   );

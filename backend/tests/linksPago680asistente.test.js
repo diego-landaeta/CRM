@@ -203,18 +203,20 @@ describe('el link de UNA venta del prospecto: el cobro entra en esa venta y sald
                VALUES ($1, 1, $2, CURRENT_DATE), ($1, 2, $2, CURRENT_DATE + 30)`, [v, v === venta ? 300 : 500]);
     }
     stripeCreaBien();
-    const r = await crear(p.gestora, { leadId: lead, conversionId: venta, productId: prod.A2, importe: 300 });
+    // El admin: un link por menos de lo pendiente (una cuota) sigue siendo «descuento»
+    // para la gestora con tope 0 (fase 3); el link por cuota llega con el plan de pago.
+    const r = await crear(p.admin, { leadId: lead, conversionId: venta, productId: prod.A2, importe: 300 });
     expect(r.status).toBe(201);
     expect(r.body.data.conversion_id).toBe(venta);
     // La lista dice a qué venta va, con su programa.
-    const lista = await api.get('/api/links-pago').query({ leadId: lead }).set(como(p.gestora));
+    const lista = await api.get('/api/links-pago').query({ leadId: lead }).set(como(p.admin));
     expect(lista.body.data.find((l) => l.id === r.body.data.id)).toMatchObject({ conversion_id: venta, venta_producto_nombre: `${MARCA} experto` });
 
     const link = r.body.data;
     const cargo = {
       id: `ch_${MARCA}_1`, amount: 30000, currency: 'eur', status: 'succeeded', created: Math.floor(Date.now() / 1000),
       billing_details: { email: `pagador@otro.test`, name: `${MARCA} Pagador` },
-      metadata: { crm_link_id: String(link.id), crm_project_id: String(A), crm_lead_id: String(lead), crm_conversion_id: String(venta), crm_user_id: String(p.gestora.id), crm_entorno: 'local' },
+      metadata: { crm_link_id: String(link.id), crm_project_id: String(A), crm_lead_id: String(lead), crm_conversion_id: String(venta), crm_user_id: String(p.admin.id), crm_entorno: 'local' },
       payment_method_details: { type: 'card' },
     };
     await servicio.handleWebhookEvent(A, { id: `evt_${cargo.id}`, type: 'charge.succeeded', data: { object: cargo } });
