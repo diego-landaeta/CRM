@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple, CalendarBlank } from '@phosphor-icons/react';
 // Los atajos de fecha. El mismo componente para todas las pantallas con
 // rango: Diego los pidio tres veces en cuatro dias, y eso no son tres tareas.
 import RangoRapido from '@/shared/components/ui/RangoRapido';
@@ -20,6 +20,7 @@ import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
 import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import AnularFacturaDialog from '../components/AnularFacturaDialog';
+import EditarFechasDialog from '../components/EditarFechasDialog';
 import TutorialButton from '../components/TutorialButton';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { toast } from '@/shared/hooks/useToast';
@@ -147,6 +148,9 @@ export default function InvoicesPage() {
   const [cobrarInv, setCobrarInv] = useState<Invoice | null>(null);
   // Anular una emitida con su motivo (CRM#793).
   const [anularInv, setAnularInv] = useState<Invoice | null>(null);
+  // Cambiar la fecha, también de una emitida, en su sitio de la serie (19/11).
+  const [fechasInv, setFechasInv] = useState<Invoice | null>(null);
+  const puedeFechas = can('facturas.editar_fechas');
   // Cobro por Stripe: al descargar se elige entre la factura del alumno (bruto)
   // y la copia de gestión (neto liquidado).
   const [descargarInv, setDescargarInv] = useState<Invoice | null>(null);
@@ -812,6 +816,14 @@ export default function InvoicesPage() {
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
                       )}
+                      {/* La fecha sí (Diego, 19/11): solo la fecha, en su sitio de la serie. */}
+                      {puedeFechas && inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.numero != null && (
+                        <button onClick={() => setFechasInv(inv)} data-recorrido="factura-cambiar-fecha"
+                          title="Cambiar la fecha de emisión o de pago (solo la fecha, entre la del número anterior y la del siguiente)"
+                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                          <CalendarBlank size={11} /> Cambiar fecha
+                        </button>
+                      )}
                       {/* Una emitida no se cambia (CRM#793): el botón se ve, desactivado, con el porqué. */}
                       {puedeCorregir && esFacturaEmitida(inv) && (
                         <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex" data-recorrido="factura-bloqueada">
@@ -982,6 +994,10 @@ export default function InvoicesPage() {
       {cobrarInv && (
         <CobrarProformaDialog invoice={cobrarInv} onClose={() => setCobrarInv(null)}
           onSaved={() => { setCobrarInv(null); load(); }} />
+      )}
+      {fechasInv && (
+        <EditarFechasDialog invoice={fechasInv} onClose={() => setFechasInv(null)}
+          onSaved={() => { setFechasInv(null); load(); }} />
       )}
       {anularInv && (
         <AnularFacturaDialog invoice={anularInv} onClose={() => setAnularInv(null)}
