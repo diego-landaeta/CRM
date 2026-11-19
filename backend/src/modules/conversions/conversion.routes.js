@@ -17,6 +17,25 @@ router.param('paymentId', pagoPorId);
 router.param('refundId', devolucionPorId);
 router.param('leadId', prospectoPorId);
 
+/*
+  COBRO AUTOMÁTICO DE LAS CUOTAS (309): si la gestora cambia la fecha o el importe
+  de una cuota, la borra, rehace el plan, apunta o borra un cobro, o cambia el
+  total, el plan se vuelve a pasar a Stripe al acabar la petición (sin hacerla
+  esperar). Solo en las ventas que tienen el cobro automático; en las demás, nada.
+*/
+router.use((req, res, next) => {
+  if (req.method !== 'GET') {
+    res.on('finish', () => {
+      if (res.statusCode < 400 && req.ventaTocada) {
+        import('../links-pago/links-pago.cobro-auto.js')
+          .then((m) => m.alCambiarElPlan(req.ventaTocada))
+          .catch(() => {});
+      }
+    });
+  }
+  next();
+});
+
 // Listado y detalle
 router.get('/', puede('conversions.view'), ctrl.list);
 router.get('/productos', puede('conversions.view'), ctrl.listProductos);

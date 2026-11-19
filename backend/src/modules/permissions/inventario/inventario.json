@@ -3068,6 +3068,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3088,6 +3092,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3112,6 +3120,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3132,6 +3144,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3156,6 +3172,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.edit"
@@ -3176,6 +3196,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3200,6 +3224,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3220,6 +3248,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3244,6 +3276,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.edit"
@@ -3264,6 +3300,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3288,6 +3328,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3308,6 +3352,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3332,6 +3380,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3352,6 +3404,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3376,6 +3432,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3396,6 +3456,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3420,6 +3484,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.cobros"
@@ -3440,6 +3508,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3464,6 +3536,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.view"
@@ -3484,6 +3560,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3508,6 +3588,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.reparto"
@@ -3528,6 +3612,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -3552,6 +3640,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.devoluciones"
@@ -3574,6 +3666,10 @@
     "tipo": "token"
    },
    {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
+   },
+   {
     "tipo": "puede",
     "claves": [
      "conversions.devoluciones"
@@ -3594,6 +3690,10 @@
   "guardias": [
    {
     "tipo": "token"
+   },
+   {
+    "tipo": "sin_regla",
+    "nombre": "anónima"
    },
    {
     "tipo": "puede",
@@ -9392,6 +9492,51 @@
     "tipo": "puede",
     "claves": [
      "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/cobro-automatico",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/cobro-automatico",
+  "relativa": "GET /cobro-automatico",
+  "controlador": "verCobroAutomatico",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/links-pago/cobro-automatico",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "PUT",
+  "ruta": "/api/links-pago/cobro-automatico",
+  "relativa": "PUT /cobro-automatico",
+  "controlador": "cambiarCobroAutomatico",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.cobro_automatico"
     ]
    }
   ],

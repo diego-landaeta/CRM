@@ -69,6 +69,8 @@ const guardia = (buscar, noEncontrada, codigo = 'NOT_FOUND') => async (req, res,
     const conversionId = await buscar(id);
     if (conversionId === null) throw new AppError(noEncontrada, 404, codigo);
     await exigirVenta(req, conversionId);
+    // La venta que toca la petición: el cobro automático (309) la repasa al acabar.
+    req.ventaTocada = Number(conversionId);
     next();
   } catch (err) { next(err); }
 };
