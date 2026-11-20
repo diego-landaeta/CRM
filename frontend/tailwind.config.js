@@ -68,6 +68,13 @@ export default {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))',
         },
+        // El lateral (rediseño «papel», 20/11). Ver .lateral en index.css.
+        lateral: {
+          DEFAULT: 'hsl(var(--lateral))',
+          hover: 'hsl(var(--lateral-hover))',
+          activo: 'hsl(var(--lateral-activo))',
+          border: 'hsl(var(--lateral-border))',
+        },
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
@@ -104,9 +111,9 @@ export default {
       // pantallas a la vez y eso no hay quien lo revise.
       fontSize: {
         // 20px · el título de la pantalla
-        titulo: ['1.25rem', { lineHeight: '1.75rem', fontWeight: '600' }],
+        titulo: ['1.125rem', { lineHeight: '1.5rem', fontWeight: '600', letterSpacing: '-0.011em' }],
         // 16px · el título de un bloque dentro de la pantalla
-        seccion: ['1rem', { lineHeight: '1.5rem', fontWeight: '600' }],
+        seccion: ['0.9375rem', { lineHeight: '1.375rem', fontWeight: '600', letterSpacing: '-0.006em' }],
         // 14px · el texto de siempre
         normal: ['0.875rem', { lineHeight: '1.25rem' }],
         // 12px · lo que acompaña: ayudas, metadatos, pies
@@ -115,7 +122,9 @@ export default {
         // ya vienen puestos, que a este tamaño en mayúsculas hacen falta.
         tabla: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.06em', fontWeight: '600' }],
         // 28px · las cifras que se miran de lejos. Siempre con tabular-nums.
-        cifra: ['1.75rem', { lineHeight: '2.25rem', fontWeight: '600' }],
+        cifra: ['1.375rem', { lineHeight: '1.75rem', fontWeight: '600', letterSpacing: '-0.015em' }],
+        // 13px · el dato de una tabla o de una ficha (rediseño, 20/11)
+        dato: ['0.8125rem', { lineHeight: '1.25rem' }],
       },
 
       // El ritmo de la pantalla (#32).
@@ -136,8 +145,8 @@ export default {
       // La escala numérica de Tailwind sigue estando para los casos sueltos;
       // esto es para las tres decisiones que se repiten en las 82 pantallas.
       spacing: {
-        bloque: '1.5rem',   // 24px
-        tarjeta: '1rem',    // 16px
+        bloque: '1rem',     // 16px (era 24: rediseño, 20/11)
+        tarjeta: '0.75rem', // 12px (era 16)
         fila: '0.5rem',     // 8px
       },
 

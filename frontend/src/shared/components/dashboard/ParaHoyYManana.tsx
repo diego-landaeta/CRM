@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Warning, Sun, CalendarBlank, CalendarCheck } from '@phosphor-icons/react';
 import { traerResumen, type ResumenCola } from '@/modules/proceso/api/agenda.api';
+import { Acta, CampoActa } from '@/shared/components/ui/Acta';
 
 /**
  * «Para hoy / para mañana» (#130, parte 2).
@@ -68,43 +69,25 @@ export default function ParaHoyYManana(
   const algo = TRAMOS.some((t) => Number(resumen[t.campo] ?? 0) > 0);
   if (!algo) return null;
 
+  // Rediseño (20/11): un acta de cuatro celdas, 56 px, en vez de un bloque de
+  // 160 con título y explicación. La explicación va en el `title` de cada celda.
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
-      <h2 className="font-semibold text-base">Lo que toca</h2>
-      <p className="text-xs text-muted-foreground mb-3">
-        Del proceso comercial. Pulsa un tramo y la cola se abre con él puesto.
-      </p>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {TRAMOS.map(({ clave, rotulo, icono: Icono, urge, campo }) => {
-          const n = Number(resumen[campo] ?? 0);
-          return (
-            <button
-              key={clave}
-              type="button"
-              onClick={() => navigate(`/prospectos/cola?tramo=${clave}`)}
-              aria-label={`${rotulo}: ${n}. Abrir la cola en este tramo`}
-              className={`rounded-md p-3 border text-left transition-colors ${
-                urge && n > 0
-                  ? 'border-orange-300 dark:border-orange-900 bg-orange-50/40 dark:bg-orange-950/20 hover:bg-orange-100/60 dark:hover:bg-orange-950/40'
-                  : 'border-border hover:bg-muted/50'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Icono size={13} />
-                <span className="truncate">{rotulo}</span>
-              </div>
-              <div
-                className={`text-2xl font-semibold tabular-nums ${
-                  urge && n > 0 ? 'text-orange-600 dark:text-orange-400' : ''
-                }`}
-              >
-                {n}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <Acta etiqueta="Lo que toca, del proceso comercial" min={120}>
+      {TRAMOS.map(({ clave, rotulo, icono: Icono, urge, campo }) => {
+        const n = Number(resumen[campo] ?? 0);
+        return (
+          <CampoActa
+            key={clave}
+            icon={Icono}
+            etiqueta={rotulo}
+            valor={n}
+            tono={urge && n > 0 ? 'aviso' : 'neutro'}
+            title={`${rotulo}: ${n}. Pulsa y la cola se abre en este tramo.`}
+            ariaLabel={`${rotulo}: ${n}. Abrir la cola en este tramo`}
+            onClick={() => navigate(`/prospectos/cola?tramo=${clave}`)}
+          />
+        );
+      })}
+    </Acta>
   );
 }

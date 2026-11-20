@@ -50,7 +50,7 @@ export default function PageHeader({
   const volver = backTo && (
     <Link
       to={backTo}
-      className="inline-flex items-center gap-1 -ml-1 px-1 rounded text-secundario font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+      className="inline-flex items-center gap-1 -ml-1 px-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <CaretLeft size={12} weight="bold" />
       {backLabel}
@@ -68,16 +68,27 @@ export default function PageHeader({
             quedaría más estrecho, son los botones los que bajan (Ingresos se
             quedaba en «Ingr…»). */}
         <div className="min-w-0 flex-1 max-sm:min-w-40 sm:min-w-32">
-          {(volver || breadcrumbs) && (
-            <div className="flex items-center gap-2 leading-none">
-              {volver}
-              {breadcrumbs}
-            </div>
-          )}
-          <h1 className="truncate text-seccion leading-tight">{title}</h1>
-          {subtitle && (
-            <p className="truncate text-secundario leading-tight text-muted-foreground">{subtitle}</p>
-          )}
+          {/* Una línea (rediseño, 20/11): la vuelta y la miga a la izquierda,
+              el título, y el subtítulo detrás en gris. En el móvil el subtítulo
+              no cabe y se queda en el `title` del encabezado. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            {(volver || breadcrumbs) && (
+              <span className="flex flex-shrink-0 items-center gap-1.5 leading-none">
+                {volver}
+                {breadcrumbs}
+                <span aria-hidden="true" className="text-muted-foreground/60">/</span>
+              </span>
+            )}
+            <h1
+              className="truncate text-[15px] font-semibold leading-tight tracking-tight"
+              title={typeof subtitle === 'string' ? subtitle : undefined}
+            >
+              {title}
+            </h1>
+            {subtitle && (
+              <p className="hidden min-w-0 truncate text-xs leading-tight text-muted-foreground lg:block">{subtitle}</p>
+            )}
+          </div>
         </div>
         {actions && (
           // En el móvil, si no caben junto al título bajan debajo y se reparten en
@@ -86,7 +97,7 @@ export default function PageHeader({
           // se reparten en dos líneas a la derecha (Reportes, 18/11: a 1440 px los
           // atajos, las fechas y CSV/PDF sacaban la cabecera 470 px de la pantalla).
           // El título se queda con 8rem como poco y los botones con el resto.
-          <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2 max-sm:max-w-full max-sm:justify-start sm:min-w-0 sm:flex-shrink">
+          <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1.5 max-sm:max-w-full max-sm:justify-start sm:min-w-0 sm:flex-shrink">
             {actions}
           </div>
         )}

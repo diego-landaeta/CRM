@@ -47,15 +47,16 @@ interface Props {
    *
    * Antes esto vivia en un boton «Refrescar» aparte, arriba: dos botones de
    * recargar en la misma pantalla, que es lo que Diego marco (#125). El aviso
-   * no se pierde —es lo unico que aquel hacia de mas—, se muda aqui.
-   */
+   * no se pierde —es lo unico que aquel hacia de mas—, se muda aqui.
+   */
   nuevos?: number;
   /** Píldoras de lo que está filtrado ahora mismo, debajo de la fila. */
   activos?: ReactNode;
   className?: string;
 }
 
-const CAMPO = 'h-10 rounded-md border border-border bg-card px-3 text-normal font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20';
+// Rediseño (20/11): una sola línea, sin tarjeta alrededor, controles de 36/32 px.
+const CAMPO = 'h-9 rounded-md border border-border bg-muted/50 px-2.5 text-[13px] text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20';
 
 export default function BarraFiltros({
   busqueda,
@@ -83,12 +84,12 @@ export default function BarraFiltros({
   ][Math.min(desplegables.length, 3)];
 
   return (
-    <Card padding="sm" className={cn('space-y-3', className)}>
+    <div className={cn('space-y-2', className)}>
       <div>
-        <div className={cn('grid gap-3', REJILLA)}>
+        <div className={cn('grid gap-2', REJILLA)}>
           <label className="relative min-w-0">
             <span className="sr-only">{placeholder}</span>
-            <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <MagnifyingGlass size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             {/* Sin el autocompletado del navegador: Edge ofrecía aquí el correo guardado
                 de quien está usando el CRM, porque el texto dice «email». */}
             <input
@@ -96,7 +97,7 @@ export default function BarraFiltros({
               value={busqueda}
               onChange={(e) => onBusqueda(e.target.value)}
               placeholder={placeholder}
-              className={cn(CAMPO, 'w-full bg-muted/50 pl-9 pr-3')}
+              className={cn(CAMPO, 'w-full pl-8 pr-3')}
             />
           </label>
 
@@ -114,15 +115,15 @@ export default function BarraFiltros({
             </select>
           ))}
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {extra}
             {onLimpiar && hayFiltros && (
               <button
                 type="button"
                 onClick={onLimpiar}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-normal font-semibold hover:bg-muted"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                <Broom size={15} weight="bold" />
+                <Broom size={14} weight="regular" />
                 Limpiar
               </button>
             )}
@@ -131,10 +132,11 @@ export default function BarraFiltros({
                 type="button"
                 onClick={onActualizar}
                 aria-label={nuevos > 0 ? `Actualizar. Han entrado ${nuevos}` : 'Actualizar'}
-                className="relative inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-normal font-semibold text-primary-foreground hover:bg-primary/90"
+                title="Actualizar"
+                className="relative inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-card px-2.5 text-[13px] font-medium hover:bg-muted"
               >
-                <ArrowClockwise size={15} weight="bold" className={actualizando ? 'animate-spin' : undefined} />
-                Actualizar
+                <ArrowClockwise size={14} weight="regular" className={actualizando ? 'animate-spin' : undefined} />
+                <span className="hidden xl:inline">Actualizar</span>
                 {nuevos > 0 && (
                   <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-success px-1 text-[10px] font-bold text-success-foreground">
                     {nuevos > 9 ? '9+' : nuevos}
@@ -147,6 +149,6 @@ export default function BarraFiltros({
       </div>
 
       {activos && <div className="flex flex-wrap items-center gap-1.5">{activos}</div>}
-    </Card>
+    </div>
   );
 }

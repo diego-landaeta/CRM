@@ -2,7 +2,7 @@ import { cva } from 'class-variance-authority';
 import { cn } from '@/shared/lib/utils';
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+  'inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[11px] font-medium leading-none transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
   {
     variants: {
       variant: {

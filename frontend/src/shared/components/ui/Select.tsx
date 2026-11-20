@@ -128,8 +128,8 @@ export default function Select<T>({
 
   const triggerCls =
     size === 'sm'
-      ? 'h-7 px-2 text-[11px] gap-1.5'
-      : 'h-9 px-3 text-sm gap-2';
+      ? 'h-7 px-2 text-xs gap-1.5'
+      : 'h-9 px-2.5 text-[13px] gap-2';
   const itemCls =
     size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-sm';
 

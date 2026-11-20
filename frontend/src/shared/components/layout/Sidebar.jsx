@@ -88,6 +88,11 @@ import { MARCA } from '@/shared/config/marca';
 
 import { reagruparMenu } from './bloquesDelMenu';
 
+// Los bloques de administración van debajo de una raya, separados de los de
+// trabajo diario (rediseño, 20/11). No cambia el orden: ya estaban al final.
+const BLOQUES_DE_ADMINISTRACION = ['Configuración', 'Sistema', 'Equipo de Desarrollo', 'Testeo'];
+const FOCO_MENU = ' focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
+
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
 const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
@@ -844,15 +849,15 @@ export function EntradaProximamente({ label, icon: Icon, collapsed = false, comp
       aria-label={`${label} — Próximamente`}
       className={cn(
         'relative flex items-center text-muted-foreground/50 cursor-not-allowed select-none',
-        compacta ? 'gap-2 px-3 py-1.5 rounded-lg text-[12px]' : 'rounded-md text-[13px]',
-        !compacta && (collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5'),
+        compacta ? 'gap-2 h-10 lg:h-7 px-2 rounded-md text-[13px]' : 'rounded-md text-[13px]',
+        !compacta && (collapsed ? 'justify-center h-8' : 'gap-2.5 h-11 lg:h-8 px-2'),
       )}
     >
-      {!compacta && Icon && <Icon size={18} weight="regular" />}
+      {!compacta && Icon && <Icon size={16} weight="light" />}
       {!collapsed && (
         <>
           <span className="truncate">{label}</span>
-          <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+          <span className="ml-auto text-[10px] bg-secondary text-muted-foreground px-1 rounded">Próximamente</span>
         </>
       )}
     </div>
@@ -886,11 +891,11 @@ function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, pro
         title={displayLabel}
         aria-label={displayLabel}
         className={cn(
-          'w-full flex items-center justify-center h-9 rounded-md transition-colors',
-          hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+          'w-full flex items-center justify-center h-8 rounded-md transition-colors',
+          hasActiveChild ? 'bg-[hsl(var(--lateral-activo))] text-foreground' : 'text-foreground/75 hover:bg-secondary hover:text-foreground'
         )}
       >
-        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+        <Icon size={16} weight={hasActiveChild ? 'regular' : 'light'} />
       </button>
     );
   }
@@ -900,16 +905,17 @@ function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, pro
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-all',
-          hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+          'w-full flex items-center gap-2.5 h-11 lg:h-8 px-2 rounded-md text-[13px] transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+          hasActiveChild ? 'text-foreground font-medium' : 'text-foreground/75 hover:bg-secondary hover:text-foreground'
         )}
+        aria-expanded={open}
       >
-        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+        <Icon size={16} weight={hasActiveChild ? 'regular' : 'light'} className={hasActiveChild ? 'text-primary' : undefined} />
         {displayLabel}
-        <CaretRight size={12} weight="bold" className={cn('ml-auto transition-transform', open && 'rotate-90')} />
+        <CaretRight size={11} weight="bold" className={cn('ml-auto opacity-60 transition-transform duration-150', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
+        <div className="ml-[1.1875rem] my-0.5 pl-2.5 border-l border-border space-y-px">
           {visible.map((child) => (
             child.comingSoon ? (
               <EntradaProximamente key={child.to} label={applyLabel(child.label, labelOverrides)} compacta />
@@ -925,10 +931,10 @@ function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, pro
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
-                    'block px-3 py-1.5 rounded-lg text-[12px] transition-all',
+                    'flex items-center h-10 lg:h-7 px-2 rounded-md text-[13px] truncate transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                     isActive
-                      ? 'bg-primary/10 text-primary font-semibold'
-                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                      ? 'bg-[hsl(var(--lateral-activo))] text-foreground font-medium'
+                      : 'text-foreground/75 hover:bg-secondary hover:text-foreground'
                   )
                 }
               >
@@ -967,7 +973,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
         aria-label={collapsed ? panel.label : panel.label}
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
+          collapsed ? 'justify-center h-8' : 'gap-2.5 h-11 lg:h-8 px-2',
         )}
       >
         <Icon size={18} weight="regular" />
@@ -990,10 +996,10 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
-          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
+          collapsed ? 'justify-center h-8' : 'gap-2.5 h-11 lg:h-8 px-2',
           isActive
-            ? 'bg-primary/10 text-primary font-bold shadow-sm'
-            : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+            ? 'bg-[hsl(var(--lateral-activo))] text-foreground font-medium'
+            : 'text-foreground/75 hover:bg-secondary hover:text-foreground'
         )
       }
     >
@@ -1022,7 +1028,10 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
  * No se BORRAN --son de Fabian y estan bien--: se quedan visibles en testeo
  * hasta que Diego los vea y diga. Quitar la bandera es una linea.
  */
-const MOSTRAR_SUBTITULOS = import.meta.env.MODE !== 'production';
+// Rediseño (20/11): una línea por entrada también en /testeo. Con el subtítulo
+// cada entrada medía 45 px y el menú abierto, 3.694 px (auditoría UX del 20/11).
+// Lo que decía el subtítulo sigue en el `title` de la entrada.
+const MOSTRAR_SUBTITULOS = false;
 
 // Exportada para la prueba del menú (#226): una entrada marcada no puede ser un enlace.
 export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, onClick, collapsed, featured, comingSoon: marcadaProximamente }) {
@@ -1050,27 +1059,21 @@ export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverr
         title={collapsed ? displayLabel : undefined}
         aria-label={collapsed ? displayLabel : undefined}
         className={cn(
-          'relative flex items-center rounded-md text-[13px] transition-all',
+          'relative flex items-center rounded-md text-[13px] transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
           collapsed
-            ? 'justify-center h-9'
-            : 'gap-2.5 px-3 py-1.5',
+            ? 'justify-center h-8'
+            : 'gap-2.5 h-11 lg:h-8 px-2',
           isActive
             ? featured
-              ? 'bg-primary text-primary-foreground font-bold shadow-sm'
-              : 'bg-primary/10 text-primary font-bold shadow-sm'
+              ? 'bg-primary text-primary-foreground font-medium'
+              : 'bg-[hsl(var(--lateral-activo))] text-foreground font-medium'
             : featured
-              ? 'border border-primary/20 bg-primary/5 text-primary font-bold hover:bg-primary/10'
-              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+              ? 'text-foreground font-medium hover:bg-secondary'
+              : 'text-foreground/75 hover:bg-secondary hover:text-foreground'
         )}
       >
-        {isActive && !collapsed && (
-          <span
-            aria-hidden="true"
-            className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
-          />
-        )}
         <span className="relative">
-          <Icon size={18} weight={isActive ? 'duotone' : 'regular'} />
+          <Icon size={16} weight={isActive ? 'fill' : 'regular'} />
           {collapsed && badge && (
             <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-1 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center">
               {badge > 9 ? '9+' : badge}
@@ -1089,7 +1092,7 @@ export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverr
           </span>
         )}
         {!collapsed && badge && (
-          <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
+          <span className="ml-auto min-w-[1.25rem] h-[18px] inline-flex items-center justify-center text-[10px] font-semibold tabular-nums bg-foreground/[0.07] text-foreground rounded px-1">
             {badge}
           </span>
         )}
@@ -1103,34 +1106,28 @@ export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverr
       // `hayRutaMasConcreta`: es lo que impedía que Conectores se encendiera.
       end={to === '/' || hayRutaMasConcreta(location.pathname, to)}
       onClick={onClick}
-      title={collapsed ? displayLabel : undefined}
+      title={collapsed ? displayLabel : (detail || undefined)}
       aria-label={collapsed ? displayLabel : undefined}
       className={({ isActive }) =>
         cn(
-          'relative flex items-center rounded-md text-[13px] transition-all',
+          'relative flex items-center rounded-md text-[13px] transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
           collapsed
-            ? 'justify-center h-9'
-            : 'gap-2.5 px-3 py-1.5',
+            ? 'justify-center h-8'
+            : 'gap-2.5 h-11 lg:h-8 px-2',
           isActive
             ? featured
-              ? 'bg-primary text-primary-foreground font-bold shadow-sm'
-              : 'bg-primary/10 text-primary font-bold shadow-sm'
+              ? 'bg-primary text-primary-foreground font-medium'
+              : 'bg-[hsl(var(--lateral-activo))] text-foreground font-medium'
             : featured
-              ? 'border border-primary/20 bg-primary/5 text-primary font-bold hover:bg-primary/10'
-              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+              ? 'text-foreground font-medium hover:bg-secondary'
+              : 'text-foreground/75 hover:bg-secondary hover:text-foreground'
         )
       }
     >
       {({ isActive }) => (
         <>
-          {isActive && !collapsed && (
-            <span
-              aria-hidden="true"
-              className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
-            />
-          )}
           <span className="relative">
-            <Icon size={18} weight={isActive ? 'duotone' : 'regular'} />
+            <Icon size={16} weight={isActive ? 'regular' : 'light'} className={isActive ? 'text-primary' : undefined} />
             {collapsed && badge && (
               <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-1 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center">
                 {badge > 9 ? '9+' : badge}
@@ -1149,7 +1146,7 @@ export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverr
           </span>
         )}
           {!collapsed && badge && (
-            <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
+            <span className="ml-auto min-w-[1.25rem] h-[18px] inline-flex items-center justify-center text-[10px] font-semibold tabular-nums bg-foreground/[0.07] text-foreground rounded px-1">
               {badge}
             </span>
           )}
@@ -1187,7 +1184,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // Persistido en localStorage. Por defecto, abierto: Principal + la sección
   // de la ruta activa. El resto cerradas para reducir ruido visual.
   const location = useLocation();
-  const SECTIONS_KEY = 'crm-sidebar-sections-v1';
+  // v2 (rediseño, 20/11): Testeo nace plegado y al final; lo guardado en v1 lo
+  // dejaba abierto arriba del todo.
+  const SECTIONS_KEY = 'crm-sidebar-sections-v2';
   const [openSections, setOpenSections] = useState(() => {
     function autoOpen() {
       const out = {};
@@ -1198,7 +1197,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           return it.to && it.to !== '/' && location.pathname.startsWith(it.to + '/');
         });
         // Abiertos de entrada, lo de cada día: Hoy y Comercial (#534, parte 3).
-        out[s.label] = s.label === 'Hoy' || s.label === 'Comercial' || s.label === 'Testeo' || has;
+        out[s.label] = s.label === 'Hoy' || s.label === 'Comercial' || has;
       }
       return out;
     }
@@ -1383,6 +1382,18 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // Un admin con la casilla NO se recorta: ya lo ve todo por su rol.
   const soloColab = esSoloColaboraciones(user);
 
+  // Lo que ve esta persona, bloque a bloque.
+  const ctxMenu = { user, can, modules: activeProject?.modules, projectType: tipoDelMenu(activeProject?.type), soloColab };
+  const seccionesVisibles = NAV_SECTIONS.filter((section) => {
+    const aplica = !(Array.isArray(section.salvoTipo) && section.salvoTipo.includes(tipoDelMenu(activeProject?.type)));
+    return aplica && entradasDeSeccion(section, ctxMenu).length > 0;
+  });
+  // El primero de administración que viene DESPUÉS de uno de trabajo: Testeo,
+  // que hoy va arriba del todo, no lleva raya encima.
+  const etiquetasVisibles = seccionesVisibles.map((s) => s.label);
+  const primerBloqueDeAdministracion = etiquetasVisibles.find((l, i) => BLOQUES_DE_ADMINISTRACION.includes(l)
+    && etiquetasVisibles.slice(0, i).some((x) => !BLOQUES_DE_ADMINISTRACION.includes(x)));
+
   // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
   // que es dar de alta profesores y ajustarles el porcentaje.
   const rolLabel = user?.gestor_colaboraciones
@@ -1399,93 +1410,76 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       role="navigation"
       aria-label="Menu principal"
       className={cn(
-        'border-r bg-card h-screen fixed left-0 top-0 flex flex-col z-40 transition-[width] duration-200',
-        collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
+        // El lateral (rediseño «papel», 20/11): un gris de papel con su línea de
+        // 1 px. La clase `lateral` redefine el gris de hover dentro del menú.
+        'lateral border-r border-border h-screen fixed left-0 top-0 flex flex-col z-40 transition-[width] duration-200',
+        collapsed ? 'w-14 px-2 py-2' : 'w-60 lg:w-56 px-2 py-2'
       )}
     >
-      {/* La cabecera: el logo grande arriba y los textos debajo.
-          En una linea no cabia: con el logo, «MultiCRM» y la chapa de BETA en
-          240 pixeles, el nombre acababa cortado en «Multi…». Apilado, el logo
-          se ve de verdad —es lo que dice en que marca estas— y el texto cabe
-          entero. */}
-      <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
-        <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
-          {/* Con una EMPRESA elegida, la marca de la empresa (11/11): su logo o
-              su nombre corto. Antes caía en el primer campus (Fono Aprende). */}
-          {activeIssuer ? (
-            <EmpresaAvatar empresa={activeIssuer} size={collapsed ? 'md' : 'lg'} />
-          ) : activeProject && activeProject.id !== -1 ? (
-            <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
-          ) : (
-            <div className={cn(
-              'rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0',
-              collapsed ? 'w-8 h-8' : 'w-12 h-12',
-            )}>
-              <Package size={collapsed ? 16 : 22} weight="bold" />
-            </div>
-          )}
-          {onToggleCollapsed && (
-            <button
-              type="button"
-              onClick={onToggleCollapsed}
-              aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
-              title={collapsed ? 'Expandir (Ctrl+B)' : 'Contraer (Ctrl+B)'}
-              className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0"
-            >
-              {collapsed ? <CaretRight size={14} weight="bold" /> : <CaretLeft size={14} weight="bold" />}
-            </button>
-          )}
-        </div>
-
-        {!collapsed && (
-          <div className="mt-2 min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-semibold text-sm text-foreground truncate">{MARCA}</span>
-              {BETA_MODE && (
-                <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
-                  BETA{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
-                </span>
-              )}
-            </div>
-            {/* Aqui salia el nombre de la marca. Se ha quitado: salia TRES veces
-                en la misma pantalla —aqui, en el selector de abajo y en la
-                cabecera— y con eso no se sabe cual manda (#79, punto 2). Ahora
-                vive solo en la cabecera, y ademas desde alli se cambia. */}
+      {/* La cabecera de la tapa, en una línea de 40 px (rediseño, 20/11): la
+          marca, el nombre del CRM y los dos botones. Antes era un logo de 48 px
+          con el nombre debajo y un botón ancho de «Configurar esta marca»:
+          142 px antes de la primera entrada del menú. */}
+      <div className={cn('mb-2 flex items-center', collapsed ? 'flex-col gap-1.5' : 'h-10 gap-2 px-1')}>
+        {/* Con una EMPRESA elegida, la marca de la empresa (11/11): su logo o
+            su nombre corto. Antes caía en el primer campus (Fono Aprende). */}
+        {activeIssuer ? (
+          <EmpresaAvatar empresa={activeIssuer} size="sm" />
+        ) : activeProject && activeProject.id !== -1 ? (
+          <ProjectAvatar project={activeProject} size="sm" />
+        ) : (
+          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center text-primary-foreground flex-shrink-0">
+            <Package size={15} weight="bold" />
           </div>
+        )}
+        {!collapsed && (
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="truncate text-[13px] font-semibold tracking-tight text-foreground">{MARCA}</span>
+            {BETA_MODE && (
+              <span className="flex-shrink-0 rounded bg-warning-soft px-1 py-px text-[9px] font-semibold text-warning-soft-foreground">
+                Beta{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
+              </span>
+            )}
+          </div>
+        )}
+        {/* Configurar la marca: cosa de administradores. Sigue aquí, pero como
+            icono (con su nombre al pasar por encima), no como un botón ancho. */}
+        {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
+          <button
+            type="button"
+            onClick={() => setConfigOpen(true)}
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            title={`Configurar esta marca (${activeProject.nombre})`}
+            aria-label="Configurar proyecto activo"
+          >
+            <Gear size={15} weight="regular" />
+          </button>
+        )}
+        {onToggleCollapsed && (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+            title={collapsed ? 'Expandir (Ctrl+B)' : 'Contraer (Ctrl+B)'}
+            className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors flex-shrink-0"
+          >
+            {collapsed ? <CaretRight size={13} weight="bold" /> : <CaretLeft size={13} weight="bold" />}
+          </button>
         )}
       </div>
 
-      {/* Aqui vivia el selector de proyecto. Se ha ido a la cabecera (#79,
-          punto 2): el nombre de la marca salia tres veces en la misma pantalla
-          y para cambiarla habia que bajar hasta aqui. El engranaje de
-          configurar la marca se queda, pero suelto: es cosa de administradores
-          y no hace falta tenerlo al lado del selector. */}
-      {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
-        <div className="mb-6 px-1">
-          <button
-            onClick={() => setConfigOpen(true)}
-            className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-secondary px-2 text-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title={`Configurar ${activeProject.nombre}`}
-            aria-label="Configurar proyecto activo"
-          >
-            <Gear size={14} weight="bold" />
-            Configurar esta marca
-          </button>
-        </div>
-      )}
-
       {/* Buscador (oculto en collapsed; sigue accesible via Ctrl+K) */}
       {!collapsed && (
-        <div className="mb-4">
+        <div className="mb-3 px-0.5">
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event('crm:open-palette'))}
-            className="w-full h-9 px-3 rounded-lg border border-border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors group flex items-center gap-2"
+            className="w-full h-10 lg:h-8 px-2 rounded-md border border-border bg-background shadow-[0_1px_0_rgb(0_0_0/0.02)] hover:border-input text-muted-foreground hover:text-foreground transition-colors group flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             aria-label="Abrir buscador (Cmd+K)"
           >
-            <MagnifyingGlass size={14} weight="bold" className="flex-shrink-0" />
-            <span className="text-sm flex-1 text-left truncate">Buscar…</span>
-            <kbd className="flex-shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-card text-muted-foreground/70 group-hover:text-foreground transition-colors">
+            <MagnifyingGlass size={14} weight="regular" className="flex-shrink-0" />
+            <span className="text-[13px] flex-1 text-left truncate">Buscar…</span>
+            <kbd className="flex-shrink-0 text-[10px] font-sans px-1 rounded border border-border text-muted-foreground transition-colors">
               {typeof navigator !== 'undefined' && /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'} K
             </kbd>
           </button>
@@ -1504,7 +1498,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       {/* Navigation */}
       <nav className={cn(
         'flex-1 overflow-y-auto min-h-0 sidebar-scroll',
-        collapsed ? 'space-y-1.5 -mr-1 pr-1' : 'space-y-3 -mr-2 pr-2'
+        collapsed ? 'space-y-1 -mr-1 pr-1' : 'space-y-1 -mr-1.5 pr-1.5'
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
@@ -1517,6 +1511,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
+          // La raya de «administración»: antes del primero de esos bloques que se vea.
+          const primeroDeAdministracion = section.label === primerBloqueDeAdministracion;
           const isOpen = !!openSections[section.label];
           // El icono del encabezado (#105). Mismo tamano y peso que los de las
           // entradas —18 y `regular`—: la idea es que ordenen, no que compitan.
@@ -1567,10 +1563,10 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     y fingirlo aqui seria peor que no ponerlo. */}
                 {SectionIcon && (
                   <div
-                    className="flex h-6 items-center justify-center text-muted-foreground/50"
+                    className="flex h-5 items-center justify-center text-muted-foreground/60"
                     title={sectionLabel}
                   >
-                    <SectionIcon size={18} weight="regular" />
+                    <SectionIcon size={16} weight="light" />
                   </div>
                 )}
                 {renderItems()}
@@ -1578,25 +1574,31 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             );
           }
           return (
-            <div key={section.label} className="space-y-0.5">
+            <div key={section.label} data-bloque-menu={section.label} className={sIdx > 0 ? 'pt-2' : undefined}>
+              {primeroDeAdministracion && (
+                <div className="mx-2 mb-1 mt-2 border-t border-border" aria-hidden="true" />
+              )}
               <button
                 type="button"
                 onClick={() => toggleSection(section.label)}
                 aria-expanded={isOpen}
-                className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
+                className={'group w-full flex items-center justify-between h-10 lg:h-7 px-2 rounded-md text-[11.5px] font-semibold tracking-[0.01em] text-muted-foreground hover:text-foreground transition-colors select-none' + FOCO_MENU}
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  {SectionIcon && <SectionIcon size={18} weight="regular" className="shrink-0" />}
+                <span className="flex min-w-0 items-center gap-2.5">
+                  {/* El icono del bloque (#105), del mismo tamaño y trazo que los
+                      de las entradas, en gris: ordena sin competir. */}
+                  {SectionIcon && <SectionIcon size={16} weight="light" className="shrink-0" />}
                   <span className="truncate">{sectionLabel}</span>
                 </span>
                 <CaretDown
                   size={10}
                   weight="bold"
-                  className={cn('transition-transform duration-150', isOpen ? '' : '-rotate-90')}
+                  aria-hidden="true"
+                  className={cn('opacity-0 transition-[transform,opacity] duration-150 group-hover:opacity-70 group-focus-visible:opacity-70', isOpen ? '' : '-rotate-90 opacity-70')}
                 />
               </button>
               {isOpen && (
-                <div className="space-y-0.5 mt-0.5 ml-1 pl-2 border-l border-border/50">
+                <div className="space-y-px pb-1">
                   {renderItems()}
                 </div>
               )}
@@ -1608,7 +1610,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         {Array.isArray(activeProject?.external_panels) && activeProject.external_panels.length > 0 && (
           <div className={cn(collapsed ? 'space-y-1' : 'space-y-0.5')}>
             {!collapsed ? (
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">
+              <p className="text-xs font-medium text-muted-foreground px-2 h-7 flex items-center">
                 Externos
               </p>
             ) : (
@@ -1628,7 +1630,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
 
       {/* Footer: avatar + notificaciones */}
       <div className={cn(
-        'mt-auto pt-3 border-t border-border',
+        'mt-auto pt-2 border-t border-border',
         collapsed ? 'flex flex-col items-center gap-1.5' : 'flex items-center gap-2'
       )}>
         <button
@@ -1643,11 +1645,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             'rounded-lg transition-colors flex items-center',
             collapsed
               ? 'w-10 h-10 justify-center'
-              : 'flex-1 min-w-0 gap-3 p-2',
+              : 'flex-1 min-w-0 gap-2 px-1.5 py-1.5',
             userMenuOpen ? 'bg-secondary' : 'hover:bg-secondary/60'
           )}
         >
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs flex-shrink-0 overflow-hidden">
+          <div className="w-7 h-7 rounded-full bg-foreground/10 flex items-center justify-center text-foreground font-semibold text-[11px] flex-shrink-0 overflow-hidden">
             {user?.avatar_url ? (
               <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/users/${user.id}/avatar`} alt="" width={36} height={36} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : initials}
@@ -1655,8 +1657,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-bold text-foreground truncate">{user?.nombre}</p>
-                <p className="text-[10px] text-muted-foreground">{rolLabel}</p>
+                <p className="text-[13px] font-medium leading-4 text-foreground truncate">{user?.nombre}</p>
+                <p className="text-[11px] leading-4 text-muted-foreground">{rolLabel}</p>
               </div>
               <CaretUp size={12} weight="bold" className={cn('text-muted-foreground transition-transform flex-shrink-0', !userMenuOpen && 'rotate-180')} />
             </>

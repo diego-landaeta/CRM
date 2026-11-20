@@ -5,7 +5,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import { mesEnCurso } from '@/modules/reports/components/ComoVoy';
-import { cn } from '@/shared/lib/utils';
+import { Acta, CampoActa } from '@/shared/components/ui/Acta';
 
 /**
  * LAS CIFRAS DE HOY (#534, parte 5). Lo primero del Dashboard: cuatro cifras
@@ -43,35 +43,25 @@ const numero = (n: number) => new Intl.NumberFormat('es-ES').format(Number(n || 
 const cuantos = (n: number, uno: string, varios: string) => `${numero(n)} ${Number(n) === 1 ? uno : varios}`;
 
 function Tarjeta({ titulo, cifra, detalle, ayuda }: { titulo: string; cifra: string; detalle: string; ayuda: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3" title={ayuda}>
-      <p className="text-xs font-medium text-muted-foreground">{titulo}</p>
-      <p className="text-2xl font-semibold tabular-nums">{cifra}</p>
-      <p className="text-[11px] text-muted-foreground">{detalle}</p>
-    </div>
-  );
+  // Rediseño (20/11): una celda del acta de Hoy.
+  return <CampoActa etiqueta={titulo} valor={cifra} detalle={detalle} title={ayuda} />;
 }
 
 function Alerta({ icono: Icono, cifra, texto, ayuda, onClick }: {
   icono: typeof WarningCircle; cifra: number; texto: string; ayuda: string; onClick: () => void;
 }) {
   const hay = cifra > 0;
+  // Una celda más del acta, pulsable: abre Prospectos con el filtro puesto.
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <CampoActa
+      icon={Icono}
+      etiqueta={texto}
+      valor={numero(cifra)}
+      detalle="Abrir la lista"
+      tono={hay ? 'aviso' : 'neutro'}
       title={ayuda}
-      className={cn(
-        'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
-        hay
-          ? 'border-warning/40 bg-warning-soft/40 hover:bg-warning-soft/70'
-          : 'border-border bg-card hover:bg-muted',
-      )}
-    >
-      <Icono size={16} weight="bold" className={hay ? 'text-warning' : 'text-muted-foreground'} />
-      <span className="tabular-nums text-base font-semibold">{numero(cifra)}</span>
-      <span className="text-[11px] leading-tight text-muted-foreground">{texto}</span>
-    </button>
+      onClick={onClick}
+    />
   );
 }
 
@@ -111,7 +101,7 @@ export default function CifrasDeHoy({ stats, today }: CifrasDeHoyProps) {
   }, [activeProject?.id, activeIssuerId]);
 
   return (
-    <section aria-label="Las cifras de hoy" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <Acta etiqueta="Las cifras de hoy" min={140}>
       {mes && (
         <Tarjeta
           titulo="Cobrado"
@@ -142,7 +132,6 @@ export default function CifrasDeHoy({ stats, today }: CifrasDeHoyProps) {
         detalle={`este mes · ${numero(today?.nuevos_hoy || 0)} hoy`}
         ayuda="Prospectos entrados este mes, por su fecha de solicitud."
       />
-      <div className="col-span-2 flex flex-col justify-center gap-2 lg:col-span-1">
         <Alerta
           icono={UserMinus}
           cifra={Number(stats?.sin_asignar || 0)}
@@ -157,7 +146,6 @@ export default function CifrasDeHoy({ stats, today }: CifrasDeHoyProps) {
           ayuda="Prospectos abiertos sin moverse más días que la alerta de su campus. Abre la lista con ellos."
           onClick={() => navigate('/prospectos?qf=sin-actividad')}
         />
-      </div>
-    </section>
+    </Acta>
   );
 }

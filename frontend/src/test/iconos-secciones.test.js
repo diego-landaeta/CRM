@@ -58,13 +58,14 @@ describe('los encabezados de sección del menú', () => {
   });
 
   it('se pintan del mismo tamaño y peso que los de las entradas', () => {
-    // Diego lo pidió así para que ordenen sin competir. Las entradas usan
-    // `size={18} weight="regular"`, y el encabezado tiene que ir igual.
+    // Diego lo pidió así para que ordenen sin competir. Desde el rediseño
+    // «papel» (20/11) las entradas usan iconos finos, `size={16} weight="light"`,
+    // y el encabezado tiene que ir igual.
     const pintadas = FUENTE.match(/<SectionIcon size=\{(\d+)\} weight="(\w+)"/g) || [];
     expect(pintadas.length).toBe(2); // desplegado y plegado
     for (const uso of pintadas) {
-      expect(uso).toContain('size={18}');
-      expect(uso).toContain('weight="regular"');
+      expect(uso).toContain('size={16}');
+      expect(uso).toContain('weight="light"');
     }
   });
 });

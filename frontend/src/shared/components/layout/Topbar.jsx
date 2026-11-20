@@ -36,9 +36,12 @@ export default function Topbar({ onAbrirMenu, className }) {
 
   return (
     <header
+      id="cabecera"
       className={cn(
-        'sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur',
-        'supports-[backdrop-filter]:bg-background/80',
+        // 48 px y una línea en el PC (rediseño, 20/11): título, ámbito y acciones.
+        // Hoja blanca con su costura: la cabecera es la primera línea del acta.
+        'sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur',
+        'supports-[backdrop-filter]:bg-card/85',
         className,
       )}
     >
@@ -46,13 +49,13 @@ export default function Topbar({ onAbrirMenu, className }) {
           todo el ancho, el título y los botones de la pantalla. En una sola
           fila no cabían a 390 px: el selector se montaba encima de «Nuevo» y
           el título se quedaba en una letra (visto en la prueba de la #106). */}
-      <div className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:flex-nowrap lg:px-6 xl:px-8">
+      <div className="flex min-h-12 flex-wrap items-center gap-x-2 gap-y-1.5 px-[var(--lienzo)] py-1.5 sm:flex-nowrap lg:h-12 lg:py-0">
         {/* En movil el menu se abre desde aqui: es donde se busca. */}
         <button
           type="button"
           onClick={onAbrirMenu}
           aria-label="Abrir menu"
-          className="lg:hidden -ml-1 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-border hover:bg-muted"
+          className="lg:hidden -ml-2 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md hover:bg-muted"
         >
           <List size={18} weight="regular" />
         </button>
@@ -64,7 +67,7 @@ export default function Topbar({ onAbrirMenu, className }) {
           /* `flex-wrap` en el móvil: si los botones no caben junto al título, bajan a
              otra línea. Sin él se comían todo el ancho y el título se quedaba en 0 px
              (Ventas, Feedback, Tareas: tres botones). */
-          className={cn('min-w-0 flex-wrap items-center gap-3 sm:flex-nowrap', ocupado ? 'order-last flex basis-full sm:order-none sm:flex-1 sm:basis-auto' : 'hidden')}
+          className={cn('min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap', ocupado ? 'order-last flex basis-full sm:order-none sm:flex-1 sm:basis-auto' : 'hidden')}
         />
 
         {/* Pantalla sin cabecera propia: el nombre de la ruta.
@@ -73,7 +76,7 @@ export default function Topbar({ onAbrirMenu, className }) {
         {!ocupado && (
           <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
             {titulo && (
-              <h1 className="truncate text-base font-semibold leading-tight">{titulo}</h1>
+              <h1 className="truncate text-[15px] font-semibold leading-tight tracking-tight">{titulo}</h1>
             )}
           </div>
         )}

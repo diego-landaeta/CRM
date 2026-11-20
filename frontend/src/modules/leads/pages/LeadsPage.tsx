@@ -705,6 +705,142 @@ export default function LeadsPage() {
         </Suspense>
       )}
 
+      {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
+      <PageHeader
+        title="Prospectos"
+        subtitle="Explora y gestiona tus clientes potenciales"
+        // Rediseño (20/11): las herramientas de la lista (Exportar, Wasapi,
+        // Configurar) suben a la cabecera, al lado de «Nuevo prospecto». Eran una
+        // fila propia de 36 px entre los bloques de resumen y la lista.
+        actions={(
+          <>
+          {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
+              arriba, en la cabecera del marco, igual que en todas las demas. */}
+          <>
+              {/* Aqui habia un «Refrescar». Hacia lo mismo que el «Actualizar» de
+                  la fila de filtros —dos botones de recargar en la misma pantalla,
+                  #125— y lo unico que aportaba de mas, el aviso de cuantos han
+                  entrado, se ha mudado alli. */}
+              {/* Aqui habia un «Lista / Kanban» y un «Audiencias» que llevaban a
+                  las mismas tres pantallas que las pestanas de arriba. Dos sitios
+                  para lo mismo, uno encima del otro. */}
+              {filteredLeads.length > 0 && can('leads.export') && (
+                <button
+                  onClick={abrirExport}
+                  disabled={exportLoading}
+                  title="Exportar (Excel/CSV/JSON) — todos los resultados filtrados"
+                  aria-label="Exportar"
+                  className="h-9 inline-flex items-center gap-1.5 px-2.5 rounded-md text-xs sm:text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <DownloadSimple size={14} weight="bold" />
+                  <span className="hidden xl:inline">{exportLoading ? 'Preparando…' : 'Exportar'}</span>
+                </button>
+              )}
+              {/* Y aqui un «Reportes», que llevaba al mismo sitio que el acceso
+                  «Reportes» del bloque de arriba. Se queda el del bloque. */}
+              <button
+                onClick={() => setWasapiOpen(true)}
+                title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
+                aria-label="Wasapi"
+                className="h-9 inline-flex items-center gap-1.5 px-2.5 rounded-md text-xs sm:text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <WhatsappLogo size={14} weight="bold" />
+                <span className="hidden xl:inline">Wasapi</span>
+              </button>
+              {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                <div className="relative">
+                  <button
+                    onClick={() => setMoreOpen(!moreOpen)}
+                    className="h-9 inline-flex items-center gap-1.5 px-2.5 rounded-md text-xs sm:text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-expanded={moreOpen}
+                  >
+                    <span className="hidden md:inline">Configurar</span>
+                    <span className="md:hidden">Más</span>
+                    <CaretDown size={11} weight="bold" />
+                  </button>
+                  {moreOpen && (
+                    <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-popover z-30 w-max py-1">
+                      {can('leads.create') && (
+                      <button
+                        onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                      >
+                        <UploadSimple size={13} weight="regular" className="flex-shrink-0" /> Importar desde CSV
+                      </button>
+                      )}
+                      <div className="my-1 border-t border-border" />
+                      <button
+                        onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                      >
+                        <Notepad size={13} weight="regular" className="flex-shrink-0" /> Campos custom de prospectos
+                      </button>
+                      <button
+                        onClick={() => { setConfigTab('webhook'); setMoreOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                      >
+                        <PlugsConnected size={13} weight="regular" className="flex-shrink-0" /> Webhook de captura
+                      </button>
+                      <button
+                        onClick={() => { navigate('/whatsapp/plantillas'); setMoreOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                      >
+                        <ChatCircleText size={13} weight="regular" className="flex-shrink-0" /> Plantillas de WhatsApp
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+          </>
+            {can('leads.create') && (
+              <button
+                onClick={() => setFormOpen(true)}
+                className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
+              >
+                <Plus size={14} weight="bold" />
+                <span className="hidden sm:inline">Nuevo prospecto</span>
+                <span className="sm:hidden">Nuevo</span>
+              </button>
+                        )}
+          </>
+        )}
+      />
+
+      {/* Los tres bloques de arriba, como la maqueta: que pasa, que toca hacer,
+          y a donde se va desde aqui. Los numeros ya venian del servidor; solo
+          se usaban para unas pildoras dentro del desplegable de filtros, donde
+          no los ve nadie.
+
+          Las proporciones son las de la maqueta: la salud manda porque es lo
+          que mas se mira, y los accesos son la columna estrecha. */}
+      <CifrasProspectos
+        stats={stats}
+        urgencias={quickCounts}
+        filtroRapido={quickFilter}
+        onFiltroRapido={(clave) => setQuickFilter(clave || '')}
+      />
+
+      {/* Plegable y con memoria (#125): «esta super bien, pero que se pueda
+          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
+          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
+          organizarse el dia le hace falta. */}
+      <BloquePlegable
+        clave="prospectos-resumen"
+        // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado»
+        // (rescatado de la PR #153). Quien ya lo dejó abierto lo sigue viendo
+        // abierto: lo guardado manda sobre el arranque.
+        abiertoPorDefecto={false}
+        titulo="Resumen del día y del equipo"
+        resumen={
+          quickCounts.urgent > 0
+            ? `${quickCounts.urgent} piden atención`
+            : 'Nada urgente'
+        }
+      >
+      {/* Rediseño (20/11): el último lead de cada gestora, cómo voy y «lo que
+          toca» viven aquí dentro, plegados con el resto del resumen. Arriba
+          empujaban la lista a 1.381 px (auditoría UX del 20/11). */}
+      <div className="space-y-3 pb-3">
       {/* A quién le toca el siguiente (#11). Va arriba porque es lo que se mira
           de pasada, no algo que se busca: enterarse de que te toca a ti es
           justo lo que hoy no pasa hasta que el lead ya está asignado. */}
@@ -715,22 +851,6 @@ export default function LeadsPage() {
       {(user?.role === 'admin' || user?.role === 'superadmin') && (
         <UltimoLeadAsignado projectId={activeProject?.id} issuerId={activeIssuerId} />
       )}
-
-      {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
-      <PageHeader
-        title="Prospectos"
-        subtitle="Explora y gestiona tus clientes potenciales"
-        actions={can('leads.create') ? (
-          <button
-            onClick={() => setFormOpen(true)}
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
-          >
-            <Plus size={14} weight="bold" />
-            <span className="hidden sm:inline">Nuevo prospecto</span>
-            <span className="sm:hidden">Nuevo</span>
-          </button>
-        ) : null}
-      />
 
       {/* Cómo va quien está mirando: su puesto en ventas y su tasa de
           conversión del mes. Va aquí y no escondido en Informes porque es la
@@ -775,116 +895,7 @@ export default function LeadsPage() {
       </div>
 
 
-      {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
-          arriba, en la cabecera del marco, igual que en todas las demas. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-          {/* Aqui habia un «Refrescar». Hacia lo mismo que el «Actualizar» de
-              la fila de filtros —dos botones de recargar en la misma pantalla,
-              #125— y lo unico que aportaba de mas, el aviso de cuantos han
-              entrado, se ha mudado alli. */}
-          {/* Aqui habia un «Lista / Kanban» y un «Audiencias» que llevaban a
-              las mismas tres pantallas que las pestanas de arriba. Dos sitios
-              para lo mismo, uno encima del otro. */}
-          {filteredLeads.length > 0 && can('leads.export') && (
-            <button
-              onClick={abrirExport}
-              disabled={exportLoading}
-              title="Exportar (Excel/CSV/JSON) — todos los resultados filtrados"
-              aria-label="Exportar"
-              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <DownloadSimple size={14} weight="bold" />
-              <span className="hidden md:inline">{exportLoading ? 'Preparando…' : 'Exportar'}</span>
-            </button>
-          )}
-          {/* Y aqui un «Reportes», que llevaba al mismo sitio que el acceso
-              «Reportes» del bloque de arriba. Se queda el del bloque. */}
-          <button
-            onClick={() => setWasapiOpen(true)}
-            title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
-            aria-label="Wasapi"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <WhatsappLogo size={14} weight="bold" />
-            <span className="hidden md:inline">Wasapi</span>
-          </button>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <div className="relative">
-              <button
-                onClick={() => setMoreOpen(!moreOpen)}
-                className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-                aria-expanded={moreOpen}
-              >
-                <span className="hidden md:inline">Configurar</span>
-                <span className="md:hidden">Más</span>
-                <CaretDown size={11} weight="bold" />
-              </button>
-              {moreOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-popover z-30 w-max py-1">
-                  {can('leads.create') && (
-                  <button
-                    onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <UploadSimple size={13} weight="regular" className="flex-shrink-0" /> Importar desde CSV
-                  </button>
-                  )}
-                  <div className="my-1 border-t border-border" />
-                  <button
-                    onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <Notepad size={13} weight="regular" className="flex-shrink-0" /> Campos custom de prospectos
-                  </button>
-                  <button
-                    onClick={() => { setConfigTab('webhook'); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <PlugsConnected size={13} weight="regular" className="flex-shrink-0" /> Webhook de captura
-                  </button>
-                  <button
-                    onClick={() => { navigate('/whatsapp/plantillas'); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <ChatCircleText size={13} weight="regular" className="flex-shrink-0" /> Plantillas de WhatsApp
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
       </div>
-
-      {/* Los tres bloques de arriba, como la maqueta: que pasa, que toca hacer,
-          y a donde se va desde aqui. Los numeros ya venian del servidor; solo
-          se usaban para unas pildoras dentro del desplegable de filtros, donde
-          no los ve nadie.
-
-          Las proporciones son las de la maqueta: la salud manda porque es lo
-          que mas se mira, y los accesos son la columna estrecha. */}
-      <CifrasProspectos
-        stats={stats}
-        urgencias={quickCounts}
-        filtroRapido={quickFilter}
-        onFiltroRapido={(clave) => setQuickFilter(clave || '')}
-      />
-
-      {/* Plegable y con memoria (#125): «esta super bien, pero que se pueda
-          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
-          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
-          organizarse el dia le hace falta. */}
-      <BloquePlegable
-        clave="prospectos-resumen"
-        // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado»
-        // (rescatado de la PR #153). Quien ya lo dejó abierto lo sigue viendo
-        // abierto: lo guardado manda sobre el arranque.
-        abiertoPorDefecto={false}
-        titulo="Resumen del dia"
-        resumen={
-          quickCounts.urgent > 0
-            ? `${quickCounts.urgent} piden atención`
-            : 'Nada urgente'
-        }
-      >
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
         <SaludComercial
           stats={stats}
@@ -936,6 +947,37 @@ export default function LeadsPage() {
       <BarraFiltros
         busqueda={search}
         onBusqueda={setSearch}
+        extra={(
+          // Los tramos, a la vista (Diego, 24/09: «sí o sí mostrar todos y
+          // atrasados, con filtros hoy, mañana, vencidos»). Rediseño (20/11):
+          // en la misma línea que el buscador, como control segmentado.
+          <div role="group" aria-label="Cuándo toca" className="inline-flex h-9 items-stretch overflow-hidden rounded-md border border-input bg-card">
+            {([
+              ['', 'Todos', undefined],
+              ['overdue', 'Vencidos', quickCounts?.overdue],
+              ['today', 'Hoy', quickCounts?.today],
+              ['tomorrow', 'Mañana', quickCounts?.tomorrow],
+            ] as Array<[string, string, number | undefined]>).map(([valor, texto, cuantos]) => (
+              <button
+                key={valor || 'todos'}
+                type="button"
+                onClick={() => setQuickFilter(valor)}
+                aria-pressed={quickFilter === valor}
+                className={'inline-flex items-center gap-1.5 border-l border-input px-2.5 text-xs font-medium transition-colors first:border-l-0 focus-visible:relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring '
+                  + (quickFilter === valor
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground')}
+              >
+                {texto}
+                {typeof cuantos === 'number' && cuantos > 0 && (
+                  <span className={'tabular-nums text-[11px] ' + (valor === 'overdue' && quickFilter !== valor ? 'text-destructive' : '')}>
+                    {cuantos}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         placeholder="Buscar por nombre, email o teléfono"
         desplegables={[]}
         hayFiltros={!!(search || filterEstado || filterOrigen || filterPais || filterResponsable || filterProducto || dateFrom || dateTo || filterDup || filterReincidente || quickFilter)}
@@ -1012,50 +1054,12 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* LOS TRAMOS, A LA VISTA.
-          Estos cuatro botones existían, pero vivían dentro del panel «Filtros»,
-          plegado. Diego, 24/09: «esto debe funcionar directamente, tuve que
-          tocarlo para verlo [...] sí o sí mostrar todos y atrasados, con
-          filtros hoy, mañana, vencidos». Un filtro que hay que descubrir no lo
-          usa nadie, y este es el que ordena la mañana. Siguen estando también
-          dentro del panel, con el resto: aquí se sacan los que se pulsan a
-          diario, no se mudan. */}
-      <div id="lista-de-prospectos" className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mr-1">
-          Cuándo toca
-        </span>
-        {([
-          ['', 'Todos', undefined],
-          ['overdue', 'Vencidos', quickCounts?.overdue],
-          ['today', 'Hoy', quickCounts?.today],
-          ['tomorrow', 'Mañana', quickCounts?.tomorrow],
-        ] as Array<[string, string, number | undefined]>).map(([valor, texto, cuantos]) => (
-          <button
-            key={valor || 'todos'}
-            type="button"
-            onClick={() => setQuickFilter(valor)}
-            aria-pressed={quickFilter === valor}
-            className={'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors '
-              + (quickFilter === valor
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card hover:bg-muted')}
-          >
-            {texto}
-            {typeof cuantos === 'number' && cuantos > 0 && (
-              <span className={'tabular-nums text-[11px] ' + (quickFilter === valor ? 'opacity-80' : 'text-muted-foreground')}>
-                {cuantos}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
       {/* Table */}
-      <div className="bg-card rounded-lg border border-border">
+      <div id="lista-de-prospectos" className="bg-card rounded-lg border border-border">
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead className="bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b sticky top-0 z-10">
+          <table className="w-full whitespace-nowrap text-[13px]">
+            <thead className="bg-card border-b sticky top-0 z-10">
               <tr>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Teléfono</th>
@@ -1091,14 +1095,19 @@ export default function LeadsPage() {
                   key={lead.id}
                   onClick={() => setDrawerLeadId(lead.id)}
                   title={isPorContactar ? 'Por contactar — pendiente de primer contacto' : `Prioridad: ${pStyle.label}`}
-                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${isPorContactar ? 'bg-warning-soft ring-1 ring-warning/40 dark:ring-warning/40' : ''}`}
+                  // Rediseño (20/11): la prioridad es un punto de color junto al
+                  // nombre, no una franja de 4 px y la fila entera en ámbar. Con
+                  // media lista «por contactar», el ámbar dejaba de distinguir nada.
+                  className="group border-b last:border-0 hover:bg-muted/60 transition-colors cursor-pointer"
                 >
                   <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold ${getAvatarColor(lead.id)}`}>
+                    <div className="flex items-center gap-2">
+                      <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${pStyle.dotClass}`} />
+                      <span className="sr-only">Prioridad: {pStyle.label}.</span>
+                      <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${getAvatarColor(lead.id)}`}>
                         {getInitials(lead.nombre)}
                       </div>
-                      <span className="font-semibold">{lead.nombre}</span>
+                      <span className={isPorContactar ? 'font-semibold' : 'font-medium'}>{lead.nombre}</span>
                       {lead.reincidente && <LeadFlagBadge kind="reincidente" />}
                       {lead.es_propuesto && <LeadFlagBadge kind="propuesto" />}
                       {lead.has_pending_spam_report && user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" />}

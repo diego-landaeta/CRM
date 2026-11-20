@@ -18,12 +18,6 @@ import { cn } from '@/shared/lib/utils';
 
 export type TonoCifra = 'neutro' | 'aviso' | 'peligro' | 'bien';
 
-const TONOS: Record<TonoCifra, string> = {
-  neutro: 'bg-muted text-muted-foreground',
-  aviso: 'bg-warning-soft text-warning-soft-foreground',
-  peligro: 'bg-destructive-soft text-destructive-soft-foreground',
-  bien: 'bg-success-soft text-success-soft-foreground',
-};
 
 export function Cifra({
   icon: Icon, etiqueta, valor, detalle, tono = 'neutro', onClick, activo,
@@ -40,40 +34,38 @@ export function Cifra({
   // Las que filtran son botones de verdad; las que no, no lo fingen. Un número
   // que parece pulsable y no hace nada es peor que uno quieto.
   const Elemento = onClick ? 'button' : 'div';
+  const TONO_CIFRA: Record<TonoCifra, string> = {
+    neutro: 'text-foreground', aviso: 'text-warning', peligro: 'text-destructive', bien: 'text-success-soft-foreground',
+  };
+  // Rediseño (20/11): una celda del acta. Etiqueta con su icono en pequeño, la
+  // cifra en su color de tono y el detalle en una línea. Dentro de
+  // <FilaDeCifras> comparte la costura con las vecinas.
   return (
     <Elemento
-      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      {...(onClick ? { type: 'button' as const, onClick, 'aria-pressed': !!activo } : {})}
+      title={typeof valor === 'string' || typeof valor === 'number' ? `${etiqueta}: ${valor}` : undefined}
       className={cn(
-        // En el móvil el icono va encima del número: a dos por fila, al lado del
-        // icono un importe como «4950,00 €» se salía del recuadro. Desde `sm`,
-        // como siempre.
-        'flex min-w-0 flex-col items-start gap-2 rounded-lg border border-border bg-card p-4 text-left shadow-sm transition-colors sm:flex-row sm:gap-3',
-        onClick && 'hover:border-muted-foreground/40 hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-ring/40',
-        activo && 'border-primary/50 bg-primary/5',
+        'campo-acta relative min-w-0 bg-card px-3 py-2 text-left',
+        onClick && 'transition-colors hover:bg-muted/60 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        activo && 'bg-muted ring-1 ring-inset ring-foreground/20',
       )}
     >
-      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', TONOS[tono])}>
-        <Icon size={17} weight="regular" />
+      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Icon size={13} weight="regular" aria-hidden="true" className="shrink-0" />
+        <span className="truncate">{etiqueta}</span>
       </span>
-      <span className="w-full min-w-0 sm:w-auto">
-        <span className="block truncate text-secundario text-muted-foreground">{etiqueta}</span>
-        {/* 20px en el móvil y los 28px de siempre desde `sm`. */}
-        <span className="block text-xl font-semibold tabular-nums leading-tight sm:text-cifra sm:leading-none">{valor}</span>
-        <span className="mt-1 block text-secundario text-muted-foreground">{detalle}</span>
-      </span>
+      <span className={cn('block truncate text-[length:clamp(1rem,4vw,1.25rem)] font-semibold leading-7 tracking-tight tabular-nums', TONO_CIFRA[tono])}>{valor}</span>
+      <span className="block truncate text-[11px] leading-4 text-muted-foreground">{detalle}</span>
     </Elemento>
   );
 }
 
 /**
- * La fila de cifras, a todo lo ancho y por encima de las columnas.
- *
- * Van dos por línea en pantalla estrecha y cuatro en ancha. Estaban dentro del
- * bloque de la izquierda y las etiquetas salían cortadas —«Pr…», «Si…»— con el
- * detalle en cinco líneas.
+ * La fila de cifras: desde el rediseño, un acta (una hoja partida en celdas
+ * por costuras de 1 px), dos por línea en el móvil y todas en una en ancho.
  */
 export function FilaDeCifras({ children }: { children: React.ReactNode }) {
-  return <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">{children}</section>;
+  return <section className="acta grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border xl:grid-cols-4">{children}</section>;
 }
 
 export default Cifra;

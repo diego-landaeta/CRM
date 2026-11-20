@@ -586,6 +586,14 @@ export default function AppLayout() {
     });
   }
 
+  // El cajón del móvil se cierra con Escape (rediseño, 20/11).
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    function onEsc(e) { if (e.key === 'Escape') setMobileOpen(false); }
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [mobileOpen]);
+
   // Atajos globales de teclado
   useEffect(() => {
     function isTyping() {
@@ -677,13 +685,13 @@ export default function AppLayout() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <div className="relative w-60 h-full">
             <Sidebar onNavigate={() => setMobileOpen(false)} />
             <button
               onClick={() => setMobileOpen(false)}
               aria-label="Cerrar menu"
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="absolute top-1 right-1 z-50 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X size={18} weight="bold" />
             </button>
@@ -709,7 +717,7 @@ export default function AppLayout() {
         Va dentro del margen del menu y es `sticky`, asi que al bajar por una
         tabla larga sigues sabiendo donde estas y en que marca.
       */}
-      <div className={cn('transition-[margin] duration-200', collapsed ? 'lg:ml-16' : 'lg:ml-64')}>
+      <div className={cn('transition-[margin] duration-200', collapsed ? 'lg:ml-14' : 'lg:ml-56')}>
         <Topbar onAbrirMenu={() => setMobileOpen(true)} />
         {/* El `p-4` del movil lo anulan a mano dos pantallas que van de borde a borde:
             el chat de WhatsApp (chat.css, `margin: -16px`) y Mensajes (`-m-4`).
@@ -719,7 +727,9 @@ export default function AppLayout() {
           role="main"
           aria-label="Contenido principal"
           tabIndex={-1}
-          className="p-4 lg:p-6 xl:p-8 focus:outline-none"
+          // El lienzo: 16 px en el móvil, 20 en el PC (era 24–32). Lo deshacen con
+          // --lienzo las pantallas que van de borde a borde (SubNav, Mensajes).
+          className="p-[var(--lienzo)] focus:outline-none"
         >
         {/* El aviso de la facturación pausada (#765). Fuera del `key` de la ruta:
             no parpadea al cambiar de pantalla. Sin permiso o apagada, no pinta nada. */}
@@ -728,7 +738,7 @@ export default function AppLayout() {
         </Suspense>
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
           </div>
         }>
           {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}

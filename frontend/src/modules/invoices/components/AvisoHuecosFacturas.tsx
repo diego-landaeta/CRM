@@ -48,30 +48,36 @@ export default function AvisoHuecosFacturas({ projectId }: { projectId?: number 
     .join(' · ');
 
   return (
-    <div className="rounded-lg border border-warning/30 bg-warning-soft p-3 sm:p-4" data-recorrido="facturas-huecos">
-      <div className="flex items-start gap-3">
-        <WarningCircle size={20} weight="fill" className="text-warning flex-none mt-0.5" />
-        <div className="min-w-0">
-          <p className="font-semibold text-warning-soft-foreground text-sm">
+    // Rediseño (20/11): el aviso en una línea (era un bloque de 152 px en Hoy y
+    // en Facturas). La explicación sigue entera, detrás de «¿Por qué?».
+    <div className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-warning-soft-foreground" data-recorrido="facturas-huecos">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <WarningCircle size={16} weight="fill" className="text-warning flex-none" />
+        <p className="min-w-0 flex-1 text-[13px]">
+          <span className="font-semibold">
             {n === 1
               ? `Falta una factura por emitir en la serie ${datos.serie}`
               : `Faltan ${n} facturas por emitir en la serie ${datos.serie}`}
-          </p>
-          <p className="text-sm text-warning-soft-foreground mt-1">
-            No existen estos números: <b className="tabular-nums break-words">{lista}</b>
-          </p>
-          <p className="text-xs text-warning-soft-foreground mt-1.5">
-            Una serie fiscal no debería tener huecos. O falta cargar esas facturas,
-            o alguien numeró a mano saltándose un número, o se borraron cuando aún se
-            podía. Desde el 18/11 una factura emitida no se borra: se anula con su motivo.
-          </p>
-          {anuladas.length > 0 && <ListaDeAnuladas serie={datos.serie} anuladas={anuladas} dentro />}
-          <Link to="/finanzas/facturas/nueva"
-            className="inline-flex items-center mt-2 h-7 px-2.5 rounded border border-warning/30 text-warning-soft-foreground text-xs font-semibold hover:bg-warning-soft">
-            Emitir la que falta
-          </Link>
-        </div>
+          </span>
+          <span className="mx-1.5 opacity-50" aria-hidden="true">·</span>
+          No existen estos números: <b className="tabular-nums break-words">{lista}</b>
+        </p>
+        <Link to="/finanzas/facturas/nueva"
+          className="inline-flex items-center h-7 px-2.5 rounded-md border border-warning/40 bg-card/60 text-xs font-semibold hover:bg-card">
+          Emitir la que falta
+        </Link>
       </div>
+      <details className="group mt-0.5 pl-7 text-xs">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded font-medium underline decoration-dotted underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          ¿Por qué?
+        </summary>
+        <p className="mt-1">
+          Una serie fiscal no debería tener huecos. O falta cargar esas facturas,
+          o alguien numeró a mano saltándose un número, o se borraron cuando aún se
+          podía. Desde el 18/11 una factura emitida no se borra: se anula con su motivo.
+        </p>
+        {anuladas.length > 0 && <ListaDeAnuladas serie={datos.serie} anuladas={anuladas} dentro />}
+      </details>
     </div>
   );
 }

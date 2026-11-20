@@ -85,7 +85,7 @@ export default function StatusBadge({ status, showIcon = false, className = '' }
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+        'inline-flex h-5 items-center gap-1 px-1.5 rounded text-[11px] font-medium leading-none whitespace-nowrap',
         style,
         className,
       )}

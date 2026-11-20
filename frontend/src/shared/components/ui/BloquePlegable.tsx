@@ -63,10 +63,11 @@ export default function BloquePlegable({
           aria-expanded={abierto}
           aria-controls={idContenido}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-md px-2 py-1 -ml-2',
-            'text-tabla uppercase text-muted-foreground',
+            // Rediseño (20/11): en minúscula y 13 px, como cualquier otro rótulo.
+            'inline-flex h-7 items-center gap-1.5 rounded-md px-2 -ml-2',
+            'text-[13px] font-medium text-foreground/80',
             'transition-colors hover:bg-muted hover:text-foreground',
-            'focus:outline-none focus:ring-2 focus:ring-ring/40',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           )}
         >
           <CaretDown
@@ -79,7 +80,7 @@ export default function BloquePlegable({
         {/* Plegado, el resumen dice si vale la pena abrirlo. Sin el, plegar
             equivale a esconder y hay que abrirlo para saber si habia algo. */}
         {!abierto && resumen && (
-          <span className="min-w-0 truncate text-secundario text-muted-foreground">{resumen}</span>
+          <span className="min-w-0 truncate text-xs text-muted-foreground">{resumen}</span>
         )}
       </div>
       {/* Se desmonta al plegar, no se esconde con CSS: lo de dentro pide datos

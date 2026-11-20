@@ -79,7 +79,7 @@ export default function MessagesPage() {
   }, [refetch]);
 
   return (
-    <div className="-m-4 lg:-m-6 xl:-m-8 flex h-[calc(100vh-56px)] lg:h-screen bg-background">
+    <div className="m-[calc(var(--lienzo)*-1)] flex h-[calc(100vh-56px)] lg:h-screen bg-background">
       <div className={`w-[340px] border-r border-border flex-shrink-0 flex flex-col bg-card ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
         <ConversationList
           conversations={conversations}

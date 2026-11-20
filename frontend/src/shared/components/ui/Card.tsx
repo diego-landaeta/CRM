@@ -45,7 +45,9 @@ export default function Card({
         // «rounded-lg (cards)». Y con `md` esta primitiva se veía distinta de las
         // 334 tarjetas que el CRM aún escribe a mano con `rounded-lg`: dos
         // aspectos de tarjeta a la vez, que es lo que hay que quitar.
-        'bg-card text-card-foreground border border-border rounded-lg shadow-sm',
+        // Sin sombra desde el rediseño (20/11): la hoja se separa del suelo por la
+        // costura de 1 px. La sombra queda para lo que flota (menús, diálogos).
+        'bg-card text-card-foreground border border-border rounded-lg',
         RELLENO[padding],
         overflowHidden && 'overflow-hidden',
         className,
@@ -69,7 +71,7 @@ interface CardSectionProps extends HTMLAttributes<HTMLDivElement> {
  */
 export function CardSection({ className, children, ...resto }: CardSectionProps) {
   return (
-    <div className={cn('px-4 py-3 border-b border-border last:border-b-0', className)} {...resto}>
+    <div className={cn('px-3 py-2 border-b border-border last:border-b-0', className)} {...resto}>
       {children}
     </div>
   );

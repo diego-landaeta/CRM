@@ -3,18 +3,21 @@ import { cn } from '@/shared/lib/utils';
 import useCountUp from '@/shared/hooks/useCountUp';
 
 /**
- * KpiCard - Tarjeta de KPI reutilizable con animación opt-in.
+ * KpiCard — una cifra con su etiqueta.
+ *
+ * Desde el rediseño (20/11) es un CAMPO DEL ACTA, no una tarjeta: etiqueta de
+ * 12 px con su icono pequeño al lado, la cifra debajo y nada más. Medía 140 px
+ * (icono en caja de 36, etiqueta, cifra de 28 px y 20 de relleno); ahora 62.
+ * Dentro de `<Acta>` pierde su borde y comparte la costura con las vecinas.
+ *
+ * La cifra no se corta en el móvil: baja de tamaño con el ancho y, si aun así
+ * no cabe, se recorta con «…» y el valor entero queda en `title` (auditoría
+ * del 20/11: «10.230,00 €» se salía de su caja a 375 px).
  *
  * props:
  *  - icon: Componente Phosphor
- *  - iconBg: clase Tailwind con bg + text para el cuadrado del icono
- *  - label: etiqueta superior
- *  - value: valor formateado (string) — backward compatible, sin animación
- *  - numericValue: número crudo — habilita animación count-up
- *  - format: función (n) => string para formatear el número animado
- *  - badge: texto en badge de tendencia (opcional)
- *  - badgeColor: clases Tailwind para el badge
- *  - trend: 'up' | 'down'
+ *  - iconBg: clase de fondo y color del icono (una chapa de 20 px)
+ *  - label, value, numericValue, format, badge, badgeColor, trend
  */
 function AnimatedValue({ numericValue, format }) {
   const animated = useCountUp(numericValue);
@@ -29,48 +32,37 @@ export default function KpiCard({
   numericValue = undefined,
   format = null,
   badge = null,
-  // Por defecto, el tono de «va bien». Con tokens: una sola definicion que
-  // ya vale para claro y para oscuro, en vez de dos listas de colores.
   badgeColor = 'bg-success-soft text-success-soft-foreground',
   trend = 'up',
   className = '',
-  // tone: prop legacy ignorada (no afecta render). Mantenida para compat
-  // con call sites que la pasan; preferir iconBg/badgeColor explícitos.
-
   tone: _tone = null,
 }) {
   const TrendIcon = trend === 'up' ? TrendUp : TrendDown;
   const showBadge = badge && badge !== '--';
   const useAnimation = typeof numericValue === 'number' && Number.isFinite(numericValue);
+  const titulo = typeof value === 'string' || typeof value === 'number' ? `${label}: ${value}` : undefined;
   return (
     <div
-      className={cn(
-        'bg-card p-5 rounded-lg border border-border transition-colors hover:border-foreground/20',
-        className,
-      )}
+      className={cn('campo-acta min-w-0 rounded-lg border border-border bg-card px-3 py-2.5', className)}
+      title={titulo}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex min-w-0 items-center gap-1.5">
         {Icon && (
-          <div className={cn('w-9 h-9 rounded-md flex items-center justify-center', iconBg)}>
-            <Icon size={18} weight="regular" />
-          </div>
+          <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded', iconBg)} aria-hidden="true">
+            <Icon size={12} weight="regular" />
+          </span>
         )}
+        <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{label}</p>
         {showBadge && (
-          <span
-            className={cn(
-              'text-xs font-medium px-2 py-0.5 rounded inline-flex items-center gap-1',
-              badgeColor,
-            )}
-          >
-            <TrendIcon size={12} weight="bold" />
+          <span className={cn('inline-flex h-4 shrink-0 items-center gap-0.5 rounded px-1 text-[10px] font-medium leading-none', badgeColor)}>
+            <TrendIcon size={10} weight="bold" aria-hidden="true" />
             {badge}
           </span>
         )}
       </div>
-      <p className="text-muted-foreground text-sm">{label}</p>
-      <h3 className="text-cifra mt-1 tabular-nums">
+      <p className="mt-0.5 truncate text-[length:clamp(1rem,4.2vw,1.25rem)] font-semibold leading-7 tracking-tight tabular-nums">
         {useAnimation ? <AnimatedValue numericValue={numericValue} format={format} /> : value}
-      </h3>
+      </p>
     </div>
   );
 }
