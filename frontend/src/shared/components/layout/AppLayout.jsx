@@ -691,7 +691,7 @@ export default function AppLayout() {
             <button
               onClick={() => setMobileOpen(false)}
               aria-label="Cerrar menu"
-              className="absolute top-1 right-1 z-50 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="absolute top-2 -right-14 z-50 flex h-11 w-11 items-center justify-center rounded-md bg-card text-foreground shadow-popover hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X size={18} weight="bold" />
             </button>
