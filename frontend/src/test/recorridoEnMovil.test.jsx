@@ -147,7 +147,12 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
     expect(ventas[1]).toHaveLength(RECORRIDOS_COBROS.ventas.pasos.length);
   });
 
-  it('entre ellos, los ocho del bloque Finanzas (#941), con todos sus pasos', () => {
+  it('entre ellos, los doce del bloque Finanzas (#941), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_FINANZAS)).toHaveLength(12);
+    // La tercera tanda, por su nombre: que no se quede ninguna fuera de esta prueba.
+    for (const id of ['nominas', 'pendientes-facturar', 'ventas-sin-formacion', 'analisis-ventas']) {
+      expect(TODOS.find(([x]) => x === id), id).toBeTruthy();
+    }
     for (const r of Object.values(RECORRIDOS_FINANZAS)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();
