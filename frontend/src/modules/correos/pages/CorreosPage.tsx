@@ -44,7 +44,7 @@ const PESTANAS = [
 ] as const;
 
 const COLOR: Record<string, string> = {
-   enviado: 'text-success',
+  enviado: 'text-success',
   recibido: 'text-info',
   bloqueado: 'text-warning',
   fallido: 'text-destructive',

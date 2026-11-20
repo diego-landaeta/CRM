@@ -251,7 +251,7 @@ export default function FieldDefinitionsPage() {
               </button>
               <button
                 onClick={() => setDeleteTarget(f)}
-                className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-destructive-soft text-destructive transition-colors"
+                className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-destructive-soft text-destructive transition-colors aria-label=Eliminar campo"
               >
                 <Trash size={14} />
               </button>
