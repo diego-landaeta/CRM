@@ -63,7 +63,7 @@ export default function InterruptorMcp({ estado, puedeApagar, onCambio }: {
           disabled={cambiando}
           className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-semibold disabled:opacity-50 ${estado.apagado
             ? 'bg-success text-success-foreground hover:bg-success/90'
-            : 'bg-red-600 text-white hover:bg-red-700'}`}
+            : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'}`}
         ><Power size={14} weight="bold" /> {estado.apagado ? 'Encender el MCP' : 'Apagar el MCP'}</button>
       )}
     </div>

@@ -12,7 +12,7 @@ interface MenuItem {
 }
 
 const ITEMS: MenuItem[] = [
-  { type: 'lead', label: 'Prospecto', icon: User, color: 'text-info', bg: 'bg-blue-500/10' },
+   { type: 'lead', label: 'Prospecto', icon: User, color: 'text-info', bg: 'bg-blue-500/10' },
   { type: 'product', label: 'Producto', icon: Package, color: 'text-warning', bg: 'bg-amber-500/10' },
 ];
 

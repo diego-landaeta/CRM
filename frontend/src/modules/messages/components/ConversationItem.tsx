@@ -42,9 +42,8 @@ export default function ConversationItem({ conversation: c, active, isOnline, on
             : <UserCircle size={28} weight="fill" className="text-muted-foreground/70" />
           }
         </div>
-        {isOnline && (
-          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-card" />
-        )}
+               {isOnline && (
+          <span className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
       </div>
 
       <div className="flex-1 min-w-0">
