@@ -365,12 +365,12 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
                     <td className="px-4 py-3 text-right tabular-nums">{Number(p.monto_comisiones).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{Number(p.ajustes).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-bold">{Number(p.total).toFixed(2)} €</td>
-                    <td className="px-4 py-3 text-center"> </td>
+                    <td className="px-4 py-3 text-center"> 
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-success-soft text-success-soft-foreground' : p.estado === 'cerrado' ? 'bg-info-soft text-info-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>{p.estado}</span>
-                    <td className="px-4 py-3 text-right">
-                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-bold mr-1">Cerrar</button>}
-                      {p.estado === 'cerrado' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-xs font-bold mr-1">Cerrar</button>}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-xs font-bold mr-1">Cerrar</button>}
+                      {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foreground text-xs font-bold">Pagar</button>} </td>
                   </tr>
                 ))}
               </tbody>
@@ -395,8 +395,8 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-sm font-bold tabular-nums">{Number(p.total).toFixed(2)} €</span>
-                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-bold w-full">Cerrar</button>}
-                  {p.estado === 'cerrado' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-[11px] font-bold w-full">Cerrar</button>}
+                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-[11px] font-bold w-full">Cerrar</button>}
+                  {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foreground text-[11px] font-bold w-full">Pagar</button>}
                 </div>
               </div>
             ))}
