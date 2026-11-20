@@ -351,15 +351,15 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           type="button"
           onClick={() => setTutorialesOpen(true)}
           title="Cómo leer esta pantalla"
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-2.5 rounded-md text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <GraduationCap size={16} weight="duotone" className="text-primary" />
+          <GraduationCap size={15} weight="regular" />
           Tutoriales
         </button>
         <button
           type="button"
           onClick={() => navigate('/finanzas/ventas-analisis')}
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-2.5 rounded-md text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           Análisis
         </button>
@@ -368,7 +368,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         <button
           type="button"
           onClick={() => navigate('/finanzas/ventas-sin-formacion')}
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-2.5 rounded-md text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           Sin formación
         </button>
@@ -380,7 +380,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               onClick={() => setMenuVenta((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={menuVenta}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90"
             >
               <Plus size={14} weight="bold" />
               Nueva venta
@@ -431,7 +431,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <button
             type="button"
             onClick={() => abrirVenta('existing')}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 self-start sm:self-auto"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 self-start sm:self-auto"
           >
             <Plus size={14} weight="bold" />
             Nueva venta
@@ -456,7 +456,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       </Suspense>
 
       {(
-        <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+        // Rediseño (20/11): los filtros en una barra sin caja, con los controles
+        // de 32 px; los atajos de fecha, en la misma línea cuando caben.
+        <div className="flex items-center gap-x-2 gap-y-2 flex-wrap">
           {/*
             Empresa y proyecto, aquí dentro.
 
@@ -494,7 +496,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               : `proj:${activeProject.id}`;
             return (
               <>
-                <label className="text-xs font-semibold text-muted-foreground">Empresa o proyecto:</label>
+                <label className="text-xs font-medium text-muted-foreground">Empresa o proyecto:</label>
                 <select
                   value={valor}
                   onChange={(e) => {
@@ -503,7 +505,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                     else if (v.startsWith('soc:')) switchIssuer(Number(v.slice(4)));
                     else switchProject(Number(v.slice(5)));
                   }}
-                  className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[220px] max-w-[300px]"
+                  className="h-9 px-2.5 rounded-md border border-border bg-muted/50 text-[13px] min-w-[200px] max-w-[300px]"
                 >
                   <option value="all">— Todos los proyectos —</option>
                   {empresas.length > 0 && (
@@ -536,11 +538,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           })()}
           {isAdmin && gestores.length > 0 && (
             <>
-              <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
+              <label className="text-xs font-medium text-muted-foreground">Ver ventas de:</label>
               <select
                 value={viewUserId}
                 onChange={(e) => setViewUserId(e.target.value)}
-                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px]"
+                className="h-9 px-2.5 rounded-md border border-border bg-muted/50 text-[13px] min-w-[180px]"
               >
                 <option value="all">— Todas (vista general) —</option>
                 {gestores.map((g) => (
@@ -553,23 +555,23 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           )}
           {cursos.length > 1 && (
             <>
-              <label className="text-xs font-semibold text-muted-foreground">Curso:</label>
+              <label className="text-xs font-medium text-muted-foreground">Curso:</label>
               <select
                 value={filterCurso}
                 onChange={(e) => setFilterCurso(e.target.value)}
-                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px] max-w-[320px]"
+                className="h-9 px-2.5 rounded-md border border-border bg-muted/50 text-[13px] min-w-[180px] max-w-[320px]"
               >
                 <option value="all">— Todos los cursos —</option>
                 {cursos.map((c) => <option key={c} value={c}>{decodificarEntidades(c)}</option>)}
               </select>
             </>
           )}
-          <label className="text-xs font-semibold text-muted-foreground" htmlFor="filtro-compartidas">Reparto:</label>
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="filtro-compartidas">Reparto:</label>
           <select
             id="filtro-compartidas"
             value={filterCompartidas}
             onChange={(e) => setFilterCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
+            className="h-9 px-2.5 rounded-md border border-border bg-muted/50 text-[13px]"
           >
             <option value="todas">Todas</option>
             <option value="solo">Solo compartidas</option>
@@ -578,12 +580,12 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           {/* Aqui habia OTRO RangoRapido, ademas del de la fila «Rápido:»: salian
               dos filas de «Hoy · Ayer · …» en Ingresos y en Ventas, que es esta
               misma pantalla (#223, #234). Queda el de su fila. */}
-          <label className="text-xs font-semibold text-muted-foreground">Desde:</label>
+          <label className="text-xs font-medium text-muted-foreground">Desde:</label>
           <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
+            className="h-9 px-2 rounded-md border border-border bg-muted/50 text-[13px]" />
+          <label className="text-xs font-medium text-muted-foreground">Hasta:</label>
           <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            className="h-9 px-2 rounded-md border border-border bg-muted/50 text-[13px]" />
           {(viewUserId !== 'all' || filterCurso !== 'all' || filterCompartidas !== 'todas' || rango.from !== rangoDe('mes').from || rango.to !== rangoDe('mes').to) && (
             <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setFilterCompartidas('todas'); setRango(rangoDe('mes')); }} className="text-[11px] text-primary hover:underline">
               Quitar filtros
@@ -592,8 +594,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
           {/* Atajos. Van en su propia fila y ocupando el ancho para que no
               queden escondidos al final de una fila larga de filtros. */}
-          <div className="basis-full flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-xs font-semibold text-muted-foreground mr-0.5">Rápido:</span>
+          <div className="flex flex-wrap items-center gap-1.5 2xl:ml-auto">
+            <span className="text-xs font-medium text-muted-foreground mr-0.5">Rápido:</span>
             {/* El componente compartido. Antes esta pantalla tenia su propia
                 copia de los seis atajos, con las mismas cuentas escritas otra
                 vez: tres copias en el CRM era lo que el ticket pedia evitar. */}
@@ -602,7 +604,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Rediseño (20/11): las cifras, en un acta (una hoja partida en celdas). */}
+      <div className="acta grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px overflow-hidden rounded-lg border border-border bg-border">
         <KpiCard
           icon={Receipt}
           iconBg="bg-info-soft text-info-soft-foreground"
@@ -861,30 +864,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className={`grid grid-cols-1 gap-4 ${esIA ? '' : 'lg:grid-cols-2'}`}>
-        {!esIA && (
-        <Suspense fallback={null}>
-          <MyGoalCard projectId={projectIdParam} />
-        </Suspense>
-        )}
-        <Suspense fallback={null}>
-          <TopProductsCard projectId={projectIdParam} issuerId={issuerIdParam}
-            from={rango.from || null} to={rango.to || null}
-            responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
-        </Suspense>
-      </div>
-
-      {isAdmin && !esIA && (
-        <Suspense fallback={null}>
-          {/* El mes ES el del filtro de arriba. Sin pasarlo, la tabla cogia
-              siempre el mes en curso: con el filtro en agosto decia
-              «Equipo de ventas — 2026-09» y todos a cero (#100 · 4). */}
-          <GestoresStatsTable projectId={projectIdParam} issuerId={issuerIdParam}
-            periodo={mesDe(rango.from, rango.to)}
-            from={rango.from || null} to={rango.to || null} canEdit={true} />
-        </Suspense>
-      )}
-
       {loading ? (
         <SkeletonTable rows={5} columns={6} />
       ) : visibleItems.length === 0 ? (
@@ -1001,6 +980,32 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             </div>
           )}
         </div>
+      )}
+
+      {/* Rediseño (20/11): la meta, los programas y el equipo, DEBAJO de la lista.
+          Arriba empujaban las ventas fuera de la primera pantalla. */}
+      <div className={`grid grid-cols-1 gap-4 ${esIA ? '' : 'lg:grid-cols-2'}`}>
+        {!esIA && (
+        <Suspense fallback={null}>
+          <MyGoalCard projectId={projectIdParam} />
+        </Suspense>
+        )}
+        <Suspense fallback={null}>
+          <TopProductsCard projectId={projectIdParam} issuerId={issuerIdParam}
+            from={rango.from || null} to={rango.to || null}
+            responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
+        </Suspense>
+      </div>
+
+      {isAdmin && !esIA && (
+        <Suspense fallback={null}>
+          {/* El mes ES el del filtro de arriba. Sin pasarlo, la tabla cogia
+              siempre el mes en curso: con el filtro en agosto decia
+              «Equipo de ventas — 2026-09» y todos a cero (#100 · 4). */}
+          <GestoresStatsTable projectId={projectIdParam} issuerId={issuerIdParam}
+            periodo={mesDe(rango.from, rango.to)}
+            from={rango.from || null} to={rango.to || null} canEdit={true} />
+        </Suspense>
       )}
     </div>
   );

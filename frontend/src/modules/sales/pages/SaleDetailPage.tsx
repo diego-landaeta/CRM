@@ -119,9 +119,9 @@ export default function SaleDetailPage() {
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="-mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft size={14} weight="bold" /> Volver
+        <ArrowLeft size={13} weight="regular" /> Volver
       </button>
 
       <PageHeader
@@ -136,15 +136,16 @@ export default function SaleDetailPage() {
             <button
               type="button"
               onClick={() => navigate(`/prospectos/${venta.lead_id}`)}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+              className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-md text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <User size={14} weight="bold" /> Ficha del cliente
+              <User size={14} weight="regular" /> Ficha del cliente
             </button>
           </span>
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Rediseño (20/11): las cuatro cifras de la venta, en un acta. */}
+      <div className="acta grid grid-cols-2 lg:grid-cols-4 gap-px overflow-hidden rounded-lg border border-border bg-border">
         <KpiCard icon={CurrencyEur} iconBg="bg-primary/10 text-primary"
           label="Importe de la venta" value={fmt(venta.importe_total)} />
         <KpiCard icon={CheckCircle} iconBg="bg-success-soft text-success-soft-foreground"
