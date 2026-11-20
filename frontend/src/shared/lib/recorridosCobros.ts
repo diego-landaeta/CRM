@@ -189,7 +189,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         donde: anclaje('links-pantalla-crear'),
         permiso: 'links_pago.crear',
         titulo: 'Crear link de pago',
-        texto: 'Pulsa aquí. Buscas al prospecto y eliges a cuál de sus ventas va: todo link va con su venta. Sale lo que le queda por pagar. Si no tiene ninguna venta, primero se registra la venta. Si algo falta o no cuadra, el asistente te dice qué.',
+        texto: 'Pulsa aquí: eliges el curso, «Pago único» o «En cuotas» (cuántas) y «Crear link». No hace falta el nombre: cuando el alumno paga, el CRM busca su ficha por el correo o la crea, y le apunta la venta. En cuotas, el link cobra la primera y Stripe cobra las demás solas cada mes. Si es para un prospecto o una venta concretos, ábrelo desde su ficha.',
       },
       {
         titulo: 'Al registrar la venta, sale solo',
