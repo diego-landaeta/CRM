@@ -41,7 +41,8 @@ export type IdRecorridoCobros =
   | 'cargos-sin-enlazar'
   | 'anular-factura'
   | 'pagos-stripe'
-  | 'disputas-stripe';
+  | 'disputas-stripe'
+  | 'cursos-producto';
 
 export interface RecorridoCobros {
   id: IdRecorridoCobros;
@@ -385,4 +386,43 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
       },
     ],
   },
+
+  // ─── 6 · Académico › Cursos de Moodle (CRM#957, para admin y soporte) ───────────
+  'cursos-producto': {
+    id: 'cursos-producto',
+    titulo: 'Cursos de Moodle de cada producto',
+    permiso: 'moodle.cursos_producto',
+    pantalla: ['modules/moodle/pages/CursosDeProductosPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Qué curso es cada producto',
+        texto: 'Cuando alguien paga un producto, la matrícula automática le matricula en su curso de Moodle. Para eso cada producto tiene que estar unido a su curso. Aquí se une, campus a campus. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('cursos-producto-aviso'),
+        titulo: 'Los vendidos sin curso, primero',
+        texto: 'Productos que ya se han vendido y no tienen curso: a sus alumnos no se les puede matricular solos. Púlsalo para ver solo esos.',
+      },
+      {
+        donde: anclaje('cursos-producto-filtros'),
+        titulo: 'Buscar y filtrar',
+        texto: 'Escribe parte del nombre del producto o del curso, o mira solo los que no tienen curso.',
+      },
+      {
+        donde: anclaje('cursos-producto-lista'),
+        titulo: 'Elegir, cambiar o quitar',
+        texto: '«Elegir» abre la lista de cursos del Moodle del campus: escribe dos palabras del curso y púlsalo, y queda guardado. Con «Cambiar» pones otro, y con la X lo quitas.',
+      },
+      {
+        donde: anclaje('cursos-producto-actualizar'),
+        titulo: 'Un curso recién creado',
+        texto: 'Si acabas de crear el curso en Moodle y no sale, pulsa «Actualizar cursos».',
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
 };
+
