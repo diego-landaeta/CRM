@@ -152,6 +152,14 @@ const RESPUESTAS = {
     success: true,
     data: [{ user_id: 41, nombre: 'Marta Asesora', email: null, role: 'gestor', ventas: 3, clientes: 2, importe: 3000, cobrado: 3100, pendiente: 400, ticket_medio: 1000, ultima_venta: HOY }],
   },
+  '/ventas/por-cliente': {
+    success: true,
+    data: [{
+      lead_id: 7, cliente: 'Carla Cliente', email: null, telefono: null, ventas: 2, importe: 2000, cobrado: 1600, pendiente: 400,
+      primera_venta: HOY, ultima_venta: HOY, cuotas_pendientes: 2, cuotas_vencidas: 1, cuotas_importe_pendiente: 400, asesoras: 'Marta Asesora',
+    }],
+    pagination: { total: 1 },
+  },
 };
 
 /** Pendientes de facturar pide /conversions con `pendingBilling`: ventas sin
@@ -249,7 +257,8 @@ describe('pintadas de verdad, se recorren enteras sin saltarse ningún paso', ()
     ['nominas', PayrollPage, {}, ['payroll.view', 'payroll.edit'], 'marta@example.com', []],
     ['pendientes-facturar', PendienteFacturarPage, {}, ['facturas.view'], 'Luis Sinprecio', []],
     ['ventas-sin-formacion', VentasSinFormacionPage, {}, ['ventas.view_equipo'], 'Eva Alumna', []],
-    ['analisis-ventas', SalesAnalysisPage, {}, ['ventas.view_equipo'], 'Cobro fraccionado', []],
+    // Abre en el resumen: la tabla de «Por asesora» y «Por cliente» no está y su paso se salta.
+    ['analisis-ventas', SalesAnalysisPage, {}, ['ventas.view_equipo'], 'Cobro fraccionado', ['Por asesora o por cliente']],
   ];
 
   it.each(CASOS)('%s: sale solo la primera vez y pasa por todos sus pasos', async (id, Pantalla, props, conPermisos, cargada, saltados) => {
@@ -336,17 +345,38 @@ describe('pintadas de verdad, se recorren enteras sin saltarse ningún paso', ()
     expect(vistos).toEqual(['Las nóminas', 'Las pestañas', 'Los planes', 'Y listo']);
   });
 
-  it('Análisis de ventas en «Por asesora»: se salta lo que es del resumen', async () => {
+  it.each([
+    ['Por asesora', 'Marta Asesora'],
+    ['Por cliente', 'Carla Cliente'],
+  ])('Análisis de ventas en «%s»: señala la tabla y se salta lo que es del resumen', async (vista, nombre) => {
     permisos.add('ventas.view_equipo');
     localStorage.setItem(claveRecorrido('analisis-ventas', 41), '1');
     pintar(SalesAnalysisPage);
     await screen.findAllByText('Cobro fraccionado', {}, { timeout: 5000 });
-    fireEvent.click(screen.getByRole('button', { name: /Por asesora/ }));
-    await screen.findAllByText('Marta Asesora', {}, { timeout: 5000 });
+    // En el resumen no hay tabla: «Por asesora o por cliente» no tiene dónde ir.
+    expect(document.querySelector('[data-recorrido="analisis-tabla"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(vista) }));
+    await screen.findAllByText(nombre, {}, { timeout: 5000 });
+    expect(document.querySelectorAll('[data-recorrido="analisis-tabla"]')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Ver recorrido: Análisis de ventas' }));
     const fuera = ['El resumen', 'Cobrado de más', 'Cobro fraccionado'];
     const titulos = RECORRIDOS_FINANZAS['analisis-ventas'].pasos.map((p) => p.titulo).filter((t) => !fuera.includes(t));
+    expect(titulos).toContain('Por asesora o por cliente');
     expect(recorrer(titulos.length)).toEqual(titulos);
+  });
+
+  it('Pendientes de facturar: «Cuántas son» va aparte y «La lista» envuelve la tabla y las tarjetas, no las páginas', async () => {
+    permisos.add('facturas.view');
+    localStorage.setItem(claveRecorrido('pendientes-facturar', 41), '1');
+    pintar(PendienteFacturarPage);
+    await screen.findAllByText('Luis Sinprecio', {}, { timeout: 5000 });
+    const lista = document.querySelector('[data-recorrido="pendientes-lista"]');
+    const cuantas = document.querySelector('[data-recorrido="pendientes-cuantas"]');
+    expect(cuantas.textContent).toContain('60');
+    expect(lista.contains(cuantas)).toBe(false);
+    expect(lista.contains(document.querySelector('[data-recorrido="pendientes-paginas"]'))).toBe(false);
+    expect(lista.querySelector('table')).not.toBeNull();
+    expect(within(lista).getAllByText('Luis Sinprecio')).toHaveLength(2); // tabla (PC) y tarjeta (móvil)
   });
 
   it('ya visto, no vuelve a salir solo', async () => {

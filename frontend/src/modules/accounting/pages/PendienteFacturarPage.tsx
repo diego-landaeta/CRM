@@ -126,13 +126,13 @@ export default function PendienteFacturarPage() {
           />
         </div>
       ) : (
-        // Envuelve la tabla (escritorio) y las tarjetas (móvil): el recorrido
-        // señala la lista en los dos (#941, como CRM-ISEIE#619).
-        <div data-recorrido="pendientes-lista" className="space-y-5">
-          <p className="text-sm text-muted-foreground">
+        <>
+          <p data-recorrido="pendientes-cuantas" className="text-sm text-muted-foreground">
             <strong className="text-foreground">{total}</strong> ventas sin importe en este proyecto.
           </p>
 
+          {/* La tabla (PC) y las tarjetas (móvil) juntas: lo que señala el recorrido (#941, como CRM-ISEIE#619). */}
+          <div data-recorrido="pendientes-lista">
           {/* Tabla escritorio */}
           <div className="hidden lg:block bg-card border border-border rounded-lg overflow-hidden">
             <table className="tabla-cifras w-full text-sm">
@@ -194,6 +194,8 @@ export default function PendienteFacturarPage() {
             ))}
           </div>
 
+          </div>
+
           {totalPages > 1 && (
             <div data-recorrido="pendientes-paginas" className="flex items-center justify-between gap-3 pt-1 text-sm">
               <span className="text-muted-foreground">
@@ -208,7 +210,7 @@ export default function PendienteFacturarPage() {
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
 
       {editing && (

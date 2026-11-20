@@ -447,6 +447,11 @@ export const RECORRIDOS_FINANZAS: Record<IdRecorridoFinanzas, RecorridoFinanzas>
         texto: 'El prospecto se marcó como convertido sin apuntar el importe de la venta. Hay que completarlo a mano.',
       },
       {
+        donde: anclaje('pendientes-cuantas'),
+        titulo: 'Cuántas son',
+        texto: 'Las ventas sin importe del campus o la empresa elegidos arriba. Cada una que completas sale de la lista.',
+      },
+      {
         donde: anclaje('pendientes-lista'),
         titulo: 'La lista',
         texto: 'Cada venta con su cliente, programa, fecha e importe actual. «Completar» abre la venta para poner el importe, lo pagado y el método de pago; el nombre abre la ficha.',
@@ -530,6 +535,11 @@ export const RECORRIDOS_FINANZAS: Record<IdRecorridoFinanzas, RecorridoFinanzas>
         donde: anclaje('analisis-fraccionado'),
         titulo: 'Cobro fraccionado',
         texto: 'Las ventas a plazos: cuotas cobradas y pendientes, lo que queda por cobrar y lo vencido.',
+      },
+      {
+        donde: anclaje('analisis-tabla'),
+        titulo: 'Por asesora o por cliente',
+        texto: 'Por asesora: lo vendido, cobrado y pendiente de cada una. Por cliente: lo de cada cliente, con sus cuotas; pulsa uno para abrir su ficha.',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],

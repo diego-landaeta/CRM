@@ -153,6 +153,12 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
     for (const id of ['nominas', 'pendientes-facturar', 'ventas-sin-formacion', 'analisis-ventas']) {
       expect(TODOS.find(([x]) => x === id), id).toBeTruthy();
     }
+    // Los dos pasos que tiene también CRM-ISEIE#619: también se prueban a 375.
+    const donde = (id) => TODOS.find(([x]) => x === id)[1].map((p) => p.donde);
+    expect(donde('pendientes-facturar')).toEqual(expect.arrayContaining([
+      '[data-recorrido="pendientes-cuantas"]', '[data-recorrido="pendientes-lista"]',
+    ]));
+    expect(donde('analisis-ventas')).toContain('[data-recorrido="analisis-tabla"]');
     for (const r of Object.values(RECORRIDOS_FINANZAS)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();

@@ -271,7 +271,7 @@ export default function SalesAnalysisPage() {
         )
       ) : tab === 'asesora' ? (
         asesoras.length === 0 ? <EmptyState icon={UsersThree} title="Sin ventas" description="No hay ventas en este filtro." /> : (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div data-recorrido="analisis-tabla" className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
@@ -309,7 +309,7 @@ export default function SalesAnalysisPage() {
         )
       ) : (
         clientes.length === 0 ? <EmptyState icon={User} title="Sin clientes" description="No hay ventas en este filtro." /> : (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div data-recorrido="analisis-tabla" className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
