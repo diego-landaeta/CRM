@@ -23,8 +23,12 @@ export interface AccionDeMenu {
  * foco al botón. En el móvil el botón mide 44 px.
  */
 export default function MenuAcciones({
-  acciones, etiqueta = 'Más acciones', className, children,
-}: { acciones: AccionDeMenu[]; etiqueta?: string; className?: string; children?: ReactNode }) {
+  acciones, etiqueta = 'Más acciones', className, children, enFila = false,
+}: {
+  acciones: AccionDeMenu[]; etiqueta?: string; className?: string; children?: ReactNode;
+  /** En una fila de tabla: sin borde y de 28 px en el PC. */
+  enFila?: boolean;
+}) {
   const [abierto, setAbierto] = useState(false);
   const boton = useRef<HTMLButtonElement>(null);
   const lista = useRef<HTMLDivElement>(null);
@@ -64,7 +68,10 @@ export default function MenuAcciones({
         aria-expanded={abierto}
         aria-controls={abierto ? id : undefined}
         onClick={() => setAbierto((v) => !v)}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-input bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-8 lg:w-8"
+        className={cn(
+          'inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          enFila ? 'lg:h-7 lg:w-7' : 'border border-input bg-card lg:h-8 lg:w-8',
+        )}
       >
         <DotsThree size={18} weight="bold" />
       </button>

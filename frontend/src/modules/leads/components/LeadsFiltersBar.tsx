@@ -232,13 +232,13 @@ export default function LeadsFiltersBar(props: Props) {
         <button
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+          className={`h-9 inline-flex items-center gap-1.5 px-2.5 rounded-md border text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activePills.length > 0
               ? 'border-primary/40 bg-primary/10 text-primary'
-              : 'border-border bg-card hover:bg-muted'
+              : 'border-input bg-card hover:bg-muted'
           }`}
         >
-          <Funnel size={14} weight={activePills.length > 0 ? 'fill' : 'bold'} />
+          <Funnel size={14} weight={activePills.length > 0 ? 'fill' : 'regular'} />
           Filtros
           {activePills.length > 0 && (
             <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
@@ -540,7 +540,7 @@ export default function LeadsFiltersBar(props: Props) {
       {activePills.map((pill) => (
         <span
           key={pill.key}
-          className="inline-flex items-center gap-1 h-9 pl-2.5 pr-1.5 rounded-md bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
+          className="inline-flex items-center gap-1 h-9 pl-2.5 pr-1.5 rounded-md bg-primary/10 text-primary text-xs font-medium border border-primary/20"
         >
           {pill.label}
           <button
@@ -557,13 +557,13 @@ export default function LeadsFiltersBar(props: Props) {
       {showAssignBtn && (
         <button
           onClick={onAssignPending}
-          className="ml-auto h-9 px-3 rounded-md bg-warning hover:bg-warning/90 text-warning-foreground text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-warning/40"
+          className="h-9 px-2.5 rounded-md border border-warning/40 bg-warning-soft hover:bg-warning-soft/70 text-warning-soft-foreground text-[13px] font-medium whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title="Aplica round-robin a todos los prospectos sin responsable"
         >
           <WarningCircle size={13} weight="fill" />
           Asignar pendientes
           {(stats?.sin_asignar ?? 0) > 0 && (
-            <span className="bg-white text-warning text-[10px] font-black px-1.5 py-0.5 rounded">
+            <span className="bg-warning text-warning-foreground text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded">
               {stats?.sin_asignar}
             </span>
           )}

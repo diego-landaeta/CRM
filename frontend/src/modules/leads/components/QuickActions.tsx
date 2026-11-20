@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash, Flag,
+  WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash, Flag, ArrowSquareOut,
 } from '@phosphor-icons/react';
+import MenuAcciones from '@/shared/components/ui/MenuAcciones';
 import { fillTemplate } from '../hooks/useWhatsappTemplates';
 import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 
@@ -51,7 +52,15 @@ export default function QuickActions({
   templates,
   projectName,
   onEditTemplates,
-}: Props) {
+  compacto = false,
+}: Props & {
+  /**
+   * Rediseño (20/11): WhatsApp a la vista y el resto en «⋯». Ocho iconos sin
+   * nombre por fila (y por tarjeta en el móvil, a 26 px) no se entendían sin
+   * pasar el ratón; en el menú cada acción lleva su nombre.
+   */
+  compacto?: boolean;
+}) {
   const navigate = useNavigate();
   // Con el criterio del backend, no con «quitale lo que no sea un digito».
   // Ese daba por bueno un «600123456.0» de Excel —Excel los guarda como numero
@@ -89,7 +98,11 @@ export default function QuickActions({
             type="button"
             onClick={() => setWaMenuOpen((o) => !o)}
             title="WhatsApp con plantilla"
-            className="p-1.5 rounded hover:bg-success-soft text-muted-foreground hover:text-success transition-colors"
+            aria-label={`WhatsApp con plantilla a ${lead.nombre || 'este prospecto'}`}
+            aria-expanded={waMenuOpen}
+            className={compacto
+              ? 'inline-flex h-11 w-11 lg:h-7 lg:w-7 items-center justify-center rounded-md hover:bg-success-soft text-muted-foreground hover:text-success transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              : 'p-1.5 rounded hover:bg-success-soft text-muted-foreground hover:text-success transition-colors'}
           >
             <WhatsappLogo size={14} weight="regular" />
           </button>
@@ -137,7 +150,21 @@ export default function QuickActions({
           )}
         </div>
       )}
-      {onEnrollSequence && (
+      {compacto && (
+        <MenuAcciones enFila
+          etiqueta={`Acciones de ${lead.nombre || 'este prospecto'}`}
+          acciones={[
+            { label: 'Abrir la ficha completa', icon: ArrowSquareOut, onClick: () => navigate(`/prospectos/${lead.id}`) },
+            { label: 'Programar siguiente contacto', icon: CalendarPlus, oculta: !onCreateReminder, onClick: () => onCreateReminder?.(lead) },
+            { label: 'Marcar contactado', icon: CheckCircle, oculta: !(lead.estado !== 'contactado' && lead.estado !== 'convertido' && lead.estado !== 'no_interesado' && onMarkContacted), onClick: () => onMarkContacted?.(lead) },
+            { label: 'Convertir a cliente', icon: Lightning, oculta: !(lead.estado !== 'convertido' && onConvert), onClick: () => onConvert?.(lead) },
+            { label: 'Enrolar en secuencia de email', icon: EnvelopeSimple, oculta: !onEnrollSequence, onClick: () => onEnrollSequence?.(lead) },
+            { label: 'Reportar como spam', icon: Flag, title: 'Reportar como spam (revisa superadmin)', oculta: !onReportSpam, onClick: () => onReportSpam?.(lead) },
+            { label: 'Eliminar', icon: Trash, title: 'Eliminar (superadmin)', peligro: true, oculta: !onSoftDelete, onClick: () => onSoftDelete?.(lead) },
+          ]}
+        />
+      )}
+      {!compacto && onEnrollSequence && (
         <button
           onClick={() => onEnrollSequence(lead)}
           title="Enrolar en secuencia de email"
@@ -146,7 +173,7 @@ export default function QuickActions({
           <EnvelopeSimple size={14} weight="regular" />
         </button>
       )}
-      {onCreateReminder && (
+      {!compacto && onCreateReminder && (
         <button
           onClick={() => onCreateReminder(lead)}
           title="Programar siguiente contacto"
@@ -155,7 +182,7 @@ export default function QuickActions({
           <CalendarPlus size={14} weight="regular" />
         </button>
       )}
-      {lead.estado !== 'contactado' && lead.estado !== 'convertido' && lead.estado !== 'no_interesado' && onMarkContacted && (
+      {!compacto && lead.estado !== 'contactado' && lead.estado !== 'convertido' && lead.estado !== 'no_interesado' && onMarkContacted && (
         <button
           onClick={() => onMarkContacted(lead)}
           title="Marcar contactado"
@@ -164,7 +191,7 @@ export default function QuickActions({
           <CheckCircle size={14} weight="regular" />
         </button>
       )}
-      {lead.estado !== 'convertido' && onConvert && (
+      {!compacto && lead.estado !== 'convertido' && onConvert && (
         <button
           onClick={() => onConvert(lead)}
           title="Convertir a cliente"
@@ -173,7 +200,7 @@ export default function QuickActions({
           <Lightning size={14} weight="regular" />
         </button>
       )}
-      {onReportSpam && (
+      {!compacto && onReportSpam && (
         <button
           onClick={() => onReportSpam(lead)}
           title="Reportar como spam (revisa superadmin)"
@@ -182,7 +209,7 @@ export default function QuickActions({
           <Flag size={14} weight="regular" />
         </button>
       )}
-      {onSoftDelete && (
+      {!compacto && onSoftDelete && (
         <button
           onClick={() => onSoftDelete(lead)}
           title="Eliminar (superadmin)"

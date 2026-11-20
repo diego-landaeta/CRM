@@ -947,10 +947,10 @@ export default function LeadsPage() {
       <BarraFiltros
         busqueda={search}
         onBusqueda={setSearch}
-        extra={(
-          // Los tramos, a la vista (Diego, 24/09: «sí o sí mostrar todos y
-          // atrasados, con filtros hoy, mañana, vencidos»). Rediseño (20/11):
-          // en la misma línea que el buscador, como control segmentado.
+        // Los tramos, a la vista (Diego, 24/09: «sí o sí mostrar todos y
+        // atrasados, con filtros hoy, mañana, vencidos»). Rediseño (20/11):
+        // en la misma línea que el buscador, como control segmentado.
+        extra={(<>
           <div role="group" aria-label="Cuándo toca" className="inline-flex h-9 items-stretch overflow-hidden rounded-md border border-input bg-card">
             {([
               ['', 'Todos', undefined],
@@ -977,7 +977,54 @@ export default function LeadsPage() {
               </button>
             ))}
           </div>
-        )}
+          {/* Rediseño (20/11): «Filtros», sus píldoras y «Asignar pendientes», en
+              la misma línea que el buscador, no en una fila aparte. */}
+          <LeadsFiltersBar
+            activeProject={activeProject}
+            projects={campusDelAmbito}
+            selectedProjectIds={selectedProjectIds}
+            setSelectedProjectIds={setSelectedProjectIds}
+            gestores={gestores}
+            products={products}
+            user={user}
+            search={search} setSearch={setSearch}
+            filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
+            filterSeguimiento={filterSeguimiento} setFilterSeguimiento={setFilterSeguimiento}
+            filterPaso={filterPaso} setFilterPaso={setFilterPaso}
+            pasosDelProceso={pasosDelProceso}
+            filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
+            filterPais={filterPais} setFilterPais={setFilterPais}
+            filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
+            filterProducto={filterProducto} setFilterProducto={setFilterProducto}
+            dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
+            sortMode={sortMode} setSortMode={setSortMode}
+            sortDir={sortDir} setSortDir={setSortDir}
+            quickFilter={quickFilter} setQuickFilter={setQuickFilter}
+            quickCounts={quickCounts}
+            filterDup={filterDup} setFilterDup={setFilterDup}
+            filterReincidente={filterReincidente} setFilterReincidente={setFilterReincidente}
+            stats={stats}
+            leadsCount={leads.length}
+            filteredCount={filteredLeads.length}
+            onAssignPending={async () => {
+              if (!activeProject?.id || activeProject.id < 0) return;
+              try {
+                const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
+                if (res.success) {
+                  const d = res.data as { reassigned: number; reason?: string };
+                  if (d.reason === 'NO_ACTIVE_GESTORES') {
+                    toast({ title: 'No hay gestores activos en este proyecto', description: 'Crea usuarios con rol "gestor" o "admin" y asígnalos al proyecto.', variant: 'destructive' });
+                  } else {
+                    toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''} equitativamente` });
+                    refetch?.();
+                  }
+                }
+              } catch (err: any) {
+                toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+              }
+            }}
+          />
+        </>)}
         placeholder="Buscar por nombre, email o teléfono"
         desplegables={[]}
         hayFiltros={!!(search || filterEstado || filterOrigen || filterPais || filterResponsable || filterProducto || dateFrom || dateTo || filterDup || filterReincidente || quickFilter)}
@@ -998,53 +1045,6 @@ export default function LeadsPage() {
         actualizando={loading}
       />
 
-      {/* Lo que no cabe arriba: el resto de filtros, las píldoras de lo que está
-          puesto ahora mismo, y «Asignar pendientes». */}
-      <LeadsFiltersBar
-        activeProject={activeProject}
-        projects={campusDelAmbito}
-        selectedProjectIds={selectedProjectIds}
-        setSelectedProjectIds={setSelectedProjectIds}
-        gestores={gestores}
-        products={products}
-        user={user}
-        search={search} setSearch={setSearch}
-        filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
-        filterSeguimiento={filterSeguimiento} setFilterSeguimiento={setFilterSeguimiento}
-        filterPaso={filterPaso} setFilterPaso={setFilterPaso}
-        pasosDelProceso={pasosDelProceso}
-        filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
-        filterPais={filterPais} setFilterPais={setFilterPais}
-        filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
-        filterProducto={filterProducto} setFilterProducto={setFilterProducto}
-        dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
-        sortMode={sortMode} setSortMode={setSortMode}
-        sortDir={sortDir} setSortDir={setSortDir}
-        quickFilter={quickFilter} setQuickFilter={setQuickFilter}
-        quickCounts={quickCounts}
-        filterDup={filterDup} setFilterDup={setFilterDup}
-        filterReincidente={filterReincidente} setFilterReincidente={setFilterReincidente}
-        stats={stats}
-        leadsCount={leads.length}
-        filteredCount={filteredLeads.length}
-        onAssignPending={async () => {
-          if (!activeProject?.id || activeProject.id < 0) return;
-          try {
-            const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
-            if (res.success) {
-              const d = res.data as { reassigned: number; reason?: string };
-              if (d.reason === 'NO_ACTIVE_GESTORES') {
-                toast({ title: 'No hay gestores activos en este proyecto', description: 'Crea usuarios con rol "gestor" o "admin" y asígnalos al proyecto.', variant: 'destructive' });
-              } else {
-                toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''} equitativamente` });
-                refetch?.();
-              }
-            }
-          } catch (err: any) {
-            toast({ title: 'Error', description: err?.message, variant: 'destructive' });
-          }
-        }}
-      />
 
       {/* Error state */}
       {error && (
@@ -1187,10 +1187,10 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.created_at ? (
-                      <div className="flex flex-col leading-tight">
+                      <span>
                         <span className="text-foreground">{new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
-                        <span className="text-muted-foreground text-[11px]">{new Date(lead.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
+                        <span className="text-muted-foreground"> · {new Date(lead.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </span>
                     ) : <span className="text-muted-foreground/60">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">
@@ -1207,7 +1207,7 @@ export default function LeadsPage() {
                   <td className="px-5 py-3.5 text-right pr-3">
                     <div className="flex items-center justify-end gap-1.5">
                     <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    <QuickActions compacto lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
                     </div>
                   </td>
                 </tr>
@@ -1246,8 +1246,9 @@ export default function LeadsPage() {
           {filteredLeads.map((lead) => (
             <div
               key={lead.id}
+              data-fila=""
               onClick={() => setDrawerLeadId(lead.id)}
-              className="p-4 space-y-2.5 cursor-pointer active:bg-muted/50 transition-colors"
+              className="px-4 py-3 space-y-1.5 cursor-pointer active:bg-muted/50 transition-colors"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -1270,11 +1271,12 @@ export default function LeadsPage() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center justify-between pt-1 border-t border-border/60">
-                <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <span className="flex items-center gap-1.5">
-                <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+              {/* Rediseño (20/11): WhatsApp y «⋯» (con nombre en cada acción),
+                  en vez de ocho iconos de 26 px sin etiqueta. */}
+              <div className="flex items-center justify-between -mb-2">
+                <span className="text-xs text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
+                <span className="flex items-center gap-1">
+                <QuickActions compacto lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
                 </span>
               </div>
             </div>

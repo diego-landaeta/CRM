@@ -415,7 +415,10 @@
   color: hsl(var(--muted-foreground));
   white-space: nowrap;
 }
-#main-content tbody td { padding-top: 0.4375rem; padding-bottom: 0.4375rem; line-height: 1.25rem; }
+/* 36 px por fila como mínimo: el contenido de 28 (botones, chapas) cabe con
+   4 px arriba y abajo; una fila de solo texto queda en 36 igual. */
+#main-content tbody tr { height: 2.25rem; }
+#main-content tbody td { padding-top: 0.25rem; padding-bottom: 0.25rem; line-height: 1.25rem; }
 #main-content :is(th, td)[class*="px-4"],
 #main-content :is(th, td)[class*="px-5"],
 #main-content :is(th, td)[class*="px-6"] { padding-left: 0.75rem; padding-right: 0.75rem; }
@@ -424,17 +427,20 @@
 /* Controles: 32 px en el PC (eran 36–40), los mismos 36–40 en el móvil, donde
    se tocan con el dedo. 772 `h-9` escritos a mano en las pantallas. */
 @media (min-width: 1024px) {
-  :is(#main-content, #cabecera) .h-9 { height: 2rem; }
-  :is(#main-content, #cabecera) .w-9 { width: 2rem; }
-  :is(#main-content, #cabecera) .h-10 { height: 2.25rem; }
-  :is(#main-content, #cabecera) .w-10 { width: 2.25rem; }
-  :is(#main-content, #cabecera) .h-11 { height: 2.5rem; }
+  :is(#main-content, #cabecera) .h-9:not([class*="lg:h-"]) { height: 2rem; }
+  :is(#main-content, #cabecera) .w-9:not([class*="lg:w-"]) { width: 2rem; }
+  :is(#main-content, #cabecera) .h-10:not([class*="lg:h-"]) { height: 2.25rem; }
+  :is(#main-content, #cabecera) .w-10:not([class*="lg:w-"]) { width: 2.25rem; }
+  :is(#main-content, #cabecera) .h-11:not([class*="lg:h-"]) { height: 2.5rem; }
   :is(#main-content, #cabecera) :is(button, a, input, select).text-sm { font-size: 0.8125rem; }
 }
 
 /* El acta: dentro de la tira, las celdas pierden su borde propio y comparten
    la costura (KpiCard y Cifra sirven de celda). */
 .acta > .campo-acta { border: 0; border-radius: 0; }
+/* Celdas envueltas (un <div title> alrededor de la KpiCard): que llenen la celda. */
+.acta > :not(.campo-acta) { display: flex; background: hsl(var(--card)); }
+.acta > :not(.campo-acta) > .campo-acta { flex: 1; border: 0; border-radius: 0; }
 
 /* Rótulos en MAYÚSCULAS espaciadas («eyebrow»): la marca de plantilla que
    había encima de cada bloque. En el rediseño, en minúscula y sin espaciar;
