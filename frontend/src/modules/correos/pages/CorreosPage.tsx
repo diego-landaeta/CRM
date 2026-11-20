@@ -48,7 +48,6 @@ const COLOR: Record<string, string> = {
   recibido: 'text-info',
   bloqueado: 'text-warning',
   fallido: 'text-destructive',
-
 };
 
 const ROTULO: Record<string, string> = {
