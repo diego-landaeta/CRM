@@ -585,6 +585,60 @@ export const CAMBIOS_DE_MENU = [
     // La escribe Claude principal con el sí de Diego.
     aprobadoPor: 'Pendiente de Diego',
   },
+  {
+    id: 'menu-testeo-solo-diseno',
+    que: 'El apartado «Testeo» del menú (TESTEO2, SUITE DASH y «Las 22 primitivas») sale solo a superadmin, admin y soporte. Solo existe en /testeo y en local; en producción no sale a nadie.',
+    motivo: 'QA de /testeo del 18/11: a una gestora le salían la maqueta del rediseño, la referencia y el muestrario de primitivas, que son herramientas de diseño y no pantallas de trabajo. Solo se esconden: no tienen ruta del servidor y sus páginas siguen abriendo igual.',
+    // Solo menú: no tienen ruta del servidor (`null`), el acceso no cambia.
+    soloMenu: true,
+    perfiles: Object.fromEntries([
+      'gestora', 'project_manager', 'gestora+tutor', 'gestora con factura_manager', 'gestora con editar_fechas_factura',
+      'gestora con usa_mcp', 'gestora con diplomas.view', 'gestora con tasks.close',
+    ].map((perfil) => [perfil, ['- Testeo › TESTEO2', '- Testeo › SUITE DASH', '- Testeo › Las 22 primitivas']])),
+    rutas: { 'Testeo › TESTEO2': null, 'Testeo › SUITE DASH': null, 'Testeo › Las 22 primitivas': null },
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
+  },
+  {
+    id: 'menu-conciliacion-905',
+    que: '«Finanzas › Conciliación»: facturas emitidas sin cobro y cobros sin factura, por campus y por mes, con «Enlazar» y «Enlazar todas las seguras» (CRM#905). La ve quien tiene `facturas.gestionar` («asociar a una venta»), admin y super admin de serie, cada uno en sus campus. Una gestora con el permiso por excepción no la ve ni concilia: es de administración.',
+    motivo: 'Diego (18/11): enlazó a mano en producción 89 facturas sin cobro; quedan unas 56 y unos 400 cobros sin factura, y tiene que poder hacerlo administración desde el CRM. No cambia el acceso: `facturas.gestionar` ya asociaba una factura a una venta. La pestaña de los cargos de Stripe (CRM#906) irá dentro de esta misma entrada.',
+    perfiles: {
+      superadmin: ['+ Finanzas › Conciliación'],
+      admin: ['+ Finanzas › Conciliación'],
+      'gestora+admin': ['+ Finanzas › Conciliación'],
+    },
+    rutas: {
+      'Finanzas › Conciliación': 'GET /api/conciliacion/facturas-cobros',
+    },
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
+  },
+  {
+    id: 'menu-conciliacion-cargos-stripe-906',
+    que: '«Finanzas › Conciliación › Cargos de Stripe»: los cargos de Stripe cobrados que no están en ningún cobro del CRM, por campus y por mes, con su cobro candidato para enlazarlo, apuntarlo en la venta del alumno o crear la venta (CRM#906). La pestaña la ve quien tiene `stripe.edit`, cada uno en sus campus; por eso la entrada «Conciliación» le sale también a soporte, que tiene `stripe.edit` y no `facturas.gestionar` (solo verá esta pestaña).',
+    motivo: 'Diego (18/11): quedaban unos 246 cargos (unos 62.000 €) sin enlazar en el 360 y se enlazaban a mano en la base. No cambia el acceso: `stripe.edit` ya asociaba cargos en Pagos Stripe.',
+    perfiles: {
+      soporte: ['+ Finanzas › Conciliación'],
+    },
+    rutas: {
+      'Finanzas › Conciliación': 'GET /api/stripe-payments/conciliacion',
+    },
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
+  },
+  {
+    id: 'menu-cursos-moodle-957',
+    que: '«Académico › Cursos de Moodle» (y la pestaña del mismo nombre en Productos): cada producto del catálogo de un campus con su curso de Moodle, o «Sin curso», y elegirlo de la lista de cursos de su Moodle, cambiarlo o quitarlo (CRM#957). Avisa de los productos vendidos sin curso. La ve quien tiene `moodle.cursos_producto`, clave nueva: admin y soporte de serie, cada uno en sus campus.',
+    motivo: 'Diego (19/11, CRM#957, a petición de CRM-ISEIE#355): sin esta unión la matrícula automática (#767) no sabe en qué curso matricular a quien compra. Hasta ahora solo se podía con SQL a mano en `moodle_cursos_producto`.',
+    perfiles: {
+      superadmin: ['+ Académico › Cursos de Moodle'],
+      admin: ['+ Académico › Cursos de Moodle'],
+      soporte: ['+ Académico › Cursos de Moodle'],
+      'gestora+admin': ['+ Académico › Cursos de Moodle'],
+    },
+    rutas: {
+      'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
+    },
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
+  },
 ];
 
 /**
