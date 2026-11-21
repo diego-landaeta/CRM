@@ -596,7 +596,7 @@ export const CAMBIOS_DE_MENU = [
       'gestora con usa_mcp', 'gestora con diplomas.view', 'gestora con tasks.close',
     ].map((perfil) => [perfil, ['- Testeo › TESTEO2', '- Testeo › SUITE DASH', '- Testeo › Las 22 primitivas']])),
     rutas: { 'Testeo › TESTEO2': null, 'Testeo › SUITE DASH': null, 'Testeo › Las 22 primitivas': null },
-    aprobadoPor: 'Pendiente de Diego (QA de /testeo del 18/11)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
   {
     id: 'menu-conciliacion-905',
@@ -610,7 +610,7 @@ export const CAMBIOS_DE_MENU = [
     rutas: {
       'Finanzas › Conciliación': 'GET /api/conciliacion/facturas-cobros',
     },
-    aprobadoPor: 'Pendiente de Diego (CRM#905)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
   {
     id: 'menu-conciliacion-cargos-stripe-906',
@@ -622,7 +622,7 @@ export const CAMBIOS_DE_MENU = [
     rutas: {
       'Finanzas › Conciliación': 'GET /api/stripe-payments/conciliacion',
     },
-    aprobadoPor: 'Pendiente de Diego (CRM#906)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
   {
     id: 'menu-cursos-moodle-957',
@@ -637,7 +637,7 @@ export const CAMBIOS_DE_MENU = [
     rutas: {
       'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
     },
-    aprobadoPor: 'Pendiente de Diego (CRM#957)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
 ];
 
