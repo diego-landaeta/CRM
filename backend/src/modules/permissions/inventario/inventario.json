@@ -3981,6 +3981,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/credentials/ia",
+  "tipo": "ruta",
+  "modulo": "credentials",
+  "metodo": "GET",
+  "ruta": "/api/credentials/ia",
+  "relativa": "GET /ia",
+  "controlador": "iaEnUso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "credentials.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/credentials/",
   "tipo": "ruta",
   "modulo": "credentials",
@@ -9332,6 +9354,32 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/cuotas-disponibles",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/cuotas-disponibles",
+  "relativa": "GET /cuotas-disponibles",
+  "controlador": "cuotasDisponibles",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/ventas-del-prospecto",
   "tipo": "ruta",
   "modulo": "links-pago",
@@ -11313,6 +11361,94 @@
     "tipo": "puede",
     "claves": [
      "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus/:id/productos-cursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/productos-cursos",
+  "relativa": "GET /campus/:id/productos-cursos",
+  "controlador": "productos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus/:id/cursos-moodle",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/cursos-moodle",
+  "relativa": "GET /campus/:id/cursos-moodle",
+  "controlador": "cursosMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/moodle/campus/:id/productos/:productId/curso",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "PUT",
+  "ruta": "/api/moodle/campus/:id/productos/:productId/curso",
+  "relativa": "PUT /campus/:id/productos/:productId/curso",
+  "controlador": "unir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/moodle/campus/:id/productos/:productId/curso",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "DELETE",
+  "ruta": "/api/moodle/campus/:id/productos/:productId/curso",
+  "relativa": "DELETE /campus/:id/productos/:productId/curso",
+  "controlador": "quitar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
     ]
    }
   ],
