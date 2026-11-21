@@ -85,10 +85,13 @@ describe('la tarjeta de la ficha', () => {
 });
 
 describe('crear sin clave de links en el campus (QA de /testeo del 18/11)', () => {
+  // Desde la v2.8.3 (#947) todo link va con su venta: sin ninguna, el asistente no
+  // enseña el formulario. Aquí la prospecto tiene una, con 370 pendientes.
+  const VENTA = { id: 81, project_id: 1, producto_contratado_id: 5, producto_nombre: 'Máster en Psicología', importe_total: 1000, cobrado: 630, pendiente: 370, fecha_conversion: '2026-11-01' };
   const conAviso = (aviso_clave) => get.mockImplementation(async (url) => {
     if (url === '/links-pago') return { success: true, data: [] };
     if (url === '/links-pago/ventas-del-prospecto') {
-      return { success: true, data: { lead: { id: 3, nombre: 'Ana', email: null, telefono: null, project_id: 1, producto_interes_id: 5 }, ventas: [] } };
+      return { success: true, data: { lead: { id: 3, nombre: 'Ana', email: null, telefono: null, project_id: 1, producto_interes_id: 5 }, ventas: [VENTA] } };
     }
     if (url.startsWith('/links-pago/config')) return { success: true, data: { ...CONFIG, aviso_clave } };
     if (url === '/products') return { success: true, data: CURSOS };
@@ -103,10 +106,11 @@ describe('crear sin clave de links en el campus (QA de /testeo del 18/11)', () =
     const dialogo = await screen.findByRole('dialog');
     const alerta = await within(dialogo).findByRole('alert');
     expect(alerta.textContent).toContain('no tiene la clave de links de pago');
-    expect(within(dialogo).getByRole('radiogroup', { name: 'Venta del link' }).closest('fieldset').disabled).toBe(true);
-    for (const etiqueta of ['Curso', 'Importe', /Caduca a los/]) {
-      expect(within(dialogo).getByLabelText(etiqueta).closest('fieldset').disabled).toBe(true);
-    }
+    // Desde la v2.9.2 (link sencillo) el curso, el pago y «para un prospecto» van en
+    // un mismo bloque: con el campus sin clave, apagado entero.
+    const bloque = dialogo.querySelector('fieldset');
+    expect(bloque.disabled).toBe(true);
+    expect(bloque.contains(within(dialogo).getByLabelText('Importe'))).toBe(true);
     expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
     // El aviso no se repite en la lista de «por qué no deja»: lo dice una vez, arriba.
     expect(within(dialogo).getAllByText(/no tiene la clave de links de pago/)).toHaveLength(1);
