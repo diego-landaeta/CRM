@@ -7,6 +7,7 @@
 
 922 rutas en 72 módulos, y 31 acciones con condición dentro de una ruta.
 923 rutas en 73 módulos, y 31 acciones con condición dentro de una ruta.
+927 rutas en 73 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -313,6 +314,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/credentials/` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.view` |
 | paridad | `GET /api/credentials/paridad` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.view` |
 | registro | `GET /api/credentials/registro` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.view` |
+| iaEnUso | `GET /api/credentials/ia` | (no existía) | (ruta nueva) | `credentials.view` |
 | upsert | `POST /api/credentials/` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.edit` |
 | test | `POST /api/credentials/:id/test` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.edit` |
 | revelar | `GET /api/credentials/:id/revelar` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.revelar` |
