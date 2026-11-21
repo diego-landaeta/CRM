@@ -3981,6 +3981,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/credentials/ia",
+  "tipo": "ruta",
+  "modulo": "credentials",
+  "metodo": "GET",
+  "ruta": "/api/credentials/ia",
+  "relativa": "GET /ia",
+  "controlador": "iaEnUso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "credentials.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/credentials/",
   "tipo": "ruta",
   "modulo": "credentials",
@@ -9322,6 +9344,32 @@
     "tipo": "puede",
     "claves": [
      "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/cuotas-disponibles",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/cuotas-disponibles",
+  "relativa": "GET /cuotas-disponibles",
+  "controlador": "cuotasDisponibles",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
     ]
    },
    {

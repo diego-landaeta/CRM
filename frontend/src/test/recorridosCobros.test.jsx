@@ -37,6 +37,7 @@ vi.mock('@/modules/links-pago/api/linksPago.api', () => ({
 }));
 
 const { RECORRIDOS_COBROS, pasosPara, claveRecorrido } = await import('@/shared/lib/recorridosCobros');
+const { RECORRIDOS_FINANZAS } = await import('@/shared/lib/recorridosFinanzas');
 const { default: VerRecorrido } = await import('@/shared/components/ui/VerRecorrido');
 const { CLAVES } = await import('../../../backend/src/modules/permissions/catalogo.js');
 
@@ -67,9 +68,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
-  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), más la de «Links de pago» (19/11) y la de «Cursos de Moodle» (#957)', () => {
-    expect(Object.keys(RECORRIDOS_COBROS).sort()).toEqual([
-      'anular-factura', 'cargos-sin-enlazar', 'cursos-producto', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'links-pago', 'pagos-stripe',
+  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), más la de «Links de pago» (19/11), la de Ventas (#941) y la de «Cursos de Moodle» (#957)', () => {
+    // Los del bloque Finanzas (#941) se cuentan en su propia prueba (recorridosFinanzas941).
+    expect(Object.keys(RECORRIDOS_COBROS).filter((k) => !(k in RECORRIDOS_FINANZAS)).sort()).toEqual([
+      'anular-factura', 'cargos-sin-enlazar', 'cursos-producto', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'links-pago', 'pagos-stripe', 'ventas',
     ]);
   });
 
