@@ -12,7 +12,8 @@ import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import CrearLinkAsistente, { copiarLink, errorDe, resumenDelPlan } from '../components/CrearLinkAsistente';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
-import { listarTodos, anularLink, type LinkDePago, type EstadoLink } from '../api/linksPago.api';
+import { listarTodos, anularLink, conectarStripe, type LinkDePago, type EstadoLink, type ConectarStripe } from '../api/linksPago.api';
+import AvisoConectarStripe, { AvisoCobroAutoApagado } from '../components/AvisoConectarStripe';
 
 /*
   LA PANTALLA «LINKS DE PAGO» (Comercial › Links de pago; Diego, 19/11).
@@ -53,6 +54,8 @@ export default function LinksDePagoPage() {
   const [anulando, setAnulando] = useState<LinkDePago | null>(null);
   const [anulandoBusy, setAnulandoBusy] = useState(false);
   const [errorAnular, setErrorAnular] = useState<string | null>(null);
+  // CRM#992: los campus del ámbito que no pueden cobrar cuotas solas por su clave de Stripe.
+  const [conectar, setConectar] = useState<ConectarStripe | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -70,6 +73,18 @@ export default function LinksDePagoPage() {
   }, [estado, pagina, limite, activeIssuerId, proyectoId]);
 
   useEffect(() => { if (encendidos) cargar(); }, [cargar, encendidos]);
+
+  // El aviso «Conectar Stripe para cobros automáticos» (CRM#992), con el mismo
+  // ámbito que la lista. Si no se puede saber, no se dice nada: no es la lista.
+  useEffect(() => {
+    if (!encendidos) return undefined;
+    let vigente = true;
+    setConectar(null);
+    conectarStripe(ambitoComoObjeto({ activeIssuerId: activeIssuerId ?? null, activeProject: { id: proyectoId } }))
+      .then((r) => { if (vigente) setConectar(r.data || null); })
+      .catch(() => { if (vigente) setConectar(null); });
+    return () => { vigente = false; };
+  }, [encendidos, activeIssuerId, proyectoId]);
 
   async function confirmarAnular(motivo: string) {
     if (!anulando) return;
@@ -111,6 +126,11 @@ export default function LinksDePagoPage() {
           </span>
         )}
       />
+
+      {conectar?.activo === false && <AvisoCobroAutoApagado motivo={conectar.motivo} />}
+      {conectar?.activo === true && Array.isArray(conectar.campus) && conectar.campus.length > 0 && (
+        <AvisoConectarStripe campus={conectar.campus} />
+      )}
 
       {/*
         LOS DOS RECORRIDOS (CRM#982, Diego 21/11: «son dos recorridos, hay que
