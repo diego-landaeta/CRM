@@ -103,6 +103,8 @@ export const listLeadsSchema = z.object({
   reincidente: z.coerce.boolean().optional(),
   // "Clientes" = leads con al menos una venta (conversión).
   conConversion: z.coerce.boolean().optional(),
+  // Solo los que siguen suspendidos en Moodle (CRM#531). «true» o «1»; cualquier otra cosa, 400.
+  suspendidoMoodle: z.enum(['true', '1']).transform(() => true).optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] }

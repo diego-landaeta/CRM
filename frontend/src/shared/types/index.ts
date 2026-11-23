@@ -186,6 +186,8 @@ export interface Client {
   cuotas_pendientes?: number;
   total_pagos?: number;
   proximo_vencimiento?: string | null;
+  // Sigue suspendido en Moodle (CRM#531). Solo viene con las suspensiones encendidas.
+  suspendido_moodle?: boolean;
 }
 
 export type ConversionEstado = 'pagado' | 'pendiente' | 'parcial' | 'reembolsado';

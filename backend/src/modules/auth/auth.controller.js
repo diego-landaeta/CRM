@@ -11,7 +11,7 @@ import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 import { alcanceDeLider } from '../../shared/utils/roles.js';
-import { linksPagoActivos, pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
+import { linksPagoActivos, pluginMoodleActivo, suspensionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -176,7 +176,11 @@ export async function me(req, res, next) {
           // El plugin del CRM en Moodle (#850), igual: lo mismo que decide qué
           // rutas del plugin se montan (PLUGIN_MOODLE_EN_PRODUCCION). Para
           // encenderlo en /crm basta con el `.env`, sin recompilar el frontal.
-          funciones: { links_pago: linksPagoActivos(), plugin_moodle: pluginMoodleActivo() },
+          // Las suspensiones de Moodle en la ficha (CRM#531), con SUSPENSIONES_MOODLE_EN_PRODUCCION.
+          funciones: {
+            links_pago: linksPagoActivos(), plugin_moodle: pluginMoodleActivo(),
+            suspensiones_moodle: suspensionesMoodleActivas(),
+          },
         },
         permissions,
         // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].
