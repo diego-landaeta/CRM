@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// Sin jest-dom: la misma prueba en los dos CRM (en ISEIE no está instalado).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
@@ -37,6 +38,7 @@ const get = vi.fn();
 const post = vi.fn();
 vi.mock('@/shared/api/client', () => ({
   default: { get: (...a) => get(...a), post: (...a) => post(...a), patch: vi.fn(), delete: vi.fn() },
+  APP_BASE_URL: '',
 }));
 
 const createMock = vi.fn();
@@ -76,7 +78,7 @@ describe('#1043 · el bloque de la factura del cobro', () => {
     fireEvent.click(await botonEmitir());
     await waitFor(() => expect(post).toHaveBeenCalledWith('/invoices/cola/generar', { projectId: 5, paymentId: 700, numero: 37 }));
     expect(get).toHaveBeenCalledWith('/invoices/cola/venta/42');
-    expect(await screen.findByText(/Factura 2026\/0037 emitida/)).toBeInTheDocument();
+    expect(await screen.findByText(/Factura 2026\/0037 emitida/)).toBeTruthy();
     // Emitida: ya no se ofrece otra vez.
     expect(screen.queryByRole('button', { name: /Emitir ya la factura/i })).toBeNull();
   });
@@ -92,7 +94,7 @@ describe('#1043 · el bloque de la factura del cobro', () => {
     cola.cobros = [];
     cola.facturas = [{ id: 80, codigo: '2026/0030', payment_id: 700, tipo: 'normal', estado: 'pagada' }];
     render(<EmitirFacturaCobro conversionId={42} paymentId={700} />);
-    expect(await screen.findByText(/ya tiene su factura 2026\/0030/)).toBeInTheDocument();
+    expect(await screen.findByText(/ya tiene su factura 2026\/0030/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Emitir ya la factura/i })).toBeNull();
     expect(post).not.toHaveBeenCalled();
   });
@@ -120,7 +122,7 @@ describe('#1043 · el bloque de la factura del cobro', () => {
   it('sin «Emitir desde la cola»: avisa de que lo emite administración, sin botón ni llamadas', () => {
     permisos.cola = false;
     render(<EmitirFacturaCobro conversionId={42} />);
-    expect(screen.getByTestId('aviso-cobro-en-cola')).toHaveTextContent(/la emite administración/);
+    expect(screen.getByTestId('aviso-cobro-en-cola').textContent).toMatch(/la emite administración/);
     expect(screen.queryByRole('button', { name: /Emitir ya la factura/i })).toBeNull();
     expect(get).not.toHaveBeenCalled();
   });
@@ -139,18 +141,18 @@ describe('#1043 · al registrar la venta con cobro (ConversionDialog)', () => {
 
   it('con permiso: «Emitir ya la factura de este cobro», sin proforma', async () => {
     await registrarPagadaEntera();
-    expect(await botonEmitir()).toBeInTheDocument();
+    expect(await botonEmitir()).toBeTruthy();
     expect(screen.queryByRole('button', { name: /proforma|presupuesto/i })).toBeNull();
-    expect(screen.getByTestId('que-es-cada-una')).toHaveTextContent(/Proforma/);
+    expect(screen.getByTestId('que-es-cada-una').textContent).toMatch(/Proforma/);
   });
 
   it('sin permiso: el aviso de la cola en vez de «¿proforma?»', async () => {
     permisos.cola = false;
     await registrarPagadaEntera();
-    expect(screen.getByTestId('aviso-cobro-en-cola')).toBeInTheDocument();
+    expect(screen.getByTestId('aviso-cobro-en-cola')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Emitir ya la factura/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /proforma|presupuesto/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Cerrar$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Cerrar$/ })).toBeTruthy();
   });
 });
 
@@ -169,14 +171,14 @@ describe('#1043 · «factúrala desde la cola» lleva a ese cobro', () => {
   it('la fila de ese cobro sale marcada', async () => {
     render(<FacturacionAlDiaCard projectId={5} resaltar={{ paymentId: 700, projectId: 5 }} />);
     const fila = await screen.findByText('[PRUEBA] Dos');
-    expect(fila.closest('tr')).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByText('[PRUEBA] Uno').closest('tr')).not.toHaveAttribute('aria-current');
+    expect(fila.closest('tr').getAttribute('aria-current')).toBe('true');
+    expect(screen.getByText('[PRUEBA] Uno').closest('tr').getAttribute('aria-current')).toBeNull();
     expect(screen.queryByTestId('cobro-no-en-cola')).toBeNull();
   });
 
   it('si no está en la cola, se dice', async () => {
     render(<FacturacionAlDiaCard projectId={5} resaltar={{ paymentId: 999, projectId: 5 }} />);
-    expect(await screen.findByTestId('cobro-no-en-cola')).toBeInTheDocument();
+    expect(await screen.findByTestId('cobro-no-en-cola')).toBeTruthy();
   });
 
   it('la cola de otro campus no dice nada', async () => {
