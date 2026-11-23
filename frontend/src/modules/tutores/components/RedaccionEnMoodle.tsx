@@ -115,7 +115,10 @@ export default function RedaccionEnMoodle({ tutorId }: { tutorId: number }) {
     setError(null);
     try {
       const r = await redaccionMoodleApi.ver(tutorId);
-      setDatos(r.success && r.data ? r.data : null);
+      // Solo con la forma que se espera: otra cosa (un servidor sin la ruta, una prueba
+      // que contesta [] a todo) rompía la ficha entera con «reading 'length'».
+      const d = r.success ? r.data : null;
+      setDatos(d && Array.isArray(d.campus) && Array.isArray(d.sin_curso) ? d : null);
     } catch (e: unknown) {
       const x = e as { data?: { error?: string }; message?: string };
       setError(x?.data?.error || x?.message || 'No se ha podido mirar en los campus.');
