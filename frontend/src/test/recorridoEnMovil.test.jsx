@@ -7,6 +7,7 @@ import { PASOS_TABLERO, CLAVE_RECORRIDO_TABLERO } from '@/modules/tasks/lib/reco
 import { RECORRIDOS_COBROS, pasosPara } from '@/shared/lib/recorridosCobros';
 import { RECORRIDOS_DE_PRUEBA, pasosDePruebaPara, pasosApagada } from '@/shared/lib/recorridosDePrueba';
 import { RECORRIDOS_FINANZAS } from '@/shared/lib/recorridosFinanzas';
+import { RECORRIDOS_NOVEDADES } from '@/shared/lib/recorridosNovedades';
 import { RECORRIDOS_NOVEDADES_B } from '@/shared/lib/recorridosNovedadesB';
 
 /*
@@ -165,6 +166,15 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
     ]));
     expect(donde('analisis-ventas')).toContain('[data-recorrido="analisis-tabla"]');
     for (const r of Object.values(RECORRIDOS_FINANZAS)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, los cuatro de las novedades del 18/11 (#928, tanda A), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_NOVEDADES)).toEqual(['menu-bloques', 'hoy-dashboard', 'ventas-repetidas', 'venta-cuotas']);
+    for (const r of Object.values(RECORRIDOS_NOVEDADES)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();
       expect(fila[1]).toHaveLength(r.pasos.length);
