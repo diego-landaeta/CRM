@@ -10,6 +10,7 @@ import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
+import FechaInicioCurso, { faltaFechaInicio } from '@/modules/conversions/components/FechaInicioCurso';
 import Portal from '@/shared/components/ui/portal';
 
 import FilaCampos from '@/shared/components/ui/FilaCampos';
@@ -140,6 +141,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
   const [metodo, setMetodo] = useState('transferencia');
   const [fecha, setFecha] = useState(today);
   const [notas, setNotas] = useState('');
+  // Inicio del curso pactado con el alumno (#767): con ella se programa la matrícula en Moodle.
+  const [fechaInicio, setFechaInicio] = useState('');
+  // Se ha pulsado «Registrar venta»: desde entonces, lo que falta se marca en su campo.
+  const [intentado, setIntentado] = useState(false);
 
   // Pagos fraccionados (cuotas). Se activan al seleccionar metodo='fraccionado'.
   // Por defecto generamos N cuotas mensuales desde la fecha de pago, distribuyendo
@@ -165,6 +170,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     setProductoId(''); setProductSearch('');
     setImporteTotal(''); setImportePagado(''); setMetodo('transferencia');
     setFecha(today); setNotas('');
+    setFechaInicio(''); setIntentado(false);
   }, [open, today]);
 
   // Si esta empresa numera al registrar, y cual seria el siguiente libre. Se
@@ -326,6 +332,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     if (!totalNum || totalNum <= 0) {
       faltan.push({ title: 'Falta el importe total', description: 'Escribe en «Importe total» una cantidad mayor que 0.', que: 'el importe en «Importe total»' });
     }
+    const sinFechaInicio = faltaFechaInicio(fechaInicio);
+    if (sinFechaInicio) faltan.push(sinFechaInicio);
+    setIntentado(true);
     const falta = avisoDeLoQueFalta(faltan);
     if (falta) { toast(falta); return; }
     const pagadoNum = importePagado === '' ? totalNum : parseFloat(importePagado);
@@ -365,6 +374,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
         importe_pagado: pagadoNum,
         metodo_pago: metodo,
         fecha_pago: fecha,
+        fecha_inicio: fechaInicio,
         notas: notas.trim() || null,
       };
       if (metodo === 'fraccionado' && installments.length >= 2) {
@@ -819,6 +829,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
                           : `${productosFiltrados.length} formación${productosFiltrados.length === 1 ? '' : 'es'} — elige una en la lista de arriba.`}
                 </p>
               </div>
+
+              <FechaInicioCurso id="venta-fecha-inicio" value={fechaInicio}
+                onChange={setFechaInicio} intentado={intentado} />
 
               <FilaCampos>
                 <Field label="Importe total" required htmlFor="venta-importe-total">
