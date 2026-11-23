@@ -252,8 +252,8 @@ export default function SaleDetailPage() {
                     <th className="text-left py-2 font-bold">#</th>
                     <th className="text-left py-2 font-bold">Vence</th>
                     <th className="text-right py-2 font-bold">Importe</th>
-                    <th className="text-left py-2 font-bold pl-4">Estado</th>
-                    <th className="text-left py-2 font-bold">Factura</th>
+                    <th className="text-left py-2 font-bold pl-4" data-recorrido="venta-cuotas-estado">Estado</th>
+                    <th className="text-left py-2 font-bold" data-recorrido="venta-cuotas-factura">Factura</th>
                   </tr>
                 </thead>
                 <tbody>

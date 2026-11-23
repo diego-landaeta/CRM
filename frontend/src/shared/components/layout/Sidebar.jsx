@@ -494,6 +494,15 @@ export const SECCIONES_DE_ANTES = [
 
 // El menú por bloques de uso (#534, parte 3). Los iconos de los bloques nuevos;
 // los que conservan su nombre (Finanzas, Análisis...) conservan el suyo.
+/**
+ * El `data-recorrido` de cada bloque del menú: «menu-» y su nombre sin tildes
+ * («Captación y publicidad» → `menu-captacion-y-publicidad`). Lo señalan el
+ * recorrido del menú (#928) y el recorrido general según el rol (CRM#1012).
+ */
+export function anclaDelBloque(label) {
+  return `menu-${String(label).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
 export const NAV_SECTIONS = reagruparMenu(SECCIONES_DE_ANTES, {
   Hoy: { icon: House },
   Comercial: { icon: UsersThree },
@@ -1588,7 +1597,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           // iconos verticales separados por divisores.
           if (collapsed) {
             return (
-              <div key={section.label} className="space-y-1">
+              // Plegado también lleva su anclaje: el recorrido general (CRM#1012) lo señala.
+              <div key={section.label} className="space-y-1" data-recorrido={anclaDelBloque(section.label)}>
                 {sIdx > 0 && <div className="mx-2 mt-2 border-t border-border" aria-hidden="true" />}
                 {/* Plegado solo habia una raya: se veia que empezaba otra cosa,
                     pero no cual. El icono lo dice, y al pasar por encima da el
@@ -1616,7 +1626,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 : section.label === 'Comercial' ? 'menu-comercial'
                   : section.label === 'Académico' ? 'menu-academico'
                     : section.label === 'Finanzas' ? 'menu-finanzas'
-                      : section.label === 'Configuración' ? 'menu-configuracion' : undefined}
+                      : section.label === 'Configuración' ? 'menu-configuracion' : anclaDelBloque(section.label)}
             >
               <button
                 type="button"
