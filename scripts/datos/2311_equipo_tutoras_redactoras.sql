@@ -2,7 +2,7 @@
 -- de cada empresa que tiene alguna, y ellas dentro como «Miembro».
 --
 -- Va DESPUÉS de la migración que da task_teams.tipo = 'redactoras' (314 en el
--- 360, 324 en ISEIE). No activa a nadie ni manda correos: las que estén
+-- 360, 325 en ISEIE). No activa a nadie ni manda correos: las que estén
 -- desactivadas siguen así, solo quedan en su equipo para cuando se activen.
 -- La encargada (si la hay) se elige después en Configurar tablero › Equipos.
 --
