@@ -11,6 +11,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
 import FechaInicioCurso, { faltaFechaInicio } from '@/modules/conversions/components/FechaInicioCurso';
+import { useProductosConCurso, algunoConCurso } from '@/modules/conversions/hooks/useProductosConCurso';
 import Portal from '@/shared/components/ui/portal';
 
 import FilaCampos from '@/shared/components/ui/FilaCampos';
@@ -145,6 +146,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
   const [fechaInicio, setFechaInicio] = useState('');
   // Se ha pulsado «Registrar venta»: desde entonces, lo que falta se marca en su campo.
   const [intentado, setIntentado] = useState(false);
+  // Obligatoria solo si el producto elegido tiene curso de Moodle (#1036).
+  const conCurso = useProductosConCurso(pid);
+  const exigeFechaInicio = algunoConCurso(conCurso, [productoId || null]);
 
   // Pagos fraccionados (cuotas). Se activan al seleccionar metodo='fraccionado'.
   // Por defecto generamos N cuotas mensuales desde la fecha de pago, distribuyendo
@@ -332,7 +336,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     if (!totalNum || totalNum <= 0) {
       faltan.push({ title: 'Falta el importe total', description: 'Escribe en «Importe total» una cantidad mayor que 0.', que: 'el importe en «Importe total»' });
     }
-    const sinFechaInicio = faltaFechaInicio(fechaInicio);
+    const sinFechaInicio = faltaFechaInicio(fechaInicio, exigeFechaInicio);
     if (sinFechaInicio) faltan.push(sinFechaInicio);
     setIntentado(true);
     const falta = avisoDeLoQueFalta(faltan);
@@ -374,7 +378,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
         importe_pagado: pagadoNum,
         metodo_pago: metodo,
         fecha_pago: fecha,
-        fecha_inicio: fechaInicio,
+        fecha_inicio: fechaInicio || null,
         notas: notas.trim() || null,
       };
       if (metodo === 'fraccionado' && installments.length >= 2) {
@@ -831,7 +835,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
               </div>
 
               <FechaInicioCurso id="venta-fecha-inicio" value={fechaInicio}
-                onChange={setFechaInicio} intentado={intentado} />
+                onChange={setFechaInicio} intentado={intentado}
+                required={exigeFechaInicio} sinProducto={!productoId} />
 
               <FilaCampos>
                 <Field label="Importe total" required htmlFor="venta-importe-total">
