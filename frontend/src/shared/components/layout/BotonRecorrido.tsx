@@ -145,13 +145,13 @@ export default function BotonRecorrido({ className }: { className?: string }) {
         aria-haspopup="menu"
         aria-expanded={abierto}
         aria-controls="menu-recorrido"
+        aria-label="Recorrido"
         data-recorrido="cabecera-recorrido"
         title="Un recorrido paso a paso: el de esta pantalla o el general"
         className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-semibold hover:bg-muted"
       >
         <Compass size={16} weight="bold" aria-hidden="true" />
         <span className="hidden sm:inline">Recorrido</span>
-        <span className="sr-only sm:hidden">Recorrido</span>
         <CaretDown size={11} weight="bold" aria-hidden="true" className={cn('hidden sm:inline transition-transform', abierto && 'rotate-180')} />
       </button>
       {abierto && (
