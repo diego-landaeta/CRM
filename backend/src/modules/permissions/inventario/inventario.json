@@ -5266,6 +5266,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/interruptor",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/interruptor",
+  "relativa": "GET /interruptor",
+  "controlador": "interruptor",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/factura-automatica/venta/:conversionId",
   "tipo": "ruta",
   "modulo": "factura-automatica",
@@ -9375,6 +9397,29 @@
    {
     "tipo": "alcance",
     "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/conectar-stripe",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/conectar-stripe",
+  "relativa": "GET /conectar-stripe",
+  "controlador": "conectarStripe",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
    }
   ],
   "puertas": []
