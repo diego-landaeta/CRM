@@ -9,6 +9,7 @@ import { campusParaRecortar, veTodoElCrm, campusDeLaPersona } from '../../shared
 import {
   cifrarConexion, descifrarConexion, probarConexion,
 } from '../../shared/services/correo-entrante.service.js';
+import { destinoSeguro } from '../../shared/services/correo-destino.js';
 
 /**
  * Los buzones de correo de la Bandeja (CRM#1032).
@@ -81,6 +82,16 @@ async function ofertaDeCorreo(req, b) {
   return { empresaId: b.empresa_id, empresa: b.empresa_nombre, direccion: b.direccion };
 }
 
+/**
+ * Puerto e IP del servidor, antes de guardar o probar: 400 si no se permite
+ * (ver `correo-destino.js`). El servicio lo vuelve a mirar justo antes de
+ * conectar, que es lo que para el rebinding; esto es para decirlo a tiempo.
+ */
+async function exigirDestino(conexion) {
+  const d = await destinoSeguro(conexion);
+  if (!d.ok) throw new AppError(d.motivo, 400, 'DESTINO_NO_PERMITIDO');
+}
+
 /** El error de la base por dirección repetida, en palabras. */
 function siRepetido(err) {
   if (err?.code === '23505') {
@@ -99,6 +110,7 @@ export async function crear(req, res, next) {
   try {
     const d = validar(crearBuzonSchema, req.body);
     await comprobarDestino(req, { projectId: d.project_id, empresaId: d.empresa_id, alCrear: true });
+    await exigirDestino({ host: d.host, puerto: d.puerto });
     const cifrado = cifrarConexion({
       host: d.host, puerto: d.puerto, usuario: d.usuario || d.direccion, clave: d.clave,
     });
@@ -135,6 +147,9 @@ export async function cambiar(req, res, next) {
       // Con Hostinger el usuario es la dirección: si cambia la dirección y el
       // usuario era la dirección de antes, cambia con ella.
       const usuarioEraLaDireccion = (antes.usuario || '').toLowerCase() === actual.direccion;
+      if (d.host || d.puerto) {
+        await exigirDestino({ host: d.host || antes.host, puerto: d.puerto || antes.puerto });
+      }
       cifrado = cifrarConexion({
         host: d.host || antes.host,
         puerto: d.puerto || antes.puerto,
@@ -185,6 +200,7 @@ export async function probar(req, res, next) {
     if (!conexion.usuario || !conexion.clave) {
       throw new AppError('Faltan el usuario o la contraseña del buzón', 400, 'VALIDATION_ERROR');
     }
+    await exigirDestino(conexion);
     res.json({ success: true, data: await probarConexion(conexion) });
   } catch (e) { next(e); }
 }

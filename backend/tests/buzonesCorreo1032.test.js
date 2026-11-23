@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import express from 'express';
 import supertest from 'supertest';
 import jwt from 'jsonwebtoken';
+import { isIP } from 'node:net';
 
 /**
  * Varios buzones de correo conectados desde el panel (CRM#1032).
@@ -71,6 +72,20 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { default: correos } = await import('../src/modules/correos/index.js');
 const { leerBuzon, descifrarConexion } = await import('../src/shared/services/correo-entrante.service.js');
+const { resolutor } = await import('../src/shared/services/correo-destino.js');
+
+// DNS de mentira: sin red en las pruebas. Los nombres «interno.» resuelven a una
+// privada, «mixto.» a una pública y una privada; el resto, a una pública
+// (203.0.113.0/24 es de documentación, no se usa en ningún sitio).
+const IP_PUBLICA = '203.0.113.10';
+resolutor.lookup = async (host) => {
+  // Una IP escrita tal cual se «resuelve» a sí misma, como hace el DNS de verdad.
+  if (isIP(host)) return [{ address: host, family: isIP(host) }];
+  if (host.startsWith('interno.')) return [{ address: '10.0.0.5', family: 4 }];
+  if (host.startsWith('mixto.')) return [{ address: IP_PUBLICA, family: 4 }, { address: '192.168.1.9', family: 4 }];
+  if (host.startsWith('noexiste.')) throw Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' });
+  return [{ address: IP_PUBLICA, family: 4 }];
+};
 
 const app = express();
 app.use(express.json());
@@ -226,7 +241,8 @@ describe('«Probar conexión»', () => {
     conexiones.length = 0;
     const r = await request.post(`/api/correos/buzones/${id}/probar`).set(como(SUPER)).send({});
     expect(r.body.data.ok).toBe(true);
-    expect(conexiones[0]).toMatchObject({ host: 'imap.hostinger.com', port: 993, secure: true });
+    // A la IP ya comprobada, con el nombre para el certificado.
+    expect(conexiones[0]).toMatchObject({ host: IP_PUBLICA, servername: 'imap.hostinger.com', port: 993, secure: true });
   });
 
   it('en otro puerto exige STARTTLS: la contraseña no viaja en claro', async () => {
@@ -234,6 +250,61 @@ describe('«Probar conexión»', () => {
     await request.post('/api/correos/buzones/probar').set(como(SUPER))
       .send({ direccion: SOP, clave: CLAVE_BUENA, host: 'mail.ejemplo.com', puerto: 143 });
     expect(conexiones[0]).toMatchObject({ port: 143, secure: false, doSTARTTLS: true });
+  });
+});
+
+describe('«Probar» y guardar no conectan a cualquier sitio', () => {
+  const probar = (cuerpo) => request.post('/api/correos/buzones/probar').set(como(SUPER))
+    .send({ direccion: SOP, clave: CLAVE_BUENA, ...cuerpo });
+
+  it('solo los puertos de IMAP: 993 y 143; el resto, 400 y sin conectar', async () => {
+    for (const puerto of [22, 25, 80, 443, 5432, 6379, 3306, 15432]) {
+      conexiones.length = 0;
+      const r = await probar({ host: 'mail.ejemplo.com', puerto });
+      expect(r.status, `puerto ${puerto}`).toBe(400);
+      expect(r.body.error).toMatch(/993.*143/);
+      expect(conexiones).toHaveLength(0);
+    }
+    expect((await probar({ host: 'mail.ejemplo.com', puerto: 993 })).status).toBe(200);
+  });
+
+  it('un servidor que resuelve a una dirección interna: 400 y sin conectar', async () => {
+    for (const host of ['interno.ejemplo.com', 'mixto.ejemplo.com', '127.0.0.1', '169.254.169.254', '10.1.2.3', '::1']) {
+      conexiones.length = 0;
+      const r = await probar({ host });
+      expect(r.status, host).toBe(400);
+      // Una IPv6 escrita tal cual ni siquiera pasa la forma del nombre; también es 400.
+      expect(r.body.error).toMatch(host === '::1' ? /nombre/ : /interna/);
+      expect(conexiones).toHaveLength(0);
+    }
+  });
+
+  it('un servidor que no existe: 400 que lo dice', async () => {
+    const r = await probar({ host: 'noexiste.ejemplo.com' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/No se encuentra/);
+  });
+
+  it('tampoco se guarda un buzón así, ni se cambia uno hacia ahí', async () => {
+    expect((await conectar(SUPER, { nombre: 'x', direccion: `p1@${dom}`, clave: 'x', project_id: MIO, puerto: 6379 })).status).toBe(400);
+    expect((await conectar(SUPER, { nombre: 'x', direccion: `p2@${dom}`, clave: 'x', project_id: MIO, host: 'interno.ejemplo.com' })).status).toBe(400);
+    const id = (await one(`SELECT id FROM correo_buzones WHERE direccion = $1 AND activo`, [FACT])).id;
+    expect((await request.patch(`/api/correos/buzones/${id}`).set(como(SUPER)).send({ host: '192.168.1.1' })).status).toBe(400);
+    expect((await request.patch(`/api/correos/buzones/${id}`).set(como(SUPER)).send({ puerto: 25 })).status).toBe(400);
+  });
+
+  it('y al LEER se vuelve a mirar justo antes de conectar (rebinding): no conecta', async () => {
+    const id = (await one(`SELECT id FROM correo_buzones WHERE direccion = $1 AND activo`, [FACT])).id;
+    const antes = resolutor.lookup;
+    // Se guardó resolviendo a una pública; ahora el mismo nombre apunta dentro.
+    resolutor.lookup = async () => [{ address: '127.0.0.1', family: 4 }];
+    conexiones.length = 0;
+    try {
+      const r = await leerBuzon({ buzonId: id });
+      expect(r.motivo).toBe('ERROR');
+      expect(r.detalle).toMatch(/interna/);
+      expect(conexiones).toHaveLength(0);
+    } finally { resolutor.lookup = antes; }
   });
 });
 

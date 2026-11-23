@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { puertoPermitido, MOTIVO_PUERTO } from '../../shared/services/correo-destino.js';
 
 /**
  * Los buzones de correo que lee la Bandeja (CRM#1032).
@@ -14,7 +15,9 @@ const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/
 
 const host = z.string().trim().toLowerCase().max(253)
   .regex(HOST, 'El servidor tiene que ser un nombre como imap.hostinger.com');
-const puerto = z.coerce.number().int().min(1).max(65535);
+// Solo los de IMAP (993 TLS, 143 STARTTLS): ver `correo-destino.js`.
+const puerto = z.coerce.number().int().min(1).max(65535)
+  .refine((p) => puertoPermitido(p), MOTIVO_PUERTO);
 const idOpcional = z.coerce.number().int().positive().nullable().optional();
 
 export const crearBuzonSchema = z.object({

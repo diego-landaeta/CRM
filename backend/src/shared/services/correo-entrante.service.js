@@ -2,7 +2,9 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { logger } from '../utils/logger.js';
 import { query } from '../config/db.js';
+import net from 'node:net';
 import { encrypt, decrypt } from '../utils/crypto.js';
+import { destinoSeguro, modoPruebasLocal } from './correo-destino.js';
 
 /**
  * Leer el buzón y guardar lo que ha llegado. Segunda mitad del #146.
@@ -126,8 +128,7 @@ export async function buzonesQueLeer({ buzonId = null } = {}) {
 export function opcionesImap({ host, puerto, usuario, clave }, extra = {}) {
   const port = Number(puerto) || 993;
   const tlsDirecto = port === 993;
-  const sinTls = !tlsDirecto && process.env.NODE_ENV !== 'production'
-    && process.env.CORREO_IMAP_SIN_TLS === '1';
+  const sinTls = !tlsDirecto && modoPruebasLocal();
   const opciones = {
     host, port, secure: tlsDirecto,
     auth: { user: usuario, pass: clave },
@@ -260,9 +261,20 @@ export function motivoDeFallo(err) {
   return 'No se pudo conectar con el buzón.';
 }
 
-/** Un cliente IMAP que no tumba la API si se corta la red. */
-function nuevoCliente(buzon, extra) {
-  const cliente = new ImapFlow(opcionesImap(buzon, extra));
+/**
+ * Un cliente IMAP que no tumba la API si se corta la red.
+ *
+ * Se conecta a `ip`, la ya comprobada por `destinoSeguro`, y no al nombre:
+ * resolverlo otra vez al conectar dejaría pasar un DNS que cambia de respuesta
+ * entre la comprobación y la conexión. El nombre va como `servername` para
+ * que el certificado TLS se compruebe contra él.
+ */
+function nuevoCliente(buzon, ip, extra = {}) {
+  const servername = net.isIP(buzon.host) ? undefined : buzon.host;
+  const cliente = new ImapFlow(opcionesImap(
+    { ...buzon, host: ip },
+    { ...(servername ? { servername } : {}), ...extra },
+  ));
 
   // UN CORTE DE RED NO ES UN FALLO DE PROGRAMACION.
   //
@@ -289,9 +301,12 @@ function nuevoCliente(buzon, extra) {
  * guarda nada ni lee correos. NUNCA lanza.
  */
 export async function probarConexion(buzon) {
+  // Puerto e IP, antes de abrir nada (ver `correo-destino.js`).
+  const destino = await destinoSeguro(buzon);
+  if (!destino.ok) return { ok: false, motivo: destino.motivo };
   let cliente;
   try {
-    cliente = nuevoCliente(buzon, { connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000 });
+    cliente = nuevoCliente(buzon, destino.ip, { connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000 });
     await cliente.connect();
     const caja = await cliente.mailboxOpen('INBOX', { readOnly: true });
     await cliente.logout();
@@ -310,9 +325,17 @@ export async function probarConexion(buzon) {
  * `{ leidos: 0, nuevos: 0, motivo: 'ERROR', detalle }`. NUNCA lanza.
  */
 export async function leerUnBuzon(buzon, { desde = null } = {}) {
+  // Lo mismo al leer que al probar: un buzón guardado antes de la regla, o con
+  // un nombre que ahora apunta dentro, no se lee.
+  const destino = await destinoSeguro(buzon);
+  if (!destino.ok) {
+    logger.warn({ buzon: buzon.id, motivo: destino.motivo }, 'Correo entrante: destino no permitido');
+    await anotarResultado(buzon, false, destino.motivo);
+    return { leidos: 0, nuevos: 0, motivo: 'ERROR', detalle: destino.motivo };
+  }
   let cliente;
   try {
-    cliente = nuevoCliente(buzon);
+    cliente = nuevoCliente(buzon, destino.ip);
     await cliente.connect();
 
     // SOLO LECTURA. Sin esto, abrir el buzón marca correos como vistos y a
