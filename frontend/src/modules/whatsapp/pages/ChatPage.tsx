@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
@@ -22,6 +22,7 @@ import ElegirChat from '../components/ElegirChat';
 import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
+import BotonLinkEnChat from '@/modules/links-pago/components/BotonLinkEnChat';
 import Llamar from '../components/Llamar';
 import EtiquetasDelChat from '../components/EtiquetasDelChat';
 import type { DatosParaRellenar } from '../lib/plantilla';
@@ -693,8 +694,16 @@ export default function ChatPage() {
   // aquí o con «Recorrido» en la cabecera.
   useRegistrarRecorrido({ id: 'whatsapp-chat', titulo: 'El chat de WhatsApp', abrir: () => setTour(true) });
   // Desde la guía, «Ver el recorrido por el chat» lo pide al navegar (botón pulsado).
-  const pedidoDesdeLaGuia = !!(useLocation().state as { abrirTour?: boolean } | null)?.abrirTour;
-  useEffect(() => { if (pedidoDesdeLaGuia) setTour(true); }, [pedidoDesdeLaGuia]);
+  // El aviso se borra al usarlo: si no, al recargar la página el recorrido saldría solo.
+  const lugar = useLocation();
+  const irA = useNavigate();
+  const pedidoDesdeLaGuia = !!(lugar.state as { abrirTour?: boolean } | null)?.abrirTour;
+  useEffect(() => {
+    if (!pedidoDesdeLaGuia) return;
+    setTour(true);
+    irA(`${lugar.pathname}${lugar.search}`, { replace: true, state: null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoDesdeLaGuia]);
   useEffect(() => { if (abierto) cargarHilo(abierto); }, [abierto, cargarHilo]);
 
   // El alto se MIDE, no se adivina.
@@ -2270,6 +2279,11 @@ export default function ChatPage() {
                     <FileText size={15} />
                     <span>Plantillas</span>
                   </button>
+                )}
+                {/* CRM#983: crear un link de pago y mandarlo aquí, con su mensaje. */}
+                {!bloqueo && (
+                  <BotonLinkEnChat leadId={conv?.lead_id} conversacionId={abierto} usuarioId={deQuien}
+                    onEnviado={() => { if (abierto) cargarHilo(abierto); cargarLista(); }} />
                 )}
               </InputToolbox>
 

@@ -11,7 +11,8 @@ import { anclaje, FINAL_RECORRIDO } from '@/shared/lib/recorridosComun';
   que no se le explica nada que no tenga.
 
   Aquí solo se arma el texto (función pura, se prueba sin pintar nada). Quien lo
-  lanza es `BotonRecorrido`, en la cabecera; en el móvil abre antes el menú.
+  lanza es `BotonRecorrido`, en la cabecera (directo en una pantalla sin recorrido,
+  o desde su flecha); en el móvil abre antes el menú.
 */
 
 /** Un bloque del menú tal como lo ve esa persona: su nombre y sus entradas. */
@@ -109,7 +110,7 @@ export function pasosDelRecorridoGeneral({ roles, bloques, nombre }: {
     {
       donde: anclaje('cabecera-recorrido'),
       titulo: 'El recorrido de cada pantalla',
-      texto: 'Cada pantalla tiene el suyo, con sus botones y sus filtros de verdad. Entra en ella, pulsa «Recorrido» y elige «Recorrido de esta pantalla».',
+      texto: 'Cada pantalla que lo tiene, con sus botones y sus filtros de verdad: entra en ella y pulsa «Recorrido». Donde no hay, sale este. La flecha de al lado te deja elegir entre el de la pantalla y este general. Ninguno se abre solo.',
     },
     { titulo: 'Y listo', texto: FINAL_RECORRIDO },
   );

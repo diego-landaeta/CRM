@@ -106,56 +106,69 @@ describe('el botón «Recorrido» de la cabecera', () => {
     <MemoryRouter initialEntries={[ruta]}><BotonRecorrido /><PresentadorRecorrido /></MemoryRouter>,
   );
 
-  it('abre el de la pantalla: en Links de pago, el de Links de pago', () => {
+  it('abre el de la pantalla: en Links de pago, el de Links de pago, sin menú de por medio', () => {
     permisos.add('links_pago.crear');
     pintar('/links-pago');
     fireEvent.click(screen.getByRole('button', { name: 'Recorrido' }));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Links de pago' })).toBeInTheDocument();
+  });
+
+  it('la flecha deja elegir: el de la pantalla o el general', () => {
+    permisos.add('links_pago.crear');
+    pintar('/links-pago');
+    fireEvent.click(screen.getByRole('button', { name: 'Más recorridos' }));
     expect(screen.getByRole('menu', { name: 'Recorridos' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Tu menú, paso a paso/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Links de pago' }));
     expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Links de pago' })).toBeInTheDocument();
   });
 
-  it('la ficha de la venta ofrece los suyos: cuotas, links y cobro automático', () => {
+  it('con varios en la pantalla (la ficha de la venta), «Recorrido» los ofrece para elegir', () => {
     for (const k of ['conversions.view', 'links_pago.crear', 'stripe.edit']) permisos.add(k);
     pintar('/finanzas/ventas/12');
     fireEvent.click(screen.getByRole('button', { name: 'Recorrido' }));
+    expect(document.querySelector('[aria-labelledby="recorrido-titulo"]')).toBeNull();
     const nombres = screen.getAllByRole('menuitem').map((b) => b.textContent);
     expect(nombres).toEqual(expect.arrayContaining([
       'Cuotas y cobros de la venta', 'Cobrar la venta con links de pago', 'Cobro automático de las cuotas', 'Cargos de Stripe sin enlazar',
     ]));
   });
 
-  it('sin el permiso de la pantalla, no lo ofrece: dice que no tiene y deja el general', () => {
+  it('en una pantalla sin recorrido, «Recorrido» abre el general, con el rol de quien entra', async () => {
     permisos.add('leads.view');
-    pintar('/links-pago');
+    pintar('/una-pantalla-sin-recorrido');
     fireEvent.click(screen.getByRole('button', { name: 'Recorrido' }));
-    expect(screen.getByText('Esta pantalla todavía no tiene recorrido.')).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Links de pago' })).toBeNull();
-    expect(screen.getByRole('menuitem', { name: /Tu menú, paso a paso/ })).toBeInTheDocument();
-  });
-
-  it('abre el general, con el rol de quien entra', async () => {
-    permisos.add('leads.view');
-    pintar('/');
-    fireEvent.click(screen.getByRole('button', { name: 'Recorrido' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Tu menú, paso a paso/ }));
     // En el móvil abre antes el menú y espera un instante.
     expect(await screen.findByRole('dialog', { name: 'Tu CRM, como Admin' }, { timeout: 2000 })).toBeInTheDocument();
   });
 
-  it('con teclado: flechas para moverse y Escape para cerrar, con el foco de vuelta en el botón', () => {
+  it('sin el permiso de la pantalla, no lo ofrece: sale el general, y la flecha dice que no tiene', async () => {
+    permisos.add('leads.view');
+    pintar('/links-pago');
+    fireEvent.click(screen.getByRole('button', { name: 'Más recorridos' }));
+    expect(screen.getByText('Esta pantalla todavía no tiene recorrido.')).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Links de pago' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /Tu menú, paso a paso/ })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'Recorrido' }));
+    expect(await screen.findByRole('dialog', { name: 'Tu CRM, como Admin' }, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Links de pago' })).toBeNull();
+  });
+
+  it('con teclado: flechas para moverse y Escape para cerrar, con el foco de vuelta en la flecha', () => {
     permisos.add('links_pago.crear');
     pintar('/links-pago');
-    const boton = screen.getByRole('button', { name: 'Recorrido' });
-    fireEvent.click(boton);
+    const flecha = screen.getByRole('button', { name: 'Más recorridos' });
+    fireEvent.click(flecha);
     const items = screen.getAllByRole('menuitem');
     expect(document.activeElement).toBe(items[0]);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(items[1]);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(document.activeElement).toBe(boton);
+    expect(document.activeElement).toBe(flecha);
   });
 });
 

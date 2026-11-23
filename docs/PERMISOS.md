@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-937 rutas en 73 módulos, y 31 acciones con condición dentro de una ruta.
+949 rutas en 73 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -445,6 +445,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | (anónima) | `GET /api/facturas-colaborador/empresas` | sesión · permiso facturas_colaborador.ver_todas o facturas_colaborador.gestionar | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.ver_todas` o `facturas_colaborador.gestionar` |
 | (anónima) | `GET /api/facturas-colaborador/colaboradores` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `POST /api/facturas-colaborador/colaboradores` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
+| (anónima) | `GET /api/facturas-colaborador/colaboradores/redactoras-sin-ficha` | (no existía) | (ruta nueva) | `facturas_colaborador.gestionar` |
 | (anónima) | `GET /api/facturas-colaborador/colaboradores/:id` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `PATCH /api/facturas-colaborador/colaboradores/:id` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `POST /api/facturas-colaborador/colaboradores/:id/baja` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
@@ -574,6 +575,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | facturacionAlDia | `GET /api/invoices/facturacion-al-dia` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |
 | setFacturacionAlDia | `PUT /api/invoices/facturacion-al-dia` | sesión · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte/project_manager con «factura_manager» | `facturas.cola` |
 | generarDeCola | `POST /api/invoices/cola/generar` | sesión · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte/project_manager con «factura_manager» | `facturas.cola` |
+| cobrosDeVentaEnCola | `GET /api/invoices/cola/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
 | emitirColaHasta | `POST /api/invoices/cola/emitir-hasta` | sesión · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte/project_manager con «factura_manager» | `facturas.cola` |
 | list | `GET /api/invoices/` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |
 | stats | `GET /api/invoices/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |
@@ -676,12 +678,22 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| listarCodigos | `GET /api/links-pago/codigos` | (no existía) | (ruta nueva) | `links_pago.configurar` o `links_pago.crear` |
+| crearCodigo | `POST /api/links-pago/codigos` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| desactivarCodigo | `POST /api/links-pago/codigos/:id/desactivar` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cuotasDisponibles | `GET /api/links-pago/cuotas-disponibles` | (no existía) | (ruta nueva) | `links_pago.crear` |
+| conectarStripe | `GET /api/links-pago/conectar-stripe` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | ventasDelProspecto | `GET /api/links-pago/ventas-del-prospecto` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verPlan | `GET /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | generarPlan | `POST /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verCobroAutomatico | `GET /api/links-pago/cobro-automatico` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | cambiarCobroAutomatico | `PUT /api/links-pago/cobro-automatico` | (no existía) | (ruta nueva) | `links_pago.cobro_automatico` |
+| listar | `GET /api/links-pago/externos` | (no existía) | (ruta nueva) | `links_pago.ver_todos` |
+| sincronizar | `POST /api/links-pago/externos/sincronizar` | (no existía) | (ruta nueva) | `links_pago.ver_todos` |
+| porVincular | `GET /api/links-pago/por-vincular` | (no existía) | (ruta nueva) | `links_pago.ver_todos` |
+| buscarVentas | `GET /api/links-pago/por-vincular/ventas` | (no existía) | (ruta nueva) | `links_pago.ver_todos` |
+| vincular | `POST /api/links-pago/por-vincular/:id/vincular` | (no existía) | (ruta nueva) | `links_pago.ver_todos` |
+| embudo | `GET /api/links-pago/embudo` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | crear | `POST /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` |
@@ -1650,8 +1662,8 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Crear links de pago | `links_pago.crear` | Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos. | Admin, Gestora, Soporte |  |
-| Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno). | Admin |  |
-| Configurar los links de pago | `links_pago.configurar` | Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe. | Admin |  |
+| Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno), los creados directamente en Stripe y vincular sus cobros a una venta. | Admin |  |
+| Configurar los links de pago | `links_pago.configurar` | Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas, monedas y códigos promocionales de campaña) y el webhook de su cuenta de Stripe. | Admin |  |
 | Cobro automático de cuotas | `links_pago.cobro_automatico` | Activar o quitar en una venta que Stripe cobre solas sus cuotas, en sus fechas, con la tarjeta que guarda el alumno al pagar la primera. | Admin, Gestora, Soporte |  |
 
 ### Facturas de colaboradores

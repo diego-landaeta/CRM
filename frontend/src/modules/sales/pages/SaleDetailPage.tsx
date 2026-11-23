@@ -132,7 +132,7 @@ export default function SaleDetailPage() {
         subtitle={`${venta.producto_contratado || 'Sin programa'} · ${venta.proyecto_nombre || ''}`}
         actions={
           <span className="flex flex-wrap items-center gap-2">
-            {/* El recorrido de las cuotas y los cobros (#928): sale solo la primera vez. */}
+            {/* El recorrido de las cuotas y los cobros (#928): solo con el botón (CRM#1012). */}
             <VerRecorrido id="venta-cuotas" />
             {/* «Crear link de pago» arriba (Diego, 19/11), con esta venta ya elegida. */}
             <BotonCrearLink leadId={venta.lead_id} conversionId={venta.id} />

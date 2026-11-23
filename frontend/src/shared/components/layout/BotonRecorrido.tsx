@@ -19,13 +19,18 @@ import {
   EL BOTÓN «RECORRIDO» DE LA CABECERA (CRM#1012 · CRM-ISEIE#681; Diego, 23/11).
 
   «QUE SOLO SE ACTIVE AL TOCAR EL BOTÓN ARRIBA DE RECORRIDO.» Siempre en el mismo
-  sitio, en la cabecera de todas las pantallas. Al pulsarlo, un menú con:
+  sitio, en la cabecera de todas las pantallas. Son dos botones pegados:
 
-   · «Recorrido de esta pantalla»: los de la ruta en la que se está (el registro
-     `recorridosPorRuta`) y los que la pantalla montada ha apuntado (el tablero,
-     el chat de WhatsApp, los «Ver cómo funciona»). Solo los que esa persona
-     tiene permiso de ver. Si la pantalla no tiene, lo dice.
-   · «Recorrido general»: su menú, según su rol y sus permisos.
+   · «Recorrido»: abre el de ESTA pantalla. Si la pantalla no tiene (o esa
+     persona no tiene permiso para el suyo), abre el GENERAL según su rol. Si
+     tiene varios (la ficha de la venta: cuotas, links, cobro automático…),
+     despliega el menú para elegir.
+   · La flecha de al lado despliega siempre el menú, con:
+       – «Recorrido de esta pantalla»: los de la ruta en la que se está (el
+         registro `recorridosPorRuta`) y los que la pantalla montada ha apuntado
+         (el tablero, el chat de WhatsApp, los «Ver cómo funciona»). Solo los que
+         esa persona tiene permiso de ver. Si la pantalla no tiene, lo dice.
+       – «Recorrido general»: su menú, según su rol y sus permisos.
 
   Con teclado: Intro o espacio lo abre, las flechas se mueven por las opciones,
   Escape lo cierra y devuelve el foco al botón.
@@ -65,6 +70,7 @@ export default function BotonRecorrido({ className }: { className?: string }) {
   const apuntados = useRecorridosApuntados();
   const [abierto, setAbierto] = useState(false);
   const boton = useRef<HTMLButtonElement | null>(null);
+  const flecha = useRef<HTMLButtonElement | null>(null);
   const caja = useRef<HTMLDivElement | null>(null);
 
   // Los de esta pantalla: los de su ruta, y los que la pantalla ha apuntado.
@@ -107,7 +113,8 @@ export default function BotonRecorrido({ className }: { className?: string }) {
     const primera = caja.current?.querySelector<HTMLElement>('[role="menuitem"]');
     primera?.focus();
     const fuera = (e: PointerEvent) => {
-      if (!caja.current?.contains(e.target as Node) && !boton.current?.contains(e.target as Node)) setAbierto(false);
+      const t = e.target as Node;
+      if (!caja.current?.contains(t) && !boton.current?.contains(t) && !flecha.current?.contains(t)) setAbierto(false);
     };
     document.addEventListener('pointerdown', fuera);
     return () => document.removeEventListener('pointerdown', fuera);
@@ -119,7 +126,7 @@ export default function BotonRecorrido({ className }: { className?: string }) {
   function alTeclear(e: React.KeyboardEvent<HTMLDivElement>) {
     const items = Array.from(caja.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') || []);
     const i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === 'Escape') { e.preventDefault(); setAbierto(false); boton.current?.focus(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); setAbierto(false); (deLaPantalla.length > 1 ? boton : flecha).current?.focus(); return; }
     if (e.key === 'Tab') { setAbierto(false); return; }
     if (!items.length) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
@@ -133,27 +140,50 @@ export default function BotonRecorrido({ className }: { className?: string }) {
     o.abrir();
   }
 
+  // El botón principal: el de esta pantalla; sin ninguno, el general; con varios, a elegir.
+  function alPulsar() {
+    if (deLaPantalla.length === 1) { setAbierto(false); deLaPantalla[0].abrir(); return; }
+    if (deLaPantalla.length === 0) { setAbierto(false); lanzarGeneral(); return; }
+    setAbierto((v) => !v);
+  }
+  const queAbre = deLaPantalla.length === 1 ? `el recorrido de esta pantalla: ${deLaPantalla[0].titulo}`
+    : deLaPantalla.length === 0 ? `el recorrido general${nombreRol ? ` (como ${nombreRol})` : ''}`
+      : 'los recorridos de esta pantalla, para elegir';
+
   if (!user) return null;
 
   const item = 'w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted focus:bg-muted focus:outline-none';
   return (
     <div className={cn('relative flex-shrink-0', className)}>
-      <button
-        ref={boton}
-        type="button"
-        onClick={() => setAbierto((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={abierto}
-        aria-controls="menu-recorrido"
-        aria-label="Recorrido"
-        data-recorrido="cabecera-recorrido"
-        title="Un recorrido paso a paso: el de esta pantalla o el general"
-        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-semibold hover:bg-muted"
-      >
-        <Compass size={16} weight="bold" aria-hidden="true" />
-        <span className="hidden sm:inline">Recorrido</span>
-        <CaretDown size={11} weight="bold" aria-hidden="true" className={cn('hidden sm:inline transition-transform', abierto && 'rotate-180')} />
-      </button>
+      <div className="inline-flex h-9 items-stretch rounded-md border border-border bg-card" data-recorrido="cabecera-recorrido">
+        <button
+          ref={boton}
+          type="button"
+          onClick={alPulsar}
+          aria-label="Recorrido"
+          aria-haspopup={deLaPantalla.length > 1 ? 'menu' : undefined}
+          aria-expanded={deLaPantalla.length > 1 ? abierto : undefined}
+          title={`Abre ${queAbre}`}
+          data-abre={deLaPantalla.length === 1 ? 'pantalla' : deLaPantalla.length === 0 ? 'general' : 'menu'}
+          className="inline-flex items-center gap-1.5 rounded-l-md px-2.5 text-sm font-semibold hover:bg-muted"
+        >
+          <Compass size={16} weight="bold" aria-hidden="true" />
+          <span className="hidden sm:inline">Recorrido</span>
+        </button>
+        <button
+          ref={flecha}
+          type="button"
+          onClick={() => setAbierto((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={abierto}
+          aria-controls="menu-recorrido"
+          aria-label="Más recorridos"
+          title="Elegir: el de esta pantalla o el general"
+          className="inline-flex items-center rounded-r-md border-l border-border px-1.5 hover:bg-muted"
+        >
+          <CaretDown size={11} weight="bold" aria-hidden="true" className={cn('transition-transform', abierto && 'rotate-180')} />
+        </button>
+      </div>
       {abierto && (
         <div
           ref={caja}

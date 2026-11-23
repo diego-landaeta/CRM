@@ -72,7 +72,7 @@ export async function avisoDeClave(projectId) {
   }
 }
 
-function errorDeStripe(err, que) {
+export function errorDeStripe(err, que) {
   if (err instanceof stripe.ErrorDeStripe) {
     const sinPermiso = err.status === 401 || err.status === 403;
     return new AppError(
@@ -138,7 +138,14 @@ export function importeMinimo(precioCatalogo, maxPct) {
  * queda. La inicial, como cualquier cobro de Stripe, de al menos 0,50 €, y menor
  * que el total. Sin `inicial`, como antes: el total entre `numCuotas` (de 2).
  */
-export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, numCuotas, inicial, esAdmin, pendiente }) {
+/*
+ * LA MONEDA DEL CAMPUS (CRM#986, Diego 21/11): «el link sale en la moneda del
+ * campus (MXN, COP, CLP…), con el precio del curso en esa moneda cuando lo haya».
+ * Sin moneda pedida, la que se propone (`monedaPropuesta`). En una moneda sin
+ * decimales en Stripe (CLP…), el importe va en unidades enteras: 1.500,50 CLP se
+ * cobraría como 1.501 sin decirlo.
+ */
+export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, numCuotas, inicial, plan, hoy, esAdmin, pendiente }) {
   if (modalidad === 'cuotas') {
     if (pendiente !== undefined && pendiente !== null) {
       throw new AppError('Una venta ya tiene su plan: para cobrarla a plazos, usa «Generar plan de pago» en la venta.', 400, 'CUOTAS_DESDE_VENTA');
@@ -163,16 +170,22 @@ export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, mod
         throw new AppError('La inicial tiene que ser de al menos 0,50 €: Stripe no cobra menos.', 400, 'CUOTA_MINIMA');
       }
     }
-    const [primera] = conInicial
-      ? repartirEnCuotas(restaCentimos(importe, inicial), numCuotas)
-      : repartirEnCuotas(importe, numCuotas);
-    if (!(primera >= 0.5)) {
+    const importes = plan?.length
+      ? plan.map((c) => Number(c.importe))
+      : (conInicial ? repartirEnCuotas(restaCentimos(importe, inicial), numCuotas) : repartirEnCuotas(importe, numCuotas));
+    if (!importes.every((i) => i >= 0.5)) {
       throw new AppError('Cada cuota tiene que ser de al menos 0,50 €: Stripe no cobra menos.', 400, 'CUOTA_MINIMA');
     }
+    if (plan?.length) comprobarFechasDelPlan(plan, hoy);
   }
-  const mon = modalidad === 'cuotas' ? 'EUR' : (moneda || cfg.moneda_defecto);
+  const mon = modalidad === 'cuotas'
+    ? 'EUR'
+    : (moneda || monedaPropuesta({ cfg, prod, desdeVenta: pendiente !== undefined && pendiente !== null }));
   if (!cfg.monedas.includes(mon)) {
     throw new AppError(`Este campus no cobra en ${mon}. Monedas admitidas: ${cfg.monedas.join(', ')}.`, 400, 'MONEDA_NO_ADMITIDA');
+  }
+  if (stripe.esSinDecimales(mon) && !Number.isInteger(Math.round(Number(importe) * 100) / 100)) {
+    throw new AppError(`En ${mon} el importe va sin decimales.`, 400, 'IMPORTE_SIN_DECIMALES');
   }
   const dias = caducidadDias ?? cfg.caducidad_dias;
   if (dias > cfg.caducidad_max_dias) {
@@ -217,6 +230,22 @@ export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, mod
     moneda: mon, caducidadDias: dias, precioCatalogo: precio, descuentoPct: descuento ?? 0,
     referencia: desdeVenta ? 'pendiente' : 'catalogo', ...(desdeVenta ? { pendiente: Number(pendiente) } : {}),
   };
+}
+
+/**
+ * La moneda en que sale un link si no se pide otra (CRM#986):
+ *   · desde una venta, EUR si el campus lo admite: lo pendiente está en euros y
+ *     es contra lo que se mide el link;
+ *   · si el curso tiene precio en una moneda que el campus admite, esa: así el
+ *     link sale con el precio del curso (y la gestora puede crearlo sin admin);
+ *   · si no, la del campus (`moneda_defecto`).
+ */
+export function monedaPropuesta({ cfg, prod, desdeVenta = false }) {
+  const monedas = cfg?.monedas || [];
+  if (desdeVenta && monedas.includes('EUR')) return 'EUR';
+  const delCurso = prod?.moneda ? String(prod.moneda).trim().toUpperCase() : null;
+  if (delCurso && prod.precio != null && Number(prod.precio) > 0 && monedas.includes(delCurso)) return delCurso;
+  return cfg?.moneda_defecto || 'EUR';
 }
 
 /*
@@ -285,12 +314,52 @@ export function planConInicial({ total, inicial, n, desde }) {
     .map((importe, i) => ({ numero: i + 1, importe, vence: fechas[i] }));
 }
 
+/** Hoy en Madrid, AAAA-MM-DD (las fechas de las cuotas son de calendario). */
+export function hoyEnMadrid(ahora = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
+}
+
+/** Como mucho, tres años entre hoy y la última cuota. */
+export const MAX_ANIOS_DEL_PLAN = 3;
+
 /**
- * El plan de la venta de un link en cuotas, desde el día del pago: con inicial
- * (CRM#982) o, los de antes, el total entre `num_cuotas`. null si no es en cuotas.
+ * LAS FECHAS QUE ELIGE LA GESTORA (Diego, 23/11/2026: «crear cuotas y elegir las
+ * fechas sí o sí»). Cada cuota después de la inicial lleva su fecha: de mañana en
+ * adelante (la inicial es la de hoy, la que cobra el link), cada una después de
+ * la anterior y la última a menos de tres años. El orden y la suma los mira Zod.
+ */
+export function comprobarFechasDelPlan(plan, hoy = hoyEnMadrid()) {
+  const fechas = plan.map((c) => String(c.vence).slice(0, 10));
+  if (!(fechas[0] > hoy)) {
+    throw new AppError('La primera cuota tiene que ir de mañana en adelante: la de hoy es la inicial, la que cobra el link.', 400, 'FECHA_NO_VALIDA');
+  }
+  const [a, m, d] = hoy.split('-').map(Number);
+  const tope = new Date(Date.UTC(a + MAX_ANIOS_DEL_PLAN, m - 1, d)).toISOString().slice(0, 10);
+  if (fechas[fechas.length - 1] > tope) {
+    throw new AppError(`La última cuota no puede ir a más de ${MAX_ANIOS_DEL_PLAN} años.`, 400, 'FECHA_NO_VALIDA');
+  }
+}
+
+/**
+ * La inicial el día del pago y cada cuota con el importe y la fecha que eligió la
+ * gestora (`plan_cuotas` del link, 23/11). Sin `plan`, null.
+ */
+export function planConFechas({ inicial, plan, desde }) {
+  if (!Array.isArray(plan) || !plan.length) return null;
+  return [{ numero: 1, importe: Number(inicial), vence: String(desde).slice(0, 10) },
+    ...plan.map((c, i) => ({ numero: i + 2, importe: Number(c.importe), vence: String(c.vence).slice(0, 10) }))];
+}
+
+/**
+ * El plan de la venta de un link en cuotas, desde el día del pago: con las fechas
+ * que eligió la gestora (23/11), con inicial (CRM#982) o, los de antes, el total
+ * entre `num_cuotas`. null si no es en cuotas.
  */
 export function planDelLink(link, desde) {
   if (link.modalidad !== 'cuotas' || !(Number(link.num_cuotas) >= 2)) return null;
+  // Con las fechas elegidas al crearlo (23/11), tal cual.
+  const conFechas = link.importe_inicial != null ? planConFechas({ inicial: link.importe_inicial, plan: link.plan_cuotas, desde }) : null;
+  if (conFechas) return conFechas;
   if (link.importe_inicial != null) {
     return planConInicial({
       total: Number(link.importe), inicial: Number(link.importe_inicial), n: Number(link.num_cuotas) - 1, desde,
@@ -301,15 +370,20 @@ export function planDelLink(link, desde) {
 
 /**
  * Cuántos días dura el link de una cuota: hasta su vencimiento más la caducidad
- * de serie del campus, sin bajar de esa caducidad ni pasar de la máxima. Una
- * cuota que vence más allá de la máxima tiene un link que caduca antes: se
- * vuelve a generar desde el plan cuando toque (la pantalla lo dice).
+ * de serie del campus, sin bajar de esa caducidad.
+ *
+ * Hasta el 23/11 tampoco pasaba de la máxima del campus (30 días de serie), así
+ * que el link de una cuota a tres meses caducaba antes de vencer y había que
+ * volver a generarlo. Con las cuotas sin cobro automático (cada una con su link,
+ * Diego 23/11) eso dejaba a la alumna sin poder pagar cuando tocaba. La máxima es
+ * para los links sueltos; el de una cuota vive hasta su fecha (como mucho, la del
+ * plan: tres años, `MAX_ANIOS_DEL_PLAN`).
  */
 export function diasDeLaCuota(vence, cfg, hoy = new Date()) {
   const v = new Date(`${String(vence).slice(0, 10)}T00:00:00Z`);
   const h = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
   const hasta = Math.max(0, Math.round((v.getTime() - h) / 86400000));
-  return Math.min(cfg.caducidad_max_dias, Math.max(cfg.caducidad_dias, hasta + cfg.caducidad_dias));
+  return Math.min(366 * MAX_ANIOS_DEL_PLAN + cfg.caducidad_dias, Math.max(cfg.caducidad_dias, hasta + cfg.caducidad_dias));
 }
 
 /**
@@ -390,17 +464,28 @@ function nombreDeCuotas(enCuotas) {
 /*
   `enCuotas.inicial` (CRM#982): el link cobra la inicial (`importeCuota`) y
   `enCuotas.num` cuenta TODOS los pagos de la venta (la inicial y las cuotas).
+  `enCuotas.plan` (23/11): las cuotas de después de la inicial con el importe y la
+  fecha que eligió la gestora, `[{ importe, vence }]`; la venta nace con ellas.
   `descuento` (CRM#982): `{ precioOriginal, tipo, valor, importe }`, o null. Se
   guarda en el link y, al pagarse, en la venta.
 */
-export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null, enCuotas = null, descuento = null }) {
+/*
+  `codigosPromo` (CRM#986): el alumno puede escribir un código promocional de
+  Stripe al pagar. Lo decide el controlador (solo pago único y si el campus lo
+  admite); lo que descontó se apunta al pagarse (links-pago.codigos.js).
+*/
+export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null, enCuotas = null, descuento = null, codigosPromo = false }) {
   const clave = await claveObligatoria(projectId);
   const fila = await model.insertar({
     projectId, leadId, conversionId, productId: prod.id, createdBy: userId,
     precioCatalogo: reglas.precioCatalogo, importe, descuentoPct: reglas.descuentoPct,
     moneda: reglas.moneda, caducidadDias: reglas.caducidadDias, installmentId: cuota?.id ?? null,
     guardaTarjeta: !!guardaTarjeta,
-    ...(enCuotas ? { numCuotas: enCuotas.num, importeCuota: enCuotas.importeCuota, importeInicial: enCuotas.inicial ?? null } : {}),
+    codigosPromo: !!codigosPromo,
+    ...(enCuotas ? {
+      numCuotas: enCuotas.num, importeCuota: enCuotas.importeCuota, importeInicial: enCuotas.inicial ?? null,
+      planCuotas: enCuotas.plan ?? null,
+    } : {}),
     ...(descuento ? {
       precioOriginal: descuento.precioOriginal, descuentoTipo: descuento.tipo,
       descuentoValor: descuento.valor, descuentoImporte: descuento.importe,
@@ -424,6 +509,7 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
     // La marca de plataforma de las cuentas compartidas ya va en `meta` (link y cargo).
     link = await stripe.crearLink(clave, {
       priceId: precio.id, metadata: meta, idempotencia: `${base}-link`, guardaTarjeta, pedirTelefono: sinPersona,
+      codigosPromo: !!codigosPromo,
     });
   } catch (err) {
     await model.borrar(fila.id).catch((e) => logger.error({ err: e.message, linkId: fila.id }, 'Links de pago: no se pudo borrar la fila de un link fallido'));
@@ -449,15 +535,36 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
     ...(guardaTarjeta ? { guarda_tarjeta: true } : {}),
     ...(enCuotas ? { num_cuotas: enCuotas.num, importe_cuota: enCuotas.importeCuota } : {}),
     ...(enCuotas?.inicial != null ? { importe_inicial: enCuotas.inicial } : {}),
+    ...(enCuotas?.plan ? { plan_cuotas: enCuotas.plan, cobro_automatico: !!guardaTarjeta } : {}),
     ...(descuento ? {
       precio_original: descuento.precioOriginal, descuento_tipo: descuento.tipo,
       descuento_valor: descuento.valor, descuento_importe: descuento.importe,
     } : {}),
     ...(sinPersona ? { sin_prospecto: true } : {}),
+    ...(codigosPromo ? { codigos_promo: true } : {}),
     ...(reglas.pendiente !== undefined ? { pendiente: reglas.pendiente } : {}),
   });
   logger.info({ linkId: fila.id, projectId, userId, importe, moneda: reglas.moneda }, 'Links de pago: link creado');
   return model.porId(fila.id);
+}
+
+/**
+ * UN LINK POR CUOTA (plan de pago, 19/11; y cuotas sin cobro automático, 23/11).
+ * Para cada cuota pendiente de la venta sin link vivo, un link con su importe que
+ * caduca según su fecha (`reglasDeCuota`). Al pagarlo, el cobro salda ESA cuota.
+ * Devuelve los ids de los links creados.
+ */
+export async function crearLinksDeCuotas({ projectId, leadId, conversionId, prod, cfg, userId, cuotas, guardaTarjeta = null }) {
+  const creados = [];
+  for (const c of cuotas.filter((x) => !x.link_id)) {
+    const reglas = reglasDeCuota({ cfg, prod, vence: c.vence });
+    const link = await crear({
+      projectId, leadId, conversionId, prod, reglas, importe: Number(c.importe), userId,
+      cuota: { id: c.id, numero: c.numero, vence: c.vence }, guardaTarjeta,
+    });
+    creados.push(Number(link.id));
+  }
+  return creados;
 }
 
 /**
@@ -531,6 +638,9 @@ export const EVENTOS_DE_LOS_LINKS = [
   'invoice.paid',
   'invoice.payment_failed',
   'customer.subscription.deleted',
+  // Los links creados directamente en Stripe (CRM#1019): que salgan en Links de pago al momento.
+  'payment_link.created',
+  'payment_link.updated',
 ];
 
 /**

@@ -33,12 +33,18 @@ export interface LinkDePago {
    * cuenta la inicial y las cuotas, y estas son iguales sobre lo que queda.
    */
   importe_inicial?: string | number | null;
+  /** 23/11: las cuotas de después de la inicial con su importe y su fecha. */
+  plan_cuotas?: { importe: number | string; vence: string }[] | null;
   /** El precio antes del descuento y el descuento (CRM#982). `importe` es el total. */
   precio_original?: string | number | null;
   descuento_tipo?: 'monto' | 'pct' | null;
   descuento_valor?: string | number | null;
   descuento_importe?: string | number | null;
   guarda_tarjeta?: boolean;
+  /** Códigos promocionales (CRM#986): si el link los admite y, pagado, el que usó el alumno y lo que descontó. */
+  codigos_promo?: boolean;
+  promo_codigo?: string | null;
+  promo_descuento?: string | number | null;
   estado: EstadoLink;
   url: string | null;
   caduca_el: string | null;
@@ -77,6 +83,8 @@ export interface ConfigLinks {
   /** Seguimiento (CRM#984): a las cuántas horas de abrirlo sin pagar se avisa, y los recordatorios al alumno. */
   aviso_abierto_horas?: number;
   recordatorios?: boolean;
+  /** Si los links del campus admiten códigos promocionales de Stripe (CRM#986). */
+  codigos_promo?: boolean;
 }
 
 export interface WebhookDeLaCuenta {
@@ -134,21 +142,110 @@ export function crearLink(cuerpo: {
   modalidad?: 'unico' | 'cuotas'; num_cuotas?: number;
   // CRM#982: con `inicial`, el link cobra la inicial y `num_cuotas` son las de después.
   inicial?: number;
+  // 23/11: con inicial, cada cuota de después con su importe y su fecha (AAAA-MM-DD).
+  cuotas?: { importe: number; vence: string }[];
   // CRM#982: el precio antes del descuento y el descuento; `importe` es el total que resulta.
   precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
+  // CRM#986: si el link admite códigos promocionales (sin decirlo, lo que diga el campus).
+  codigos_promo?: boolean;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
 }
 
+/** Un código promocional de campaña (CRM#986): un cupón y un código de Stripe con su fecha límite. */
+export interface CodigoPromocional {
+  id: number;
+  project_id: number;
+  codigo: string;
+  campana: string | null;
+  tipo: 'pct' | 'monto';
+  valor: number;
+  moneda: string | null;
+  caduca_el: string;
+  max_usos: number | null;
+  activo: boolean;
+  estado: 'vigente' | 'caducado' | 'desactivado';
+  creado_por_nombre?: string | null;
+  created_at: string;
+}
+
+/** Los códigos del campus: quien crea links ve los vigentes; quien configura, todos. */
+export function listarCodigos(projectId: number) {
+  return client.get<CodigoPromocional[]>('/links-pago/codigos', { params: { projectId } });
+}
+
+export function crearCodigo(projectId: number, cuerpo: {
+  codigo: string; tipo: 'pct' | 'monto'; valor: number; moneda?: string; caduca_el: string; max_usos?: number; campana?: string;
+}) {
+  return client.post<CodigoPromocional>('/links-pago/codigos', { projectId, ...cuerpo });
+}
+
+export function desactivarCodigo(projectId: number, id: number) {
+  return client.post<CodigoPromocional>(`/links-pago/codigos/${id}/desactivar`, { projectId });
+}
+
+/** «20 %» o «50,00 €»: lo que descuenta un código. */
+export function textoDelCodigo(c: Pick<CodigoPromocional, 'tipo' | 'valor' | 'moneda'>) {
+  if (c.tipo === 'pct') return `${String(c.valor).replace('.', ',')} %`;
+  try {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: c.moneda || 'EUR' }).format(Number(c.valor));
+  } catch {
+    return `${c.valor} ${c.moneda || ''}`.trim();
+  }
+}
+
 /** Si «Cuotas» se puede en el campus y, si no, por qué (20/11). */
-export interface CuotasDisponibles { disponible: boolean; motivo: string | null; cuotas_max: number | null }
+/*
+  `codigo` (CRM#992): por qué no. `sin_clave` y `clave_sin_permiso` se arreglan en
+  Integraciones › Links de pago (aviso «Conectar Stripe para cobros automáticos»);
+  `apagado_entorno`, en ningún sitio de la pantalla. El resto, solo el texto.
+*/
+/*
+  23/11 (Diego: «crear cuotas sí o sí»): `disponible` dice si se pueden crear cuotas
+  (solo no si el campus no las admite en euros) y `automatico`, si Stripe las cobra
+  solas. Sin cobro automático, cada cuota tiene su propio link; `codigo` y `motivo`
+  dicen por qué no es automático.
+*/
+export interface CuotasDisponibles {
+  disponible: boolean; automatico?: boolean; codigo?: string | null; motivo: string | null; cuotas_max: number | null;
+}
 
 export function cuotasDisponibles(projectId: number) {
   return client.get<CuotasDisponibles>('/links-pago/cuotas-disponibles', { params: { projectId } });
 }
 
+export interface CampusPorConectar { project_id: number; nombre: string; codigo: string; motivo: string }
+export interface ConectarStripe { activo: boolean; codigo: string | null; motivo: string | null; campus: CampusPorConectar[] }
+
+/** Los campus del ámbito sin clave de Stripe o sin su permiso de suscripciones (CRM#992). */
+export function conectarStripe(ambito?: { projectId?: number; issuerId?: number }) {
+  return client.get<ConectarStripe>('/links-pago/conectar-stripe', { params: { ...(ambito || {}) } });
+}
+
 export function anularLink(id: number, motivo: string) {
   return client.post<LinkDePago>(`/links-pago/${id}/anular`, { motivo });
+}
+
+/** Una fila del embudo (CRM#987): por gestora (`user_id`), por campus (`project_id`) o el total. */
+export interface FilaEmbudo {
+  user_id?: number | null;
+  project_id?: number;
+  nombre?: string;
+  creados: number;
+  abiertos: number;
+  pagados: number;
+  pct_abiertos: number | null;
+  pct_pagados: number | null;
+  cobrado: number;
+  cuotas_cobradas: number;
+  cuotas_fallidas: number;
+  cuotas_pendientes: number;
+}
+export interface Embudo { desde: string; hasta: string; total: FilaEmbudo; por_gestora: FilaEmbudo[]; por_campus: FilaEmbudo[] }
+
+/** El embudo de los links (CRM#987), con el ámbito de quien mira. */
+export function verEmbudo(params: { desde: string; hasta: string; ambito?: { projectId?: number; issuerId?: number } }) {
+  return client.get<Embudo>('/links-pago/embudo', { params: { desde: params.desde, hasta: params.hasta, ...(params.ambito || {}) } });
 }
 
 /** Renovar un caducado (CRM#984): un link nuevo igual, con la caducidad de serie del campus. */

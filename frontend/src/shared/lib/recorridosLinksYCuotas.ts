@@ -81,6 +81,12 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
         permiso: 'links_pago.crear',
         texto: 'Lo más rápido: al registrar la venta deja marcado «Generar link de pago de Stripe». Si paga de una vez, un link por todo; si va a plazos, un link por cuota con su fecha (y el de la inicial, si la marcas). Al terminar te los da todos para copiar.',
       },
+      // El embudo por gestora y por campus (CRM#987).
+      {
+        donde: anclaje('links-embudo'),
+        titulo: 'Cómo van tus links',
+        texto: 'Para el periodo que elijas: los links creados, cuántos se abrieron y cuántos se pagaron (con su %), y lo cobrado. En las cuotas que cobra Stripe solo: las cobradas, las que fallaron y las pendientes. Por gestora o por campus; cada uno ve lo suyo.',
+      },
       {
         donde: anclaje('links-pantalla-filtros'),
         titulo: 'Por estado',
@@ -109,8 +115,8 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
       },
       {
         donde: anclaje('links-pantalla-acciones'),
-        titulo: 'Copiar, abrir o anular',
-        texto: '«Copiar» lo deja listo para pegarlo en WhatsApp o en un correo; «Abrir» enseña lo que verá el alumno. Si te equivocaste, «Anular» y escribe por qué: se desactiva en Stripe y queda apuntado quién y cuándo.',
+        titulo: 'Mandar, copiar, abrir o anular',
+        texto: '«Copiar mensaje» lo deja listo, con su texto, para pegarlo en WhatsApp o en un correo; con tu WhatsApp conectado en el CRM, «Enviar por WhatsApp» lo manda en su conversación. «Abrir» enseña lo que verá el alumno. Si te equivocaste, «Anular» y escribe por qué: se desactiva en Stripe y queda apuntado quién y cuándo.',
       },
       {
         titulo: 'Cuando lo paga',

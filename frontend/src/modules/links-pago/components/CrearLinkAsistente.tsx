@@ -1,21 +1,22 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  LinkSimple, Copy, CheckCircle, MagnifyingGlass, ArrowSquareOut, WhatsappLogo, EnvelopeSimple, WarningCircle, CaretDown, CaretRight,
+  LinkSimple, Copy, CheckCircle, MagnifyingGlass, ArrowSquareOut, WhatsappLogo, EnvelopeSimple, WarningCircle, CaretDown, CaretRight, ChatText,
+  Ticket,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
-import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import AvisoConectarStripe, { AvisoCobroAutoApagado, tipoDeAviso } from './AvisoConectarStripe';
 // El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
 const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
 import {
-  crearLink, verConfig, ventasDelProspecto, cuotasDisponibles,
-  type ConfigLinks, type CuotasDisponibles, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto,
+  crearLink, verConfig, ventasDelProspecto, cuotasDisponibles, listarCodigos, textoDelCodigo,
+  type ConfigLinks, type CuotasDisponibles, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto, type CodigoPromocional,
 } from '../api/linksPago.api';
+import { useWhatsappConectado, enviarPorWhatsapp, copiarMensaje } from './EnviarLink';
 
 /*
   «CREAR LINK DE PAGO», EN UNA PANTALLA (Carlos y Diego, 20/11/2026).
@@ -27,10 +28,12 @@ import {
     1. el campus (solo si la persona tiene varios);
     2. el curso, con buscador: sale su precio del catálogo, que se puede bajar
        dentro del tope de descuento del campus;
-    3. pago único o en cuotas (de 2 al máximo del campus), con lo que paga en
-       cada una. En cuotas, el link cobra la primera y guarda la tarjeta; Stripe
-       cobra las demás solas cada mes. Si el campus no puede (no lo permite, o la
-       clave de Stripe no tiene permisos), se dice aquí, antes de crear nada;
+    3. pago único o en cuotas, con lo que paga en cada una y CUÁNDO (Diego,
+       23/11: «crear cuotas y elegir las fechas sí o sí»): una al mes de serie y
+       cada fecha y cada importe se pueden cambiar. Con cobro automático, el link
+       cobra la inicial y guarda la tarjeta, y Stripe cobra las demás en su fecha;
+       sin él (la clave de Stripe no tiene permisos, el campus no lo permite…),
+       cada cuota tiene su propio link con su vencimiento, y se dice aquí;
     4. «Crear link», y el link: copiar, abrir y, si va para un prospecto,
        mandarlo por WhatsApp o por correo.
 
@@ -127,6 +130,67 @@ function hoyLocal(ahora = new Date()) {
 
 const fechaCorta = (f: string) => f.split('-').reverse().join('/');
 
+/** El día después de `f` (AAAA-MM-DD). */
+function diaSiguiente(f: string) {
+  const [a, m, d] = f.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * Las fechas de `n` cuotas: las que ya hay se quedan (la gestora pudo cambiarlas)
+ * y las que faltan, una al mes después de la última; la primera, un mes después
+ * de hoy. Con menos, se quitan las últimas.
+ */
+export function ajustarFechas(antes: string[], n: number, hoy: string) {
+  if (antes.length >= n) return antes.slice(0, n);
+  const base = antes.length ? antes[antes.length - 1] : hoy;
+  return [...antes, ...fechasMensuales(base, n - antes.length + 1).slice(1)];
+}
+
+/**
+ * Qué falla en las cuotas que se han escrito (23/11), en frases; vacío si nada.
+ * Las mismas reglas que el servidor: al menos 0,50 € cada una, que sumen lo que
+ * queda tras la inicial, la primera de mañana en adelante, cada una después de
+ * la anterior y la última a menos de tres años.
+ */
+export function problemasDelPlan(filas: { importe: string; vence: string }[], resto: number, hoy: string) {
+  const out: string[] = [];
+  const importes = filas.map((f) => Number(String(f.importe).replace(',', '.')));
+  if (importes.some((i) => !(i >= 0.5))) out.push('Cada cuota tiene que ser de al menos 0,50 €.');
+  else {
+    const suma = importes.reduce((t, i) => t + Math.round(i * 100), 0);
+    if (suma !== Math.round(resto * 100)) {
+      out.push(`Las cuotas suman ${dinero(suma / 100)} y tienen que sumar ${dinero(resto)} (lo que queda tras la inicial).`);
+    }
+  }
+  const fechas = filas.map((f) => f.vence);
+  if (fechas.some((f) => !/^\d{4}-\d{2}-\d{2}$/.test(f))) out.push('Pon la fecha de cada cuota.');
+  else if (fechas.length) {
+    if (!(fechas[0] > hoy)) out.push('La primera cuota tiene que ir de mañana en adelante: la de hoy es la inicial.');
+    const mal = fechas.findIndex((f, i) => i > 0 && !(f > fechas[i - 1]));
+    if (mal > 0) out.push(`La cuota ${mal + 1} tiene que ir después de la ${mal}.`);
+    const [a, m, d] = hoy.split('-').map(Number);
+    const tope = new Date(Date.UTC(a + 3, m - 1, d)).toISOString().slice(0, 10);
+    if (fechas[fechas.length - 1] > tope) out.push('La última cuota no puede ir a más de 3 años.');
+  }
+  return out;
+}
+
+/**
+ * Lo que se busca en «Para un prospecto» (23/11). La lista de prospectos exige el
+ * campus (CRM#859): sin `projectId` ni `projectIds`, el cliente ni siquiera hace la
+ * petición y devuelve una lista vacía. Por eso Daniela buscaba «34960254882» y no
+ * salía nadie aunque hubiera cinco fichas con ese móvil. Se busca en todos los
+ * campus de quien crea el link (el servidor los recorta a los suyos igual).
+ */
+export function paramsDeLaBusqueda(texto: string, campus: number[]) {
+  const ids = [...new Set(campus.filter((id) => Number.isInteger(id) && id > 0))];
+  return {
+    search: texto.trim(), includeConverted: true, limit: 10,
+    ...(ids.length === 1 ? { projectId: ids[0] } : { projectIds: ids.join(',') }),
+  };
+}
+
 /** «3 × 200,00 €», «2 × 199,99 € y la última de 200,02 €» o «1 cuota de 600,00 €». */
 export function textoDeLasCuotas(importes: number[]) {
   const n = importes.length;
@@ -141,8 +205,14 @@ export function textoDeLasCuotas(importes: number[]) {
  * Cómo se paga un link en cuotas, en una frase. Con inicial (CRM#982), la inicial
  * con el link y las cuotas de lo que queda; los de antes, el total entre N.
  */
-export function resumenDelPlan(l: Pick<LinkDePago, 'importe' | 'num_cuotas' | 'importe_cuota' | 'importe_inicial'>) {
+export function resumenDelPlan(l: Pick<LinkDePago, 'importe' | 'num_cuotas' | 'importe_cuota' | 'importe_inicial' | 'plan_cuotas' | 'guarda_tarjeta'>) {
   const n = Number(l.num_cuotas || 0);
+  // Con las fechas que eligió la gestora (23/11): cada cuota con la suya.
+  if (l.importe_inicial != null && Array.isArray(l.plan_cuotas) && l.plan_cuotas.length) {
+    const fechas = l.plan_cuotas.map((c) => fechaCorta(String(c.vence).slice(0, 10))).join(', ');
+    const como = l.guarda_tarjeta === false ? '; cada cuota, con su link' : '';
+    return `${dinero(l.importe_inicial)} de inicial con el link y ${textoDeLasCuotas(l.plan_cuotas.map((c) => Number(c.importe)))} (${fechas})${como}`;
+  }
   if (l.importe_inicial != null) {
     const resto = repartirEnCuotas(restaCentimos(Number(l.importe), Number(l.importe_inicial)), n - 1);
     return `${dinero(l.importe_inicial)} de inicial con el link y ${textoDeLasCuotas(resto)}, una al mes`;
@@ -151,6 +221,25 @@ export function resumenDelPlan(l: Pick<LinkDePago, 'importe' | 'num_cuotas' | 'i
 }
 
 interface Curso { id: number; nombre: string; precio: string | number | null; moneda: string | null }
+
+/*
+  LA MONEDA DEL CAMPUS (CRM#986). Monedas sin decimales en Stripe: el importe va
+  entero (1.500 CLP, no 1.500,50).
+*/
+const SIN_DECIMALES = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
+
+/**
+ * La moneda que sale elegida (la misma regla que el servidor): desde una venta,
+ * euros (lo pendiente está en euros); si el curso tiene precio en una moneda que
+ * el campus admite, esa (el link sale con su precio); si no, la del campus.
+ */
+export function monedaPropuesta(cfg: Pick<ConfigLinks, 'monedas' | 'moneda_defecto'> | null, curso: Pick<Curso, 'precio' | 'moneda'> | null, desdeVenta = false) {
+  const monedas = cfg?.monedas || [];
+  if (desdeVenta && monedas.includes('EUR')) return 'EUR';
+  const delCurso = curso?.moneda ? curso.moneda.trim().toUpperCase() : null;
+  if (delCurso && curso?.precio != null && Number(curso.precio) > 0 && monedas.includes(delCurso)) return delCurso;
+  return cfg?.moneda_defecto || 'EUR';
+}
 interface LeadEncontrado { id: number; nombre: string | null; email: string | null; telefono?: string | null; project_nombre?: string | null }
 interface Campus { id: number; nombre: string }
 
@@ -163,14 +252,24 @@ export interface CrearLinkAsistenteProps {
   onCreado?: (link: LinkDePago) => void;
   /** Cómo sale elegido el pago (los atajos de la pantalla «Links de pago», CRM#982). */
   formaInicial?: 'unico' | 'cuotas';
+  /**
+   * Desde el chat de WhatsApp (CRM#983): la conversación abierta (y de quién es la
+   * sesión, si un admin mira la de otra). «Enviar por WhatsApp» manda el link ahí,
+   * con su mensaje, sin abrir otra conversación.
+   */
+  conversacionId?: number | null;
+  usuarioId?: number | null;
+  onEnviado?: () => void;
 }
 
 /** «Nueva venta al pagar»: el link va al prospecto y la venta se crea con el cobro. */
 const NUEVA = 'nueva';
 
-export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: ventaInicial, onClose, onCreado, formaInicial = 'unico' }: CrearLinkAsistenteProps) {
+export default function CrearLinkAsistente({
+  leadId: leadInicial, conversionId: ventaInicial, onClose, onCreado, formaInicial = 'unico',
+  conversacionId = null, usuarioId = null, onEnviado,
+}: CrearLinkAsistenteProps) {
   const { can } = usePermission();
-  const navigate = useNavigate();
   const { activeProject, projects } = useProjectContext();
   const esAdmin = can('links_pago.configurar');
 
@@ -208,6 +307,11 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   const [cursoId, setCursoId] = useState('');
   const [importe, setImporte] = useState('');
   const [moneda, setMoneda] = useState('');
+  // CRM#986: la moneda sigue al curso hasta que la gestora la cambia a mano.
+  const [monedaTocada, setMonedaTocada] = useState(false);
+  // CRM#986: si el link admite códigos promocionales, y los vigentes del campus.
+  const [codigosPromo, setCodigosPromo] = useState(false);
+  const [vigentes, setVigentes] = useState<CodigoPromocional[]>([]);
   const [forma, setForma] = useState<'unico' | 'cuotas'>(formaInicial);
   const [numCuotas, setNumCuotas] = useState(3);
   // CRM#982: descuento en € o en % sobre el precio, y la inicial de «inicial más cuotas».
@@ -216,6 +320,9 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   const [inicial, setInicial] = useState('');
   const [inicialTocada, setInicialTocada] = useState(false);
   const [cuotas, setCuotas] = useState<CuotasDisponibles | null>(null);
+  // 23/11: el importe y la fecha de cada cuota de después de la inicial.
+  const [importesCuotas, setImportesCuotas] = useState<string[]>([]);
+  const [fechasCuotas, setFechasCuotas] = useState<string[]>([]);
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,17 +330,20 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   const [correoAbierto, setCorreoAbierto] = useState(false);
 
   // Buscar prospectos (solo si se abre «para un prospecto» y no viene elegido).
+  const idsDeCampus = campusPosibles.map((c) => c.id).join(',');
   useEffect(() => {
     if (!paraAlguien || consulta || busqueda.trim().length < 2) { setEncontrados([]); return undefined; }
+    const ids = idsDeCampus ? idsDeCampus.split(',').map(Number) : [];
+    if (!ids.length) { setEncontrados([]); return undefined; }
     const t = setTimeout(() => {
       setBuscando(true);
-      client.get<LeadEncontrado[]>('/leads', { params: { search: busqueda.trim(), includeConverted: true, limit: 10 } })
+      client.get<LeadEncontrado[]>('/leads', { params: paramsDeLaBusqueda(busqueda, ids) })
         .then((r) => setEncontrados(Array.isArray(r?.data) ? r.data : []))
         .catch((e) => { setEncontrados([]); setError(errorDe(e)); })
         .finally(() => setBuscando(false));
     }, 250);
     return () => clearTimeout(t);
-  }, [busqueda, consulta, paraAlguien]);
+  }, [busqueda, consulta, paraAlguien, idsDeCampus]);
 
   // El prospecto elegido (o el de la venta): sus datos y sus ventas.
   useEffect(() => {
@@ -264,10 +374,17 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     setCursos([]);
     setCursosCargados(false);
     setCuotas(null);
+    setVigentes([]);
+    setMonedaTocada(false);
     verConfig(projectId).then((r) => {
       if (!vigente || !r.data) return;
       setCfg(r.data);
       setMoneda(r.data.moneda_defecto);
+      // Códigos promocionales (CRM#986): si el campus los admite, el link también, y los vigentes a la vista.
+      setCodigosPromo(r.data.codigos_promo === true);
+      if (r.data.codigos_promo) {
+        listarCodigos(projectId).then((c) => { if (vigente) setVigentes(Array.isArray(c?.data) ? c.data : []); }).catch(() => {});
+      }
     }).catch((e) => { if (vigente) setError(`No se han podido leer las reglas de links de este campus: ${errorDe(e)}`); });
     client.get<Curso[]>('/products', { params: { projectId, limit: 500 } })
       .then((r) => { if (vigente) setCursos(Array.isArray(r?.data) ? r.data : []); })
@@ -306,8 +423,11 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   useEffect(() => {
     if (!venta && curso?.precio != null && Number(curso.precio) > 0) setImporte(String(Number(curso.precio)));
   }, [venta, curso]);
-  // En cuotas, siempre en euros.
-  useEffect(() => { if (enCuotas) setMoneda('EUR'); }, [enCuotas]);
+  // La moneda del campus (CRM#986): la del curso si tiene precio en ella; desde una
+  // venta, euros. Hasta que la gestora la cambie. En cuotas, siempre euros (`mon`).
+  useEffect(() => {
+    if (cfg && !monedaTocada) setMoneda(monedaPropuesta(cfg, curso, !!venta));
+  }, [cfg, curso, venta, monedaTocada]);
 
   const cursosFiltrados = useMemo(() => {
     const q = filtroCurso.trim().toLowerCase();
@@ -337,33 +457,53 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
 
   /*
     INICIAL MÁS CUOTAS (CRM#982): el link cobra la inicial y lo que queda va en N
-    cuotas iguales, una al mes desde un mes después del pago (la fecha, si paga hoy).
+    cuotas. Desde el 23/11 (Diego: «crear cuotas y elegir las fechas sí o sí»),
+    cada cuota con su importe (a partes iguales de serie, editable) y su fecha
+    (una al mes desde hoy de serie, editable). Se mandan tal cual al servidor.
   */
   const ini = Number(inicial.replace(',', '.'));
   const resto = enCuotas && total > 0 && ini > 0 ? restaCentimos(total, ini) : 0;
-  const reparto = resto > 0 ? repartirEnCuotas(resto, numCuotas) : [];
-  const primeraCuota = fechasMensuales(hoyLocal(), 2)[1];
+  const hoy = hoyLocal();
   // La inicial que se propone: la parte de un reparto igual, hasta que se toca.
   useEffect(() => {
     if (enCuotas && !inicialTocada && total > 0) setInicial(String(repartirEnCuotas(total, numCuotas + 1)[0]));
   }, [enCuotas, inicialTocada, total, numCuotas]);
+  // Al cambiar lo que queda o el número de cuotas, a partes iguales otra vez.
+  useEffect(() => {
+    setImportesCuotas(resto > 0 ? repartirEnCuotas(resto, numCuotas).map(String) : []);
+  }, [resto, numCuotas]);
+  // Las fechas: las que ya hay se quedan; las nuevas, una al mes.
+  useEffect(() => { setFechasCuotas((antes) => ajustarFechas(antes, numCuotas, hoy)); }, [numCuotas, hoy]);
+  const filasCuotas = importesCuotas.map((importe, i) => ({ importe, vence: fechasCuotas[i] || '' }));
+  const importesPlan = filasCuotas.map((f) => Number(String(f.importe).replace(',', '.')));
+  const cobroAuto = !!cuotas?.automatico;
 
   // El campus sin clave de links (QA de /testeo del 18/11): se dice en cuanto se
   // sabe el campus y no se deja rellenar ni enviar.
   const sinClave = cfg?.aviso_clave || null;
+  // Cuotas sin cobro automático por la clave de Stripe (CRM#992; desde el 23/11 ya
+  // no apaga las cuotas): el aviso que lleva a Integraciones › Links de pago de
+  // este campus, con el motivo concreto.
+  const tipoAviso = cuotas && !cuotas.automatico ? tipoDeAviso(cuotas.codigo) : null;
+  const avisoConectar = !venta && tipoAviso === 'conectar' && projectId && cuotas
+    ? <AvisoConectarStripe campus={[{ project_id: projectId, codigo: String(cuotas.codigo), motivo: cuotas.motivo }]} onIr={onClose} />
+    : null;
 
   // Por qué no se puede crear todavía: siempre escrito, nunca un botón gris mudo.
   const motivos: string[] = [];
   if (paraAlguien && consulta && cargandoProspecto) motivos.push('Cargando el prospecto…');
   else if (paraAlguien && !consulta && !campusElegido) motivos.push('Elige el campus, o busca el prospecto.');
   else if (!projectId) motivos.push('Elige el campus.');
-  else if (sinClave) motivos.push('Todavía no se pueden crear links en este campus.');
+  else if (sinClave) motivos.push('Falta conectar Stripe en este campus.');
   else {
     if (!cfg) motivos.push('Cargando las reglas del campus…');
     if (cursosCargados && cursos.length === 0) motivos.push('Este campus no tiene cursos en el catálogo: sin curso no se puede crear el link.');
     if (cursos.length > 0 && !curso) motivos.push('Elige el curso.');
     if (!(n > 0)) motivos.push(venta && venta.pendiente <= 0 ? 'Esta venta ya está cobrada entera: no queda nada que cobrar con un link.' : 'Escribe el importe.');
     if (n > 0 && (descuentoMal || !calculo)) motivos.push('El descuento no puede superar el precio.');
+    if (SIN_DECIMALES.has(mon) && total > 0 && !Number.isInteger(Math.round(total * 100) / 100)) {
+      motivos.push(`En ${mon} el importe va sin decimales.`);
+    }
     else if (n > 0 && calculo && !(total > 0)) motivos.push('Con ese descuento no queda nada que cobrar: el total tiene que ser mayor que 0.');
     if (venta && mon === 'EUR' && total > 0 && Math.round(total * 100) > Math.round(venta.pendiente * 100)) {
       motivos.push(`El link no puede pasar de lo pendiente de la venta (${dinero(venta.pendiente)}).`);
@@ -385,7 +525,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
         if (!(ini > 0)) motivos.push('Escribe la inicial: lo que cobra el link al pagarlo.');
         else if (Math.round(ini * 100) >= Math.round(total * 100)) motivos.push('La inicial tiene que ser menor que el total.');
         else if (ini < 0.5) motivos.push('La inicial tiene que ser de al menos 0,50 €.');
-        else if (reparto.length && reparto[0] < 0.5) motivos.push('Cada cuota tiene que ser de al menos 0,50 €.');
+        else motivos.push(...problemasDelPlan(filasCuotas, resto, hoy));
       }
     }
   }
@@ -401,7 +541,12 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
         productId: curso.id, importe: total,
         // El precio y el descuento, para que el servidor rehaga la cuenta y los guarde.
         ...(conDescuento ? { precio_original: n, descuento_tipo: descTipo, descuento_valor: dv } : {}),
-        ...(enCuotas ? { modalidad: 'cuotas' as const, num_cuotas: numCuotas, inicial: ini } : { moneda }),
+        ...(enCuotas ? {
+          modalidad: 'cuotas' as const, num_cuotas: numCuotas, inicial: ini,
+          cuotas: filasCuotas.map((f, i) => ({ importe: importesPlan[i], vence: f.vence })),
+        } : { moneda }),
+        // CRM#986: solo donde caben (pago único, sin venta y el campus los admite).
+        ...(cfg?.codigos_promo && !enCuotas && !venta ? { codigos_promo: codigosPromo } : {}),
       });
       if (r.data) { setHecho(r.data); onCreado?.(r.data); } else setError('El servidor no ha devuelto el link. Mira la lista de links antes de crear otro.');
     } catch (e) {
@@ -409,13 +554,25 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     } finally { setEnviando(false); }
   }
 
+  /*
+    (CRM#983) «Enviar por WhatsApp» MANDA el link, con su mensaje, en la conversación
+    del CRM con el prospecto (o en la del chat desde el que se abrió). Antes lo
+    copiaba y abría el chat para pegarlo a mano. Solo con WhatsApp conectado.
+  */
+  const [enviandoWa, setEnviandoWa] = useState(false);
+  const [enviadoWa, setEnviadoWa] = useState(false);
   async function porWhatsapp() {
     const leadId = prospecto?.lead.id;
-    if (!hecho?.url || !leadId) return;
-    await copiarLink(hecho.url);
-    const ruta = await abrirChatCrm({ leadId });
-    if (ruta) { toast({ title: 'Link copiado', description: 'Pégalo en la conversación y envíalo.' }); navigate(ruta); }
-    else toast({ title: 'No se ha podido abrir el chat', description: 'El link está copiado: mándalo desde WhatsApp.', variant: 'destructive' });
+    if (!hecho?.url || (!leadId && !conversacionId)) return;
+    setEnviandoWa(true);
+    try {
+      await enviarPorWhatsapp(hecho, { leadId, nombre: prospecto?.lead.nombre, conversacionId, usuarioId });
+      setEnviadoWa(true);
+      toast({ title: 'Link enviado por WhatsApp', description: 'Ha salido en la conversación del CRM, con su mensaje.' });
+      onEnviado?.();
+    } catch (e) {
+      toast({ title: 'No se ha podido enviar', description: `${errorDe(e)} Puedes copiar el mensaje y mandarlo a mano.`, variant: 'destructive' });
+    } finally { setEnviandoWa(false); }
   }
 
   function olvidarProspecto() {
@@ -428,13 +585,14 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
 
   const campo = 'w-full h-10 px-3 rounded-md border border-border bg-card text-sm';
   const lead = prospecto?.lead;
+  const waConectado = useWhatsappConectado(!!hecho && !!(lead || conversacionId));
   const ventas = prospecto?.ventas || [];
   const desdeFicha = !!(leadInicial || ventaInicial);
   const nombreCampus = campusPosibles.find((c) => c.id === projectId)?.nombre;
 
   const resumenHecho = hecho && (hecho.modalidad === 'cuotas' && hecho.num_cuotas
     ? `${dinero(hecho.importe)}${conDescuentoHecho}: ${resumenDelPlan(hecho)}`
-    : `${dinero(hecho.importe, hecho.moneda)}${conDescuentoHecho}`);
+    : `${dinero(hecho.importe, hecho.moneda)}${conDescuentoHecho}${hecho.codigos_promo ? ' · admite códigos promocionales' : ''}`);
 
   return (
     <Portal>
@@ -482,10 +640,19 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                     <ArrowSquareOut size={14} weight="bold" aria-hidden="true" /> Abrir
                   </a>
                 )}
-                {lead && can('whatsapp.usar') && (
-                  <button type="button" onClick={porWhatsapp}
+                {hecho.url && (
+                  <button type="button" onClick={() => copiarMensaje(hecho, lead?.nombre)}
                     className="inline-flex items-center gap-1 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">
-                    <WhatsappLogo size={14} weight="bold" aria-hidden="true" /> Enviar por WhatsApp
+                    <ChatText size={14} weight="bold" aria-hidden="true" /> Copiar mensaje
+                  </button>
+                )}
+                {(lead || conversacionId) && waConectado && (
+                  <button type="button" onClick={porWhatsapp} disabled={enviandoWa || enviadoWa}
+                    className={`inline-flex items-center gap-1 h-9 px-3 rounded-md text-sm font-semibold disabled:opacity-60 ${conversacionId
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      : 'border border-border bg-card hover:bg-muted'}`}>
+                    <WhatsappLogo size={14} weight="bold" aria-hidden="true" />
+                    {enviadoWa ? 'Enviado por WhatsApp' : enviandoWa ? 'Enviando…' : conversacionId ? 'Enviar en este chat' : 'Enviar por WhatsApp'}
                   </button>
                 )}
                 {lead && can('leads.enviar_correo') && lead.email && (
@@ -514,11 +681,12 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                 <div role="alert" data-recorrido="links-asistente-sin-clave" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
                   <WarningCircle size={18} weight="fill" className="mt-0.5 flex-shrink-0" aria-hidden="true" />
                   <p>
-                    <span className="font-semibold block">Todavía no se pueden crear links en este campus</span>
+                    <span className="font-semibold block">FALTA CONECTAR STRIPE</span>
                     {sinClave.error}
                   </p>
                 </div>
               )}
+              {sinClave && avisoConectar}
 
               <fieldset disabled={!!sinClave} aria-disabled={!!sinClave} className="space-y-4 min-w-0 disabled:opacity-60">
               {/* Curso, con buscador */}
@@ -569,7 +737,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                     {!enCuotas && (cfg?.monedas.length || 0) > 1 && (
                       <div>
                         <label htmlFor="link-moneda" className="text-xs text-muted-foreground mb-1 block">Moneda</label>
-                        <select id="link-moneda" value={moneda} onChange={(e) => setMoneda(e.target.value)} className={campo}>
+                        <select id="link-moneda" value={moneda} onChange={(e) => { setMoneda(e.target.value); setMonedaTocada(true); }} className={campo}>
                           {(cfg?.monedas || []).map((m) => <option key={m} value={m}>{m}</option>)}
                         </select>
                       </div>
@@ -615,14 +783,58 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                       <label className={`flex items-center gap-2 p-2.5 rounded-md border text-sm ${cuotas && !cuotas.disponible ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${forma === 'cuotas' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                         <input type="radio" name="link-forma" checked={forma === 'cuotas'} disabled={!!cuotas && !cuotas.disponible}
                           onChange={() => setForma('cuotas')} />
-                        <span><span className="font-medium block">Inicial + cuotas</span><span className="text-xs text-muted-foreground">El link cobra la inicial; las cuotas, solas</span></span>
+                        <span><span className="font-medium block">Inicial + cuotas</span><span className="text-xs text-muted-foreground">
+                          {cuotas && !cuotas.automatico ? 'El link cobra la inicial; cada cuota, con su link' : 'El link cobra la inicial; las cuotas, solas'}
+                        </span></span>
                       </label>
                     </div>
                   )}
+                  {/* Códigos promocionales de campaña (CRM#986): solo en pago único y sin venta. */}
+                  {!venta && !enCuotas && cfg?.codigos_promo && (
+                    <div className="space-y-1" data-recorrido="links-asistente-codigos">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={codigosPromo} onChange={(e) => setCodigosPromo(e.target.checked)} />
+                        <Ticket size={14} aria-hidden="true" /> Admite códigos promocionales
+                      </label>
+                      {codigosPromo && (
+                        <p className="text-xs text-muted-foreground" data-testid="link-codigos-vigentes">
+                          {vigentes.length
+                            ? <>El alumno puede escribir al pagar: {vigentes.map((c) => `${c.codigo} (−${textoDelCodigo(c)}, hasta el ${fechaCorta(c.caduca_el)})`).join(' · ')}. Lo que descuente queda en la venta.</>
+                            : <>El alumno puede escribir un código de campaña al pagar; ahora no hay ninguno vigente en este campus.</>}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* Cuotas en otra moneda (CRM#986): van en euros, y se dice. */}
+                  {!venta && enCuotas && cfg && cfg.moneda_defecto !== 'EUR' && (
+                    <p className="text-xs text-muted-foreground" data-testid="link-cuotas-en-euros">
+                      Las cuotas van en euros: el CRM lleva en euros el plan de cada venta. Para cobrar en {cfg.moneda_defecto}, pago único.
+                    </p>
+                  )}
+                  {/* Sin cuotas solo si el campus no las admite (en euros): el texto. */}
                   {!venta && cuotas && !cuotas.disponible && (
                     <p className="text-xs text-muted-foreground" data-recorrido="links-asistente-cuotas-no">
                       Cuotas no disponibles: {cuotas.motivo}
                     </p>
+                  )}
+                  {/* 23/11: sin cobro automático, las cuotas siguen (cada una con su link)
+                      y se dice por qué. CRM#992: si es por la clave de Stripe, el aviso
+                      que lleva a ponerla (sin clave de links va arriba); si es el
+                      interruptor del servidor, que no está activo aquí. */}
+                  {!venta && enCuotas && cuotas?.disponible && !cuotas.automatico && (
+                    <div className="space-y-2" data-recorrido="links-asistente-cuotas-sin-auto">
+                      <p role="status" data-testid="aviso-cuotas-sin-auto"
+                        className="flex items-start gap-1.5 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                        <WarningCircle size={14} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        <span>
+                          <span className="font-semibold text-foreground">El cobro no será automático: cada cuota tendrá su propio link.</span>{' '}
+                          Al pagar la inicial se crea un link por cuota, con su fecha de vencimiento; los verás en la venta y en «Links de pago» para mandarlos cuando toque.
+                          {tipoAviso !== 'conectar' && tipoAviso !== 'entorno' && cuotas.motivo ? ` (${cuotas.motivo})` : ''}
+                        </span>
+                      </p>
+                      {tipoAviso === 'conectar' ? (!sinClave && avisoConectar)
+                        : tipoAviso === 'entorno' ? <AvisoCobroAutoApagado motivo={cuotas.motivo} /> : null}
+                    </div>
                   )}
 
                   {enCuotas && (
@@ -641,14 +853,54 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                           </select>
                         </div>
                       </div>
-                      {reparto.length > 0 && (
-                        <p className="text-sm" aria-live="polite" data-testid="link-resumen-cuotas">
-                          Quedan <strong className="tabular-nums">{dinero(resto)}</strong> en{' '}
-                          <strong className="tabular-nums">{textoDeLasCuotas(reparto)}</strong>, una al mes desde el {fechaCorta(primeraCuota)} si paga hoy.
-                        </p>
+                      {filasCuotas.length > 0 && (
+                        <>
+                          <p className="text-sm" aria-live="polite" data-testid="link-resumen-cuotas">
+                            Quedan <strong className="tabular-nums">{dinero(resto)}</strong> en{' '}
+                            <strong className="tabular-nums">{textoDeLasCuotas(importesPlan.map((x) => (x > 0 ? x : 0)))}</strong>.
+                          </p>
+                          <table className="w-full text-sm" data-testid="link-plan-cuotas">
+                            <thead>
+                              <tr className="text-xs text-muted-foreground">
+                                <th className="text-left font-medium pb-1">Cuota</th>
+                                <th className="text-left font-medium pb-1">Importe (€)</th>
+                                <th className="text-left font-medium pb-1">Fecha</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filasCuotas.map((f, i) => (
+                                <tr key={i}>
+                                  <td className="pr-2 py-0.5 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
+                                  <td className="pr-2 py-0.5">
+                                    <input type="text" inputMode="decimal" value={f.importe} aria-label={`Importe de la cuota ${i + 1}`}
+                                      onChange={(e) => setImportesCuotas((xs) => xs.map((x, k) => (k === i ? e.target.value : x)))}
+                                      className="w-full h-9 px-2 rounded-md border border-border bg-card text-sm tabular-nums" />
+                                  </td>
+                                  <td className="py-0.5">
+                                    <input type="date" value={f.vence} min={diaSiguiente(hoy)} aria-label={`Fecha de la cuota ${i + 1}`}
+                                      onChange={(e) => setFechasCuotas((xs) => xs.map((x, k) => (k === i ? e.target.value : x)))}
+                                      className="w-full h-9 px-2 rounded-md border border-border bg-card text-sm" />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="flex flex-wrap gap-3">
+                            <button type="button" className="text-xs underline text-muted-foreground hover:text-foreground"
+                              onClick={() => setImportesCuotas(repartirEnCuotas(resto, numCuotas).map(String))}>
+                              Repartir a partes iguales
+                            </button>
+                            <button type="button" className="text-xs underline text-muted-foreground hover:text-foreground"
+                              onClick={() => setFechasCuotas(ajustarFechas([], numCuotas, hoy))}>
+                              Una al mes desde hoy
+                            </button>
+                          </div>
+                        </>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        Al pagar, el link cobra la inicial{ini > 0 ? ` (${dinero(ini)})` : ''} y guarda la tarjeta. Las cuotas las cobra Stripe solas, la primera un mes después del pago, y cada cobro salda su cuota en la venta.
+                        {cobroAuto
+                          ? <>Al pagar, el link cobra la inicial{ini > 0 ? ` (${dinero(ini)})` : ''} y guarda la tarjeta. Stripe cobra cada cuota sola en su fecha, y cada cobro salda su cuota en la venta.</>
+                          : <>Al pagar, el link cobra la inicial{ini > 0 ? ` (${dinero(ini)})` : ''} y se crea un link por cuota, que vence en su fecha. Cada cobro salda su cuota en la venta.</>}
                       </p>
                     </div>
                   )}
