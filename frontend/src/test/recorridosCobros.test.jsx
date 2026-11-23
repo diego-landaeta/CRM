@@ -42,6 +42,8 @@ const { RECORRIDOS_FINANZAS } = await import('@/shared/lib/recorridosFinanzas');
 // Los de las novedades del 18/11 (#928): se cuentan en recorridosNovedades928.
 const { RECORRIDOS_NOVEDADES } = await import('@/shared/lib/recorridosNovedades');
 const { RECORRIDOS_NOVEDADES_B } = await import('@/shared/lib/recorridosNovedadesB');
+// Los del día a día de una gestora (#941, tanda C): se cuentan en recorridosGestora941.
+const { RECORRIDOS_GESTORA } = await import('@/shared/lib/recorridosGestora');
 const { default: VerRecorrido } = await import('@/shared/components/ui/VerRecorrido');
 const { CLAVES } = await import('../../../backend/src/modules/permissions/catalogo.js');
 

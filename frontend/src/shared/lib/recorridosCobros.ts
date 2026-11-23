@@ -6,6 +6,8 @@ import { RECORRIDOS_FINANZAS, type IdRecorridoFinanzas } from '@/shared/lib/reco
 import { RECORRIDOS_NOVEDADES, type IdRecorridoNovedades } from '@/shared/lib/recorridosNovedades';
 // Los de las novedades del 18/11, segunda tanda (#928), en su propio fichero.
 import { RECORRIDOS_NOVEDADES_B, type IdRecorridoNovedadesB } from '@/shared/lib/recorridosNovedadesB';
+// Los del día a día de una gestora (#941, tanda C: Clientes, ficha y cola), en su propio fichero.
+import { RECORRIDOS_GESTORA, type IdRecorridoGestora } from '@/shared/lib/recorridosGestora';
 // Links de pago y cuotas, los principales (CRM#1012), en su propio fichero.
 import { RECORRIDOS_LINKS, type IdRecorridoLinks } from '@/shared/lib/recorridosLinksYCuotas';
 
@@ -57,6 +59,7 @@ export type IdRecorridoCobros =
   | IdRecorridoFinanzas
   | IdRecorridoNovedades
   | IdRecorridoNovedadesB
+  | IdRecorridoGestora
   | IdRecorridoLinks;
 
 export interface RecorridoCobros {
@@ -472,7 +475,9 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 8 · Novedades del 18/11, segunda tanda (#928): `recorridosNovedadesB.ts` ───
   ...RECORRIDOS_NOVEDADES_B,
 
-  // ─── 9 · Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
+  // ─── 9 · El día a día de una gestora (#941, tanda C): `recorridosGestora.ts` ───
+  ...RECORRIDOS_GESTORA,
+  // ─── 10 · Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
   ...RECORRIDOS_LINKS,
 };
 
