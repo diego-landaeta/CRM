@@ -227,4 +227,9 @@ describe('el registro ruta → recorrido', () => {
     expect(recorridosDeLaRuta('/links-pago')).toEqual(['links-pago']);
     expect(recorridosDeLaRuta('/no-existe')).toEqual([]);
   });
+
+  it('manda la ruta más concreta, como en el router: La cola no es la ficha de un prospecto', () => {
+    expect(recorridosDeLaRuta('/prospectos/cola')).toEqual(['cola-del-dia']);
+    expect(recorridosDeLaRuta('/prospectos/12')).toEqual(['prospecto-ficha']);
+  });
 });
