@@ -4,6 +4,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './meta-ads.controller.js';
+import * as portfolioCtrl from './meta-portfolio.controller.js';
 
 const router = Router();
 router.use(verifyToken);
@@ -55,5 +56,18 @@ router.post('/adset-associations', configurar, ctrl.setAdSetAssociations);
 
 router.get('/roi', ver, ctrl.getRoi);
 router.get('/products-view', ver, ctrl.getProductsView);
+
+// Portfolio de Meta (#212): el Business Manager entero, y la bandeja de
+// cuentas que descubre. Solo admin (y superadmin, que ya lo tiene todo) —
+// soporte no, a propósito (ver el permiso en catalogo.js).
+const conectarPortfolio = puede('meta_ads.conectar_portfolio');
+router.post('/portfolios', conectarPortfolio, portfolioCtrl.connect);
+router.get('/portfolios', conectarPortfolio, portfolioCtrl.list);
+router.delete('/portfolios/:portfolioId', conectarPortfolio, portfolioCtrl.disconnect);
+router.post('/portfolios/:portfolioId/sync', conectarPortfolio, portfolioCtrl.sync);
+router.get('/portfolios/:portfolioId/discovered', conectarPortfolio, portfolioCtrl.listDiscovered);
+// Asignar sí mira el campus: el project_id del body tiene que ser uno de los suyos.
+router.post('/portfolios/discovered/:discoveredId/assign', [conectarPortfolio, deSusCampus], portfolioCtrl.assign);
+router.post('/portfolios/discovered/:discoveredId/ignore', conectarPortfolio, portfolioCtrl.ignore);
 
 export default router;
