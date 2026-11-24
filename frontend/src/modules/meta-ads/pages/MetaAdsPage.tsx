@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
 import ElegirCampus from '@/shared/components/ui/ElegirCampus';
-import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown } from '@phosphor-icons/react';
+import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown, Buildings } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
@@ -11,6 +11,7 @@ const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
 const MetaSettingsPanel = lazy(() => import('../components/MetaSettingsPanel'));
 const MetaManual = lazy(() => import('../components/MetaManual'));
+const MetaPortfolioPanel = lazy(() => import('../components/MetaPortfolioPanel'));
 
 function fmtMoney(n: number, currency = 'EUR') {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n || 0);
@@ -54,7 +55,7 @@ export default function MetaAdsPage() {
   const [dashboard, setDashboard] = useState<MetaDashboard | null>(null);
   const [roi, setRoi] = useState<MetaRoiRow[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [tab, setTab] = useState<'campaigns' | 'products' | 'roi' | 'manual' | 'config'>('campaigns');
+  const [tab, setTab] = useState<'campaigns' | 'products' | 'roi' | 'manual' | 'config' | 'portfolio'>('campaigns');
   const [productsView, setProductsView] = useState<any[]>([]);
   const [associateOpen, setAssociateOpen] = useState<MetaCampaign | null>(null);
   const [associateAdSetOpen, setAssociateAdSetOpen] = useState<MetaAdSet | null>(null);
@@ -257,7 +258,7 @@ export default function MetaAdsPage() {
 
       {/* Selector rango fechas (oculto cuando estás en config) */}
 
-      {tab !== 'config' && tab !== 'manual' && (
+      {tab !== 'config' && tab !== 'manual' && tab !== 'portfolio' && (
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-semibold text-muted-foreground">Rango:</label>
         <input type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)}
@@ -277,7 +278,7 @@ export default function MetaAdsPage() {
       )}
 
       {/* KPIs del dashboard */}
-      {tab !== 'config' && tab !== 'manual' && dashboard && (
+      {tab !== 'config' && tab !== 'manual' && tab !== 'portfolio' && dashboard && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} label="Gasto" value={fmtMoney(dashboard.totals.spend, currency)} tone="violet" />
           <KpiCard icon={Eye} label="Impresiones" value={fmtNum(dashboard.totals.impressions)} tone="blue" />
@@ -287,7 +288,7 @@ export default function MetaAdsPage() {
       )}
 
       {/* Gráfica daily simple */}
-      {tab !== 'config' && tab !== 'manual' && dashboard && dashboard.daily.length > 0 && (
+      {tab !== 'config' && tab !== 'manual' && tab !== 'portfolio' && dashboard && dashboard.daily.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <ChartLineUp size={16} weight="duotone" className="text-info" />
@@ -316,6 +317,12 @@ export default function MetaAdsPage() {
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Manual
           </button>
+          {!soloVer && (
+          <button onClick={() => setTab('portfolio')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'portfolio' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
+            <Buildings size={13} weight="duotone" /> Portfolios
+          </button>
+          )}
           {!soloVer && (
           <button onClick={() => setTab('config')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'config' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
@@ -391,6 +398,14 @@ export default function MetaAdsPage() {
                 onChanged={() => { loadAccounts(); loadData(); }}
                 onDisconnect={handleDisconnect}
               />
+            </Suspense>
+          </div>
+        )}
+
+        {tab === 'portfolio' && !soloVer && (
+          <div className="p-4">
+            <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
+              <MetaPortfolioPanel />
             </Suspense>
           </div>
         )}
