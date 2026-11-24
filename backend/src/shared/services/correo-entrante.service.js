@@ -42,9 +42,15 @@ import { destinoSeguro, modoPruebasLocal } from './correo-destino.js';
  * `ENCRYPTION_KEY` que `api_credentials`).
  *
  * El del `.env` (`IMAP_*`, o `SMTP_*`, que es la misma cuenta) sigue valiendo:
- * se lee SOLO si no hay ninguno activo en la base. Un servidor que ya lo tenía
- * no cambia nada al desplegar; en cuanto alguien conecta buzones desde el
- * panel, mandan esos.
+ * se lee SOLO si no hay ninguno activo en la base (Diego, CRM#1058: «mandan los
+ * de la base»). Un servidor que ya lo tenía no cambia nada al desplegar; en
+ * cuanto alguien conecta buzones desde el panel, mandan esos, y el del `.env`
+ * ya adoptado no se vuelve a leer (ver `buzonesQueLeer`).
+ *
+ * SOLO LEER (Diego, CRM#1058). Los buzones del panel no mandan nada: el envío
+ * sigue por Brevo con su plantilla y, donde ya se usaba, por el `SMTP_*` del
+ * `.env` (`correo-buzon.service.js`), igual que la copia en «Enviados». Nada de
+ * aquí les pasa a esos dos las credenciales de un buzón de la base.
  */
 
 /** Cuántos se traen de una tacada. Un buzón con años detrás no cabe en memoria. */
@@ -91,6 +97,13 @@ export function descifrarConexion(fila) {
  * Los buzones que hay que leer: los activos de la base o, si no hay ninguno, el
  * del `.env`. Con `buzonId`, solo ese (y si no está, ninguno).
  *
+ * Diego (CRM#1058): «mandan los de la base; el del `.env` solo se lee si no hay
+ * ninguno en la base, y cuando se adopta deja de leerse para que no salga
+ * duplicado». Por eso, si la dirección del `.env` se conectó alguna vez desde
+ * el panel —aunque luego se quitara—, ya no se vuelve a leer por el `.env`: sus
+ * correos llevan ya la clave del buzón de la base, y releerlos con la de antes
+ * los guardaría otra vez. Quitarlo del panel es dejar de leerlo.
+ *
  * Uno que no se pueda descifrar —cambió la `ENCRYPTION_KEY`— se salta con un
  * aviso: no puede impedir que se lean los demás.
  */
@@ -103,7 +116,10 @@ export async function buzonesQueLeer({ buzonId = null } = {}) {
   if (!rows.length) {
     if (buzonId) return [];
     const env = buzonDelEnv();
-    return env ? [env] : [];
+    if (!env) return [];
+    const { rows: adoptado } = await query(
+      'SELECT 1 FROM correo_buzones WHERE lower(direccion) = $1 LIMIT 1', [env.direccion]);
+    return adoptado.length ? [] : [env];
   }
   const lista = [];
   for (const f of rows) {

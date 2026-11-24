@@ -1,4 +1,6 @@
--- Migración 320: varios buzones de correo conectados desde el panel (CRM#1032).
+-- Migración 328: varios buzones de correo conectados desde el panel (CRM#1032).
+-- Iba a ser la 320, que ya es 320_tickets_en_seguimiento (y 326 y 327 ya están en main).
+-- En ISEIE es la 335 (CRM-ISEIE#750).
 --
 -- Diego, 23/11: «poder conectar varios correos de Hostinger como hicimos en
 -- CEDIA». Hasta aquí la Bandeja (#146) leía UN buzón, el de `IMAP_USER` e
@@ -12,9 +14,14 @@
 -- y si hay credenciales guardadas.
 --
 -- COMPATIBILIDAD. Si no hay ningún buzón activo aquí, se sigue leyendo el del
--- `.env` como hasta ahora. Los correos que ya entraron por él se quedan con
--- `buzon_id` NULL; si ese mismo buzón se conecta luego desde el panel, el CRM
+-- `.env` como hasta ahora. En cuanto hay uno, mandan los de aquí y el del `.env`
+-- deja de leerse (Diego, CRM#1058). Los correos que ya entraron por él se quedan
+-- con `buzon_id` NULL; si ese mismo buzón se conecta luego desde el panel, el CRM
 -- los adopta al releerlo en vez de duplicarlos.
+--
+-- SOLO LEER. Estos buzones no mandan nada (Diego, CRM#1058): el envío sigue
+-- como estaba, por Brevo con su plantilla, y el `SMTP_*` del `.env` y la copia
+-- en «Enviados» siguen saliendo solo del buzón del `.env`.
 --
 -- Reaplicable: todo con IF NOT EXISTS.
 
@@ -26,7 +33,8 @@ CREATE TABLE IF NOT EXISTS correo_buzones (
   nombre             VARCHAR(120) NOT NULL,
   -- La dirección del buzón, en minúsculas. Con Hostinger es también el usuario.
   direccion          VARCHAR(255) NOT NULL,
-  -- De qué campus es. NULL = de ninguno en concreto (lo ve quien ve la Bandeja).
+  -- De qué campus es. NULL = de ninguno en concreto (lo ve quien ve la Bandeja,
+  -- y solo lo tocan superadmin y soporte).
   project_id         INTEGER      REFERENCES projects(id) ON DELETE SET NULL,
   -- De qué empresa de facturación es, si es su buzón de facturación.
   empresa_id         INTEGER      REFERENCES invoice_issuers(id) ON DELETE SET NULL,

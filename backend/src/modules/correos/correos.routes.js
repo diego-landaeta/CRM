@@ -18,7 +18,9 @@ router.post('/sincronizar', puede('correos.sincronizar'), ctrl.sincronizar);
 
 // Los buzones (CRM#1032). Verlos —nombre, dirección, campus— basta con ver la
 // Bandeja: es lo que se elige arriba. Conectarlos, probarlos y quitarlos pide
-// `correos.buzones`. Las credenciales no salen por ninguna de estas rutas.
+// `correos.buzones`, de serie para admin y soporte, cada uno en sus campus
+// (Diego, CRM#1058). Las credenciales no salen por ninguna de estas rutas.
+// Solo se LEEN: no hay ruta para mandar desde un buzón; el envío sigue por Brevo.
 // También antes de `/:id`.
 router.get('/buzones', puede('correos.view'), buzones.listar);
 router.post('/buzones', puede('correos.buzones'), buzones.crear);

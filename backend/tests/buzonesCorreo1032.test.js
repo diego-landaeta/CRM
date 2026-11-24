@@ -73,6 +73,7 @@ const { errorHandler } = await import('../src/shared/middleware/errorHandler.js'
 const { default: correos } = await import('../src/modules/correos/index.js');
 const { leerBuzon, descifrarConexion } = await import('../src/shared/services/correo-entrante.service.js');
 const { resolutor } = await import('../src/shared/services/correo-destino.js');
+const { valoresPorDefecto } = await import('../src/modules/permissions/catalogo.js');
 
 // DNS de mentira: sin red en las pruebas. Los nombres «interno.» resuelven a una
 // privada, «mixto.» a una pública y una privada; el resto, a una pública
@@ -439,5 +440,73 @@ describe('el buzón de facturación de una empresa sin correo', () => {
     expect(r.body.ofrecerCorreoEmpresa).toBeNull();
     await request.post(`/api/correos/buzones/${r.body.data.id}/correo-de-empresa`).set(como(ADMIN));
     expect((await one('SELECT email FROM invoice_issuers WHERE id = $1', [EMPRESA_CON_CORREO])).email).toBe(`ya@${dom}`);
+  });
+});
+
+// Las respuestas de Diego en CRM#1058 (23/11), las mismas que ya fijó ISEIE (#750).
+describe('lo que decidió Diego (CRM#1058)', () => {
+  it('1 · «Conectar buzones» de serie para admin y soporte; «Guardar claves», solo soporte', () => {
+    const serie = valoresPorDefecto();
+    expect(serie.admin['correos.buzones']).toBe(true);
+    expect(serie.soporte['correos.buzones']).toBe(true);
+    expect(serie.gestor['correos.buzones']).toBe(false);
+    expect(serie.project_manager['correos.buzones']).toBe(false);
+    expect(serie.soporte['credentials.edit']).toBe(true);
+    expect(serie.admin['credentials.edit']).toBe(false);
+  });
+
+  it('1 · un id que no es un número es un 404, no un error de la base', async () => {
+    expect((await request.patch('/api/correos/buzones/abc').set(como(SUPER)).send({ nombre: 'x' })).status).toBe(404);
+    expect((await request.delete('/api/correos/buzones/1e3').set(como(SUPER))).status).toBe(404);
+    expect((await request.post('/api/correos/buzones/-1/probar').set(como(SUPER)).send({})).status).toBe(404);
+  });
+
+  it('2 · el del .env ya adoptado no se vuelve a leer, ni aunque se quite del panel', async () => {
+    vi.stubEnv('SMTP_USER', ''); vi.stubEnv('SMTP_PASSWORD', '');
+    vi.stubEnv('IMAP_USER', ENV); vi.stubEnv('IMAP_PASSWORD', CLAVE_BUENA);
+    const adoptado = await one(`SELECT id FROM correo_buzones WHERE direccion = $1 AND activo`, [ENV]);
+    expect((await request.delete(`/api/correos/buzones/${adoptado.id}`).set(como(SUPER))).status).toBe(200);
+    // Ninguno activo en la base: lo que antes hacía volver a leer el del .env.
+    await q(`UPDATE correo_buzones SET activo = false WHERE activo AND direccion LIKE $1`, [`%@${dom}`]);
+    conexiones.length = 0;
+    const r = await leerBuzon();
+    expect(r.motivo).toBe('SIN_BUZON');
+    expect(conexiones).toHaveLength(0);
+    // Sus dos correos, una vez y con el buzón al que se adoptaron.
+    const filas = await q(`SELECT buzon_id FROM email_envios WHERE clave LIKE $1`, [`%<e_@${dom}>`]);
+    expect(filas).toHaveLength(2);
+    expect(filas.every((f) => f.buzon_id === adoptado.id)).toBe(true);
+  });
+
+  it('2 · un .env que nunca se conectó en el panel sí se lee si no hay ninguno en la base', async () => {
+    const NUEVO = `nuevo@${dom}`;
+    BUZONES_FALSOS[NUEVO] = [crudo('n1', NUEVO, 'Del nuevo')];
+    vi.stubEnv('IMAP_USER', NUEVO);
+    conexiones.length = 0;
+    const r = await leerBuzon();
+    expect(r.nuevos).toBe(1);
+    expect(conexiones.map((c) => c.auth.user)).toEqual([NUEVO]);
+  });
+
+  it('3 · solo leer: no hay ruta para mandar desde un buzón', async () => {
+    const f = await one(`SELECT id FROM correo_buzones WHERE direccion = $1 ORDER BY id DESC LIMIT 1`, [FACT]);
+    for (const ruta of ['enviar', 'mandar', 'responder']) {
+      expect((await request.post(`/api/correos/buzones/${f.id}/${ruta}`).set(como(SUPER)).send({})).status).toBe(404);
+    }
+  });
+
+  it('3 · solo leer: la salida por SMTP no usa nunca un buzón de la base', async () => {
+    vi.stubEnv('SMTP_USER', ''); vi.stubEnv('SMTP_PASSWORD', '');
+    vi.stubEnv('IMAP_USER', ''); vi.stubEnv('IMAP_PASSWORD', '');
+    // Con un buzón de la base conectado y activo, y sin buzón en el .env…
+    const r = await conectar(SUPER, { nombre: 'Facturación', direccion: FACT, clave: CLAVE_BUENA, project_id: MIO });
+    expect(r.status).toBe(201);
+    vi.resetModules();
+    const salida = await import('../src/shared/services/correo-buzon.service.js');
+    // …no hay salida propia, y un correo firmado por ese buzón no sale por él.
+    expect(salida.haySalidaPropia()).toBe(false);
+    expect(salida.saleDelBuzon(FACT)).toBe(false);
+    expect(await salida.mandarDesdeBuzon({ to: `x@${dom}`, subject: 's', htmlContent: 'h' }))
+      .toEqual({ sent: false, reason: 'SIN_BUZON' });
   });
 });

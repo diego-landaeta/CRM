@@ -30,7 +30,9 @@ const validar = (schema, body) => {
 
 /** Que el buzón sea de uno de sus campus (o de ninguno, si ve el CRM entero). 404 si no. */
 async function buzonVisible(req, id) {
-  const b = await model.uno(id);
+  // Un id que no es un número es un 404, no un error de la base (como ISEIE#750).
+  const n = Number(id);
+  const b = Number.isInteger(n) && n > 0 ? await model.uno(n) : null;
   if (!b) throw new AppError('Ese buzón no está', 404, 'NOT_FOUND');
   const campus = await campusParaRecortar(req);
   if (campus && b.project_id != null && !campus.includes(Number(b.project_id))) {
