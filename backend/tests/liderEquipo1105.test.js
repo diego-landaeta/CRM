@@ -29,7 +29,7 @@ const { explicarPermisos, olvidarPermisos } = await import('../src/modules/permi
 const cat = await import('../src/modules/permissions/catalogo.js');
 const { SYSTEM_ROLE_DEFAULTS } = await import('../src/modules/permissions/permissions.defaults.js');
 const { createUserSchema } = await import('../src/modules/users/user.validation.js');
-const modulos = await Promise.all(['users', 'leads', 'conversions', 'sales', 'reports', 'permissions', 'integrations', 'accounting']
+const modulos = await Promise.all(['users', 'leads', 'conversions', 'sales', 'reports', 'permissions', 'integrations', 'accounting', 'informe-mensual']
   .map((m) => import(`../src/modules/${m}/index.js`).then((x) => x.default)));
 
 const app = express();
@@ -43,7 +43,7 @@ const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const one = async (sql, p) => (await q(sql, p))[0];
 const ids = { users: [], projects: [], issuers: [], leads: [], ventas: [] };
 
-let A; let LIDER; let SOLA; let G1; let G2; let FUERA; let ADMIN;
+let A; let EMPRESA; let LIDER; let SOLA; let G1; let G2; let FUERA; let ADMIN;
 let L_LIDER; let L1; let L2; let L_FUERA; let L_SIN; let L_SOLA; let V1; let V_FUERA;
 
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
@@ -60,8 +60,8 @@ const DE_ADMINISTRACION = [
   'mcp.usar', 'mcp.administrar', 'connectors.view', 'webhooks.view', 'webhooks_salientes.view', 'make.view', 'moodle.view',
   'accounting.view', 'expenses.view', 'accounts_payable.view', 'commissions.view', 'payroll.view', 'cobros_externos.view',
   'facturas.configurar', 'facturas.emitir', 'facturas.cola', 'facturas.auditoria', 'facturas_colaborador.ver_todas',
-  'links_pago.ver_todos', 'links_pago.configurar', 'stripe.edit', 'conversions.reparto', 'conversions.sin_gestora',
-  'reports.informe_mensual', 'reports.dinero', 'reports.editar_baremo',
+  'links_pago.ver_todos', 'links_pago.configurar', 'stripe.edit', 'conversions.sin_gestora',
+  'reports.dinero', 'reports.editar_baremo', 'commissions.edit', 'commissions.pagar',
   'registro.view', 'status.view', 'correos.view', 'tasks.view_all', 'monitask.view',
   'leads.delete', 'leads.duplicados', 'proceso.configurar_pasos', 'products.create', 'products.edit',
 ];
@@ -69,7 +69,7 @@ const DE_ADMINISTRACION = [
 beforeAll(async () => {
   const e = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id',
     [`${MARCA} empresa`, `B9${Date.now().toString().slice(-7)}`]);
-  ids.issuers.push(e.id);
+  ids.issuers.push(e.id); EMPRESA = e.id;
   A = (await one(`INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id)
                    VALUES ($1, $2, $3, $4) RETURNING id`,
     [`${MARCA} a`, `${MARCA.toLowerCase()}-a`, `${MARCA}-k-a`, e.id])).id;
@@ -116,6 +116,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await q('DELETE FROM equipo_comercial WHERE lider_id = ANY($1::int[]) OR gestora_id = ANY($1::int[])', [ids.users]);
   await q('DELETE FROM permisos_registro WHERE usuario_id = ANY($1::int[]) OR quien_id = ANY($1::int[])', [ids.users]).catch(() => {});
+  await q('DELETE FROM conversion_vendedoras WHERE conversion_id = ANY($1::int[])', [ids.ventas]).catch(() => {});
   await q('DELETE FROM conversion_payments WHERE conversion_id = ANY($1::int[])', [ids.ventas]);
   await q('DELETE FROM conversions WHERE id = ANY($1::int[])', [ids.ventas]);
   await q('DELETE FROM lead_interactions WHERE lead_id = ANY($1::int[])', [ids.leads]).catch(() => {});
@@ -145,7 +146,8 @@ describe('el rol en el catálogo', () => {
     const lider = SYSTEM_ROLE_DEFAULTS.lider_equipo;
     const deGestora = Object.entries(SYSTEM_ROLE_DEFAULTS.gestor).filter(([, v]) => v).map(([k]) => k);
     expect(deGestora.filter((k) => lider[k] !== true)).toEqual([]);
-    for (const k of ['reports.puesto_ajeno', 'reports.view', 'ventas.view_equipo', 'leads.assign', 'whatsapp.supervisar', 'equipos.su_equipo']) {
+    for (const k of ['reports.puesto_ajeno', 'reports.view', 'ventas.view_equipo', 'leads.assign', 'whatsapp.supervisar', 'equipos.su_equipo',
+      'conversions.reparto', 'reports.informe_mensual']) {
       expect(lider[k], k).toBe(true);
     }
     expect(cat.dependenciasRotas(lider)).toEqual([]);
@@ -260,6 +262,54 @@ describe('el alcance: ella y su equipo', () => {
     expect((await pedir(G1, '/api/users?limit=100&alcance=comercial')).status).toBe(403);
     // El admin, como siempre: su campus entero.
     expect(idsDe(await pedir(ADMIN, `/api/users?limit=100&projectId=${A}`))).toContain(FUERA.id);
+  });
+});
+
+describe('lo que Diego añadió el 24/11: repartir una venta y el informe mensual, de su equipo', () => {
+  const repartir = (u, venta, partes) => request.put(`/api/conversions/${venta}/reparto`).set(como(u)).send({ partes });
+  const mitad = (a, b) => [{ user_id: a.id, porcentaje: 50 }, { user_id: b.id, porcentaje: 50 }];
+
+  it('reparte una venta de su equipo entre ella y su equipo; con alguien de fuera, 403', async () => {
+    const r = await repartir(LIDER, V1, mitad(G1, G2));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const conFuera = await repartir(LIDER, V1, mitad(G1, FUERA));
+    expect(conFuera.status).toBe(403);
+    expect(conFuera.body.code).toBe('FUERA_DE_TU_EQUIPO');
+    // La venta de otra, ni tocarla.
+    expect((await repartir(LIDER, V_FUERA, mitad(G1, G2))).status).toBe(403);
+    // Una gestora no reparte.
+    expect((await repartir(G1, V1, mitad(G1, G2))).status).toBe(403);
+    // Las candidatas que le enseña la pantalla: ella y su equipo.
+    const g = await pedir(LIDER, `/api/conversions/${V1}/reparto`);
+    expect(g.status).toBe(200);
+    const candidatas = g.body.data.candidatas.map((c) => Number(c.id));
+    expect(candidatas).not.toContain(FUERA.id);
+    expect(candidatas.every((id) => [LIDER.id, G1.id, G2.id].includes(id))).toBe(true);
+  });
+
+  it('deshace su reparto; uno con alguien de fuera (lo hizo administración), no', async () => {
+    expect((await request.delete(`/api/conversions/${V1}/reparto`).set(como(LIDER))).status).toBe(200);
+    await q(`INSERT INTO conversion_vendedoras (conversion_id, user_id, porcentaje, repartida_por_user_id)
+             VALUES ($1, $2, 50, $4), ($1, $3, 50, $4)`, [V1, G1.id, FUERA.id, ADMIN.id]);
+    const r = await request.delete(`/api/conversions/${V1}/reparto`).set(como(LIDER));
+    expect(r.status).toBe(403);
+    expect((await q('SELECT 1 FROM conversion_vendedoras WHERE conversion_id = $1', [V1])).length).toBe(2);
+    await q('DELETE FROM conversion_vendedoras WHERE conversion_id = $1', [V1]);
+  });
+
+  it('el informe mensual: el de su equipo, sin las de fuera; el ZIP de la empresa, 403', async () => {
+    const mes = new Date().toISOString().slice(0, 7);
+    const r = await pedir(LIDER, `/api/informe-mensual?periodo=${mes}`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const quienes = r.body.data.comerciales.map((c) => Number(c.id));
+    expect(quienes).toContain(G1.id);
+    expect(quienes).not.toContain(FUERA.id);
+    // La admin sin equipo ve a todas.
+    const admin = await pedir(ADMIN, `/api/informe-mensual?periodo=${mes}`);
+    expect(admin.body.data.comerciales.map((c) => Number(c.id))).toContain(FUERA.id);
+    expect((await pedir(LIDER, `/api/informe-mensual/zip?periodo=${mes}&issuerId=${EMPRESA}`)).status).toBe(403);
+    // Una gestora no lo ve.
+    expect((await pedir(G1, `/api/informe-mensual?periodo=${mes}`)).status).toBe(403);
   });
 });
 

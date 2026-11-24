@@ -48,7 +48,8 @@ const GESTORA = ['leads.view', 'leads.create', 'leads.edit', 'leads.enviar_corre
   'accesos.pedir', 'change_requests.view', 'change_requests.create', 'change_requests.edit', 'change_requests.approve',
   'incidencias.view', 'documents.view', 'projects.view', 'channels.view', 'field_defs.view', 'installation.view',
   'cuenta.cambiar_correo'];
-const LIDER = [...GESTORA, 'leads.assign', 'whatsapp.supervisar', 'ventas.view_equipo', 'reports.view', 'reports.puesto_ajeno', 'equipos.su_equipo'];
+const LIDER = [...GESTORA, 'leads.assign', 'whatsapp.supervisar', 'ventas.view_equipo', 'reports.view', 'reports.puesto_ajeno', 'equipos.su_equipo',
+  'conversions.reparto', 'reports.informe_mensual'];
 const yo = { role: 'lider_equipo' };
 
 describe('el rol en la pantalla de Usuarios', () => {
