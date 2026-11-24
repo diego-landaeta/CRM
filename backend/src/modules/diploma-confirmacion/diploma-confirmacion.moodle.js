@@ -7,6 +7,7 @@ import * as model from './diploma-confirmacion.model.js';
 import { pedir, DESDE_MOODLE } from './diploma-confirmacion.service.js';
 import { recorrer } from '../certifex/certifex.cliente.js';
 import { proyectosDeCentro } from '../certifex/certifex.programa.js';
+import { pasarAPendientes } from '../certifex/certifex.pendientes.js';
 
 /*
   PASO 1 DE LA #768: «Moodle detecta que el alumno tiene todas las actividades al
@@ -24,18 +25,29 @@ import { proyectosDeCentro } from '../certifex/certifex.programa.js';
        la matrícula automática; y su venta, si la hay (solo se informa);
     3. su matrícula en Certifex: la de ese curso de Moodle (`curso.ref` es el id del
        curso), ese correo y un campus de Certifex que sea este proyecto;
-    4. si ya pidió el diploma en Certifex y no hay confirmación viva, la de siempre:
-       `pedir()` del servicio, la misma que el botón. Si ya la hay, nada (idempotente).
+    4. si aún no ha pedido el diploma en Certifex, el CRM lo pasa a pendientes, lo mismo
+       que el botón «Pasar a pendientes» del panel Diplomas (`pasarAPendientes`,
+       certifex.pendientes.js). Regla de Diego (PR #1048): el alumno no pide el diploma
+       hasta tener el curso al 100 %, o hasta que una gestora le dé «Emitir» desde el
+       CRM; al 100 % el CRM lo pasa solo. Va forzado: este aviso ES el 100 % (lo que
+       Certifex sepa de sus calificaciones puede ir con retraso); queda en el registro;
+    5. y, sin confirmación viva, la de siempre: `pedir()` del servicio, la misma que el
+       botón. Si ya la hay, nada (idempotente).
+
+  Quien terminó antes de encender el interruptor no recibe aviso: lo lleva la gestora a
+  mano desde el CRM. Sin ninguna actividad con seguimiento, el plugin no avisa.
 
   Lo que no se puede resolver solo (sin ficha, curso sin producto, sin matrícula en
-  Certifex, sin pedir el diploma, `pedir` que falla) no es un error para Moodle: se
-  avisa a administración del campus por la campana y se contesta 200. Una campana por
-  `cambio_id`, aunque el aviso llegue dos veces. Certifex caído sí es un 503: el plugin
-  lo reintenta más tarde.
+  Certifex, Certifex que no acepta el paso a pendientes por los datos, `pedir` que
+  falla) no es un error para Moodle: se avisa a administración del campus por la campana
+  y se contesta 200. Una campana por `cambio_id`, aunque el aviso llegue dos veces.
+  Certifex caído (al buscar la matrícula o al pasarla a pendientes) sí es un 503: el
+  plugin lo reintenta más tarde, y lo ya hecho no se repite.
 
   INTERRUPTOR: DIPLOMA_CONFIRMACION_AUTO (apagado de serie), además de
   DIPLOMA_CONFIRMACION_ACTIVA y de que el campus esté en DIPLOMA_CONFIRMACION_CENTROS.
-  Apagado, el aviso se contesta 200 «ignorado» y no se toca nada.
+  Apagado, el aviso se contesta 200 «ignorado» y no se toca nada (tampoco se pasa a
+  pendientes).
 */
 
 const idMoodle = z.coerce.number().int().positive();
@@ -164,6 +176,14 @@ async function avisarAdministracion(projectId, aviso, title, message, extra = {}
   }
 }
 
+/**
+ * ¿Es Certifex caído (que el plugin reintente) y no un «no» por los datos? No responde, o
+ * contesta con un 5xx (el cliente lo da como CERTIFEX_ERROR 502). La clave mal puesta o
+ * Certifex sin configurar no se arreglan reintentando: campana.
+ */
+const certifexCaido = (err) => err?.code === 'CERTIFEX_NO_RESPONDE'
+  || (err?.code === 'CERTIFEX_ERROR' && Number(err.statusCode) === 502);
+
 const quien = (a) => a.alumno.nombre || a.alumno.email || `usuario ${a.alumno.id} de Moodle`;
 const cursoTxt = (a) => a.curso.nombre ? `«${a.curso.nombre}»` : `el curso ${a.curso.id} de Moodle`;
 
@@ -222,21 +242,48 @@ export async function recibirCursoCompletado(projectId, avisoRecibido) {
   if (c.nexpediente) return { resultado: 'ya_emitido', matriculaId, ...base };
   const viva = await model.deLaMatricula(matriculaId);
   if (viva) return { resultado: 'repetido', matriculaId, estado: viva.estado, ...base };
+  // Con la confirmación apagada en este campus (DIPLOMA_CONFIRMACION_CENTROS) no se toca
+  // nada, tampoco Certifex: ni se pasa a pendientes.
+  if (!cfg.activaEn(c.centro)) return { resultado: 'ignorado', motivo: `la confirmación no va en ${c.centro}`, matriculaId, ...base };
+
+  let pasado = false;
   if (!c.solicitud) {
-    // Pedir la confirmación exige la solicitud del diploma en Certifex (la que crea el
-    // alumno con «Solicitar mi diploma» o el «Pasar a pendientes» del panel).
-    await avisarAdministracion(pid, a, 'Curso terminado: aún no ha pedido el diploma',
-      `${quien(a)} ha terminado ${cursoTxt(a)} con todo corregido y aún no ha pedido el diploma. Pásalo a pendientes en Diplomas y pide sus datos.`,
-      { ...base, matriculaId });
-    return { resultado: 'sin_solicitud', matriculaId, ...base };
+    // Pedir la confirmación exige la solicitud del diploma en Certifex. Al 100 % la crea
+    // el CRM, como el «Pasar a pendientes» del panel (regla de Diego, PR #1048).
+    try {
+      await pasarAPendientes(c, c.centro, {
+        creadoPor: DESDE_MOODLE.email, forzar: true,
+        log: { origen: 'moodle_curso_completado', projectId: pid, cambioId: a.completado.cambio_id },
+      });
+      pasado = true;
+    } catch (err) {
+      if (certifexCaido(err)) {
+        logger.warn({ err: err.message, projectId: pid, matriculaId }, 'Diploma: Certifex no contesta al pasar a pendientes por curso terminado');
+        throw new AppError('Certifex no responde: prueba más tarde', 503, 'CERTIFEX_NO_RESPONDE');
+      }
+      if (!(err instanceof AppError)) throw err;
+      if (err.code === 'YA_EMITIDO') return { resultado: 'ya_emitido', matriculaId, ...base };
+      await avisarAdministracion(pid, a, 'Curso terminado: no se pudo pasar a pendientes',
+        `${quien(a)} ha terminado ${cursoTxt(a)}, pero Certifex no lo ha pasado a pendientes: ${err.message}`,
+        { ...base, matriculaId, codigo: err.code ?? 'ERROR' });
+      return { resultado: 'no_pasada', matriculaId, codigo: err.code ?? 'ERROR', ...base };
+    }
   }
 
-  const [r] = await pedir(DESDE_MOODLE, [matriculaId]);
+  let r;
+  try {
+    [r] = await pedir(DESDE_MOODLE, [matriculaId]);
+  } catch (err) {
+    // Ya pasado a pendientes (si hacía falta): el reintento solo pedirá los datos.
+    if (!certifexCaido(err)) throw err;
+    logger.warn({ err: err.message, projectId: pid, matriculaId, pasado }, 'Diploma: Certifex no contesta al pedir los datos por curso terminado');
+    throw new AppError('Certifex no responde: prueba más tarde', 503, 'CERTIFEX_NO_RESPONDE');
+  }
   if (!r?.ok) {
     await avisarAdministracion(pid, a, 'Curso terminado: no se pudieron pedir los datos del diploma',
-      `${quien(a)} · ${cursoTxt(a)}: ${r?.error || 'error'}`, { ...base, matriculaId });
-    return { resultado: 'no_pedida', matriculaId, codigo: r?.codigo ?? 'ERROR', ...base };
+      `${quien(a)} · ${cursoTxt(a)}${pasado ? ' (ya está en pendientes)' : ''}: ${r?.error || 'error'}`, { ...base, matriculaId, pasado });
+    return { resultado: 'no_pedida', matriculaId, pasado, codigo: r?.codigo ?? 'ERROR', ...base };
   }
-  logger.info({ projectId: pid, matriculaId, leadId: lead.id }, 'Diploma: confirmación de datos pedida por el aviso de curso terminado');
-  return { resultado: 'pedida', matriculaId, enviado: !!r.enviado, simulado: !!r.simulado, ...base };
+  logger.info({ projectId: pid, matriculaId, leadId: lead.id, pasado }, 'Diploma: confirmación de datos pedida por el aviso de curso terminado');
+  return { resultado: 'pedida', matriculaId, pasado, enviado: !!r.enviado, simulado: !!r.simulado, ...base };
 }

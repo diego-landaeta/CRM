@@ -6,30 +6,54 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
  * confirmación de datos del diploma, la misma de «Pedir datos».
  *
  *   interruptor apagado → nada; encendido → se pide (una vez: el aviso repetido no la
- *   repite); sin ficha, curso sin producto o sin pedir el diploma en Certifex → campana a
- *   administración (una por aviso) y 200; Certifex caído → 503 (el plugin reintenta);
- *   y por la puerta firmada de verdad, sin romper el aviso de mensajes.
+ *   repite); sin pedir el diploma en Certifex → el CRM lo pasa a pendientes (el «Pasar a
+ *   pendientes» del panel) y pide (regla de Diego en la PR #1048); sin ficha, curso sin
+ *   producto o Certifex que no acepta el paso a pendientes → campana a administración
+ *   (una por aviso) y 200; Certifex caído → 503 (el plugin reintenta, sin repetir lo
+ *   hecho); y por la puerta firmada de verdad, sin romper el aviso de mensajes.
  *
  * Con base real (la de db-preparar). Certifex, Brevo y la campana, simulados (la campana
  * se guarda en admin_notifications para poder comprobar que no se repite).
+ *
+ * El Certifex simulado: `/candidatos` con `solicitadas: '1'` (lo que usa `pedir()`) solo
+ * da las que tienen solicitud; `POST /matriculas` engancha la matrícula de Moodle del
+ * mismo correo, curso y campus y le pone la solicitud (lo que hace Certifex de verdad).
  */
 
 vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
-const estado = { candidatos: [], caido: null };
+// caido: todo Certifex; caidoAlPasar: solo POST /matriculas; caidoAlPedir: solo la lista de `pedir()`.
+const estado = { candidatos: [], caido: null, caidoAlPasar: false, caidoAlPedir: false, engancharOtra: false };
 const llamadas = [];
 vi.mock('../src/modules/certifex/certifex.cliente.js', async () => {
   const { AppError } = await import('../src/shared/utils/AppError.js');
+  const noResponde = () => new AppError('Certifex no responde. Prueba de nuevo en un momento.', 502, 'CERTIFEX_NO_RESPONDE');
   return {
-    certifex: vi.fn(async (metodo, ruta) => { llamadas.push({ metodo, ruta }); return {}; }),
+    certifex: vi.fn(async (metodo, ruta, cuerpo) => {
+      llamadas.push({ metodo, ruta, cuerpo });
+      if (estado.caido) throw new AppError(estado.caido.msg, estado.caido.status, estado.caido.code);
+      if (metodo === 'POST' && ruta === '/matriculas') {
+        if (estado.caidoAlPasar) throw noResponde();
+        const c = estado.candidatos.find((x) => x.centro === cuerpo.centro && x.titular.email === cuerpo.email
+          && x.curso.nombre === cuerpo.curso);
+        if (!c || estado.engancharOtra) return { matriculaId: 1, vinculadaMoodle: false, yaExistia: false };
+        const yaExistia = !!c.solicitud;
+        c.solicitud ??= { nombre: cuerpo.nombre, en: new Date().toISOString() };
+        return { matriculaId: c.matriculaId, vinculadaMoodle: true, yaExistia, nexpediente: c.nexpediente };
+      }
+      return {};
+    }),
     recorrer: vi.fn(async (ruta, params, { filtro }) => {
       llamadas.push({ ruta, params });
       if (estado.caido) throw new AppError(estado.caido.msg, estado.caido.status, estado.caido.code);
-      return { filas: estado.candidatos.filter(filtro), truncado: false };
+      if (params?.solicitadas === '1' && estado.caidoAlPedir) throw noResponde();
+      const filas = estado.candidatos.filter((c) => params?.solicitadas !== '1' || c.solicitud);
+      return { filas: filas.filter(filtro), truncado: false };
     }),
     TAM_CERTIFEX: 200,
   };
 });
+const pasos = () => llamadas.filter((l) => l.metodo === 'POST' && l.ruta === '/matriculas');
 const correos = [];
 vi.mock('../src/shared/services/brevo.service.js', () => ({
   sendEmail: vi.fn(async (c) => { correos.push(c); return { sent: true }; }),
@@ -63,7 +87,7 @@ let producto;
 let n = 0;
 
 /** Un alumno: su ficha, su venta del producto del curso y (si se pide) su matrícula en Certifex. */
-async function alumno({ ficha = true, venta = true, certifex = true, solicitud = true } = {}) {
+async function alumno({ ficha = true, venta = true, certifex = true, solicitud = true, nombre } = {}) {
   n += 1;
   const email = `alumno.${BASE + n}@example.com`;
   let leadId = null;
@@ -77,7 +101,7 @@ async function alumno({ ficha = true, venta = true, certifex = true, solicitud =
   }
   const c = {
     matriculaId: BASE + n, centro: MARCA,
-    titular: { nombre: `Alumno Prueba ${n}`, email, dni: '12345678Z' },
+    titular: { nombre: nombre ?? 'Alumno De Prueba', email, dni: '12345678Z' },
     solicitud: solicitud ? { nombre: `Alumno Prueba ${n}`, en: new Date().toISOString() } : null,
     curso: { ref: CURSO, nombre: 'Curso 768' }, nexpediente: null,
   };
@@ -109,6 +133,9 @@ beforeEach(() => {
   correos.length = 0;
   campanas.length = 0;
   estado.caido = null;
+  estado.caidoAlPasar = false;
+  estado.caidoAlPedir = false;
+  estado.engancharOtra = false;
   process.env.DIPLOMA_CONFIRMACION_ACTIVA = '1';
   process.env.DIPLOMA_CONFIRMACION_AUTO = '1';
   process.env.DIPLOMA_CONFIRMACION_CENTROS = MARCA;
@@ -186,6 +213,98 @@ describe('#768 paso 1 · encendido', () => {
   });
 });
 
+describe('#768 paso 1 · sin pedir el diploma: el CRM lo pasa a pendientes y pide (PR #1048)', () => {
+  it('sin solicitud en Certifex: la pasa a pendientes (como el botón del panel) y pide los datos', async () => {
+    const { email, c } = await alumno({ solicitud: false });
+    const r = await recibirCursoCompletado(proyecto.id, aviso(email));
+    expect(r).toMatchObject({ resultado: 'pedida', matriculaId: c.matriculaId, pasado: true });
+    expect(pasos()).toHaveLength(1);
+    expect(pasos()[0].cuerpo).toMatchObject({
+      centro: MARCA, email, dni: '12345678Z', curso: 'Curso 768', creadoPor: 'Moodle (curso terminado)',
+    });
+    expect(pasos()[0].cuerpo.nombre).toBeTruthy();
+    expect(c.solicitud).not.toBeNull();
+    const [f] = await filas(c.matriculaId);
+    expect(f).toMatchObject({ estado: 'pendiente', pedido_por: 'Moodle (curso terminado)' });
+    expect(campanas).toHaveLength(0);
+  });
+
+  it('ya pendiente (pidió el diploma): solo pide, no pasa nada a Certifex', async () => {
+    const { email, c } = await alumno({ solicitud: true });
+    const r = await recibirCursoCompletado(proyecto.id, aviso(email));
+    expect(r).toMatchObject({ resultado: 'pedida', matriculaId: c.matriculaId, pasado: false });
+    expect(pasos()).toHaveLength(0);
+    expect(await filas(c.matriculaId)).toHaveLength(1);
+  });
+
+  it('repetido: el mismo aviso otra vez no pasa ni pide nada', async () => {
+    const { email, c } = await alumno({ solicitud: false });
+    const a = aviso(email);
+    expect((await recibirCursoCompletado(proyecto.id, a)).resultado).toBe('pedida');
+    llamadas.length = 0;
+    expect((await recibirCursoCompletado(proyecto.id, a)).resultado).toBe('repetido');
+    expect((await recibirCursoCompletado(proyecto.id, aviso(email))).resultado).toBe('repetido');
+    expect(pasos()).toHaveLength(0);
+    expect(await filas(c.matriculaId)).toHaveLength(1);
+    expect(campanas).toHaveLength(0);
+  });
+
+  it('Certifex caído al pasar a pendientes: 503 y nada hecho; el reintento lo pasa y pide', async () => {
+    const { email, c } = await alumno({ solicitud: false });
+    const a = aviso(email);
+    estado.caidoAlPasar = true;
+    await expect(recibirCursoCompletado(proyecto.id, a)).rejects.toMatchObject({ statusCode: 503, code: 'CERTIFEX_NO_RESPONDE' });
+    expect(c.solicitud).toBeNull();
+    expect(await filas(c.matriculaId)).toHaveLength(0);
+    expect(campanas).toHaveLength(0);
+    estado.caidoAlPasar = false;
+    expect(await recibirCursoCompletado(proyecto.id, a)).toMatchObject({ resultado: 'pedida', pasado: true });
+    expect(await filas(c.matriculaId)).toHaveLength(1);
+  });
+
+  it('Certifex caído al pedir, ya pasado a pendientes: 503; el reintento solo pide', async () => {
+    const { email, c } = await alumno({ solicitud: false });
+    const a = aviso(email);
+    estado.caidoAlPedir = true;
+    await expect(recibirCursoCompletado(proyecto.id, a)).rejects.toMatchObject({ statusCode: 503 });
+    expect(c.solicitud).not.toBeNull();
+    expect(await filas(c.matriculaId)).toHaveLength(0);
+    estado.caidoAlPedir = false;
+    llamadas.length = 0;
+    expect(await recibirCursoCompletado(proyecto.id, a)).toMatchObject({ resultado: 'pedida', pasado: false });
+    expect(pasos()).toHaveLength(0);
+    expect(await filas(c.matriculaId)).toHaveLength(1);
+  });
+
+  it('Certifex no lo acepta por los datos (nombre que no vale): campana, ni pasa ni pide', async () => {
+    const { email, c } = await alumno({ solicitud: false, nombre: 'X' });
+    const a = aviso(email);
+    expect(await recibirCursoCompletado(proyecto.id, a)).toMatchObject({ resultado: 'no_pasada', codigo: 'NOMBRE_NO_VALIDO' });
+    expect((await recibirCursoCompletado(proyecto.id, a)).resultado).toBe('no_pasada');
+    expect(pasos()).toHaveLength(0);
+    expect(campanas).toHaveLength(1);
+    expect(campanas[0].title).toMatch(/no se pudo pasar a pendientes/);
+    expect(await filas(c.matriculaId)).toHaveLength(0);
+  });
+
+  it('Certifex engancha otra matrícula: no se da por hecho, campana', async () => {
+    const { email, c } = await alumno({ solicitud: false });
+    estado.engancharOtra = true;
+    expect(await recibirCursoCompletado(proyecto.id, aviso(email))).toMatchObject({ resultado: 'no_pasada', codigo: 'CERTIFEX_NO_ENGANCHA' });
+    expect(campanas).toHaveLength(1);
+    expect(await filas(c.matriculaId)).toHaveLength(0);
+  });
+
+  it('con la confirmación apagada en ese campus (CENTROS) no se pasa a pendientes', async () => {
+    process.env.DIPLOMA_CONFIRMACION_CENTROS = 'OTRO';
+    const { email, c } = await alumno({ solicitud: false });
+    expect((await recibirCursoCompletado(proyecto.id, aviso(email))).resultado).toBe('ignorado');
+    expect(pasos()).toHaveLength(0);
+    expect(c.solicitud).toBeNull();
+    expect(await filas(c.matriculaId)).toHaveLength(0);
+  });
+});
+
 describe('#768 paso 1 · lo que no se resuelve solo: campana a administración', () => {
   it('sin ficha del alumno: campana (una por aviso) y 200', async () => {
     const { email, c } = await alumno({ ficha: false });
@@ -204,13 +323,6 @@ describe('#768 paso 1 · lo que no se resuelve solo: campana a administración',
     expect((await recibirCursoCompletado(proyecto.id, a)).resultado).toBe('sin_producto');
     expect(campanas).toHaveLength(1);
     expect(campanas[0].title).toMatch(/no tiene producto/);
-  });
-
-  it('sin pedir el diploma en Certifex: campana, no se pide', async () => {
-    const { email, c } = await alumno({ solicitud: false });
-    expect((await recibirCursoCompletado(proyecto.id, aviso(email))).resultado).toBe('sin_solicitud');
-    expect(campanas[0].title).toMatch(/aún no ha pedido el diploma/);
-    expect(await filas(c.matriculaId)).toHaveLength(0);
   });
 
   it('sin matrícula en Certifex: campana', async () => {
