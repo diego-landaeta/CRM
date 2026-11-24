@@ -14,7 +14,7 @@ import {
 } from '../api/tutores.api';
 import MisCursosPage from './MisCursosPage';
 import { useAuth } from '@/contexts/AuthContext';
-import { esSoloRedactora } from '@/shared/lib/roles';
+import { soloEsTutorRedactor } from '@/shared/lib/roles';
 // Lo que hay que hacer en un solo sitio y el selector de campus (Diego, 24/11).
 import {
   SelectorCampus, PorResponder, PorCorregir, entregasPorCorregir, leerCampusElegidos, guardarCampusElegidos,
@@ -358,7 +358,7 @@ const PESTANAS = [
 export default function MiCampusPage() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
-  const soloRedactora = esSoloRedactora(user);
+  const soloRedactora = soloEsTutorRedactor(user);
   const pestanas = soloRedactora ? PESTANAS.filter((t) => t.id !== 'cursos') : PESTANAS;
   const vista: 'campus' | 'cursos' = !soloRedactora && params.get('vista') === 'cursos' ? 'cursos' : 'campus';
   const irA = (v: 'campus' | 'cursos') => setParams(v === 'cursos' ? { vista: 'cursos' } : {}, { replace: true });

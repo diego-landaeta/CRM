@@ -20,7 +20,8 @@ vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 vi.mock('@/modules/tutores/pages/MisCursosPage', () => ({ default: () => <p>LISTA DE COMISIONES</p> }));
 
 const { default: MiCampusPage } = await import('@/modules/tutores/pages/MiCampusPage');
-const { esSoloRedactora } = await import('@/shared/lib/roles');
+const { soloEsTutorRedactor } = await import('@/shared/lib/roles');
+const { nombreDeSeccion } = await import('@/shared/components/layout/Sidebar');
 
 afterEach(() => cleanup());
 
@@ -39,9 +40,16 @@ describe('Mi campus sin comisiones para la redactora', () => {
   });
 
   it('quién es «solo redactora»', () => {
-    expect(esSoloRedactora({ role: 'tutor_redactor' })).toBe(true);
-    expect(esSoloRedactora({ role: 'tutor_redactor', roles_extra: ['tutor'] })).toBe(false);
-    expect(esSoloRedactora({ role: 'tutor' })).toBe(false);
-    expect(esSoloRedactora(null)).toBe(false);
+    expect(soloEsTutorRedactor({ role: 'tutor_redactor' })).toBe(true);
+    expect(soloEsTutorRedactor({ role: 'tutor_redactor', roles_extra: ['tutor'] })).toBe(false);
+    expect(soloEsTutorRedactor({ role: 'tutor' })).toBe(false);
+    expect(soloEsTutorRedactor(null)).toBe(false);
+  });
+
+  it('su tablero se llama «Mis tareas», no «Equipo de desarrollo»', () => {
+    const seccion = { label: 'Equipo de Desarrollo', labelRedactora: 'Mis tareas' };
+    expect(nombreDeSeccion(seccion, { role: 'tutor_redactor' })).toBe('Mis tareas');
+    expect(nombreDeSeccion(seccion, { role: 'admin' })).toBe('Equipo de Desarrollo');
+    expect(nombreDeSeccion({ label: 'Comercial' }, { role: 'tutor_redactor' })).toBe('Comercial');
   });
 });
