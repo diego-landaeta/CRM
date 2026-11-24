@@ -46,6 +46,7 @@ const { frasesDelAviso, euros, cobrosEnLista } = await import('@/modules/links-p
 const { agruparPorEmpresa, stripePrestadoDe, SIN_EMPRESA } = await import('@/shared/lib/campusPorEmpresa');
 const { default: AvisoConectarStripe } = await import('@/modules/links-pago/components/AvisoConectarStripe');
 const { default: EstadoDeLasIntegraciones } = await import('@/modules/accounting/components/EstadoDeLasIntegraciones');
+const { default: SaludDeLasConexiones } = await import('@/modules/accounting/components/SaludDeLasConexiones');
 const { default: ConversionDialog } = await import('@/modules/conversions/components/ConversionDialog');
 
 // Dos empresas y un campus suelto, como llegan en /auth/me.
@@ -277,5 +278,29 @@ describe('3 · Stripe por empresa y campus', () => {
     expect(within(grupos[0]).getAllByText('Usa el Stripe de ICTESS').length).toBeGreaterThan(0);
     expect(within(grupos[1]).getByText('Psiko Aprende')).toBeTruthy();
     expect(within(grupos[2]).getByText('Campus suelto')).toBeTruthy();
+  });
+
+  it('Integraciones › Salud de las conexiones: cada empresa con sus campus; el que usa el Stripe de otro, conectado', async () => {
+    const vacia = (resumen) => ({ estado: 'sin_configurar', resumen, ultimaSenal: null, queSenal: null, motivo: null, comprobado: null });
+    const bien = { estado: 'bien', resumen: 'Cobros al día', ultimaSenal: null, queSenal: null, motivo: null, comprobado: null };
+    get.mockResolvedValue({ success: true, data: {
+      comprobado: '2026-11-24T12:00:00Z',
+      conexiones: [{ clave: 'stripe', titulo: 'Stripe' }],
+      campus: [
+        { id: 1, nombre: 'Psiko Aprende', peor: 'bien', casillas: { stripe: bien } },
+        { id: 2, nombre: 'ICTESS', peor: 'bien', casillas: { stripe: bien } },
+        { id: 3, nombre: 'ICTESS US', peor: 'sin_configurar', casillas: { stripe: vacia('Sin clave de Stripe') }, stripe_prestado_de: { id: 2, nombre: 'ICTESS' } },
+        { id: 4, nombre: 'Campus suelto', peor: 'sin_configurar', casillas: { stripe: vacia('Sin clave de Stripe') } },
+      ],
+    } });
+    render(<SaludDeLasConexiones deTodos />);
+    const tabla = await screen.findByRole('table', { name: 'Salud de las conexiones por campus' });
+    const grupos = within(tabla).getAllByTestId('grupo-empresa');
+    expect(grupos.map((g) => g.querySelector('th').textContent.trim())).toEqual(['Alfa Educación SL', 'Zeta Formación SL', SIN_EMPRESA]);
+    expect(within(grupos[0]).getByText('ICTESS US')).toBeTruthy();
+    expect(within(grupos[0]).getByText('Usa el Stripe de ICTESS')).toBeTruthy();
+    expect(within(grupos[1]).getByText('Psiko Aprende')).toBeTruthy();
+    expect(within(grupos[2]).getByText('Campus suelto')).toBeTruthy();
+    expect(within(grupos[2]).queryByText(/Usa el Stripe/)).toBeNull();
   });
 });
