@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /**
@@ -18,7 +18,7 @@ vi.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light', t
 const get = vi.fn();
 vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => get(...a), post: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
-vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => !!estado.permisos[k], llevaEquipo: false }) }));
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => !!(estado.permisos['*'] || estado.permisos[k]), llevaEquipo: false }) }));
 
 const { default: Sidebar } = await import('@/shared/components/layout/Sidebar');
 
@@ -30,12 +30,16 @@ beforeEach(() => {
 });
 
 describe('el aviso en «Consultas»', () => {
-  it('la tutora ve cuántas suyas esperan respuesta', async () => {
-    estado.role = 'tutor'; estado.permisos = { 'consultas.atender': true };
-    render(<MemoryRouter><Sidebar /></MemoryRouter>);
+  it('quien atiende consultas ve cuántas suyas esperan respuesta, en «Consultas»', async () => {
+    // Un admin que también atiende (permiso «*»): el menú entero, como en sidebarMonta.
+    estado.role = 'admin'; estado.permisos = { '*': true };
+    const { container } = render(<MemoryRouter><Sidebar /></MemoryRouter>);
     await waitFor(() => expect(get.mock.calls.some((c) => c[0] === '/consultas/mias?estado=pendientes')).toBe(true));
-    const enlace = (await screen.findAllByRole('link')).find((a) => a.getAttribute('href') === '/consultas');
-    await waitFor(() => expect(enlace.textContent).toContain('3'));
+    await waitFor(() => {
+      const enlace = container.querySelector('a[href="/consultas"]');
+      expect(enlace).toBeTruthy();
+      expect(enlace.textContent).toContain('3');
+    });
   });
 
   it('administración, las de su campus', async () => {
