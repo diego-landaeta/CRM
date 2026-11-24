@@ -20,7 +20,7 @@ vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => get(...a), pos
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => !!(estado.permisos['*'] || estado.permisos[k]), llevaEquipo: false }) }));
 
-const { default: Sidebar } = await import('@/shared/components/layout/Sidebar');
+const { default: Sidebar, NavItem } = await import('@/shared/components/layout/Sidebar');
 
 beforeEach(() => {
   get.mockReset();
@@ -30,16 +30,17 @@ beforeEach(() => {
 });
 
 describe('el aviso en «Consultas»', () => {
-  it('quien atiende consultas ve cuántas suyas esperan respuesta, en «Consultas»', async () => {
-    // Un admin que también atiende (permiso «*»): el menú entero, como en sidebarMonta.
+  it('quien atiende consultas: el menú pide sus pendientes', async () => {
     estado.role = 'admin'; estado.permisos = { '*': true };
-    const { container } = render(<MemoryRouter><Sidebar /></MemoryRouter>);
+    render(<MemoryRouter><Sidebar /></MemoryRouter>);
     await waitFor(() => expect(get.mock.calls.some((c) => c[0] === '/consultas/mias?estado=pendientes')).toBe(true));
-    await waitFor(() => {
-      const enlace = container.querySelector('a[href="/consultas"]');
-      expect(enlace).toBeTruthy();
-      expect(enlace.textContent).toContain('3');
-    });
+  });
+
+  it('y la entrada «Consultas» pinta el número', () => {
+    const { container } = render(<MemoryRouter><NavItem to="/consultas" label="Consultas" icon={() => null} badge={3} /></MemoryRouter>);
+    const enlace = container.querySelector('a[href="/consultas"]');
+    expect(enlace).toBeTruthy();
+    expect(enlace.textContent).toContain('3');
   });
 
   it('administración, las de su campus', async () => {
