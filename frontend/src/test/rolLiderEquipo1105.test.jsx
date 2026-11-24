@@ -87,7 +87,7 @@ describe('menú · líder de equipo (CRM#1105)', () => {
     for (const no of ['/finanzas', '/finanzas/egresos', '/finanzas/por-pagar', '/finanzas/comisiones', '/finanzas/nominas',
       '/finanzas/facturas', '/finanzas/integraciones', '/finanzas/facturas-colaboradores', '/registro', '/correos',
       '/configuracion/claves', '/conexion/mcp', '/conexion/moodle', '/conexion/conectores', '/conexion/webhooks',
-      '/conexion/asignacion-leads', '/tutores', '/productos', '/tareas/configurar', '/prospectos/revision-duplicados']) {
+      '/conexion/asignacion-leads', '/tutores', '/productos/woocommerce', '/productos/categorias', '/tareas/configurar', '/prospectos/revision-duplicados']) {
       expect(ve, no).not.toContain(no);
     }
   });
