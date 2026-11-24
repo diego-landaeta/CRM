@@ -227,7 +227,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     await screen.findByTestId('resumen-mi-campus');
     await abrir('mi-campus');
     await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
-    expect(recorrer(11)).toEqual(titulos('mi-campus', ['Tus campus']));
+    expect(recorrer(8)).toEqual(titulos('mi-campus', ['Tus campus']));
   });
 
   it('Mi campus con dos campus (24/11): también «Tus campus», el selector', async () => {
@@ -240,7 +240,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     await screen.findByTestId('resumen-mi-campus');
     await abrir('mi-campus');
     await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
-    expect(recorrer(11)).toEqual(titulos('mi-campus'));
+    expect(recorrer(8)).toEqual(titulos('mi-campus'));
   });
 
   it('Mi campus con todo conectado: se salta «Campus sin conectar»', async () => {
@@ -251,7 +251,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     await screen.findByTestId('resumen-mi-campus');
     await abrir('mi-campus');
     await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
-    expect(recorrer(11)).toEqual(titulos('mi-campus', ['Campus sin conectar', 'Tus campus']));
+    expect(recorrer(8)).toEqual(titulos('mi-campus', ['Campus sin conectar', 'Tus campus']));
   });
 
   it('Incidencias (admin): en la lista pasa por todo menos las cifras', async () => {
