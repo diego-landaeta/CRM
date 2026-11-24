@@ -1,5 +1,5 @@
 -- ============================================================
--- 325: «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764)
+-- 326: «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764)
 -- ============================================================
 -- Con la facturación automática encendida (24/11), la factura de cada cobro
 -- sale sola y se le manda en PDF al alumno. Diego, 24/11: que la gestora pueda
@@ -21,7 +21,7 @@
 --                                    automáticamente: la envía la gestora»).
 --
 -- Columnas nuevas en tablas que ya existen: los permisos (GRANT) no cambian.
--- Mismo contenido en los dos CRMs (aquí 325; en ISEIE, 337). Se puede pasar dos veces.
+-- Mismo contenido en los dos CRMs (aquí 326; en ISEIE, 338). Se puede pasar dos veces.
 
 BEGIN;
 
