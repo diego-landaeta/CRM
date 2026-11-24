@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowSquareOut, Student } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
-import { formatFecha } from '@/shared/lib/fechas';
 import { cn } from '@/shared/lib/utils';
 import { alumnosApi, type AlumnosDeFormacion as Datos } from '../api/alumnos.api';
-import { filtrarAlumnos, textoEstado, TEXTO_PAGO, TONO_PAGO, type FiltroAlumnos } from '../lib/alumnosFormacion';
+import {
+  fechaCorta, filtrarAlumnos, rutaDeVenta, textoEstado, TEXTO_PAGO, TONO_PAGO, type FiltroAlumnos,
+} from '../lib/alumnosFormacion';
 
 /**
  * La sección «Alumnos» de la ficha de una formación (CRM#1113): cuántos tiene
@@ -103,16 +104,16 @@ export default function AlumnosDeFormacion({ productId, campusId }: { productId:
             <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border" aria-label="Alumnos de la formación">
               {lista.map((a) => (
                 <li key={`${a.lead_id ?? 'v'}-${a.venta_id}`}>
-                  <Link to={`/finanzas/ventas/${a.venta_id}`} className="flex flex-col gap-1 px-3 py-2 text-sm hover:bg-muted sm:flex-row sm:items-center sm:gap-3">
+                  <Link to={rutaDeVenta(a.venta_id)} className="flex flex-col gap-1 px-3 py-2 text-sm hover:bg-muted sm:flex-row sm:items-center sm:gap-3">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium text-foreground">{a.nombre || a.email || `Venta ${a.venta_id}`}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {[a.gestora || 'Sin gestora', a.fecha_venta ? `venta ${formatFecha(a.fecha_venta)}` : null].filter(Boolean).join(' · ')}
+                        {[a.gestora || 'Sin gestora', a.fecha_venta ? `venta ${fechaCorta(a.fecha_venta)}` : null].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                     <span className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
                       <span className="text-xs text-muted-foreground" title={a.detalle_fin}>
-                        {a.fin_acceso ? `${a.estado === 'terminado' ? 'Acabó' : 'Hasta'} ${formatFecha(a.fin_acceso)}` : 'Sin fecha'}
+                        {a.fin_acceso ? `${a.estado === 'terminado' ? 'Acabó' : 'Hasta'} ${fechaCorta(a.fin_acceso)}` : 'Sin fecha'}
                       </span>
                       <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold',
                         a.estado === 'activo' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>

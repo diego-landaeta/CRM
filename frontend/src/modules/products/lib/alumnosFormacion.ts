@@ -1,3 +1,4 @@
+import { soloFecha } from '@/shared/lib/fechas';
 import type { AlumnoFormacion, EstadoPago, ResumenAlumnos } from '../api/alumnos.api';
 
 /**
@@ -5,6 +6,15 @@ import type { AlumnoFormacion, EstadoPago, ResumenAlumnos } from '../api/alumnos
  * Las reglas (quién es activo, hasta cuándo, cómo va de pagos) las decide el
  * servidor (`formacion-alumnos.reglas.js`); aquí solo se enseñan.
  */
+
+/** La ficha de la venta (en CRM-ISEIE, `/ventas/:id`). */
+export const rutaDeVenta = (id: number) => `/finanzas/ventas/${id}`;
+
+/** «24 nov 26». */
+export function fechaCorta(iso?: string | null): string {
+  const d = soloFecha(iso);
+  return d ? d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' }) : '';
+}
 
 export const TEXTO_PAGO: Record<EstadoPago, string> = {
   al_dia: 'Al día',
