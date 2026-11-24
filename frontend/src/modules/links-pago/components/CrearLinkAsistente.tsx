@@ -5,10 +5,14 @@ import {
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import AvisoConectarStripe, { AvisoCobroAutoApagado, tipoDeAviso } from './AvisoConectarStripe';
+import AvisoComoSeCobra from './AvisoComoSeCobra';
+import type { DatosDelAviso } from '../lib/avisoCuotas';
+import { useRecordatoriosLinks } from '@/shared/lib/recordatoriosLinks';
 // El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
 const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
 import {
@@ -271,6 +275,7 @@ export default function CrearLinkAsistente({
   const { can } = usePermission();
   const { activeProject, projects } = useProjectContext();
   const esAdmin = can('links_pago.configurar');
+  const recordatoriosEncendidos = useRecordatoriosLinks();
 
   // ── «Para un prospecto o una venta concretos» (plegado) ──
   const [paraAlguien, setParaAlguien] = useState(!!(leadInicial || ventaInicial));
@@ -476,6 +481,22 @@ export default function CrearLinkAsistente({
   const filasCuotas = importesCuotas.map((importe, i) => ({ importe, vence: fechasCuotas[i] || '' }));
   const importesPlan = filasCuotas.map((f) => Number(String(f.importe).replace(',', '.')));
   const cobroAuto = !!cuotas?.automatico;
+  /*
+    «CÓMO SE COBRA» (Diego, 24/11): con cuotas, un recuadro siempre a la vista
+    antes de «Crear link», con las cifras del plan: un solo enlace que cobra hoy
+    la inicial y Stripe las cuotas solas, o un enlace por cuota.
+  */
+  const avisoCobro: DatosDelAviso | null = enCuotas && cuotas?.disponible && total > 0 && ini > 0
+    && Math.round(ini * 100) < Math.round(total * 100) && filasCuotas.length > 0
+    ? {
+      automatico: cobroAuto,
+      primero: { importe: ini, esInicial: true },
+      despues: filasCuotas.map((f, i) => ({ importe: importesPlan[i] > 0 ? importesPlan[i] : 0, vence: f.vence || null })),
+      total,
+      linksDeCuotas: 'al_pagar',
+      recordatorio: recordatoriosEncendidos && cfg?.recordatorios !== false,
+    }
+    : null;
 
   // El campus sin clave de links (QA de /testeo del 18/11): se dice en cuanto se
   // sabe el campus y no se deja rellenar ni enviar.
@@ -493,7 +514,7 @@ export default function CrearLinkAsistente({
   if (paraAlguien && consulta && cargandoProspecto) motivos.push('Cargando el prospecto…');
   else if (paraAlguien && !consulta && !campusElegido) motivos.push('Elige el campus, o busca el prospecto.');
   else if (!projectId) motivos.push('Elige el campus.');
-  else if (sinClave) motivos.push('Todavía no se pueden crear links en este campus.');
+  else if (sinClave) motivos.push('Falta conectar Stripe en este campus.');
   else {
     if (!cfg) motivos.push('Cargando las reglas del campus…');
     if (cursosCargados && cursos.length === 0) motivos.push('Este campus no tiene cursos en el catálogo: sin curso no se puede crear el link.');
@@ -607,6 +628,9 @@ export default function CrearLinkAsistente({
               <h3 id="crear-link-titulo" className="font-semibold text-base">Crear link de pago</h3>
               <p className="text-xs text-muted-foreground">Elige el curso y cómo paga. No hace falta el nombre: al pagar, el CRM crea su ficha y su venta, y te avisa.</p>
             </div>
+            {/* El recorrido del asistente (CRM#1012): solo al pulsarlo. Va dentro de
+                la ventana: la cabecera queda debajo y no se puede pulsar. */}
+            {!hecho && <VerRecorrido id="links-asistente" compacto dentroDe='[data-recorrido="links-asistente"]' />}
           </div>
 
           {hecho ? (
@@ -674,10 +698,10 @@ export default function CrearLinkAsistente({
               )}
 
               {sinClave && (
-                <div role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
+                <div role="alert" data-recorrido="links-asistente-sin-clave" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
                   <WarningCircle size={18} weight="fill" className="mt-0.5 flex-shrink-0" aria-hidden="true" />
                   <p>
-                    <span className="font-semibold block">Todavía no se pueden crear links en este campus</span>
+                    <span className="font-semibold block">FALTA CONECTAR STRIPE</span>
                     {sinClave.error}
                   </p>
                 </div>
@@ -771,7 +795,7 @@ export default function CrearLinkAsistente({
                       Pago único por lo pendiente de la venta ({dinero(venta.pendiente)}): el link no puede pasar de ahí. Para cobrarla a plazos, «Generar plan de pago» en la venta.
                     </p>
                   ) : (
-                    <div role="radiogroup" aria-label="Cómo paga" className="grid grid-cols-2 gap-2">
+                    <div role="radiogroup" aria-label="Cómo paga" className="grid grid-cols-2 gap-2" data-recorrido="links-asistente-forma">
                       <label className={`flex items-center gap-2 p-2.5 rounded-md border text-sm cursor-pointer ${forma === 'unico' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                         <input type="radio" name="link-forma" checked={forma === 'unico'} onChange={() => setForma('unico')} />
                         <span><span className="font-medium block">Pago único</span><span className="text-xs text-muted-foreground">Todo de una vez</span></span>
@@ -893,11 +917,7 @@ export default function CrearLinkAsistente({
                           </div>
                         </>
                       )}
-                      <p className="text-xs text-muted-foreground">
-                        {cobroAuto
-                          ? <>Al pagar, el link cobra la inicial{ini > 0 ? ` (${dinero(ini)})` : ''} y guarda la tarjeta. Stripe cobra cada cuota sola en su fecha, y cada cobro salda su cuota en la venta.</>
-                          : <>Al pagar, el link cobra la inicial{ini > 0 ? ` (${dinero(ini)})` : ''} y se crea un link por cuota, que vence en su fecha. Cada cobro salda su cuota en la venta.</>}
-                      </p>
+                      <p className="text-xs text-muted-foreground">Cada cobro salda su cuota en la venta.</p>
                     </div>
                   )}
 
@@ -986,6 +1006,8 @@ export default function CrearLinkAsistente({
               </section>
               </fieldset>
 
+              {/* Cómo se cobra (24/11): siempre, con cuotas, justo antes de «Crear link». */}
+              {avisoCobro && !sinClave && <AvisoComoSeCobra datos={avisoCobro} />}
               {motivos.length > 0 && !cargandoProspecto && !sinClave && (
                 <ul className="text-xs text-warning-soft-foreground space-y-0.5" aria-live="polite" data-recorrido="links-asistente-motivos">
                   {motivos.map((m) => <li key={m} className="flex gap-1"><WarningCircle size={13} className="mt-0.5 flex-shrink-0" aria-hidden="true" /> {m}</li>)}
@@ -1005,7 +1027,7 @@ export default function CrearLinkAsistente({
               {hecho || sinClave ? 'Cerrar' : 'Cancelar'}
             </button>
             {!hecho && (
-              <button type="button" onClick={enviar} disabled={enviando || motivos.length > 0}
+              <button type="button" onClick={enviar} disabled={enviando || motivos.length > 0} data-recorrido="links-asistente-crear"
                 title={motivos[0] || undefined}
                 className="inline-flex items-center h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
                 {enviando ? 'Creando…' : 'Crear link'}

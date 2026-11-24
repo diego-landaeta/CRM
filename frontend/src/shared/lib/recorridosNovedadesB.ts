@@ -1,4 +1,5 @@
 import type { RecorridoCobros } from '@/shared/lib/recorridosCobros';
+import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
 
 /**
  * LOS RECORRIDOS DE LAS NOVEDADES DEL 18/11, SEGUNDA TANDA (#928; gemela
@@ -39,13 +40,13 @@ type RecorridoNovedadesB = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoNoveda
 
 const anclaje = (nombre: string) => `[data-recorrido="${nombre}"]`;
 
-const FINAL = 'No volverá a salir solo. Para repasarlo, pulsa «Ver recorrido» en esta pantalla cuando quieras.';
 
 /** En el orden de la issue: factura del mes (las dos caras), Mi campus, Incidencias y Prospectos. */
 export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNovedadesB> = {
   // ─── Mi factura (colaboradores y vendedoras) ───────────────────────────────
   'mi-factura': {
     id: 'mi-factura',
+    rutas: ['/mi-factura'],
     titulo: 'Mi factura',
     permiso: 'facturas_colaborador.subir',
     pantalla: ['modules/facturas-colaborador/pages/MiFacturaPage.tsx'],
@@ -79,6 +80,7 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
   // ─── Finanzas › Facturas de colaboradores (validar antes de pagar) ─────────
   'facturas-colaboradores': {
     id: 'facturas-colaboradores',
+    rutas: ['/finanzas/facturas-colaboradores'],
     titulo: 'Facturas de colaboradores',
     permiso: 'facturas_colaborador.ver_todas',
     pantalla: [
@@ -126,23 +128,20 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
   // ─── Mi campus (tutores) ───────────────────────────────────────────────────
   'mi-campus': {
     id: 'mi-campus',
+    rutas: ['/mis-cursos/campus'],
     titulo: 'Mi campus',
     permiso: 'tutores.mis_cursos',
-    pantalla: ['modules/tutores/pages/MiCampusPage.tsx'],
+    // La bandeja y el selector de campus viven en su componente (Diego, 24/11).
+    pantalla: ['modules/tutores/pages/MiCampusPage.tsx', 'modules/tutores/components/BandejaMiCampus.tsx'],
     pasos: [
       {
         titulo: 'Tu campus',
-        texto: 'Lo que te toca en Moodle sin entrar en Moodle: entregas por corregir, dudas, tus alumnos y lo que tienes por desarrollar. Son {pasos} pasos.',
+        texto: 'Todo lo que te toca en Moodle, sin entrar en Moodle. Arriba, la cuenta de lo de hoy; «Actualizar» lo vuelve a leer, y la pestaña «Mis cursos y comisiones» tiene tus cursos en el CRM y lo que te corresponde. Son {pasos} pasos.',
       },
       {
-        donde: anclaje('mi-campus-pestanas'),
-        titulo: 'Las dos pestañas',
-        texto: '«Por hacer en Moodle», lo de hoy. «Mis cursos y comisiones», tus cursos en el CRM y lo que te corresponde.',
-      },
-      {
-        donde: anclaje('mi-campus-resumen'),
-        titulo: 'Lo de hoy',
-        texto: 'Cuántas entregas tienes por corregir, cuántas dudas sin contestar y cuántos cursos por desarrollar.',
+        donde: anclaje('mi-campus-selector'),
+        titulo: 'Tus campus',
+        texto: '¿Estás en varios campus? Míralos todos juntos con «Todos» o pulsa uno o varios para ver solo esos. Se queda guardado para la próxima vez.',
       },
       {
         donde: anclaje('mi-campus-sin-conectar'),
@@ -150,19 +149,24 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
         texto: 'En estos campus tu cuenta de Moodle no está unida a la del CRM. Pídeselo a coordinación.',
       },
       {
+        donde: anclaje('mi-campus-responder'),
+        titulo: 'Por responder',
+        texto: 'Las consultas de tus alumnos que esperan respuesta, con su último mensaje. «Responder» abre el cuadro aquí mismo y la respuesta le llega al alumno en Moodle, a tu nombre. «Abrir» lleva a la conversación entera.',
+      },
+      {
+        donde: anclaje('mi-campus-corregir'),
+        titulo: 'Por corregir',
+        texto: 'Cada entrega sin nota, la más antigua primero. «Corregir» abre esa entrega: ves lo que ha subido el alumno, pones la nota y el comentario, y los ve en Moodle.',
+      },
+      {
         donde: anclaje('mi-campus-curso'),
         titulo: 'Cada curso',
-        texto: 'Púlsalo para abrirlo: «Corregir» y «Responder» en lo pendiente, sus tareas, y sus alumnos con el último acceso y el % hecho.',
+        texto: 'Púlsalo para abrirlo: lo pendiente de ese curso, todas sus tareas y sus alumnos con el último acceso y el % hecho.',
       },
       {
         donde: anclaje('mi-campus-por-desarrollar'),
         titulo: 'Por desarrollar',
         texto: 'Los cursos que estás preparando: el plazo, el % de módulos y si ya están la foto y el vídeo.',
-      },
-      {
-        donde: anclaje('mi-campus-actualizar'),
-        titulo: 'Actualizar',
-        texto: 'Todo se lee de Moodle. Arriba pone a qué hora; pulsa «Actualizar» para leerlo otra vez.',
       },
       {
         titulo: 'Y listo',
@@ -174,6 +178,7 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
   // ─── Incidencias ───────────────────────────────────────────────────────────
   incidencias: {
     id: 'incidencias',
+    rutas: ['/incidencias'],
     titulo: 'Incidencias',
     permiso: 'incidencias.view',
     pantalla: ['modules/incidencias/pages/IncidenciasPage.tsx', 'modules/incidencias/components/CifrasIncidencias.tsx'],
@@ -218,6 +223,7 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
   // ─── Prospectos › Lista, con sus filtros ───────────────────────────────────
   prospectos: {
     id: 'prospectos',
+    rutas: ['/prospectos'],
     titulo: 'Prospectos',
     permiso: 'leads.view',
     pantalla: [

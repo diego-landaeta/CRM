@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-956 rutas en 73 módulos, y 31 acciones con condición dentro de una ruta.
+962 rutas en 74 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -254,6 +254,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | cuotas | `GET /api/conversions/cuotas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | filas | `GET /api/conversions/filas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | posiblesRepetidas | `GET /api/conversions/posibles-repetidas` | (no existía) | (ruta nueva) | `conversions.edit` |
+| productosConCursoMoodle | `GET /api/conversions/productos-con-curso` | (no existía) | (ruta nueva) | `conversions.view` |
+| sinFechaInicio | `GET /api/conversions/sin-fecha-inicio` | (no existía) | (ruta nueva) | `conversions.edit` |
 | listByLead | `GET /api/conversions/by-lead/:leadId` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | getById | `GET /api/conversions/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | create | `POST /api/conversions/` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.create` |
@@ -514,6 +516,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | remove | `DELETE /api/forms/:id` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo | superadmin, admin, soporte | `forms.delete` |
 | startListening | `POST /api/forms/:id/listen` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo | superadmin, admin, soporte | `forms.edit` |
 | stopListening | `POST /api/forms/:id/listen/stop` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo | superadmin, admin, soporte | `forms.edit` |
+
+## google-analytics
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/google-analytics/estado` | (no existía) | (ruta nueva) | `google_analytics.view` |
+| embudo | `GET /api/google-analytics/embudo` | (no existía) | (ruta nueva) | `google_analytics.view` |
+| paginas | `GET /api/google-analytics/paginas` | (no existía) | (ruta nueva) | `google_analytics.view` |
+| sincronizar | `POST /api/google-analytics/sincronizar` | (no existía) | (ruta nueva) | `google_analytics.edit` |
 
 ## ia-analisis
 
@@ -1521,6 +1532,13 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte, Project manager |  |
 | Conectar y sincronizar Meta Ads | `meta_ads.edit` | Conectar cuentas, sincronizarlas y asociar campañas a productos. | Admin, Soporte | `meta_ads.view` |
+
+### Google Analytics
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver Google Analytics | `google_analytics.view` | Visitas por canal y por página de curso, y cuántas acaban en prospecto y en venta. | Admin, Soporte, Project manager |  |
+| Sincronizar Google Analytics | `google_analytics.edit` | Traer ya los datos de GA4 de un campus. | Admin, Soporte | `google_analytics.view` |
 
 ## Catálogo
 
