@@ -22,6 +22,13 @@ const LISTA = [
         "titulo": "Moodle",
         "items": [
           {
+            "titulo": "Aviso si un Moodle se queda a medio actualizar",
+            "texto": "Si el Moodle de un campus se actualiza solo y se queda con la actualización a medias (y el campus sin entrar), te llega un aviso en la campana y la tarjeta Moodle de Integraciones dice desde cuándo, de qué versión a cuál y qué hay que hacer para terminarla.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/finanzas/integraciones?seccion=moodle",
+            "boton": "Ir a la conexión del campus"
+          },
+          {
             "titulo": "Todo lo de Moodle, en un solo sitio del menú",
             "texto": "Un apartado «Moodle» en el menú con Mi campus, Consultas, los cursos y alumnos de cada campus, el curso de Moodle de cada producto, los cursos pendientes, los diplomas y la conexión del campus. Cada uno ve lo mismo que antes: solo cambia de sitio. «Cursos y alumnos» enseña los cursos del campus elegido arriba (con «Todos», la lista de campus) y ya cuenta los campus conectados en Integraciones.",
             "roles": ["admin", "superadmin"],
@@ -196,6 +203,32 @@ const LISTA = [
         ]
       },
       {
+        "titulo": "La web y Google",
+        "items": [
+          {
+            "titulo": "Google Analytics: lo que pasa antes del prospecto",
+            "texto": "Una pantalla nueva en Publicidad › Google Analytics: las visitas de la web de cada campus por día, por canal y por página de entrada, junto a los prospectos y las ventas que salen de ellas. Así se ve si un curso no vende porque no lo visita nadie o porque entran y no piden información.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/google-analytics",
+            "boton": "Ir a Google Analytics"
+          },
+          {
+            "titulo": "Tráfico orgánico con Search Console",
+            "texto": "En Publicidad › Tráfico orgánico, lo que Google enseña de cada web: clics, impresiones y posición, por página y por búsqueda, y si las páginas de las formaciones están indexadas.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/trafico-organico",
+            "boton": "Ir a Tráfico orgánico"
+          },
+          {
+            "titulo": "Conectar Google desde Integraciones",
+            "texto": "En Integraciones, cada campus tiene su tarjeta de Google Analytics y de Search Console: se sube la cuenta de Google del campus, se elige la propiedad y se prueba. La clave nunca se vuelve a enseñar.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/finanzas/integraciones",
+            "boton": "Ir a Integraciones"
+          }
+        ]
+      },
+      {
         "titulo": "Links de pago",
         "items": [
           {
@@ -253,7 +286,13 @@ const LISTA = [
     ],
     "arreglos": [
       "La paginación de Prospectos cabe en el móvil.",
-      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola."
+      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola.",
+      "Feedback: una fecha imposible en el filtro ya no da error, los días se cuentan en hora de Madrid, los campus de pruebas no suman y ya no se escribe a prospectos de campus desactivados.",
+      "Feedback: la encuesta se puede rellenar con el teclado y con lector de pantalla, el correo sale también en texto plano y el CSV dice cuándo se envió cada uno.",
+      "Los avisos de Moodle de una cuenta o una matrícula suspendida ya no hablan en masculino de todas.",
+      "En el móvil, el botón del rayo ya no tapa lo último de la ficha del cliente.",
+      "En Diplomas, «Aprobar y emitir», «Rechazar» y «Editar» se ven siempre, aunque la tabla no quepa.",
+      "La tabla de Actividad (Monitask) cabe en el móvil."
     ]
   },
   {

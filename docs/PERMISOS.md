@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-987 rutas en 74 módulos, y 31 acciones con condición dentro de una ruta.
+1002 rutas en 76 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -537,6 +537,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | startListening | `POST /api/forms/:id/listen` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo | superadmin, admin, soporte | `forms.edit` |
 | stopListening | `POST /api/forms/:id/listen/stop` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo | superadmin, admin, soporte | `forms.edit` |
 
+## google-analytics
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/google-analytics/estado` | (no existía) | (ruta nueva) | `google_analytics.view` |
+| embudo | `GET /api/google-analytics/embudo` | (no existía) | (ruta nueva) | `google_analytics.view` |
+| paginas | `GET /api/google-analytics/paginas` | (no existía) | (ruta nueva) | `google_analytics.view` |
+| sincronizar | `POST /api/google-analytics/sincronizar` | (no existía) | (ruta nueva) | `google_analytics.edit` |
+
 ## ia-analisis
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
@@ -593,6 +602,11 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | comprobar | `POST /api/integrations/salud/comprobar` | (no existía) | (ruta nueva) | `integrations.salud` |
 | ver | `GET /api/integrations/moodle/categorias` | (no existía) | (ruta nueva) | `integrations.view` |
 | guardar | `PUT /api/integrations/moodle/categorias` | (no existía) | (ruta nueva) | `integrations.edit` |
+| sitios | `POST /api/integrations/google/gsc/sitios` | (no existía) | (ruta nueva) | `integrations.google` |
+| ver | `GET /api/integrations/google/:servicio` | (no existía) | (ruta nueva) | `integrations.view` |
+| guardar | `PUT /api/integrations/google/:servicio` | (no existía) | (ruta nueva) | `integrations.google` |
+| probar | `POST /api/integrations/google/:servicio/probar` | (no existía) | (ruta nueva) | `integrations.google` |
+| quitar | `DELETE /api/integrations/google/:servicio` | (no existía) | (ruta nueva) | `integrations.google` |
 | getOne | `GET /api/integrations/:provider` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | upsert | `PUT /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
 | test | `POST /api/integrations/:provider/test` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
@@ -1095,6 +1109,17 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | deleteGoal | `DELETE /api/ventas/goals/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `ventas.metas` |
 | create · registrar una venta que no es de nadie («sin gestora») | `POST /api/ventas/` | cuando registrar una venta que no es de nadie («sin gestora»): a mano, sales.controller.js · resolvePermission(conversions.sin_gestora) | superadmin, admin | `conversions.sin_gestora` |
 
+## search-console
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/search-console/estado` | (no existía) | (ruta nueva) | `search_console.view` |
+| resumen | `GET /api/search-console/resumen` | (no existía) | (ruta nueva) | `search_console.view` |
+| consultas | `GET /api/search-console/consultas` | (no existía) | (ruta nueva) | `search_console.view` |
+| paginas | `GET /api/search-console/paginas` | (no existía) | (ruta nueva) | `search_console.view` |
+| indexacion | `GET /api/search-console/indexacion` | (no existía) | (ruta nueva) | `search_console.view` |
+| sincronizar | `POST /api/search-console/sincronizar` | (no existía) | (ruta nueva) | `search_console.edit` |
+
 ## soporte
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
@@ -1558,6 +1583,20 @@ lo que pide para tener sentido (editar pide ver).
 | Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte, Project manager |  |
 | Conectar y sincronizar Meta Ads | `meta_ads.edit` | Conectar cuentas, sincronizarlas y asociar campañas a productos. | Admin, Soporte | `meta_ads.view` |
 
+### Google Analytics
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver Google Analytics | `google_analytics.view` | Visitas por canal y por página de curso, y cuántas acaban en prospecto y en venta. | Admin, Soporte, Project manager |  |
+| Sincronizar Google Analytics | `google_analytics.edit` | Traer ya los datos de GA4 de un campus. | Admin, Soporte | `google_analytics.view` |
+
+### Search Console
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver Tráfico orgánico | `search_console.view` | Clics, impresiones, posición, búsquedas y páginas de Google, y qué páginas de formación no están indexadas. | Admin, Soporte, Project manager |  |
+| Sincronizar Search Console | `search_console.edit` | Traer ya los datos de Search Console de un campus. | Admin, Soporte | `search_console.view` |
+
 ## Catálogo
 
 ### Productos
@@ -1738,6 +1777,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver integraciones | `integrations.view` | Los servicios conectados (Stripe, Brevo…). | Admin, Soporte, Project manager |  |
 | Configurar integraciones | `integrations.edit` | Conectarlos, probarlos y desconectarlos. | Admin, Soporte | `integrations.view` |
+| Conectar Google Analytics y Search Console | `integrations.google` | Subir la cuenta de servicio de Google de un campus, elegir su propiedad de GA4 o de Search Console, probarla y quitarla. | Admin | `integrations.view` |
 | Ver la salud de las conexiones | `integrations.salud` | Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora. | Admin | `integrations.view` |
 
 ## Análisis
