@@ -8,6 +8,7 @@
 //   - producto
 //   - rango de fechas (última compra)
 //   - estado de pago (pagado/parcial/sin pagar/sin ventas) — client-side
+//   - suspendidos en Moodle (CRM#531) — server-side, solo si el servidor lo tiene encendido
 //   - orden (recent, facturado, cobrado, pendiente, nombre)
 
 import { useEffect, useRef, useState } from 'react';
@@ -30,6 +31,8 @@ interface Props {
   productos: Producto[];
   totalBackend: number;
   filteredCount: number;
+  /** CRM#531: «suspendidos» o vacío. Sin setFilterMoodle (apagado en el servidor), no sale. */
+  filterMoodle?: string; setFilterMoodle?: (v: string) => void;
 }
 
 export const ESTADO_PAGO_LABELS: Record<string, string> = {
@@ -53,6 +56,7 @@ export default function ClientsFiltersBar(props: Props) {
     filterProducto, setFilterProducto, filterEstadoPago, setFilterEstadoPago,
     dateFrom, setDateFrom, dateTo, setDateTo, sortBy, setSortBy,
     gestores, productos, totalBackend, filteredCount,
+    filterMoodle = '', setFilterMoodle,
   } = props;
   // El filtro de gestora, por permiso y alcance (Diego, 25/11/2026): también la
   // líder de equipo, con ella y su equipo. «Sin asignar» no es de su equipo.
@@ -83,6 +87,7 @@ export default function ClientsFiltersBar(props: Props) {
     activePills.push({ key: 'prod', label: label.length > 20 ? label.slice(0, 20) + '…' : label, onClear: () => setFilterProducto('') });
   }
   if (filterEstadoPago) activePills.push({ key: 'pago', label: ESTADO_PAGO_LABELS[filterEstadoPago] || filterEstadoPago, onClear: () => setFilterEstadoPago('') });
+  if (filterMoodle && setFilterMoodle) activePills.push({ key: 'moodle', label: 'Suspendidos en Moodle', onClear: () => setFilterMoodle('') });
   if (dateFrom || dateTo) activePills.push({ key: 'date', label: `${dateFrom || '...'} → ${dateTo || 'hoy'}`, onClear: () => { setDateFrom(''); setDateTo(''); } });
 
   function clearAll() {
@@ -92,6 +97,7 @@ export default function ClientsFiltersBar(props: Props) {
     setFilterEstadoPago('');
     setDateFrom('');
     setDateTo('');
+    setFilterMoodle?.('');
   }
 
   return (
@@ -157,6 +163,19 @@ export default function ClientsFiltersBar(props: Props) {
                     {Object.entries(ESTADO_PAGO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </Row>
+                {setFilterMoodle && (
+                  <Row label="Moodle">
+                    <select
+                      value={filterMoodle}
+                      onChange={(e) => setFilterMoodle(e.target.value)}
+                      aria-label="Estado en Moodle"
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    >
+                      <option value="">Todos</option>
+                      <option value="suspendidos">Suspendidos en Moodle</option>
+                    </select>
+                  </Row>
+                )}
                 <Row label="Última compra desde">
                   <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
                     className="w-full h-9 px-2 rounded-md border border-border bg-muted/40 text-sm" />

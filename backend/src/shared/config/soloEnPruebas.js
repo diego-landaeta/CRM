@@ -133,6 +133,21 @@ export function recordatorioWhatsappActivo(env = process.env) {
 }
 
 /**
+ * Suspensiones y reactivaciones de Moodle en la ficha del alumno (CRM#531): recibir el
+ * aviso `estado_alumno` del plugin 1.13.0, apuntarlo, el estado y el historial en la
+ * ficha, el filtro «Suspendidos» de Clientes y la campana a la gestora.
+ *
+ * Va con su propio interruptor, ADEMÁS del del plugin: el plugin puede aprobarse para los
+ * mensajes antes que esto (el motivo deducido de los cobros espera el OK de Diego), y esto
+ * necesita la migración 318. Apagado, el CRM contesta al aviso como uno que aún no lo
+ * conoce (400): el plugin lo da por perdido sin reintentar, así que no se atasca nada.
+ * Se aprueba con SUSPENSIONES_MOODLE_EN_PRODUCCION=1 (y PLUGIN_MOODLE_EN_PRODUCCION=1).
+ */
+export function suspensionesMoodleActivas(env = process.env) {
+  return pluginMoodleActivo(env) && enPruebasOAprobado('SUSPENSIONES_MOODLE_EN_PRODUCCION', env);
+}
+
+/**
  * Las tutoras redactoras en Moodle (CRM#1026): en su ficha de Tutores y en el «Mi
  * campus» de la propia redactora, si su cuenta de cada campus está lista y si es
  * «Profesor» (`editingteacher`, como las tutoras de hoy) de los cursos que redacta

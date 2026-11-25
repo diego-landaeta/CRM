@@ -27,7 +27,7 @@ import AccesosClave from '@/shared/components/ui/AccesosClave';
 import useCobrosClientes from '../hooks/useCobrosClientes';
 import {
   UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple, Trash, Plus,
-  GraduationCap, Wallet, Receipt, ChartLineUp,
+  GraduationCap, Wallet, Receipt, ChartLineUp, Prohibit,
 } from '@phosphor-icons/react';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
@@ -36,6 +36,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROLES_DE_GESTORA } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
 import { etiquetaProducto, ofreceMatriculas } from '@/shared/lib/etiquetas';
+import { useSuspensionesMoodleEncendidas } from '@/shared/lib/suspensionesMoodle';
 
 function exportCSV(clients: Client[], filename: string, etiquetaPlural: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
@@ -159,6 +160,15 @@ function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
   );
 }
 
+/** En la fila: sigue suspendido en Moodle (CRM#531). El motivo está en su ficha. */
+function SuspendidoEnMoodle() {
+  return (
+    <span className="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-destructive-soft px-1.5 py-0.5 text-[10px] font-semibold text-destructive-soft-foreground">
+      <Prohibit size={10} weight="bold" aria-hidden /> Suspendido en Moodle
+    </span>
+  );
+}
+
 export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -178,18 +188,24 @@ export default function ClientsPage() {
     resp: '',
     prod: '',
     estado_pago: '',
+    // CRM#531: 'suspendidos' = solo los que siguen suspendidos en Moodle (server-side).
+    moodle: '',
     from: '',
     to: '',
     sort: 'recent',
     page: 1,
   });
-  const { q: search, resp: filterResp, prod: filterProducto, estado_pago: filterEstadoPago, from: dateFrom, to: dateTo, sort: sortBy, page } = urlFilters as {
-    q: string; resp: string; prod: string; estado_pago: string; from: string; to: string; sort: string; page: number;
+  const { q: search, resp: filterResp, prod: filterProducto, estado_pago: filterEstadoPago, moodle: filtroMoodle, from: dateFrom, to: dateTo, sort: sortBy, page } = urlFilters as {
+    q: string; resp: string; prod: string; estado_pago: string; moodle: string; from: string; to: string; sort: string; page: number;
   };
+  // Con SUSPENSIONES_MOODLE_EN_PRODUCCION apagado, el filtro ni sale ni se manda.
+  const conSuspensiones = useSuspensionesMoodleEncendidas();
+  const filterMoodle = conSuspensiones ? filtroMoodle : '';
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterResp = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
   const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
   const setFilterEstadoPago = useCallback((v: string) => setUrlFilters({ estado_pago: v, page: 1 }), [setUrlFilters]);
+  const setFilterMoodle = useCallback((v: string) => setUrlFilters({ moodle: v, page: 1 }), [setUrlFilters]);
   const setDateFrom = useCallback((v: string) => setUrlFilters({ from: v, page: 1 }), [setUrlFilters]);
   const setDateTo = useCallback((v: string) => setUrlFilters({ to: v, page: 1 }), [setUrlFilters]);
   const setSortBy = useCallback((v: string) => setUrlFilters({ sort: v, page: 1 }), [setUrlFilters]);
@@ -268,6 +284,7 @@ export default function ClientsPage() {
       if (filterProducto) params.set('productId', filterProducto);
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
+      if (filterMoodle === 'suspendidos') params.set('suspendidoMoodle', 'true');
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (res.success) {
@@ -281,7 +298,7 @@ export default function ClientsPage() {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [activeProject?.id, isAllProjects, projects, page, debouncedSearch, filterResp, filterProducto, dateFrom, dateTo, reloadKey]);
+  }, [activeProject?.id, isAllProjects, projects, page, debouncedSearch, filterResp, filterProducto, filterMoodle, dateFrom, dateTo, reloadKey]);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
@@ -308,7 +325,7 @@ export default function ClientsPage() {
     return ub - ua;
   });
 
-  const hasActiveFilters = !!(search.trim() || filterResp || filterProducto || filterEstadoPago || dateFrom || dateTo);
+  const hasActiveFilters = !!(search.trim() || filterResp || filterProducto || filterEstadoPago || filterMoodle || dateFrom || dateTo);
   const clearAllFilters = useCallback(() => {
     (setUrlFilters as unknown as { reset: () => void }).reset();
   }, [setUrlFilters]);
@@ -472,6 +489,8 @@ export default function ClientsPage() {
           productos={productos}
           totalBackend={totalBackend}
           filteredCount={filtered.length}
+          filterMoodle={filterMoodle}
+          setFilterMoodle={conSuspensiones ? setFilterMoodle : undefined}
         />
         {filtered.length > 0 && can('clients.export') && (
           <button
@@ -520,6 +539,7 @@ export default function ClientsPage() {
                     <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/clientes/${c.id}`)}>
                       <td className="px-4 py-3">
                         <div className="font-semibold">{c.nombre}</div>
+                        {c.suspendido_moodle && <SuspendidoEnMoodle />}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">{c.telefono || '—'}</td>
@@ -572,6 +592,7 @@ export default function ClientsPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-semibold truncate">{c.nombre}</div>
+                      {c.suspendido_moodle && <SuspendidoEnMoodle />}
                       <div className="text-xs text-muted-foreground truncate">{c.email}</div>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold flex-shrink-0">

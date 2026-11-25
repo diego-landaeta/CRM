@@ -28,6 +28,8 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
+import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
+import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
 // Apostilla de La Haya (CRM#1130): el bloque sale solo si el cliente tiene alguna.
 import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 
@@ -132,6 +134,8 @@ export default function ClientDetailPage() {
   // Su avance en Moodle (#532). Se pide al abrir la ficha; la pestaña solo sale si el
   // servidor lo tiene encendido (el plugin del CRM aprobado en ese entorno).
   const avance = useAvanceMoodle(id);
+  // Sus suspensiones en Moodle (CRM#531): solo lee el CRM; si está apagado, disponible: false.
+  const suspensiones = useSuspensionesMoodle(id);
 
   // Dos condiciones, y hacen falta las dos: que el rol tenga el permiso, y que
   // el cliente sea suyo. El permiso dice QUE puede hacer; ser el responsable
@@ -238,6 +242,7 @@ export default function ClientDetailPage() {
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-success-soft text-success-soft-foreground">
               <CheckCircle size={11} weight="fill" /> Cliente
             </span>
+            <EtiquetaSuspendido datos={suspensiones.datos} />
             {lead.origen && <ChannelBadge channel={lead.origen} />}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-sm text-muted-foreground">
@@ -348,7 +353,7 @@ export default function ClientDetailPage() {
                 // prospecto.
                 { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
-                ...(avance.datos?.disponible ? [{ id: 'campus', label: 'Campus', icon: GraduationCap }] : []),
+                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspensión' : 'Campus', icon: GraduationCap }] : []),
               ].map(t => {
                 const Icon = t.icon;
                 return (
@@ -381,12 +386,18 @@ export default function ClientDetailPage() {
                 </Suspense>
               )}
               {tab === 'campus' && (
-                <AvanceMoodleBloque
-                  datos={avance.datos}
-                  cargando={avance.cargando}
-                  error={avance.error}
-                  onActualizar={avance.actualizar}
-                />
+                <div className="space-y-4">
+                  {/* Arriba, si está suspendido y por qué (CRM#531); debajo, su avance (#532). */}
+                  <SuspensionesMoodleBloque datos={suspensiones.datos} cargando={suspensiones.cargando} error={suspensiones.error} />
+                  {avance.datos?.disponible !== false && (
+                    <AvanceMoodleBloque
+                      datos={avance.datos}
+                      cargando={avance.cargando}
+                      error={avance.error}
+                      onActualizar={avance.actualizar}
+                    />
+                  )}
+                </div>
               )}
               {tab === 'interacciones' && (
                 <div>

@@ -11,7 +11,7 @@ import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 import { alcanceDeLider } from '../../shared/utils/roles.js';
-import { linksPagoActivos, pluginMoodleActivo, seguimientoLinksActivo } from '../../shared/config/soloEnPruebas.js';
+import { linksPagoActivos, pluginMoodleActivo, seguimientoLinksActivo, suspensionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
 import { monitaskActivo } from '../monitask/interruptor.js';
 
 function getClientIp(req) {
@@ -183,11 +183,13 @@ export async function me(req, res, next) {
           // Monitask (#236): MONITASK_ACTIVO. Con él apagado, el menú no enseña
           // «Actividad» y la pantalla y la tarjeta no piden /monitask/estado (que
           // contestaría 404 y llenaba el registro de «Peticion rechazada»).
+          // Las suspensiones de Moodle en la ficha (CRM#531), con SUSPENSIONES_MOODLE_EN_PRODUCCION.
           funciones: {
             links_pago: linksPagoActivos(),
             plugin_moodle: pluginMoodleActivo(),
             recordatorios_links: seguimientoLinksActivo(),
             monitask: monitaskActivo(),
+            suspensiones_moodle: suspensionesMoodleActivas(),
           },
         },
         permissions,

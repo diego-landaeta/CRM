@@ -7,6 +7,7 @@ import { gestoresDelReparto } from './reparto.js';
 import { comoIds, esRolDeGestora } from '../../shared/utils/roles.js';
 import { paisDeEntrada, sqlPaisDelLead } from './pais.js';
 import { telefonoParaGuardar } from '../../shared/utils/normalizePhone.js';
+import { SUSPENDIDO_EN_MOODLE, suspensionesListas } from './suspensiones-moodle.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -831,7 +832,7 @@ export const FILTROS_RAPIDOS = {
   get 'sin-actividad'() { return SIN_ACTIVIDAD('l'); },
 };
 
-export async function findAll({ projectId, projectIds, status, seguimiento, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf }) {
+export async function findAll({ projectId, projectIds, status, seguimiento, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf, suspendidoMoodle }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -875,6 +876,11 @@ export async function findAll({ projectId, projectIds, status, seguimiento, paso
   if (conConversion) {
     conditions.push(`EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)`);
   }
+  // Suspendidos en Moodle (CRM#531): siguen suspendidos (la cuenta o un curso) según el
+  // último aviso del plugin. Solo con SUSPENSIONES_MOODLE_EN_PRODUCCION y la
+  // migración 318 aplicada (`suspensionesListas`): si no, no sale nadie (nunca «todos»).
+  const conSuspensiones = (suspendidoMoodle || conConversion) && await suspensionesListas();
+  if (suspendidoMoodle) conditions.push(conSuspensiones ? SUSPENDIDO_EN_MOODLE('l') : 'FALSE');
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
@@ -1006,7 +1012,8 @@ export async function findAll({ projectId, projectIds, status, seguimiento, paso
             client_stats.cuotas_pagadas,
             client_stats.cuotas_pendientes,
             client_stats.total_pagos,
-            client_stats.proximo_vencimiento` : '';
+            client_stats.proximo_vencimiento${conSuspensiones ? `,
+            ${SUSPENDIDO_EN_MOODLE('l')} AS suspendido_moodle` : ''}` : '';
   const clientStatsJoin = conConversion ? `
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS conversiones,
