@@ -225,7 +225,25 @@ export function sinPermiso() {
   permisos del catálogo (#423).
 */
 const VEN_TODO_EL_CAMPUS = ['superadmin', 'admin', 'soporte'];
-const COMERCIAL_PROPIO = ['gestor', 'project_manager'];
+// La líder de equipo (CRM#1105) también: lo suyo y, con `equipo_comercial`, lo
+// de sus gestoras (`alcanceComercial`, más abajo). Nunca el campus entero.
+const COMERCIAL_PROPIO = ['gestor', 'project_manager', 'lider_equipo'];
+
+/*
+  LOS ROLES QUE TRABAJAN COMO UNA GESTORA (CRM#1105, Diego 24/11/2026).
+
+  La líder de equipo es una gestora que además ve a su equipo: atiende sus
+  prospectos, registra sus ventas, sale en el ranking, usa su WhatsApp y le
+  llegan los correos de gestora. Donde el CRM preguntaba «¿es gestora?» para
+  eso —no para decidir quién entra, que es cosa de los permisos (#423)—, la
+  líder cuenta como gestora. Mismo nombre y contrato en CRM-ISEIE (paridad).
+*/
+export const ROLES_DE_GESTORA = ['gestor', 'lider_equipo'];
+
+/** Si su rol PRINCIPAL trabaja como una gestora (lo que antes era `role === 'gestor'`). */
+export function esRolDeGestora(rol) {
+  return ROLES_DE_GESTORA.includes(rol);
+}
 
 export function soloLoSuyo(user) {
   const suyos = rolesDe(user);
@@ -344,6 +362,12 @@ export function comoIds(v) {
  * (09/11/2026): quien lo lleva ve su equipo, o una de él si la pide, nunca a
  * otra. Sin equipo, exactamente lo de antes.
  */
+/**
+ * Quien ve el campus entero en los informes y en la cola: todo, o la de una si la
+ * pide. Soporte también (25/11/2026): tenía Reportes y la Cola y le salían vacíos.
+ */
+export const JEFES_DEL_INFORME = ['admin', 'superadmin', 'soporte'];
+
 export async function personaDelInforme(user, pedido, { jefes = ['admin', 'superadmin'] } = {}) {
   const alcance = await alcanceComercial(user);
   const esJefe = jefes.includes(user?.role);
@@ -367,5 +391,10 @@ export async function personaDelInforme(user, pedido, { jefes = ['admin', 'super
  */
 export async function alcanceDeLider(user) {
   const alcance = await alcanceComercial(user);
-  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
+  if (!Array.isArray(alcance)) return null;
+  // La líder de equipo (CRM#1105) lo es aunque hoy no tenga a nadie a su cargo:
+  // su equipo es ella sola, y lo que trae de equipo (el ranking, reasignar…)
+  // se queda en ella. Sin esto, con el equipo vacío se le abría el campus entero.
+  if (alcance.length > 1 || tieneRol(user, 'lider_equipo')) return alcance;
+  return null;
 }
