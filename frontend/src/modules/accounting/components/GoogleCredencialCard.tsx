@@ -67,6 +67,17 @@ const mensajeDe = (e: unknown) => {
   return err?.data?.error || err?.message || 'Error desconocido';
 };
 
+/** El texto del archivo elegido (con FileReader si el navegador no tiene `File.text`). */
+function textoDeArchivo(f: File): Promise<string> {
+  if (typeof f.text === 'function') return f.text();
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(String(lector.result || ''));
+    lector.onerror = () => mal(lector.error);
+    lector.readAsText(f);
+  });
+}
+
 async function copiar(texto: string) {
   try {
     await navigator.clipboard.writeText(texto);
@@ -167,24 +178,31 @@ export default function GoogleCredencialCard({ projectId, servicio }: { projectI
 
   function tomarJson(texto: string) {
     const r = leerJsonCuenta(texto);
-    if (r.ok) {
-      setPendiente({ correo: r.correo, texto: r.texto });
+    if (r.ok === true) {
+      const bien = r as { correo: string; texto: string };
+      setPendiente({ correo: bien.correo, texto: bien.texto });
       setMisma(false);
       setErrorJson(null);
       setPegado(''); // el texto con la clave no se queda en pantalla
       setSitios(null);
     } else {
       setPendiente(null);
-      setErrorJson(r.error);
+      setErrorJson((r as { error: string }).error);
     }
   }
 
   async function alElegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    e.target.value = '';
+    const input = e.target;
+    const f = input.files?.[0];
     if (!f) return;
     if (f.size > 20000) { setErrorJson('El archivo es demasiado grande para ser la clave de una cuenta de servicio.'); return; }
-    tomarJson(await f.text());
+    try {
+      tomarJson(await textoDeArchivo(f));
+    } catch {
+      setErrorJson('No se ha podido leer el archivo.');
+    } finally {
+      try { input.value = ''; } catch { /* para poder volver a elegir el mismo */ }
+    }
   }
 
   function alPegar(texto: string) {
