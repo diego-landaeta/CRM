@@ -9,7 +9,9 @@ import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
 import { TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
 import SupabaseCard from '../components/SupabaseCard';
+import CategoriasFormacionesMoodle from '../components/CategoriasFormacionesMoodle';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
+import GoogleCredencialCard from '../components/GoogleCredencialCard';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
@@ -75,6 +77,11 @@ const EVENTOS_DEL_WEBHOOK = [
   // El cobro automático de las cuotas (309): Stripe cobra cada cuota con una factura
   // de su calendario; pagada, salda su cuota; fallida, se avisa y se manda su link.
   'invoice.paid', 'invoice.payment_failed',
+  // CRM#1103: Stripe deja de cobrar una cuota (suscripción cancelada o impagada,
+  // calendario cancelado, factura anulada o incobrable): sigue pendiente, marcada y con aviso.
+  'customer.subscription.deleted', 'customer.subscription.updated',
+  'subscription_schedule.canceled', 'subscription_schedule.aborted',
+  'invoice.voided', 'invoice.marked_uncollectible',
   // Los links creados directamente en Stripe (CRM#1019): salen en Links de pago
   // como «Creado en Stripe» y su cobro se busca por el correo o el móvil.
   'payment_link.created', 'payment_link.updated',
@@ -133,6 +140,14 @@ export default function IntegrationsPage() {
     const t = setTimeout(() => document.getElementById('integracion-links-pago')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
     return () => clearTimeout(t);
   }, [irALinks]);
+  // «Moodle › Conexión del campus» (apartado Moodle, Diego 25/11) trae aquí con
+  // `?seccion=moodle`: con un campus elegido, baja hasta su tarjeta Moodle, marcada.
+  const irAMoodle = params.get('seccion') === 'moodle' && !!pid && (!campusPedido || pid === campusPedido);
+  useEffect(() => {
+    if (!irAMoodle) return undefined;
+    const t = setTimeout(() => document.getElementById('integracion-moodle')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
+    return () => clearTimeout(t);
+  }, [irAMoodle]);
   // Lo del #44, solo en pruebas (`shared/lib/proyectosIA`).
   const esIA = esProyectoIA(activeProject);
   // La salud de las conexiones (CRM#533): superadmin y admin, de «Todos», de una
@@ -155,7 +170,7 @@ export default function IntegrationsPage() {
         ) as unknown as string}
         subtitle={vistaGeneral
           ? 'El estado de las conexiones (Stripe, Brevo, el campus Moodle) de cada campus.'
-          : `Configura conexiones externas (Stripe, Brevo, el campus Moodle${esIA ? ', Supabase' : ''}) para ${activeProject?.nombre || 'el proyecto activo'}.`}
+          : `Configura conexiones externas (Stripe, Brevo, el campus Moodle${esIA ? ', Supabase' : ''}, Google Analytics, Search Console) para ${activeProject?.nombre || 'el proyecto activo'}.`}
         /* El recorrido de Stripe y los links (18/11): con un campus elegido, que es
            cuando salen sus tarjetas. */
         actions={pid ? <VerRecorrido id="integraciones-stripe" /> : null}
@@ -171,7 +186,8 @@ export default function IntegrationsPage() {
           <p><strong>3) Uso real:</strong></p>
           <ul className="list-disc list-inside pl-2 space-y-0.5">
             <li><strong>Stripe:</strong> con el access token guardado, el CRM sondea los cobros cada cinco minutos y los deja en <em>Pagos Stripe</em> para asociarlos a una venta. En proyectos IA, además, el dashboard lee MRR, suscripciones y cobros fallidos en vivo. El webhook es <em>opcional</em>: sirve para no esperar esos cinco minutos, y sin su secreto de firma se rechaza.</li>
-            <li><strong>Campus (Moodle):</strong> las consultas de alumnos, «Tutores › Mi campus» y las notas. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto. Su servicio necesita {TOTAL_FUNCIONES_MOODLE} funciones y «Puede descargar archivos»: «Probar conexión» dice cuáles faltan.</li>
+            <li><strong>Campus (Moodle):</strong> las consultas de alumnos, «Moodle › Mi campus» y las notas. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto. Su servicio necesita {TOTAL_FUNCIONES_MOODLE} funciones y «Puede descargar archivos»: «Probar conexión» dice cuáles faltan.</li>
+            <li><strong>Google Analytics 4 y Search Console:</strong> con la cuenta de servicio de Google del campus (su JSON) y su propiedad, el CRM trae las visitas por canal y por página y las búsquedas en Google. Cada tarjeta explica cómo crearla y darle acceso de solo lectura; «Probar» hace una llamada real y dice qué falta.</li>
             <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
             {esIA && (
               <li><strong>Supabase:</strong> la base de la propia app IA. De ahí salen sus usuarios y
@@ -221,7 +237,13 @@ export default function IntegrationsPage() {
           {/* PayPal (#766): solo si el servidor tiene encendido PAYPAL_COBROS_ACTIVO. */}
           <PaypalSiEstaEncendido key={`paypal-${pid}`} projectId={pid} />
           <BrevoCard projectId={pid} />
-          <MoodleCard projectId={pid} />
+          <div id="integracion-moodle" data-testid="integracion-moodle" className={`scroll-mt-4 rounded-lg ${irAMoodle ? 'ring-2 ring-primary' : ''}`}>
+            <MoodleCard projectId={pid} />
+          </div>
+          {/* Google Analytics 4 y Search Console del campus (CRM#1099): la cuenta de
+              servicio y la propiedad, donde las leen sus módulos. */}
+          <GoogleCredencialCard key={`ga4-${pid}`} projectId={pid} servicio="ga4" />
+          <GoogleCredencialCard key={`gsc-${pid}`} projectId={pid} servicio="gsc" />
         </div>
       )}
     </div>
@@ -1291,6 +1313,9 @@ function MoodleCard({ projectId }: { projectId: number }) {
             <p className="text-xs text-muted-foreground">Leyendo desde el {fmt(String(data.config_public.consultas_desde))}.</p>
           )}
         </div>
+
+        {/* CRM#1113, fase 2: la categoría de cada tipo para «Crear en Moodle» en Formaciones. */}
+        {data?.has_secret && <CategoriasFormacionesMoodle projectId={projectId} />}
 
         <TestStatus data={data} aviso={faltas.length > 0} />
         {funcionesProbadas?.grupos && (

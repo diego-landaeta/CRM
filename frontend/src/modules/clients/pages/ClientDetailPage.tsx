@@ -30,6 +30,8 @@ import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
 // #1135: el diploma (datos pedidos, contestados o emitido).
 import DiplomaDelAlumno from '../components/DiplomaDelAlumno';
+// Apostilla de La Haya (CRM#1130): el bloque sale solo si el cliente tiene alguna.
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const ConversionsTab = lazy(() => import('@/modules/conversions/components/ConversionsTab'));
@@ -207,8 +209,10 @@ export default function ClientDetailPage() {
   const totalPendiente = totalFacturado - totalPagado;
   const interacciones = lead.interactions || [];
 
+  // pb-24: el botón flotante de atajos (el rayo, abajo a la derecha) no tapa lo último
+  // de la ficha, sobre todo en el móvil (QA del 25/11/2026). Como en Diplomas y Emisiones.
   return (
-    <div className="space-y-5 pb-8 max-w-[1100px] mx-auto">
+    <div className="space-y-5 pb-24 max-w-[1100px] mx-auto">
 
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">
@@ -477,6 +481,9 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Su Apostilla de La Haya (CRM#1130): paso, si está pagada y cuánto lleva. */}
+          <ApostillasBloque leadId={lead.id} />
 
           {/* Datos fiscales del cliente (se rellenan al completar una factura y
               quedan globales; sirven para futuras facturas). */}

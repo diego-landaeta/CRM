@@ -20,6 +20,7 @@ import consultasModule from './modules/consultas/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import googleAnalyticsModule from './modules/google-analytics/index.js';
+import searchConsoleModule from './modules/search-console/index.js';
 import accountingModule from './modules/accounting/index.js';
 import expensesModule from './modules/expenses/index.js';
 import integrationsModule from './modules/integrations/index.js';
@@ -78,6 +79,8 @@ import certifexModule from './modules/certifex/index.js';
 import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 import soporteModule from './modules/soporte/index.js';
 import incidenciasModule from './modules/incidencias/index.js';
+// Apostilla de La Haya (CRM#1130): el trámite de cada apostilla vendida.
+import apostillasModule from './modules/apostillas/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
@@ -106,6 +109,7 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startGoogleAnalyticsSyncScheduler } from './jobs/googleAnalyticsSyncScheduler.js';
+import { startSearchConsoleSyncScheduler } from './jobs/searchConsoleSyncScheduler.js';
 import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
@@ -133,6 +137,7 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
+import { comprobarBaseDeLaEncuesta } from './modules/feedback/feedback.service.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
 import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
 import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
@@ -147,9 +152,12 @@ import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
 import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
+import { startApostillasScheduler } from './jobs/apostillasScheduler.js';
 import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, proyectosIAActivos, pluginMoodleActivo, cobroAutomaticoActivo, seguimientoLinksActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
+// La versión del CRM: la primera de Novedades, la misma que enseña el frontal (25/11).
+import { ACTUAL as VERSION_ACTUAL } from './modules/novedades/versiones.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -221,7 +229,7 @@ app.get('/api', (_req, res) => {
     success: true,
     data: {
       name: 'CRM MultiProyecto API',
-      version: '1.0.0',
+      version: VERSION_ACTUAL.version,
       status: 'online',
       endpoints: {
         health: '/api/health',
@@ -237,7 +245,7 @@ app.get('/api', (_req, res) => {
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } });
+  res.json({ success: true, data: { status: 'ok', version: VERSION_ACTUAL.version, timestamp: new Date().toISOString() } });
 });
 
 // Traído de CRM-ISEIE (paridad, 15/10).
@@ -328,6 +336,7 @@ const ALL_MODULES = [
   { name: 'meta-ads', mod: metaAdsModule },
   // Google Analytics 4 (CRM#55): lo que pasa antes del lead.
   { name: 'google-analytics', mod: googleAnalyticsModule },
+  { name: 'search-console', mod: searchConsoleModule },
   { name: 'accounting', mod: accountingModule },
   // Egresos, su propio modulo e igual que en CRM-ISEIE (#227). Va DESPUES de
   // `accounting`: su alias /api/accounting/expenses cuelga de ese prefijo.
@@ -348,6 +357,8 @@ const ALL_MODULES = [
   // El informe mensual por equipo y comercial y el ZIP de facturas para la gestoría (#772).
   { name: 'informe-mensual', mod: informeMensualModule },
   { name: 'matriculas', mod: matriculasModule },
+  // Clientes › Apostillas (CRM#1130). Migración 333.
+  { name: 'apostillas', mod: apostillasModule },
   { name: 'feedback', mod: feedbackModule },
   { name: 'factura-automatica', mod: facturaAutomaticaModule },
   { name: 'novedades', mod: novedadesModule },
@@ -533,6 +544,10 @@ process.on('uncaughtException', (err) => {
 
 // Solo escuchar si no estamos en tests
 if (process.env.NODE_ENV !== 'test') {
+  // En producción, sin la dirección de la encuesta de feedback no se arranca:
+  // los correos saldrían con enlaces a localhost (#1154). Mejor que PM2 lo
+  // enseñe al desplegar que enterarse por las encuestas que nadie contesta.
+  comprobarBaseDeLaEncuesta();
   app.listen(PORT, () => {
     logger.info(`CRM API corriendo en puerto ${PORT}`);
     startEmailSequenceScheduler();
@@ -549,6 +564,8 @@ if (process.env.NODE_ENV !== 'test') {
     startMetaAdsSyncScheduler();
     // Sincronización de Google Analytics 4 (CRM#55). Apagada sin GA4_SYNC_ACTIVO=1.
     startGoogleAnalyticsSyncScheduler();
+    // Sincronización de Search Console (CRM#36). Apagada sin GSC_SYNC_ACTIVO=1.
+    startSearchConsoleSyncScheduler();
     // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
     startMetaTokensScheduler();
     startTutorCommissionsScheduler();
@@ -605,6 +622,8 @@ if (process.env.NODE_ENV !== 'test') {
     startInformeMensualScheduler();
     // Apagada de serie (BREVO_BLOQUEADOS_ACTIVO): apagada no arranca ni pregunta a Brevo.
     startBrevoBloqueadosScheduler();
+    // Apostillas (CRM#1130): fichas nuevas cada 10 minutos y el aviso de atascadas (solo campana).
+    startApostillasScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
