@@ -215,6 +215,8 @@ export async function ventaDeApostillaDelCargo({ projectId, payment, fichas, por
     lead_id: Number(ficha.id),
     producto_interes_id: Number(producto.id),
     importe_total: importe,
+    // Lo cobrado es el precio final: el IVA va dentro (como en la compra directa).
+    iva_incluido: true,
     importe_pagado: 0,
     metodo_pago: 'tarjeta',
     fecha_pago: fecha,
