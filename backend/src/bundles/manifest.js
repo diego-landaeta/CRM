@@ -14,13 +14,13 @@ export const BUNDLES = {
   leads: {
     label: 'Leads / Captacion',
     description: 'Pipeline + audiencias + forms + webhooks',
-    modules: ['leads', 'actividad', 'proceso', 'feedback', 'convocatorias', 'forms', 'webhook-tokens', 'audiences', 'make', 'meta-ads', 'widget', 'whatsapp'],
+    modules: ['leads', 'actividad', 'proceso', 'feedback', 'convocatorias', 'forms', 'webhook-tokens', 'audiences', 'make', 'meta-ads', 'google-analytics', 'search-console', 'widget', 'whatsapp'],
     requires: ['core'],
   },
   comercial: {
     label: 'Comercial / Ventas',
     description: 'Productos + conversiones + comisiones + tutores + matriculas + dossiers',
-    modules: ['products', 'product-categories', 'cursos-pendientes', 'conversions', 'sales', 'commissions', 'tutores', 'consultas', 'matriculas', 'dossiers', 'documents'],
+    modules: ['products', 'product-categories', 'cursos-pendientes', 'conversions', 'sales', 'commissions', 'tutores', 'consultas', 'matriculas', 'apostillas', 'dossiers', 'documents'],
     requires: ['core'],
   },
   accounting: {

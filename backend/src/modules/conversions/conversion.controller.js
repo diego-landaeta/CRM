@@ -19,13 +19,72 @@ import { opcionDeCompartidas } from './compartidas.js';
 import { alcanceComercial, acotarAlAlcance, enElAlcance } from '../../shared/utils/roles.js';
 import { campusParaRecortar } from '../../shared/utils/ambito.js';
 import { posiblesRepetidas as gruposRepetidos } from './venta-repetida.js';
+import { exigirFechaSiTieneCurso, exigirAlQuitarla, productosConCurso, ventasSinFecha } from './fecha-inicio.js';
 
 export async function create(req, res, next) {
   try {
     const parsed = createConversionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    // «Enviar factura automáticamente»: solo quien tiene `facturas.envio_auto` (25/11).
+    const { quitarSiNoPuede } = await import('../factura-automatica/factura-automatica.envio.js');
+    await quitarSiNoPuede(req, parsed.data);
+    // Con curso de Moodle, sin fecha de inicio no se cierra la venta (#767, #1036).
+    await exigirFechaSiTieneCurso(parsed.data);
     const conversion = await conversionService.create(parsed.data, req.user.userId);
-    res.status(201).json({ success: true, data: conversion });
+    const cargo_inicial = await unirLaInicialDeStripe(req, parsed.data, conversion);
+    res.status(201).json({ success: true, data: cargo_inicial ? { ...conversion, cargo_inicial } : conversion });
+  } catch (err) { next(err); }
+}
+
+/*
+  «LINK DE PAGO USADO» (CRM#1107): la inicial ya se pagó con otro link o con
+  Stripe y la gestora pegó el link (buy.stripe.com/…, plink_, cs_, pi_ o ch_). El
+  cargo se busca en Stripe y se une a ESTE pago inicial, sin crear otro cobro. Si
+  no se puede, la referencia queda como estaba y se dice por qué. La venta ya está
+  creada: esto nunca la tumba.
+*/
+async function unirLaInicialDeStripe(req, data, conversion) {
+  if (!conversion?._initial_payment_id || !data.referencia_pago_inicial) return null;
+  const { leerReferencia, unirCargoDeLaReferencia } = await import('../links-pago/links-pago.referencia.js');
+  const ref = leerReferencia(data.referencia_pago_inicial);
+  // Una dirección que no es de Stripe solo se busca si la inicial se pagó con Stripe.
+  if (!ref || (ref.tipo === 'url' && !ref.deStripe && data.metodo_pago_inicial !== 'tarjeta_stripe')) return null;
+  const { tienePermiso } = await import('../../shared/middleware/permissions.js');
+  if (!(await tienePermiso(req, 'links_pago.crear'))) return null;
+  return unirCargoDeLaReferencia({
+    projectId: Number(conversion.project_id), referencia: data.referencia_pago_inicial,
+    importe: Number(conversion._initial_payment_importe), conversionId: Number(conversion.id),
+    conversionPaymentId: Number(conversion._initial_payment_id), userId: Number(req.user.userId),
+  });
+}
+
+// GET /api/conversions/productos-con-curso?projectId=
+//
+// Los productos del campus unidos a un curso de Moodle (ids). Los formularios
+// de venta lo piden para saber si la fecha de inicio es obligatoria (#1036).
+// Fuera de los campus de quien pide, lista vacía.
+export async function productosConCursoMoodle(req, res, next) {
+  try {
+    const pid = /^[1-9]\d{0,9}$/.test(String(req.query.projectId ?? '')) ? Number(req.query.projectId) : null;
+    if (!pid) throw new AppError('projectId requerido', 400, 'VALIDATION_ERROR');
+    const suyos = await campusParaRecortar(req);
+    const data = suyos && !suyos.includes(pid) ? [] : await productosConCurso(pid);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/sin-fecha-inicio?projectId=|issuerId=
+//
+// Las ventas ya hechas sin fecha de inicio cuyo producto tiene curso de Moodle,
+// para completarlas (#1036). Por campus o empresa, solo en los de quien pide;
+// una gestora (o quien lleva un equipo), solo las suyas.
+export async function sinFechaInicio(req, res, next) {
+  try {
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    const campus = projectId ? [projectId] : projectIds;
+    const personas = await alcanceComercial(req.user);
+    const data = await ventasSinFecha({ projectIds: campus, personas });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 
@@ -144,6 +203,8 @@ export async function update(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const parsed = updateConversionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    // Quitar la fecha de inicio de una venta con curso de Moodle, no (#1036).
+    if (parsed.data.fecha_inicio === null) await exigirAlQuitarla(id);
     const updated = await conversionService.update(id, parsed.data);
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }

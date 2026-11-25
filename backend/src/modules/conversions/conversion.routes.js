@@ -4,6 +4,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './conversion.controller.js';
 import * as refundsCtrl from './refunds.controller.js';
 import * as repartoCtrl from './reparto.controller.js';
+import * as bajaCtrl from './baja-alumno.controller.js';
 import { ventaPorId, cuotaPorId, pagoPorId, devolucionPorId, prospectoPorId, puedeCrearEn } from './conversion.acceso.js';
 
 const router = Router();
@@ -25,6 +26,10 @@ router.get('/cuotas', puede('conversions.view'), ctrl.cuotas);
 router.get('/filas', puede('conversions.view'), ctrl.filas);
 // Ventas del mismo alumno y programa, para revisar (CRM#898). Quien puede editar ventas.
 router.get('/posibles-repetidas', puede('conversions.edit'), ctrl.posiblesRepetidas);
+// Fecha de inicio del curso (#1036): qué productos la exigen (los formularios
+// de venta) y las ventas ya hechas que la tienen pendiente (quien edita ventas).
+router.get('/productos-con-curso', puede('conversions.view'), ctrl.productosConCursoMoodle);
+router.get('/sin-fecha-inicio', puede('conversions.edit'), ctrl.sinFechaInicio);
 router.get('/by-lead/:leadId', puede('conversions.view'), ctrl.listByLead);
 router.get('/:id', puede('conversions.view'), ctrl.getById);
 
@@ -65,6 +70,14 @@ router.delete('/:id/reparto', puede('conversions.reparto'), repartoCtrl.remove);
 router.get('/:id/refunds', puede('conversions.view'), refundsCtrl.list);
 router.post('/:id/refunds', puede('conversions.devoluciones'), refundsCtrl.create);
 router.delete('/refunds/:refundId', puede('conversions.devoluciones'), refundsCtrl.remove);
+
+// Baja o desistimiento del alumno (sobre CRM#1113): fecha, motivo y nota; se
+// puede deshacer y queda en su historial. No anula facturas ni toca cobros,
+// cuotas ni Moodle. Verla, quien ve la venta; darla o deshacerla, con su
+// permiso (la gestora, solo en las suyas: `ventaPorId`).
+router.get('/:id/baja', puede('conversions.view'), bajaCtrl.get);
+router.put('/:id/baja', puede('conversions.baja_alumno'), bajaCtrl.set);
+router.delete('/:id/baja', puede('conversions.baja_alumno'), bajaCtrl.remove);
 
 // Eliminar conversión. Gestor solo si es dueña del lead. Requiere motivo.
 // Ownership + log a lead_interactions se hace dentro del controller.

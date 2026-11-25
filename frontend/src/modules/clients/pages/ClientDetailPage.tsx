@@ -30,6 +30,8 @@ import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
 import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
 import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
+// Apostilla de La Haya (CRM#1130): el bloque sale solo si el cliente tiene alguna.
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const ConversionsTab = lazy(() => import('@/modules/conversions/components/ConversionsTab'));
@@ -359,6 +361,7 @@ export default function ClientDetailPage() {
                     key={t.id}
                     onClick={() => setTab(t.id)}
                     aria-pressed={tab === t.id}
+                    data-recorrido={t.id === 'campus' ? 'ficha-pestana-campus' : undefined}
                     className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-semibold border-b-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm ${
                       tab === t.id
                         ? 'border-primary text-primary'
@@ -483,6 +486,9 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Su Apostilla de La Haya (CRM#1130): paso, si está pagada y cuánto lleva. */}
+          <ApostillasBloque leadId={lead.id} />
 
           {/* Datos fiscales del cliente (se rellenan al completar una factura y
               quedan globales; sirven para futuras facturas). */}

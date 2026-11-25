@@ -44,6 +44,7 @@ interface Grupo {
  *
  *  · gestor              — recibe siempre, el flag ni se mira
  *  · admin / superadmin  — solo si el flag esta marcado en ese proyecto
+ *  · lider de equipo     — igual que un admin (CRM#1105): se decide por persona
  *  · soporte / tutor     — no entran nunca en el reparto
  *
  * Por eso el interruptor solo sale para admin, y al gestor se le pinta fijo:
@@ -58,7 +59,7 @@ export default function ProjectSelector({
   projects, selected, role, onToggle, onToggleRecibeLeads, onSetMany, required = false,
   empresas, empresasEnteras = [], onToggleEmpresa, faltaMigracionEmpresas = false, esColaborador = false,
 }: Props) {
-  const mostrarToggle = role === 'admin';
+  const mostrarToggle = role === 'admin' || role === 'lider_equipo';
   // La casilla de empresa: admin y colaborador, y solo si quien edita puede darla.
   const paraColaborador = role !== 'admin' && esColaborador;
   const conEmpresas = (role === 'admin' || paraColaborador) && !!onToggleEmpresa && !!empresas;
@@ -196,7 +197,7 @@ export default function ProjectSelector({
                         <span>Recibe leads</span>
                       </label>
                     ) : role === 'gestor' ? (
-                      <span className="text-secundario font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded flex-shrink-0">
+                      <span className="text-secundario font-semibold text-success-soft-foreground bg-success-soft px-1.5 py-0.5 rounded flex-shrink-0">
                         Recibe leads
                       </span>
                     ) : null)}
@@ -215,7 +216,7 @@ export default function ProjectSelector({
       </div>
 
       {conEmpresas && faltaMigracionEmpresas && (
-        <p className="text-secundario text-amber-600 dark:text-amber-500 mt-2 px-1">
+        <p className="text-secundario text-warning mt-2 px-1">
           Falta aplicar la migración 203. Hasta entonces la empresa entera no se
           puede guardar: marca sus campus uno a uno o con «Marcar todos».
         </p>

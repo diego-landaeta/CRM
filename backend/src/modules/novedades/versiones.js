@@ -13,6 +13,346 @@ export const CRM = { nombre: 'MultiCRM', color: '#1f3a5f' };
 
 const LISTA = [
   {
+    "version": "3.0.0",
+    "fecha": "2026-11-24",
+    "titulo": "Versión 3.0.0",
+    "intro": "Moodle dentro del CRM, tutoras redactoras, recorridos que solo se abren al pulsar (y «Ver recorrido» en cada novedad) y facturación más clara.",
+    "grupos": [
+      {
+        "titulo": "Moodle",
+        "items": [
+          {
+            "titulo": "Todo lo de Moodle, en un solo sitio del menú",
+            "texto": "Un apartado «Moodle» en el menú con Mi campus, Consultas, los cursos y alumnos de cada campus, el curso de Moodle de cada producto, los cursos pendientes, los diplomas y la conexión del campus. Cada uno ve lo mismo que antes: solo cambia de sitio. «Cursos y alumnos» enseña los cursos del campus elegido arriba (con «Todos», la lista de campus) y ya cuenta los campus conectados en Integraciones.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/conexion/moodle",
+            "boton": "Ir a Cursos y alumnos",
+            "recorrido": "menu-bloques"
+          },
+          {
+            "titulo": "«Mi campus» para las tutoras",
+            "texto": "Tus alumnos con su % hecho, las dudas por contestar, las entregas por corregir y los cursos por desarrollar, en una sola pantalla.",
+            "roles": ["tutor", "tutor_redactor", "admin", "superadmin"],
+            "ruta": "/mis-cursos/campus",
+            "boton": "Ir a Mi campus",
+            "recorrido": "mi-campus"
+          },
+          {
+            "titulo": "Responder y corregir desde Mi campus",
+            "texto": "Arriba, las consultas por responder, que se contestan ahí mismo, y las entregas por corregir, la más antigua primero: «Corregir» abre la entrega para poner la nota y el comentario. Con varios campus, se ven todos juntos o se eligen uno o varios. También para las tutoras redactoras.",
+            "roles": ["tutor", "tutor_redactor", "admin", "superadmin"],
+            "ruta": "/mis-cursos/campus",
+            "boton": "Ir a Mi campus",
+            "recorrido": "mi-campus"
+          },
+          {
+            "titulo": "El chat del campus, en Consultas",
+            "texto": "Las dudas que el alumno escribe en el chat de Moodle llegan a Consultas y se contestan desde el CRM; la respuesta sale en Moodle a nombre de la tutora. Se enciende campus a campus, al conectar el plugin.",
+            "roles": ["tutor", "admin", "superadmin"],
+            "ruta": "/consultas",
+            "boton": "Ir a Consultas",
+            "recorrido": "consultas-chat"
+          },
+          {
+            "titulo": "Cada producto con su curso de Moodle",
+            "texto": "En «Cursos de Moodle» eliges el curso de cada producto, y avisa de los vendidos sin curso. «Probar conexión» dice qué le falta al Moodle de cada campus.",
+            "roles": ["admin", "superadmin", "soporte"],
+            "ruta": "/productos/cursos-moodle",
+            "boton": "Ir a Cursos de Moodle",
+            "recorrido": "cursos-producto"
+          },
+          {
+            "titulo": "Matrícula automática",
+            "texto": "Con el primer pago, el CRM programa la matrícula del alumno en su curso para el día antes del inicio. Por eso la fecha de inicio del curso es obligatoria al cerrar la venta. Llega campus a campus: hasta entonces, la matrícula sigue a mano.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/finanzas/ventas",
+            "boton": "Ir a Ventas",
+            "recorrido": "cursos-producto"
+          },
+          {
+            "titulo": "El avance del alumno en su ficha",
+            "texto": "En la pestaña «Campus» de la ficha del cliente: último acceso, % hecho, notas y estado de cada curso. Su recorrido, con «Ver recorrido» dentro de la pestaña.",
+            "roles": ["gestor", "admin", "superadmin"]
+          }
+        ]
+      },
+      {
+        "titulo": "Formaciones y alumnos",
+        "items": [
+          {
+            "titulo": "Formaciones con sus módulos",
+            "texto": "En Productos › Formaciones se crea y se edita cada formación: tipo, horas, precio, fechas, sus módulos con el temario y sus tutoras. Los módulos son los que imprime el diploma.",
+            "roles": ["admin", "superadmin", "soporte"],
+            "ruta": "/productos/formaciones",
+            "boton": "Ir a Formaciones"
+          },
+          {
+            "titulo": "Alumnos activos por formación",
+            "texto": "En cada formación, sus alumnos activos, terminados y de baja; de los activos, quién va al día, quién tiene cuotas pendientes y quién está en impago. En la lista, las columnas «Activos» y «Con impago». Cada gestora ve los suyos.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/productos/formaciones",
+            "boton": "Ir a Formaciones"
+          },
+          {
+            "titulo": "Dar de baja al alumno",
+            "texto": "En la ficha de la venta: fecha, motivo (desistimiento, baja voluntaria, impago u otro) y nota. Desde esa fecha deja de contar como activo. Se puede deshacer y queda en el historial. No anula facturas ni cobros, ni le da de baja en Moodle.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/finanzas/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "El curso de Moodle, desde la formación (preparado)",
+            "texto": "En Integraciones › Moodle se elige la categoría de cursos, diplomados y másteres de cada campus, y la ficha de la formación enseña el nombre corto y las secciones que tendrá el curso. El botón «Crear en Moodle» se enciende cuando el plugin nuevo llegue a los campus.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/productos/formaciones",
+            "boton": "Ir a Formaciones"
+          }
+        ]
+      },
+      {
+        "titulo": "Equipo",
+        "items": [
+          {
+            "titulo": "Tutoras redactoras",
+            "texto": "Las tutoras redactoras tienen su tablero aparte y su ficha; el tablero se filtra por equipo.",
+            "roles": ["admin", "superadmin", "tutor_redactor"],
+            "ruta": "/tareas",
+            "boton": "Ir a Tareas",
+            "recorrido": "tablero"
+          },
+          {
+            "titulo": "Rol nuevo: Líder de equipo",
+            "texto": "Para quien lleva un equipo comercial sin ser administradora: ve lo suyo y lo de las gestoras de su equipo (prospectos, ventas, la cola y el ranking en «Cómo voy», con su propio puesto) puede pasar un prospecto a otra de su equipo, repartir una venta entre su equipo y ve el informe mensual de su equipo. Nada de administración. Se da en Usuarios, y su equipo se elige en su ficha.",
+            "roles": ["lider_equipo", "admin", "superadmin"],
+            "ruta": "/",
+            "boton": "Ir al Dashboard"
+          },
+          {
+            "titulo": "Recorridos, solo cuando los pides",
+            "texto": "Ningún recorrido se abre solo. «Recorrido», arriba, abre el de la pantalla en la que estás o el general de tu rol, y «Ver recorrido» está en Ventas, Finanzas, Clientes, la ficha del prospecto y La cola del día.",
+            "roles": ["gestor", "admin", "superadmin"]
+          },
+          {
+            "titulo": "Lo completado, en «Qué ha pasado hoy»",
+            "texto": "Los recordatorios que se completan salen en la actividad del día.",
+            "roles": ["gestor", "admin", "superadmin"]
+          }
+        ]
+      },
+      {
+        "titulo": "Facturas",
+        "items": [
+          {
+            "titulo": "Facturación automática, encendida",
+            "texto": "Desde el 24/11, en todos los campus. Al entrar un cobro, el alumno recibe un correo con un formulario para sus datos fiscales. Al contestarlo, la factura sale sola, con el número siguiente de la serie, y le llega en PDF. A los 7 días sin respuesta sale con su ficha si está completa; si no, el cobro se queda en la cola y te avisamos. Las cuotas reutilizan los mismos datos.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/finanzas/facturas/automatica",
+            "boton": "Ir a Facturación automática",
+            "recorrido": "facturacion-automatica"
+          },
+          {
+            "titulo": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo»",
+            "texto": "Al registrar la venta (también al crear un link de pago), en la ficha de la venta y en la cola de facturación. Sí, de serie: el CRM le manda el PDF. No: la factura se emite igual, pero no se manda y lleva «No se envía automáticamente: la envía la gestora». El correo del alumno sale ya relleno: «Confirmar» o «Editar»; el formulario y el PDF van a ese.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/finanzas/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Dónde se ve: Facturas › Facturación automática",
+            "texto": "Los formularios enviados, contestados y vencidos; las facturas que salieron solas, con su número y a qué correo fue el PDF; y las que necesitan a una persona (en revisión, posible duplicada…), con su motivo y qué hacer. La administración ve además la auditoría y su «Pasada en seco».",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/finanzas/facturas/automatica",
+            "boton": "Ir a Facturación automática"
+          },
+          {
+            "titulo": "Aviso de posible duplicada más claro",
+            "texto": "Dice de quién es la otra factura y en qué se parece: la misma venta, el mismo NIF o el mismo nombre. Si es otra, «Es otra, emitir igualmente».",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/finanzas/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "Nadie valida ni paga su propia factura",
+            "texto": "En las facturas del mes de vendedoras y colaboradores, quien la emite no puede validarla ni marcarla como pagada: lo hace otra persona.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/finanzas/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores",
+            "recorrido": "facturas-colaboradores"
+          },
+          {
+            "titulo": "El envío de la factura, solo administración",
+          "texto": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» ya solo los ven las administradoras. La gestora carga en la venta los datos de la persona para la factura (documento, dirección, ciudad, código postal y país; si llegaron por la admisión, salen rellenos). Sin cobro no sale ninguna factura: la factura es siempre de lo cobrado.",
+          "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+          "ruta": "/finanzas/ventas",
+          "boton": "Ir a Ventas"
+        },
+        {
+          "titulo": "La cola de facturación, por campus",
+            "texto": "Con «Todos los proyectos» la cola sale separada por campus, y lo que no factura la automática sale marcado «A mano». Si un cobro anterior frena el turno, la cola dice cuál. Al registrar un cobro, la ficha de la venta ya no se cierra y sigue el botón «Emitir ya la factura de este cobro».",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/finanzas/facturas",
+            "boton": "Ir a Facturas"
+          }
+        ]
+      },
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "La venta nace con el link",
+            "texto": "Al crear un link desde un prospecto, su venta queda creada a tu nombre, pendiente de cobro (en cuotas, con su plan), y el prospecto pasa a «Convertido». Si caduca o se anula sin pagarse, te avisamos y decides tú. En la venta, «Link de pago usado» une el cobro de Stripe aunque pagara con otro correo.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          }
+        ]
+      },
+      {
+        "titulo": "Recorridos",
+        "items": [
+          {
+            "titulo": "«Ver recorrido» desde Novedades",
+            "texto": "Cada novedad que tiene recorrido trae su botón «Ver recorrido»: te lleva a la pantalla y te la enseña paso a paso. Solo se abre al pulsarlo.",
+            "roles": ["gestor", "admin", "superadmin", "tutor", "tutor_redactor"]
+          },
+          {
+            "titulo": "Consultas y el chat del campus",
+            "texto": "Recorrido nuevo: las pendientes y su color, buscar, contestar y «Leer el campus ahora».",
+            "roles": ["tutor", "admin", "superadmin"],
+            "ruta": "/consultas",
+            "boton": "Ir a Consultas",
+            "recorrido": "consultas-chat"
+          },
+          {
+            "titulo": "Conciliación de facturas y cobros",
+            "texto": "Recorrido nuevo: campus y mes, facturas sin cobro, cobros sin factura y «Enlazar todas las seguras».",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/finanzas/conciliacion/facturas",
+            "boton": "Ir a Conciliación",
+            "recorrido": "conciliacion-facturas"
+          },
+          {
+            "titulo": "Códigos promocionales y links creados en Stripe",
+            "texto": "El recorrido de Links de pago enseña ya los links creados directamente en Stripe y sus cobros por vincular, y el de Integraciones, los códigos promocionales.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          },
+          {
+            "titulo": "El tablero, también de las redactoras, y el avance del alumno",
+            "texto": "El recorrido del tablero enseña el filtro «Equipo de trabajo» (desarrollo o tutoras redactoras), y la pestaña «Campus» de la ficha del cliente tiene el suyo.",
+            "roles": ["admin", "superadmin", "tutor_redactor"],
+            "ruta": "/tareas",
+            "boton": "Ir a Tareas",
+            "recorrido": "tablero"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "La paginación de Prospectos cabe en el móvil.",
+      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola."
+    ]
+  },
+  {
+    "version": "2.9.8",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.8",
+    "intro": "Links de pago completos: cuotas con sus fechas, moneda y códigos, links de Stripe, embudo y seguimiento.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Cuotas con las fechas que elijas",
+            "texto": "Al crear un link «En cuotas» eliges la fecha de cada cuota, y puedes poner otro importe, un descuento o una inicial más las cuotas. Con Stripe conectado para cobros automáticos, Stripe cobra cada cuota en su fecha; si no, el asistente te dice por qué.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          },
+          {
+            "titulo": "La moneda de cada campus y códigos promocionales",
+            "texto": "Cada link sale en la moneda de su campus. Los códigos de campaña, con su fecha límite, se encienden campus a campus en Integraciones › Links de pago.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "integraciones-stripe"
+          },
+          {
+            "titulo": "Links creados directamente en Stripe",
+            "texto": "Los links hechos en Stripe también entran al CRM, en «Creados en Stripe». Sus cobros que no se sabe de qué venta son esperan en «Cobros de Stripe por vincular» hasta que eliges la venta.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          },
+          {
+            "titulo": "Embudo y seguimiento de los links sin pagar",
+            "texto": "El embudo cuenta los links creados, abiertos y pagados, y las cuotas cobradas, por gestora y por campus. Un link que no se paga avisa a su gestora y se puede renovar; cada link enseña su estado. Se manda también desde el chat de WhatsApp o en una secuencia de correo.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          },
+          {
+            "titulo": "«FALTA CONECTAR STRIPE»",
+            "texto": "En un campus sin la clave de Stripe, el asistente lo dice nada más abrirlo y lleva a Integraciones para conectarla.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          }
+        ]
+      },
+      {
+        "titulo": "Facturas y Conciliación",
+        "items": [
+          {
+            "titulo": "«Emitir ya la factura de este cobro»",
+            "texto": "Al registrar una venta o un cobro puedes emitir su factura en el momento, sin esperar a la cola.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/finanzas/facturas",
+            "boton": "Ir a Facturación",
+            "recorrido": "cola-facturacion"
+          },
+          {
+            "titulo": "Conciliación de facturas, cobros y cargos de Stripe",
+            "texto": "Facturas sin cobro, cobros sin factura y cargos de Stripe sin enlazar, por campus y mes, para enlazarlos o crear la venta.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/finanzas/conciliacion",
+            "boton": "Ir a Conciliación",
+            "recorrido": "conciliacion-facturas"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Un webhook de Stripe sin cuerpo ya no se anota como rechazo de Stripe."
+    ]
+  },
+  {
+    "version": "2.9.7",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.7",
+    "intro": "El menú, por permiso.",
+    "grupos": [],
+    "arreglos": [
+      "El menú enseña cada pantalla a quien tiene su permiso, sea cual sea su rol.",
+      "Productos: se ven los de todos los campus, para registrar la venta o el link de pago de un alumno de otro campus. Crear y editar productos sigue siendo solo en los campus de cada uno."
+    ]
+  },
+  {
+    "version": "2.9.6",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.6",
+    "intro": "Versión de paridad con ISEIE.",
+    "grupos": [],
+    "arreglos": ["Misma versión que el CRM de ISEIE, que arregla allí el menú de «Links de pago». Aquí no cambia nada."]
+  },
+  {
     "version": "2.9.5",
     "fecha": "2026-11-23",
     "titulo": "Versión 2.9.5",

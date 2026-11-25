@@ -26,10 +26,11 @@ export default function LeadSidebar({
   onOpenInteraction, onOpenReminder, onOpenReassign, onOpenMerge,
 }: LeadSidebarProps) {
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
-  const { can } = usePermission();
+  const { can, veGestoras } = usePermission();
   return (
     <div className="space-y-3">
-      <div className="bg-card p-4 rounded-lg border border-border">
+      {/* `data-recorrido`: el paso «Cambiar estado» del recorrido de la ficha (#941). */}
+      <div data-recorrido="ficha-estado" className="bg-card p-4 rounded-lg border border-border">
         <h3 className="text-[13px] font-semibold mb-2 flex items-center gap-1.5">
           <Funnel size={14} weight="regular" className="text-muted-foreground" /> Cambiar estado
         </h3>
@@ -65,7 +66,8 @@ export default function LeadSidebar({
           >
             <CalendarCheck size={14} weight="bold" /> Programar recordatorio
           </button>
-          {isAdmin && can('leads.assign') && (
+          {/* También la líder de equipo, dentro del suyo (Diego, 25/11/2026). */}
+          {veGestoras && can('leads.assign') && (
             <button
               onClick={onOpenReassign}
               className="w-full h-9 rounded-md border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"

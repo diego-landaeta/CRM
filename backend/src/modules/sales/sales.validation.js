@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { envioFacturaSchema, datosFiscalesSchema } from '../factura-automatica/factura-automatica.validation.js';
+import { fechaInicioCurso } from '../conversions/conversion.validation.js';
 
 const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'paypal', 'fraccionado'];
 
@@ -23,6 +25,11 @@ export const createSaleSchema = z.object({
   importe_pagado: z.number().min(0).optional(),
   metodo_pago: z.enum(PAYMENT_METHODS).optional().nullable(),
   fecha_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
+  // Inicio del curso pactado (#767). Aquí opcional: este esquema lo usa también
+  // Conciliación, que crea la venta de un cargo de Stripe ya cobrado. La exige
+  // el controlador de POST /api/ventas («Registrar venta») si el producto tiene
+  // curso de Moodle (#1036).
+  fecha_inicio: fechaInicioCurso().optional().nullable(),
   notas: z.string().max(2000).optional().nullable(),
   // VENTA SIN GESTORA: se crea de cero y no es de nadie. Quien puede pedirlo lo
   // decide el permiso `conversions.sin_gestora`, y eso se comprueba en el
@@ -36,6 +43,10 @@ export const createSaleSchema = z.object({
   // CREAR OTRA IGUALMENTE (CRM#898): el alumno ya tiene una venta de este
   // programa y quien registra dice que es otra compra. Queda apuntado quién.
   forzar: z.boolean().optional(),
+  // «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+  envio_factura: envioFacturaSchema.optional(),
+  // Los datos fiscales de la persona (25/11): ver conversion.validation.js.
+  datos_fiscales: datosFiscalesSchema.partial().optional(),
   // Cuotas para pago fraccionado. Validado además en el service que sumen el total.
   installments: z.array(z.object({
     importe_previsto: z.number().positive('Importe de cuota debe ser > 0'),

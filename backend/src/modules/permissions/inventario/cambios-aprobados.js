@@ -275,6 +275,8 @@ CAMBIOS_POR_DATOS.push({
  * antes y las de ahora, y la foto del menú (`menuPorPerfil423.test.jsx`) solo
  * deja pasar estas diferencias. `+` aparece, `-` desaparece.
  */
+const PRODUCTOS_PARA_TODOS = ['+ Académico › Productos', '+ Académico › Productos por categoría'];
+
 export const CAMBIOS_DE_MENU = [
   {
     id: 'menu-mi-factura-con-ficha',
@@ -628,16 +630,102 @@ export const CAMBIOS_DE_MENU = [
     id: 'menu-cursos-moodle-957',
     que: '«Académico › Cursos de Moodle» (y la pestaña del mismo nombre en Productos): cada producto del catálogo de un campus con su curso de Moodle, o «Sin curso», y elegirlo de la lista de cursos de su Moodle, cambiarlo o quitarlo (CRM#957). Avisa de los productos vendidos sin curso. La ve quien tiene `moodle.cursos_producto`, clave nueva: admin y soporte de serie, cada uno en sus campus.',
     motivo: 'Diego (19/11, CRM#957, a petición de CRM-ISEIE#355): sin esta unión la matrícula automática (#767) no sabe en qué curso matricular a quien compra. Hasta ahora solo se podía con SQL a mano en `moodle_cursos_producto`.',
+    // Diego, 25/11: apartado Moodle. La entrada sigue siendo la misma; desde ese día vive en
+    // el bloque «Moodle» (`bloquesDelMenu.js`), y aquí se nombra ya con su sitio nuevo.
     perfiles: {
-      superadmin: ['+ Académico › Cursos de Moodle'],
-      admin: ['+ Académico › Cursos de Moodle'],
-      soporte: ['+ Académico › Cursos de Moodle'],
-      'gestora+admin': ['+ Académico › Cursos de Moodle'],
+      superadmin: ['+ Moodle › Cursos de Moodle'],
+      admin: ['+ Moodle › Cursos de Moodle'],
+      soporte: ['+ Moodle › Cursos de Moodle'],
+      'gestora+admin': ['+ Moodle › Cursos de Moodle'],
     },
     rutas: {
-      'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
+      'Moodle › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
     },
     aprobadoPor: 'Pendiente de Diego (CRM#957)',
+  },
+  {
+    id: 'menu-por-permiso-productos',
+    que: 'El menú decide por PERMISO, no por rol (#423: «el rol solo vale para el ALCANCE»): una entrada que pide `permiso` sale a quien lo tiene, sea cual sea su rol. Una gestora con permisos de admin dados como excepción ve sus pantallas. A una gestora normal solo le aparecen «Productos» y «Productos por categoría» (su rol trae `products.view` de serie); las demás entradas cuyo permiso trae de serie su rol siguen por rol (`seguirPorRol`) hasta que Diego decida.',
+    motivo: 'Diego (23/11): «los productos los ven todos, de todos». Una gestora con permisos de admin como excepción perdía «Productos» aunque tuviera `products.view`. No cambia el acceso: `GET /api/products` ya respondía a la gestora (ahora, además, de cualquier campus).',
+    perfiles: {
+      'gestora': PRODUCTOS_PARA_TODOS,
+      'gestora+tutor': PRODUCTOS_PARA_TODOS,
+      'gestora con factura_manager': PRODUCTOS_PARA_TODOS,
+      'gestora con editar_fechas_factura': PRODUCTOS_PARA_TODOS,
+      'gestora con usa_mcp': PRODUCTOS_PARA_TODOS,
+      'gestora con diplomas.view': PRODUCTOS_PARA_TODOS,
+      'gestora con tasks.close': PRODUCTOS_PARA_TODOS,
+    },
+    rutas: {
+      'Académico › Productos': 'GET /api/products/',
+      'Académico › Productos por categoría': 'GET /api/products/',
+    },
+    aprobadoPor: 'Pendiente de Diego (menú por permiso)',
+  },
+  {
+    id: 'menu-google-analytics-55',
+    que: '«Publicidad › Google Analytics»: visitas de la web por día, por canal y por página de entrada, cruzadas con prospectos y ventas (CRM#55). La ve quien tiene `google_analytics.view`, clave nueva: admin, soporte y project manager de serie, cada uno en sus campus. Sincronizar a mano, `google_analytics.edit` (admin y soporte).',
+    motivo: 'CRM#55: el embudo empezaba cuando alguien deja su teléfono; con GA4 se ve lo de antes, y si un curso no vende porque no lo ven o porque no convence.',
+    perfiles: {
+      superadmin: ['+ Publicidad › Google Analytics'],
+      admin: ['+ Publicidad › Google Analytics'],
+      soporte: ['+ Publicidad › Google Analytics'],
+      project_manager: ['+ Publicidad › Google Analytics'],
+      'gestora+admin': ['+ Publicidad › Google Analytics'],
+    },
+    rutas: {
+      'Publicidad › Google Analytics': 'GET /api/google-analytics/estado',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#55)',
+  },
+  {
+    id: 'menu-trafico-organico-36',
+    que: '«Publicidad › Tráfico orgánico»: clics, impresiones, CTR y posición de Google comparados con el periodo anterior, las búsquedas, las páginas con muchas impresiones y CTR bajo y las páginas de formación sin indexar (CRM#36). La ve quien tiene `search_console.view`, clave nueva: admin, soporte y project manager de serie, cada uno en sus campus. Sincronizar a mano, `search_console.edit` (admin y soporte).',
+    motivo: 'CRM#36 (tarea 222 de Carlos): hacer el análisis SEO desde el CRM sin entrar en Search Console. Sustituye a «Campañas › Tráfico orgánico», que decía «Aún no conectado» y había salido del menú (#534).',
+    perfiles: {
+      superadmin: ['+ Publicidad › Tráfico orgánico'],
+      admin: ['+ Publicidad › Tráfico orgánico'],
+      soporte: ['+ Publicidad › Tráfico orgánico'],
+      project_manager: ['+ Publicidad › Tráfico orgánico'],
+      'gestora+admin': ['+ Publicidad › Tráfico orgánico'],
+    },
+    rutas: {
+      'Publicidad › Tráfico orgánico': 'GET /api/search-console/estado',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#36)',
+  },
+  {
+    id: 'menu-apostillas',
+    que: 'Clientes › Apostillas (el trámite de la Apostilla de La Haya) sale a todos los que entran al CRM: admin, gestoras, líder, soporte y project manager. Tutores y colaboradores, no.',
+    motivo: 'CRM#1130 / CRM-ISEIE#786 (Diego, 25/11/2026): «lo ven todos», un producto propio que tiene que poder medirse. Es una pantalla nueva con su permiso `apostillas.view` y su ruta nueva: nadie pierde nada.',
+    perfiles: Object.fromEntries([
+      'superadmin', 'admin', 'soporte', 'project_manager', 'gestora', 'gestora+admin', 'gestora+tutor',
+      'gestora con factura_manager', 'gestora con editar_fechas_factura', 'gestora con usa_mcp',
+      'gestora con diplomas.view', 'gestora con tasks.close',
+    ].map((perfil) => [perfil, ['+ Comercial › Apostillas']])),
+    rutas: { 'Comercial › Apostillas': 'GET /api/apostillas/' },
+    aprobadoPor: 'Diego, 25/11',
+  },
+  {
+    id: 'menu-mi-campus-administracion',
+    que: '«Mi campus» sale también a admin (y a quien tenga `tutores.campus_administracion`): la vista de administración, con todos los cursos del Moodle de sus campus. El super admin ya la veía. Tutoras y redactoras, igual.',
+    motivo: 'Diego (25/11/2026): «que los admin puedan verlo también y los superadmin». Bárbara (ISEIE) revisa los 314 cursos y no es profesora en ninguno. Es un permiso nuevo con su ruta nueva y solo lee: nadie pierde nada.',
+    // Diego, 25/11: apartado Moodle. «Mi campus» vive desde ese día en el bloque «Moodle».
+    perfiles: {
+      admin: ['+ Moodle › Mi campus'],
+      'gestora+admin': ['+ Moodle › Mi campus'],
+    },
+    rutas: { 'Moodle › Mi campus': 'GET /api/tutores/mi-campus/administracion' },
+    aprobadoPor: 'Diego, 25/11',
+  },
+  {
+    id: 'menu-apartado-moodle',
+    que: 'Un apartado «Moodle» en el menú con todo lo de Moodle junto (Mi campus, Consultas, Cursos y alumnos, Cursos de Moodle, Cursos pendientes y Diplomas, que solo cambian de sitio) y una entrada nueva, «Moodle › Conexión del campus», que lleva a la tarjeta Moodle de Integraciones. La ve quien ya veía «Integraciones»: superadmin, admin, soporte, gestora+admin y project manager.',
+    motivo: 'Diego, 25/11: apartado Moodle («necesito que en el menú salga un apartado de Moodle, porque no se entiende del todo, y poder meter todo lo de Moodle ahí»). La conexión del campus es la misma pantalla de Integraciones con el mismo permiso (`integrations.view`): nadie gana ni pierde nada.',
+    perfiles: Object.fromEntries(['superadmin', 'admin', 'soporte', 'gestora+admin', 'project_manager']
+      .map((perfil) => [perfil, ['+ Moodle › Conexión del campus']])),
+    rutas: { 'Moodle › Conexión del campus': 'GET /api/integrations/' },
+    aprobadoPor: 'Diego, 25/11',
   },
 ];
 

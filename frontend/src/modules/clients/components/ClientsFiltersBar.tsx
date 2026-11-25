@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Funnel, X, CaretDown } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
 
 interface Gestor { id: number; nombre: string }
 interface Producto { id: number; nombre: string }
@@ -51,13 +52,15 @@ export const SORT_LABELS: Record<string, string> = {
 
 export default function ClientsFiltersBar(props: Props) {
   const {
-    user, search, setSearch, filterResp, setFilterResp,
+    search, setSearch, filterResp, setFilterResp,
     filterProducto, setFilterProducto, filterEstadoPago, setFilterEstadoPago,
     dateFrom, setDateFrom, dateTo, setDateTo, sortBy, setSortBy,
     gestores, productos, totalBackend, filteredCount,
     filterMoodle = '', setFilterMoodle,
   } = props;
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // El filtro de gestora, por permiso y alcance (Diego, 25/11/2026): también la
+  // líder de equipo, con ella y su equipo. «Sin asignar» no es de su equipo.
+  const { veGestoras, llevaEquipo } = usePermission();
 
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -127,7 +130,7 @@ export default function ClientsFiltersBar(props: Props) {
                   eran dos sitios donde escribir y dos que limpiar. */}
               {/* Filtros principales */}
               <Section title="Filtros principales">
-                {isAdmin && (
+                {veGestoras && (
                   <Row label="Gestor">
                     <select
                       value={filterResp}
@@ -135,7 +138,7 @@ export default function ClientsFiltersBar(props: Props) {
                       className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
                     >
                       <option value="">Todos los gestores</option>
-                      <option value="unassigned">— Sin asignar —</option>
+                      {!llevaEquipo && <option value="unassigned">— Sin asignar —</option>}
                       {gestores.map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
                     </select>
                   </Row>

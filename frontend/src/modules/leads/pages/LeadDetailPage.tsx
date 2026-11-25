@@ -73,7 +73,7 @@ export default function LeadDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { can } = usePermission();
+  const { can, veGestoras } = usePermission();
   const {
     lead, timeline, interacciones, reminders, utms, loading, error, refetch,
     updateStatus, addInteraction, addReminder, completeReminder, reassign, updateLead,
@@ -101,13 +101,16 @@ export default function LeadDetailPage() {
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
 
+  // Las gestoras para «Reasignar»: por permiso y alcance, no por rol (Diego,
+  // 25/11/2026). La líder de equipo tenía el botón (`leads.assign`) y la lista
+  // vacía; el servidor le da ella y su equipo (`equipos.su_equipo`).
   useEffect(() => {
-    if (!isAdmin || gestores.length > 0) return;
+    if (!veGestoras || gestores.length > 0) return;
     // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
     client.get('/users?limit=100&alcance=comercial')
       .then((res) => { if (res.success) setGestores(res.data || []); })
       .catch(() => toast({ title: 'Error al cargar gestores', variant: 'destructive' }));
-  }, [isAdmin, gestores.length]);
+  }, [veGestoras, gestores.length]);
 
   useEffect(() => {
     if (lead?.estado && !selectedEstado) {
@@ -191,7 +194,9 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
+    /* El margen de scroll de lo que señala el recorrido de la ficha (#941): la
+       barra fija de arriba le tapaba el principio al subir. */
+    <div className="space-y-5 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <LeadLossDialog
         open={lossOpen}
         onClose={() => setLossOpen(false)}
@@ -284,7 +289,7 @@ export default function LeadDetailPage() {
             refreshKey={emailRefreshKey}
           />
           <LinksDePagoCard projectId={lead.project_id} leadId={lead.id} productoId={lead.producto_interes_id} />
-          <div data-section="compras" className="bg-card p-5 rounded-lg border border-border">
+          <div data-section="compras" data-recorrido="ficha-ventas" className="bg-card p-5 rounded-lg border border-border">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <CurrencyEur size={16} weight="regular" /> Historial de compras
             </h3>

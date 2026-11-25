@@ -11,7 +11,8 @@ import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 import { alcanceDeLider } from '../../shared/utils/roles.js';
-import { linksPagoActivos, pluginMoodleActivo, suspensionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
+import { linksPagoActivos, pluginMoodleActivo, seguimientoLinksActivo, suspensionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
+import { monitaskActivo } from '../monitask/interruptor.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -176,9 +177,18 @@ export async function me(req, res, next) {
           // El plugin del CRM en Moodle (#850), igual: lo mismo que decide qué
           // rutas del plugin se montan (PLUGIN_MOODLE_EN_PRODUCCION). Para
           // encenderlo en /crm basta con el `.env`, sin recompilar el frontal.
+          // Los recordatorios al alumno de un link sin pagar (CRM#984,
+          // LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION): «Crear link» y la venta dicen
+          // si al alumno se le recordará cada cuota o hay que mandársela (24/11).
+          // Monitask (#236): MONITASK_ACTIVO. Con él apagado, el menú no enseña
+          // «Actividad» y la pantalla y la tarjeta no piden /monitask/estado (que
+          // contestaría 404 y llenaba el registro de «Peticion rechazada»).
           // Las suspensiones de Moodle en la ficha (CRM#531), con SUSPENSIONES_MOODLE_EN_PRODUCCION.
           funciones: {
-            links_pago: linksPagoActivos(), plugin_moodle: pluginMoodleActivo(),
+            links_pago: linksPagoActivos(),
+            plugin_moodle: pluginMoodleActivo(),
+            recordatorios_links: seguimientoLinksActivo(),
+            monitask: monitaskActivo(),
             suspensiones_moodle: suspensionesMoodleActivas(),
           },
         },
@@ -211,7 +221,15 @@ export async function changePassword(req, res, next) {
 
     const newHash = await bcrypt.hash(newPassword, 12);
     await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
-    await authModel.logActivity(userId, 'change_password', null, getClientIp(req));
+    // Queda anotado en el registro, como cuando lo cambia otra persona
+    // (`usuario.cambiar_contrasena`). Nunca la contraseña: solo que la cambió
+    // ella misma. Si apuntarlo falla, la contraseña ya está cambiada: no se
+    // contesta un 500 por eso (se avisa en el log).
+    try {
+      await authModel.logActivity(userId, 'password_changed', { propia: true }, getClientIp(req));
+    } catch (err) {
+      logger.warn({ err: err.message, userId }, 'change-password: no se pudo anotar en user_activity_log');
+    }
 
     res.json({ success: true, data: { message: 'Contraseña actualizada' } });
   } catch (err) { next(err); }

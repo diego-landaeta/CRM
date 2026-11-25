@@ -3,6 +3,8 @@ import client from '@/shared/api/client';
 export type Novedad = {
   titulo: string; texto: string; roles: string[];
   ruta: string | null; boton?: string | null;
+  /** Id de su recorrido guiado: «Ver recorrido» lo abre en su pantalla (3.0.0). */
+  recorrido?: string | null;
 };
 export type Version = {
   version: string; fecha: string; titulo: string; intro: string;
@@ -32,8 +34,11 @@ export async function bajarPdf(version: string, crm: string) {
   const a = document.createElement('a');
   a.href = url;
   a.download = `novedades-${crm.toLowerCase().replace(/\s+/g, '-')}-${version}.pdf`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Soltarlo enseguida puede cortar la descarga en algunos navegadores.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 export async function enviarNovedades(version: string, body: { alcance: 'prueba' | 'equipo'; correo?: string | null }) {

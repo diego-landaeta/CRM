@@ -11,6 +11,7 @@ import Select from '@/shared/components/ui/Select';
 import Iniciales from '@/shared/components/ui/Iniciales';
 import { cn } from '@/shared/lib/utils';
 import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   consultasApi, semaforo, haceCuanto as horasEnTexto,
   type ConsultaDetalle, type ConsultaFila, type ContextoConsulta, type NotaInterna, type ParticipanteChat, type RespuestaGuardada, type TipoDeGrupo,
@@ -195,7 +196,7 @@ function Bandeja({ actual, puedes, plazoHoras, version }: { actual: number; pued
   }, [actual, puedes, version]);
 
   return (
-    <nav aria-label="Consultas pendientes" className="hidden min-h-0 flex-col border-r border-border bg-card lg:flex">
+    <nav aria-label="Consultas pendientes" data-recorrido="consulta-bandeja" className="hidden min-h-0 flex-col border-r border-border bg-card lg:flex">
       <Cabecera>
         <h2 className="flex-1 text-normal font-semibold text-foreground">Pendientes</h2>
         {lista && <span className="rounded-full bg-muted px-2 py-0.5 text-secundario font-medium tabular-nums text-muted-foreground">{lista.length}</span>}
@@ -692,7 +693,7 @@ export default function ConsultaPage() {
             </>
           ) : (
             <>
-              <Cabecera className="gap-3">
+              <Cabecera className="gap-2 sm:gap-3">
                 <Link to="/consultas" aria-label="Volver a Consultas" className="-ml-1 inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden">
                   <ArrowLeft size={16} aria-hidden />
                 </Link>
@@ -709,6 +710,13 @@ export default function ConsultaPage() {
                 <span className="hidden shrink-0 whitespace-nowrap 2xl:inline-flex"><Plazo c={c} plazoHoras={c.plazoHoras} /></span>
                 <span aria-hidden className="mx-1 hidden h-5 w-px bg-border 2xl:block" />
                 <div className="flex items-center gap-0.5">
+                  {/* «Ver recorrido», solo con la brújula donde la cabecera no tiene sitio
+                      (el nombre sigue en su aria-label y su title): en el móvil y con la ficha
+                      abierta al lado (1280-1535 px). Con el texto, «Cerrar» se salía de la
+                      pantalla a 375 px y se quedaba debajo de la ficha a 1280. */}
+                  <span className="inline-flex max-sm:[&>button]:gap-0 max-sm:[&>button]:px-2 max-sm:[&>button]:text-[0px] xl:max-2xl:[&>button]:gap-0 xl:max-2xl:[&>button]:px-2 xl:max-2xl:[&>button]:text-[0px]">
+                    <VerRecorrido id="consulta-responder" listo={!!c} compacto />
+                  </span>
                   {ctx?.conversacionUrl && (
                     <BotonIcono etiqueta="Abrir esta conversación en Moodle" href={ctx.conversacionUrl}><ArrowSquareOut size={16} aria-hidden /></BotonIcono>
                   )}
@@ -718,7 +726,7 @@ export default function ConsultaPage() {
                   </BotonIcono>
                 </div>
                 {c.estado !== 'cerrada' && (
-                  <Button variant="outline" size="sm" disabled={ocupado} title="Cerrar la consulta" className="ml-1 h-8 px-2.5 text-secundario 2xl:px-3"
+                  <Button variant="outline" size="sm" disabled={ocupado} title="Cerrar la consulta" data-recorrido="consulta-cerrar" className="ml-1 h-8 px-2.5 text-secundario 2xl:px-3"
                     onClick={() => hacer(() => consultasApi.cerrar(consultaId), 'Consulta cerrada')}>
                     <CheckCircle size={14} weight="bold" className="2xl:mr-1.5" aria-hidden />
                     <span className="hidden 2xl:inline">Cerrar</span><span className="sr-only 2xl:hidden">Cerrar la consulta</span>
@@ -727,7 +735,7 @@ export default function ConsultaPage() {
               </Cabecera>
 
               {verFicha && (
-                <div className="max-h-[55vh] overflow-y-auto border-b border-border xl:hidden">
+                <div data-recorrido="consulta-ficha" className="max-h-[55vh] overflow-y-auto border-b border-border xl:hidden">
                   <Ficha c={c} ctx={ctx} cargando={cargandoCtx} alInsertar={insertar} puedeEscribir={puedeEscribir} admin={reasignar} />
                 </div>
               )}
@@ -750,7 +758,7 @@ export default function ConsultaPage() {
               )}
 
               {/* Los mensajes */}
-              <div ref={lista} data-testid="chat-mensajes" className="min-h-[18rem] flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
+              <div ref={lista} data-testid="chat-mensajes" data-recorrido="consulta-mensajes" className="min-h-[18rem] flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
                 {c.mensajes.length === 0 && (
                   <p className="grid h-full place-items-center text-secundario text-muted-foreground">Todavía no hay mensajes en esta conversación.</p>
                 )}
@@ -846,7 +854,7 @@ export default function ConsultaPage() {
                     modoReal === 'nota' ? 'border-warning/50 bg-warning-soft/40 focus-within:ring-warning/20 dark:border-warning/30 dark:bg-warning/[0.06]' : 'bg-background focus-within:border-ring focus-within:ring-ring/20',
                     faltaTexto ? 'border-destructive' : (modoReal === 'nota' ? '' : 'border-input'))}>
                     <label htmlFor="consulta-respuesta" className="sr-only">{modoReal === 'nota' ? 'Tu nota interna' : 'Tu respuesta'}</label>
-                    <textarea id="consulta-respuesta" ref={caja} value={texto}
+                    <textarea id="consulta-respuesta" ref={caja} value={texto} data-recorrido="consulta-escribir"
                       onChange={(e) => { setTexto(e.target.value); if (e.target.value.trim()) setFaltaTexto(false); }}
                       onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviar(e.shiftKey); } }}
                       rows={Math.min(8, Math.max(2, texto.split('\n').length + 1))} maxLength={20000}
@@ -868,7 +876,7 @@ export default function ConsultaPage() {
                     )}
                     <div className="flex items-center gap-0.5 px-2 pb-2">
                       {puedeEscribir ? (
-                        <button type="button" aria-pressed={modoReal === 'nota'} onClick={() => setModo(modoReal === 'nota' ? 'respuesta' : 'nota')}
+                        <button type="button" aria-pressed={modoReal === 'nota'} onClick={() => setModo(modoReal === 'nota' ? 'respuesta' : 'nota')} data-recorrido="consulta-nota"
                           title={modoReal === 'nota' ? 'Volver a responder al alumno' : 'Escribir una nota interna (el alumno no la ve)'}
                           className={cn('inline-flex h-8 items-center gap-1 rounded-md px-2 text-secundario font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             modoReal === 'nota' ? 'bg-warning-soft dark:bg-warning/15 text-warning-soft-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
@@ -879,11 +887,11 @@ export default function ConsultaPage() {
                         <span className="inline-flex h-8 items-center gap-1 px-2 text-secundario font-medium text-warning-soft-foreground"><NotePencil size={16} aria-hidden /> Nota interna</span>
                       )}
                       {modoReal === 'respuesta' && <>
-                      <BotonIcono etiqueta="Respuestas guardadas" onClick={() => setVerGuardadas((v) => !v)} activo={verGuardadas}><BookmarkSimple size={16} aria-hidden /></BotonIcono>
+                      <span data-recorrido="consulta-guardadas" className="inline-flex"><BotonIcono etiqueta="Respuestas guardadas" onClick={() => setVerGuardadas((v) => !v)} activo={verGuardadas}><BookmarkSimple size={16} aria-hidden /></BotonIcono></span>
                       <input ref={archivo} type="file" multiple className="peer sr-only" id="consulta-adjuntos"
                         accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
                         onChange={(e) => elegirArchivos(e.target.files)} />
-                      <label htmlFor="consulta-adjuntos" title={`Adjuntar · PDF, imágenes, Word, Excel o texto · hasta ${MAX_MB} MB · ${MAX_ADJUNTOS} como mucho`}
+                      <label htmlFor="consulta-adjuntos" data-recorrido="consulta-adjuntar" title={`Adjuntar · PDF, imágenes, Word, Excel o texto · hasta ${MAX_MB} MB · ${MAX_ADJUNTOS} como mucho`}
                         className="inline-grid h-8 w-8 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
                         <Paperclip size={16} aria-hidden /><span className="sr-only">Adjuntar archivos</span>
                       </label>
@@ -899,7 +907,7 @@ export default function ConsultaPage() {
                           Enviar y cerrar
                         </Button>
                       )}
-                      <Button type="submit" size="sm" disabled={ocupado} className={cn('h-8 px-3 text-secundario', modoReal === 'nota' ? 'ml-auto md:ml-0' : 'lg:ml-auto 2xl:ml-0')}>
+                      <Button type="submit" size="sm" disabled={ocupado} data-recorrido="consulta-enviar" className={cn('h-8 px-3 text-secundario', modoReal === 'nota' ? 'ml-auto md:ml-0' : 'lg:ml-auto 2xl:ml-0')}>
                         {modoReal === 'nota'
                           ? <><NotePencil size={14} weight="bold" className="mr-1.5" aria-hidden /> {ocupado ? 'Guardando…' : 'Guardar nota'}</>
                           : <><PaperPlaneRight size={14} weight="fill" className="mr-1.5" aria-hidden /> {ocupado ? 'Enviando…' : 'Enviar'}</>}
@@ -915,7 +923,7 @@ export default function ConsultaPage() {
           )}
         </section>
 
-        <aside aria-label="Ficha del alumno" className="hidden min-h-0 flex-col border-l border-border bg-card xl:flex">
+        <aside aria-label="Ficha del alumno" data-recorrido="consulta-ficha" className="hidden min-h-0 flex-col border-l border-border bg-card xl:flex">
           <Cabecera>
             <IdentificationCard size={16} className="text-muted-foreground" aria-hidden />
             <h2 className="flex-1 text-normal font-semibold text-foreground">Ficha del alumno</h2>

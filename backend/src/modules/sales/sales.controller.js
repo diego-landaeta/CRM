@@ -2,10 +2,11 @@ import * as salesService from './sales.service.js';
 import * as reportModel from '../reports/report.model.js';
 import * as goalsService from './sales.goals.js';
 import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
+import { exigirFechaSiTieneCurso } from '../conversions/fecha-inicio.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial, acotarAlAlcance } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, acotarAlAlcance } from '../../shared/utils/roles.js';
 import { leerFiltroPais } from '../leads/pais.js';
 
 export async function create(req, res, next) {
@@ -14,6 +15,19 @@ export async function create(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // «Enviar factura automáticamente»: solo quien tiene `facturas.envio_auto` (25/11).
+    const { quitarSiNoPuede } = await import('../factura-automatica/factura-automatica.envio.js');
+    await quitarSiNoPuede(req, parsed.data);
+    // LA FECHA DE INICIO DEL CURSO, OBLIGATORIA AL CERRAR LA VENTA DE UN
+    // PRODUCTO CON CURSO DE MOODLE (#767, #1036). Esta ruta es la del
+    // formulario «Registrar venta». Conciliación, la compra directa y los links
+    // de pago crean la venta por el servicio y no pasan por aquí: siguen sin
+    // ella, y entonces la matrícula va con el pago.
+    await exigirFechaSiTieneCurso({
+      project_id: parsed.data.project_id,
+      producto_contratado_id: parsed.data.producto_interes_id,
+      fecha_inicio: parsed.data.fecha_inicio,
+    });
     // EL CANDADO DE «SIN GESTORA», EN EL SERVIDOR.
     //
     // La pantalla esconde el boton a quien no puede, pero esconder no es
@@ -96,8 +110,9 @@ export async function gestoresStats(req, res, next) {
     const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo, from, to });
     // Quien lleva un equipo comercial (09/11/2026) ve en la tabla a su equipo,
     // no a todas. Sin equipo, como siempre (lo decide `ventas.view_equipo`).
-    const alcance = await alcanceComercial(req.user);
-    if (alcance && alcance.length > 1) {
+    // La líder de equipo (CRM#1105), también con el equipo vacío: ella sola.
+    const alcance = await alcanceDeLider(req.user);
+    if (alcance) {
       result.gestores = result.gestores.filter((g) => alcance.includes(Number(g.user_id)));
     }
     res.json({ success: true, data: result });

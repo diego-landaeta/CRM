@@ -69,31 +69,96 @@ export function soloEsTutorRedactor(user: Quien | null | undefined): boolean {
   return suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor');
 }
 
+/**
+ * Los roles que trabajan como una gestora (CRM#1105): la gestora y la líder de
+ * equipo, que es una gestora que además ve a su equipo. Donde el menú o una
+ * pantalla enseñaban algo «a la gestora», también a la líder. Es comportamiento
+ * y lo que se enseña de serie; quién entra lo deciden los permisos (#423).
+ * Mismo nombre que en el servidor (`shared/utils/roles.js`) y en CRM-ISEIE.
+ */
+export const ROLES_DE_GESTORA: UserRole[] = ['gestor', 'lider_equipo'];
+
+/** Si su rol PRINCIPAL trabaja como una gestora (lo que antes era `role === 'gestor'`). */
+export function esRolDeGestora(rol: string | null | undefined): boolean {
+  return ROLES_DE_GESTORA.includes(rol as UserRole);
+}
+
 /** Los roles que dan clase: donde se pregunta «¿es tutor?», el redactor también cuenta. */
 export const ROLES_DE_TUTOR: UserRole[] = ['tutor', 'tutor_redactor'];
 
 /**
- * Los permisos con los que el servidor contesta a los avisos de WhatsApp
+ * Los permisos con los que la RUTA deja pasar a los avisos de WhatsApp
  * (`usaOSupervisa` en whatsapp.routes.js: `/sin-leer` y `/respuesta-llamada`).
  * Una prueba comprueba que no se separan.
  */
 export const PERMISOS_DE_LOS_AVISOS = ['whatsapp.usar', 'whatsapp.supervisar'];
 
 /**
- * Si tiene WhatsApp, con el mismo criterio con el que el servidor contesta a los
- * avisos: «Usar su WhatsApp» o «Supervisar WhatsApp» en su mapa de permisos, el
- * que llega con el login y con /auth/me (#423). A quien no, le contesta 403, así
- * que los avisos de mensajes y de llamadas no deben preguntar por él (QA de
- * Diego, 22/10, punto 8: el tutor recibía un 403 cada pocos segundos en
- * `/api/whatsapp/sin-leer`). Ni más ni menos: a quien el servidor contesta, se
- * le pregunta.
+ * El que de verdad hace falta para el aviso de mensajes: «Usar su WhatsApp».
+ * La ruta deja pasar también a quien solo supervisa, pero `/sin-leer` sin
+ * `usuarioId` es la línea PROPIA y el controlador (`usuarioObjetivo`) pide
+ * `whatsapp.usar`; a quien solo supervisa le contestaba 403 `SIN_WHATSAPP`
+ * (errores de producción del 23/11).
+ */
+export const PERMISO_DEL_AVISO = 'whatsapp.usar';
+
+/**
+ * Si se le pregunta por sus avisos de WhatsApp (mensajes sin leer y llamadas):
+ * con «Usar su WhatsApp» en su mapa de permisos, el que llega con el login y con
+ * /auth/me (#423), y sin la casilla «usa WhatsApp» apagada en su ficha. A quien
+ * no, el servidor le contesta 403, así que no se le pregunta (QA de Diego,
+ * 22/10, punto 8: el tutor recibía un 403 cada pocos segundos en
+ * `/api/whatsapp/sin-leer`; 23/11: quien solo supervisa, o con la casilla apagada).
  *
  * El mapa tal cual, como `tienePermiso` en el servidor, y no `can()`: `can()` le
  * da todo al superadmin, y un superadmin puede tener su WhatsApp apagado (#503).
- * Sin mapa todavía, no se pregunta. Antes se miraba la casilla «usa WhatsApp» de
- * la ficha, pero desde #423 el servidor no la mira y nadie la actualiza.
+ * Sin mapa todavía, no se pregunta. La casilla (`usa_whatsapp === false`) ya
+ * apaga el permiso en el servidor (permissions/casillas.js); mirarla aquí cubre
+ * el mapa de antes de apagarla.
  */
-export function tieneWhatsapp(permissions: Record<string, boolean> | null | undefined): boolean {
+export function tieneWhatsapp(
+  permissions: Record<string, boolean> | null | undefined,
+  user?: { usa_whatsapp?: boolean | null } | null,
+): boolean {
   if (!permissions) return false;
-  return PERMISOS_DE_LOS_AVISOS.some((clave) => permissions[clave] === true);
+  if (user?.usa_whatsapp === false) return false;
+  return permissions[PERMISO_DEL_AVISO] === true;
+}
+
+/*
+  LAS LISTAS DE GESTORAS (filtro «Gestora», reasignar, la cola del equipo…).
+  Diego, 25/11/2026: «a Raquel no le funcionan los filtros de las gestoras al
+  reasignar o filtrar». Las pantallas cargaban la lista solo si el rol PRINCIPAL
+  era admin o superadmin; la líder de equipo (CRM#1105 / CRM-ISEIE#761) tenía el
+  botón «Reasignar» (por `leads.assign`) pero el desplegable salía vacío, y el
+  filtro «Gestora» ni aparecía. El servidor ya le daba su equipo en
+  `GET /users?alcance=comercial` (por `equipos.su_equipo`).
+
+  Ahora se decide con el permiso de pedir la lista y el ALCANCE, igual que el
+  servidor (`soloLoSuyo` en shared/utils/roles.js): ve la lista quien puede
+  pedirla y ve a más de una persona (todo el campus o su equipo).
+*/
+const VEN_TODO_EL_CAMPUS: UserRole[] = ['superadmin', 'admin', 'soporte'];
+const COMERCIAL_PROPIO = ['gestor', 'project_manager', 'lider_equipo'];
+
+/** «Solo lo suyo», como `soloLoSuyo` en el servidor: comercial sin ningún rol que vea el campus entero. */
+export function soloLoSuyo(user: Quien | null | undefined): boolean {
+  const suyos = rolesDe(user);
+  if (suyos.some((r) => VEN_TODO_EL_CAMPUS.includes(r))) return false;
+  return suyos.some((r) => COMERCIAL_PROPIO.includes(r));
+}
+
+/**
+ * Si se le enseñan las listas de gestoras: puede pedir la lista (`users.view`, o
+ * `equipos.su_equipo` la líder) y ve a más de una persona (no es «solo lo suyo»,
+ * o lleva un equipo). Una gestora o un project manager sin equipo, no.
+ */
+export function veListaDeGestoras(
+  user: Quien | null | undefined,
+  can: (clave: string) => boolean,
+  llevaEquipo: boolean,
+): boolean {
+  if (!user) return false;
+  if (!can('users.view') && !can('equipos.su_equipo')) return false;
+  return llevaEquipo || !soloLoSuyo(user);
 }

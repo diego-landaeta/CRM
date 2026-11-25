@@ -82,3 +82,37 @@ describe('/auth/me dice si el plugin del CRM está encendido (#850)', () => {
     expect((await pedirMe({ NODE_ENV: 'development' })).data.user.funciones.plugin_moodle).toBe(true);
   });
 });
+
+describe('/auth/me dice si se recuerdan al alumno los links sin pagar (24/11)', () => {
+  // «Crear link» y la venta lo leen para no prometer un recordatorio que no sale.
+  const conLinks = { ...PRODUCCION, LINKS_PAGO_EN_PRODUCCION: '1', LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION: '' };
+
+  it('en producción con los links, pero sin LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION: false', async () => {
+    expect((await pedirMe(conLinks)).data.user.funciones.recordatorios_links).toBe(false);
+  });
+
+  it('con LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION=1: true', async () => {
+    expect((await pedirMe({ ...conLinks, LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION: '1' })).data.user.funciones.recordatorios_links).toBe(true);
+  });
+
+  it('sin los links encendidos no hay recordatorios, aunque esté la variable', async () => {
+    expect((await pedirMe({ ...PRODUCCION, LINKS_PAGO_EN_PRODUCCION: '', LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION: '1' })).data.user.funciones.recordatorios_links).toBe(false);
+  });
+});
+
+describe('/auth/me dice si Monitask está encendido (#236)', () => {
+  // El menú «Equipo › Actividad», la pantalla y la tarjeta de Integraciones lo leen:
+  // antes el menú iba detrás de SOLO_EN_PRUEBAS y en /crm no salía nunca.
+  it('sin MONITASK_ACTIVO: false, también en /testeo (apagado de serie en todas partes)', async () => {
+    vi.stubEnv('MONITASK_ACTIVO', '');
+    expect((await pedirMe(PRODUCCION)).data.user.funciones.monitask).toBe(false);
+    vi.stubEnv('MONITASK_ACTIVO', '');
+    expect((await pedirMe(TESTEO)).data.user.funciones.monitask).toBe(false);
+  });
+
+  it('con MONITASK_ACTIVO=1 (o true): true en producción, sin recompilar el frontal', async () => {
+    expect((await pedirMe({ ...PRODUCCION, MONITASK_ACTIVO: '1' })).data.user.funciones.monitask).toBe(true);
+    expect((await pedirMe({ ...PRODUCCION, MONITASK_ACTIVO: 'true' })).data.user.funciones.monitask).toBe(true);
+    expect((await pedirMe({ ...PRODUCCION, MONITASK_ACTIVO: '0' })).data.user.funciones.monitask).toBe(false);
+  });
+});
