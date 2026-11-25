@@ -10,15 +10,16 @@ import Iniciales from '@/shared/components/ui/Iniciales';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/lib/utils';
 import {
-  tutoresApi, type MiCampus, type MiCampusCurso, type MiCampusPendiente,
+  tutoresApi, type MiCampus, type MiCampusCurso, type MiCampusPendiente, type MiCampusMensaje,
 } from '../api/tutores.api';
 import MisCursosPage from './MisCursosPage';
 import { useAuth } from '@/contexts/AuthContext';
 import { soloEsTutorRedactor } from '@/shared/lib/roles';
 // Lo que hay que hacer en un solo sitio y el selector de campus (Diego, 24/11).
 import {
-  SelectorCampus, PorResponder, PorCorregir, entregasPorCorregir, leerCampusElegidos, guardarCampusElegidos,
+  SelectorCampus, PorResponder, PorCorregir, entregasPorCorregir, leerCampusElegidos, guardarCampusElegidos, campusSoloDesdeMoodle,
 } from '../components/BandejaMiCampus';
+import { SOLO_DESDE_MOODLE } from '../lib/adminDelSitio';
 import { consultasApi, type ConsultaFila } from '@/modules/consultas/api/consultas.api';
 // El % hecho con su barra: el mismo componente que la ficha del cliente (#532).
 import Progreso from '@/modules/moodle/components/ProgresoCurso';
@@ -27,6 +28,9 @@ import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // La redactora ve lo suyo (#1026): su cuenta y su rol en los cursos que redacta. En pruebas.
 import RedaccionEnMoodle from '../components/RedaccionEnMoodle';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+// «Mi campus» de administración (Diego, 25/11): todo el campus, con su permiso.
+import usePermission from '@/shared/hooks/usePermission';
+import CampusAdministracion from '../components/CampusAdministracion';
 
 /*
   «Mi campus» (#681): lo que la tutora tiene que hacer hoy en Moodle.
@@ -44,6 +48,10 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 
 const fechaCorta = (iso: string | null) => (iso
   ? new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+  : '—');
+/** Con el año: un mensaje sin responder puede ser de hace meses. */
+const fechaLarga = (iso: string | null) => (iso
+  ? new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
   : '—');
 
 function ultimoAcceso(iso: string | null) {
@@ -81,6 +89,8 @@ function sinProgreso(curso: MiCampusCurso) {
 }
 
 const porCorregirDe = (k: MiCampusCurso) => k.tareas.reduce((s, t) => s + t.sinCorregir.length, 0);
+/** Sus mensajes de Moodle sin responder (también los de antes de conectar el campus). */
+const mensajesDe = (k: MiCampusCurso) => k.sinResponder ?? [];
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 const accion = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-secundario font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
@@ -104,12 +114,31 @@ function PorHacer({ tono, icono, titulo, detalle, children }: {
   );
 }
 
-function Curso({ projectId, curso, abierto, alternar }: { projectId: number; curso: MiCampusCurso; abierto: boolean; alternar: () => void }) {
+/** Un mensaje de Moodle sin responder: se contesta en la mensajería del campus. */
+function MensajeSinResponder({ mensaje }: { mensaje: MiCampusMensaje }) {
+  return (
+    <PorHacer tono="duda" icono={<ChatCircleText size={15} weight="bold" />}
+      titulo={mensaje.alumno || 'Alumno'} detalle={`Mensaje en Moodle sin responder desde el ${fechaLarga(mensaje.desde)}`}>
+      <a href={mensaje.responderUrl} target="_blank" rel="noopener noreferrer"
+        className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
+        Responder en Moodle <ArrowSquareOut size={12} aria-hidden />
+      </a>
+    </PorHacer>
+  );
+}
+
+function Curso({ projectId, curso, abierto, alternar, mensajeria }: {
+  projectId: number; curso: MiCampusCurso; abierto: boolean; alternar: () => void;
+  /** Con la cuenta de administración del sitio (excepción): su mensajería de Moodle; responde y corrige allí. */
+  mensajeria?: string | null;
+}) {
   const corregir = (tareaId: number) => `/mis-cursos/campus/tarea/${projectId}/${curso.id}/${tareaId}`;
+  const enMoodle = mensajeria !== undefined;
   const conEntregas = curso.tareas.filter((t) => t.sinCorregir.length > 0);
   const porCorregir = porCorregirDe(curso);
   const dudas = curso.dudas.length;
-  const alDia = porCorregir === 0 && dudas === 0;
+  const mensajes = mensajesDe(curso);
+  const alDia = porCorregir === 0 && dudas === 0 && mensajes.length === 0;
   const panel = `curso-${curso.id}`;
   return (
     <li data-testid="curso-campus">
@@ -123,6 +152,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
           <span className="flex flex-wrap gap-x-3 text-secundario">
             {porCorregir > 0 && <span className="font-medium text-warning">{plural(porCorregir, 'entrega por corregir', 'entregas por corregir')}</span>}
             {dudas > 0 && <span className="font-medium text-info-soft-foreground">{plural(dudas, 'duda', 'dudas')}</span>}
+            {mensajes.length > 0 && <span className="font-medium text-info-soft-foreground">{plural(mensajes.length, 'mensaje sin responder', 'mensajes sin responder')}</span>}
             {alDia && <span className="inline-flex items-center gap-1 text-muted-foreground"><CheckCircle size={12} weight="fill" className="text-success" aria-hidden /> Al día</span>}
             <span className="text-muted-foreground">{plural(curso.alumnos.length, 'alumno', 'alumnos')}</span>
             {curso.alumnos.some((a) => sinEntrar(a.ultimoAcceso)) && (
@@ -149,17 +179,32 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
                 <PorHacer key={`t-${t.id}`} tono="corregir" icono={<ClipboardText size={15} weight="bold" />}
                   titulo={t.nombre || 'Tarea'}
                   detalle={`${t.sinCorregir.map((e) => e.alumno || 'Alumno').join(', ')} · entregada ${fechaCorta(t.sinCorregir[0]?.entregadaAt ?? null)}${t.entrega ? ` · fecha límite ${fechaCorta(t.entrega)}` : ''}`}>
-                  <Link to={corregir(t.id)} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
-                    Corregir{t.sinCorregir.length > 1 ? ` (${t.sinCorregir.length})` : ''}
-                  </Link>
+                  {enMoodle ? (
+                    <a href={t.corregirUrl} target="_blank" rel="noopener noreferrer" title={SOLO_DESDE_MOODLE}
+                      className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
+                      Corregir en Moodle <ArrowSquareOut size={12} aria-hidden />
+                    </a>
+                  ) : (
+                    <Link to={corregir(t.id)} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
+                      Corregir{t.sinCorregir.length > 1 ? ` (${t.sinCorregir.length})` : ''}
+                    </Link>
+                  )}
                 </PorHacer>
               ))}
               {curso.dudas.map((d) => (
                 <PorHacer key={`d-${d.consultaId}`} tono="duda" icono={<ChatCircleText size={15} weight="bold" />}
                   titulo={d.alumno || 'Alumno'} detalle={`Espera respuesta desde el ${fechaCorta(d.desde)}`}>
-                  <Link to={`/consultas/${d.consultaId}`} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>Responder</Link>
+                  {enMoodle ? (
+                    <a href={mensajeria || '#'} target="_blank" rel="noopener noreferrer" title={SOLO_DESDE_MOODLE}
+                      className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
+                      Responder en Moodle <ArrowSquareOut size={12} aria-hidden />
+                    </a>
+                  ) : (
+                    <Link to={`/consultas/${d.consultaId}`} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>Responder</Link>
+                  )}
                 </PorHacer>
               ))}
+              {mensajes.map((m) => <MensajeSinResponder key={`m-${m.conversacionId}`} mensaje={m} />)}
             </ul>
           )}
 
@@ -357,14 +402,35 @@ const PESTANAS = [
   { id: 'campus', label: 'Por hacer en Moodle', icono: <ClipboardText size={15} aria-hidden /> },
   { id: 'cursos', label: 'Mis cursos y comisiones', icono: <Coins size={15} aria-hidden /> },
 ] as const;
+/**
+ * Y la de administración (Diego, 25/11), con `tutores.campus_administracion`: todo el campus.
+ * Con ella, la de la tutora se llama «Mis cursos en Moodle», para que se vea cuál es cuál.
+ */
+const PESTANA_ADMINISTRACION = { id: 'administracion', label: 'Todo el campus (administración)', icono: <GraduationCap size={15} aria-hidden /> } as const;
+type Vista = 'campus' | 'cursos' | 'administracion';
 
 export default function MiCampusPage() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
   const soloRedactora = soloEsTutorRedactor(user);
-  const pestanas = soloRedactora ? PESTANAS.filter((t) => t.id !== 'cursos') : PESTANAS;
-  const vista: 'campus' | 'cursos' = !soloRedactora && params.get('vista') === 'cursos' ? 'cursos' : 'campus';
-  const irA = (v: 'campus' | 'cursos') => setParams(v === 'cursos' ? { vista: 'cursos' } : {}, { replace: true });
+  const { can } = usePermission();
+  const puedeAdministracion = can('tutores.campus_administracion');
+  const puedeMios = can('tutores.mis_cursos');
+  // Administración con su propia cuenta enlazada (da clase): también ve «sus cursos».
+  const [cuentaEnlazada, setCuentaEnlazada] = useState(false);
+  const [leidoAdministracion, setLeidoAdministracion] = useState<string | null>(null);
+  // Sin el permiso de administración, las pestañas de siempre (tutoras y redactoras, igual que antes).
+  const pestanas: Array<{ id: Vista; label: string; icono: React.ReactNode }> = !puedeAdministracion
+    ? [...(soloRedactora ? PESTANAS.filter((t) => t.id !== 'cursos') : PESTANAS)]
+    : [
+      ...(puedeMios || cuentaEnlazada ? [{ ...PESTANAS[0], label: 'Mis cursos en Moodle' }] : []),
+      PESTANA_ADMINISTRACION,
+      ...(puedeMios && !soloRedactora ? [PESTANAS[1]] : []),
+    ];
+  const porDefecto: Vista = puedeAdministracion && !puedeMios ? 'administracion' : 'campus';
+  const pedida = params.get('vista') as Vista | null;
+  const vista: Vista = pedida && pestanas.some((t) => t.id === pedida) ? pedida : porDefecto;
+  const irA = (v: Vista) => setParams(v === porDefecto ? {} : { vista: v }, { replace: true });
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -401,7 +467,7 @@ export default function MiCampusPage() {
         // De entrada, abiertos los cursos con algo que hacer.
         if (!refrescar) {
           setAbiertos(new Set(r.data.campus.flatMap((c) => c.cursos
-            .filter((k) => k.tareas.length || k.dudas.length).map((k) => `${c.projectId}-${k.id}`))));
+            .filter((k) => k.tareas.length || k.dudas.length || mensajesDe(k).length).map((k) => `${c.projectId}-${k.id}`))));
         }
         // Lo guardado ya no es suyo (otro campus, otra persona en este navegador): todos.
         if (elegidosRef.current.length && r.data.elegidos === null) {
@@ -429,6 +495,8 @@ export default function MiCampusPage() {
     return consultas.filter((c) => !filtro || filtro.has(Number(c.project_id)));
   }, [consultas, datos]);
   const porCorregir = useMemo(() => entregasPorCorregir(datos), [datos]);
+  // Los campus con la cuenta de administración del sitio (excepción): responde y corrige en Moodle.
+  const soloMoodle = useMemo(() => campusSoloDesdeMoodle(datos), [datos]);
   const respondida = (id: number) => {
     setConsultas((l) => (l || []).filter((c) => c.id !== id));
     // Y fuera también de su curso, sin esperar a la copia de Moodle.
@@ -447,8 +515,11 @@ export default function MiCampusPage() {
     return {
       porCorregir: cursos.reduce((s, k) => s + porCorregirDe(k), 0),
       // Las dudas, las de Consultas en cuanto se han leído (las mismas que la lista de abajo).
-      dudas: porResponder !== null ? porResponder.length
-        : cursos.reduce((s, k) => s + k.dudas.length, 0) + (datos?.campus.reduce((s, c) => s + c.dudasSinCurso.length, 0) || 0),
+      dudas: (porResponder !== null ? porResponder.length
+        : cursos.reduce((s, k) => s + k.dudas.length, 0) + (datos?.campus.reduce((s, c) => s + c.dudasSinCurso.length, 0) || 0))
+        // Y sus mensajes de Moodle sin responder, también los de antes de conectar el campus.
+        + cursos.reduce((s, k) => s + mensajesDe(k).length, 0)
+        + (datos?.campus.reduce((s, c) => s + (c.sinResponderSinCurso?.length ?? 0), 0) || 0),
     };
   }, [datos, porResponder]);
   const todosLosCampus = datos?.todosLosCampus || datos?.campus.map((c) => ({ projectId: c.projectId, campus: c.campus })) || [];
@@ -460,17 +531,22 @@ export default function MiCampusPage() {
   });
 
   const leido = datos ? new Date(datos.leidoAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : null;
+  const leidoAdmin = leidoAdministracion ? new Date(leidoAdministracion).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : null;
+  // Cada vista dice cuál es: la de administración (todo el campus) o la suya (sus cursos).
+  const subtitulo = vista === 'cursos' ? 'Tus cursos y lo que te corresponde'
+    : vista === 'administracion' ? `Administración: todo el campus en Moodle${leidoAdmin ? ` · leído a las ${leidoAdmin}` : ''}`
+      : (leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle');
 
   return (
     // El margen de scroll de lo que señala el recorrido: que la barra fija no lo tape.
     <div className="mx-auto max-w-6xl space-y-5 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title={<span className="inline-flex flex-wrap items-center gap-2">Mi campus <EtiquetaEnPruebas /></span>}
-        subtitle={vista === 'cursos' ? 'Tus cursos y lo que te corresponde' : (leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle')}
+        subtitle={subtitulo}
         actions={(
           <>
           {/* El recorrido (#928): solo con el botón (CRM#1012). */}
-          <VerRecorrido id="mi-campus" listo={vista === 'cursos' || !cargando} compacto />
+          <VerRecorrido id="mi-campus" listo={vista !== 'campus' || !cargando} compacto />
           {vista === 'campus' && (
           <Button data-recorrido="mi-campus-actualizar" variant="outline" size="sm" disabled={cargando} onClick={actualizar} className="h-8 text-secundario">
             <ArrowsClockwise size={14} className={cn('mr-1.5', cargando && 'animate-spin')} aria-hidden />
@@ -493,7 +569,9 @@ export default function MiCampusPage() {
       </div>
       )}
 
-      {vista === 'cursos' ? <MisCursosPage incrustada /> : (<>
+      {vista === 'cursos' ? <MisCursosPage incrustada /> : vista === 'administracion' ? (
+        <CampusAdministracion alLeer={({ leidoAt, tengoCuentaEnlazada }) => { setLeidoAdministracion(leidoAt); setCuentaEnlazada(tengoCuentaEnlazada); }} />
+      ) : (<>
       {error && !datos && (
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 px-4 py-4">
           <p className="text-normal font-semibold text-foreground">No se ha podido leer tu campus</p>
@@ -555,7 +633,7 @@ export default function MiCampusPage() {
               {/* Lo que hay que hacer, todo junto: responder y corregir sin ir curso a curso. */}
               {(datos.campus.length > 0 || (porResponder?.length ?? 0) > 0) && (
                 <section aria-label="Por hacer" data-testid="bandeja-mi-campus" className="rounded-lg border border-border bg-card px-4 py-2">
-                  <PorResponder consultas={porResponder} plazoHoras={plazoHoras} error={errorConsultas} respondida={respondida} />
+                  <PorResponder consultas={porResponder} plazoHoras={plazoHoras} error={errorConsultas} respondida={respondida} soloMoodle={soloMoodle} />
                   <div className="my-1 border-t border-border" />
                   <PorCorregir entregas={porCorregir} />
                 </section>
@@ -578,15 +656,38 @@ export default function MiCampusPage() {
                       <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {c.error}
                     </p>
                   )}
+                  {c.soloDesdeMoodle && (
+                    <p role="status" data-testid={`solo-desde-moodle-${c.projectId}`} className="m-4 flex items-start gap-2 rounded-md bg-info-soft dark:bg-transparent dark:ring-1 dark:ring-inset dark:ring-info/35 px-3 py-2 text-secundario text-info-soft-foreground">
+                      <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
+                      <span>
+                        {SOLO_DESDE_MOODLE} Aquí ves tus cursos, tareas, entregas y dudas; para contestar o poner la nota, ábrelo en Moodle.
+                        {c.url && (<> {' '}<a href={c.url} target="_blank" rel="noopener noreferrer" className="font-medium underline">Ir a Moodle</a></>)}
+                      </span>
+                    </p>
+                  )}
+                  {(c.aviso || c.avisoMensajes) && (
+                    <p role="status" className="m-4 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-transparent dark:ring-1 dark:ring-inset dark:ring-warning/35 px-3 py-2 text-secundario text-warning-soft-foreground">
+                      <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {[c.aviso, c.avisoMensajes].filter(Boolean).join(' ')}
+                    </p>
+                  )}
                   {!c.error && c.cursos.length === 0 && (
                     <p className="px-4 py-8 text-center text-secundario text-muted-foreground">No figuras como profesora en ningún curso de este campus.</p>
                   )}
                   {c.cursos.length > 0 && (
                     <ul className="divide-y divide-border">
                       {c.cursos.map((k) => (
-                        <Curso key={k.id} projectId={c.projectId} curso={k} abierto={abiertos.has(`${c.projectId}-${k.id}`)} alternar={() => alternar(`${c.projectId}-${k.id}`)} />
+                        <Curso key={k.id} projectId={c.projectId} curso={k} abierto={abiertos.has(`${c.projectId}-${k.id}`)} alternar={() => alternar(`${c.projectId}-${k.id}`)}
+                          mensajeria={soloMoodle.has(c.projectId) ? soloMoodle.get(c.projectId) ?? null : undefined} />
                       ))}
                     </ul>
+                  )}
+                  {(c.sinResponderSinCurso?.length ?? 0) > 0 && (
+                    <div className="border-t border-border px-4 py-1">
+                      <h3 className="py-1.5 text-tabla uppercase text-muted-foreground">Mensajes sin responder de quien no está en tus cursos</h3>
+                      <ul className="divide-y divide-border">
+                        {c.sinResponderSinCurso!.map((m) => <MensajeSinResponder key={`m-${m.conversacionId}`} mensaje={m} />)}
+                      </ul>
+                    </div>
                   )}
                   {c.dudasSinCurso.length > 0 && (
                     <p className="border-t border-border px-4 py-2.5 text-secundario text-muted-foreground">

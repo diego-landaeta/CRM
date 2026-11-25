@@ -11,7 +11,7 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mcp.acceso.js';
-import { personaDelInforme, alcanceDeLider, enElAlcance, gestorasACargo, comoIds } from '../../shared/utils/roles.js';
+import { personaDelInforme, JEFES_DEL_INFORME, alcanceDeLider, enElAlcance, gestorasACargo, comoIds } from '../../shared/utils/roles.js';
 import { leerFiltroPais } from '../leads/pais.js';
 
 // A que proyectos se acota el informe.
@@ -50,8 +50,9 @@ export async function overview(req, res, next) {
 // Admin y superadmin ven todo, o lo de una en concreto si lo piden. Quien lleva
 // un equipo comercial (09/11/2026), lo de su equipo o lo de una de ellas: puede
 // devolver una LISTA de personas, y los informes la aceptan.
+// Soporte también ve el campus entero (25/11/2026): tiene Reportes y le salían vacíos.
 export function asesoraDelInforme(req) {
-  return personaDelInforme(req.user, req.query.asesoraId ? Number(req.query.asesoraId) : null);
+  return personaDelInforme(req.user, req.query.asesoraId ? Number(req.query.asesoraId) : null, { jefes: JEFES_DEL_INFORME });
 }
 
 function makeReport(fn) {
@@ -152,6 +153,8 @@ export async function miPuesto(req, res, next) {
       userId, from: desde, to: hasta, ...sinAsesora,
       // El jefe se lleva la tabla entera; una gestora, solo lo suyo.
       esJefe,
+      // Quien lleva un equipo, la clasificación de su equipo (CRM#1105).
+      soloEstas: lider,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
       base: req.query.base === 'factura' ? 'factura' : 'cobro',
@@ -162,6 +165,8 @@ export async function miPuesto(req, res, next) {
       data.sin_gestora = null;
       data.total = null;
     }
+    // Para «Cómo voy»: además de la tabla de su equipo, su propio puesto (CRM#1105).
+    data.lider = Boolean(lider);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
