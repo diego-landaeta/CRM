@@ -49,6 +49,7 @@ import {
   Tree,
   ListBullets,
   GraduationCap,
+  Student,
   CurrencyEur,
   TrendUp,
   TrendDown,
@@ -479,7 +480,8 @@ export const SECCIONES_DE_ANTES = [
   // Integraciones, con el mismo permiso que «Integraciones» (`integrations.view`).
   {
     label: 'Moodle',
-    icon: GraduationCap,
+    // Su propio icono: GraduationCap ya es el de «Cursos y alumnos» y «Cursos de Moodle» (#105).
+    icon: Student,
     items: [
       { label: 'Conexión del campus', to: '/moodle/conexion', detail: 'Integraciones › Moodle', icon: PlugsConnected, roles: ['superadmin', 'admin'], salvoTipo: ['ia'], permiso: 'integrations.view' },
     ],
