@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
 import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown, Buildings } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
 import { tieneRol } from '@/shared/lib/roles';
@@ -45,6 +47,12 @@ export default function MetaAdsPage() {
   // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
   // (el servidor también se lo niega).
   const soloVer = !tieneRol(user, 'admin', 'superadmin', 'soporte');
+  const { can } = usePermission();
+  // Portfolio (conectar un Business Manager entero) es solo de administración:
+  // soporte ve/edita Meta Ads (meta_ads.edit) pero esto pide meta_ads.conectar_portfolio,
+  // que soporte no tiene (revisión de Diego 24/11: por rol lo veía y el 403 era
+  // del servidor, no de aquí). Se enseña por el permiso, como pide el CLAUDE.md.
+  const puedePortfolio = can('meta_ads.conectar_portfolio');
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
   // ID de la cuenta filtrada en la UI. null = "Todas" (agrega cross-cuentas, default).
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
@@ -55,7 +63,15 @@ export default function MetaAdsPage() {
   const [dashboard, setDashboard] = useState<MetaDashboard | null>(null);
   const [roi, setRoi] = useState<MetaRoiRow[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [tab, setTab] = useState<'campaigns' | 'products' | 'roi' | 'manual' | 'config' | 'portfolio'>('campaigns');
+  const [searchParams] = useSearchParams();
+  const TABS_VALIDAS = ['campaigns', 'products', 'roi', 'manual', 'config', 'portfolio'] as const;
+  type MetaAdsTab = (typeof TABS_VALIDAS)[number];
+  const tabDeLaUrl = searchParams.get('tab') as MetaAdsTab | null;
+  const tabInicial: MetaAdsTab =
+    tabDeLaUrl && TABS_VALIDAS.includes(tabDeLaUrl) && (tabDeLaUrl !== 'portfolio' || puedePortfolio)
+      ? tabDeLaUrl
+      : 'campaigns';
+  const [tab, setTab] = useState<MetaAdsTab>(tabInicial);
   const [productsView, setProductsView] = useState<any[]>([]);
   const [associateOpen, setAssociateOpen] = useState<MetaCampaign | null>(null);
   const [associateAdSetOpen, setAssociateAdSetOpen] = useState<MetaAdSet | null>(null);
@@ -317,7 +333,7 @@ export default function MetaAdsPage() {
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Manual
           </button>
-          {!soloVer && (
+          {puedePortfolio && (
           <button onClick={() => setTab('portfolio')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'portfolio' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             <Buildings size={13} weight="duotone" /> Portfolios
@@ -402,7 +418,7 @@ export default function MetaAdsPage() {
           </div>
         )}
 
-        {tab === 'portfolio' && !soloVer && (
+        {tab === 'portfolio' && puedePortfolio && (
           <div className="p-4">
             <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
               <MetaPortfolioPanel />

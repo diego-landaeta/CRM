@@ -110,8 +110,9 @@ export async function syncPortfolio(portfolioId) {
     await notifyAdmins({
       type: 'meta_portfolio_cuenta_nueva',
       title: nuevas === 1 ? 'Una cuenta nueva en el portfolio de Meta' : `${nuevas} cuentas nuevas en el portfolio de Meta`,
-      message: `En «${portfolio.nombre || portfolio.business_id}». Revisa la bandeja en Publicidad › Configuración.`,
-      link_path: '/publicidad?tab=configuracion',
+      message: `En «${portfolio.nombre || portfolio.business_id}». Revisa la bandeja en Meta Ads › Portfolios.`,
+      link_path: '/meta-ads?tab=portfolio', 
+
     });
   }
 
