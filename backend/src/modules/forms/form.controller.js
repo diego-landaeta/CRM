@@ -12,7 +12,7 @@ import { query } from '../../shared/config/db.js';
 import { countryToPrefix, phoneToCountryName } from '../../shared/utils/countryPrefix.js';
 import { logger } from '../../shared/utils/logger.js';
 import { planificarPasosDeLead } from '../proceso/proceso.model.js';
-import { extraerFbclid, fbclidAFbc } from '../leads/canal.js';
+import { extraerFbclid, fbclidAFbc, limpiarFbp } from '../leads/canal.js';
 
 // LA AGENDA DEL PROCESO COMERCIAL (#89 · #90), como en los otros dos caminos de
 // entrada (lead.service: el webhook de Make y el alta a mano). Aqui faltaba, y
@@ -529,9 +529,9 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
         utm_medium: final.utm_medium || (source === 'mailhook' ? 'email' : 'api'),
         utm_campaign: final.utm_campaign || f.embed_id,
         fbc,
-        fbp: final.fbp || body.fbp || body._fbp || null,
+        fbp: limpiarFbp(final.fbp || body.fbp || body._fbp),
         client_ip: req.ip || null,
-        user_agent: req.headers['user-agent'] || null,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 500) || null,
       },
       customFields,
     });
@@ -623,7 +623,7 @@ export async function publicSubmit(req, res, next) {
         fbc,
         fbp: null,
         client_ip: req.ip || null,
-        user_agent: req.headers['user-agent'] || null,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 500) || null,
       },
       customFields: body.custom_fields || {},
     });

@@ -40,7 +40,7 @@ vi.mock('../src/modules/asignacion/asignacion.service.js', () => ({
 const forms = await import('../src/modules/forms/form.controller.js');
 const formModel = await import('../src/modules/forms/form.model.js');
 const leadModel = await import('../src/modules/leads/lead.model.js');
-const { extraerFbclid, fbclidAFbc } = await import('../src/modules/leads/canal.js');
+const { extraerFbclid, fbclidAFbc, limpiarFbp } = await import('../src/modules/leads/canal.js');
 const { idsMetaDelEnvio } = await import('../src/modules/leads/origen-meta.js');
 const { applyMapping } = await import('../src/modules/make/make.service.js');
 
@@ -75,6 +75,18 @@ describe('fbclid → fbc (canal.js)', () => {
   });
 });
 
+describe('limpiarFbp: el _fbp del formulario externo, antes de guardarlo (#474)', () => {
+  it('con el formato de Meta, se guarda tal cual', () => {
+    expect(limpiarFbp('fb.1.1699999999999.1234567890')).toBe('fb.1.1699999999999.1234567890');
+  });
+
+  it('más largo que la columna (255) o que no es el formato de Meta: null, no rompe el alta', () => {
+    expect(limpiarFbp('x'.repeat(300))).toBeNull();
+    expect(limpiarFbp('no-es-un-fbp')).toBeNull();
+    expect(limpiarFbp(null)).toBeNull();
+  });
+});
+
 describe('idsMetaDelEnvio: el lead y el formulario de un Lead Ad (#474)', () => {
   it('lee meta_lead_id/leadgen_id y meta_form_id explícitos, sueltos o en custom_fields', () => {
     const r1 = idsMetaDelEnvio({ meta_lead_id: '123456789012', meta_form_id: '987654321098' });
@@ -95,6 +107,12 @@ describe('idsMetaDelEnvio: el lead y el formulario de un Lead Ad (#474)', () => 
     const r = idsMetaDelEnvio({ nombre: 'Juan', email: 'juan@test.com' });
     expect(r.explicitos).toEqual({ ad: null, adset: null, campaign: null, lead: null, form: null });
   });
+
+  it('un meta_lead_id o meta_form_id con letras no es un id de Meta: queda null, no rompe nada', () => {
+    const r = idsMetaDelEnvio({ meta_lead_id: 'abc123', meta_form_id: '12x456' });
+    expect(r.explicitos.lead).toBeNull();
+    expect(r.explicitos.form).toBeNull();
+  });
 });
 
 describe('Make: meta_lead_id y meta_form_id se pueden mapear como campo (#474)', () => {
@@ -106,6 +124,9 @@ describe('Make: meta_lead_id y meta_form_id se pueden mapear como campo (#474)',
     expect(out.meta_form_id).toBe('888899990000');
     expect(out.custom_fields).toEqual({});
   });
+
+
+
 });
 
 describe('el widget (iframe) manda IP, navegador y fbc; nunca fbp (#474)', () => {
@@ -171,6 +192,18 @@ describe('el webhook de formularios manda IP, navegador, fbc y fbp si lo trae (#
     expect(salida.success).toBe(true);
     expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledWith(expect.objectContaining({
       utms: expect.objectContaining({ fbc: null, fbp: null, client_ip: '198.51.100.13', user_agent: 'Normal/1.0' }),
+    }));
+  });
+
+  it('un fbp demasiado largo no rompe el alta: el prospecto se crea igual, con fbp null (#474)', async () => {
+    const salida = await llamar(forms.publicWebhook, {
+      body: { nombre: 'Elena Prueba', email: 'elena@example.com', fbp: 'x'.repeat(300) },
+      headers: { 'user-agent': 'FormularioExterno/3.0' },
+      ip: '198.51.100.15',
+    });
+    expect(salida.success).toBe(true);
+    expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledWith(expect.objectContaining({
+      utms: expect.objectContaining({ fbp: null }),
     }));
   });
 });
