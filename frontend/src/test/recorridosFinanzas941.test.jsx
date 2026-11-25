@@ -34,6 +34,7 @@ vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => api.get(...a),
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 41, role: rol.current } }) }));
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ambito.current }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.has(k) }) }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 
 const { RECORRIDOS_FINANZAS } = await import('@/shared/lib/recorridosFinanzas');
 const { RECORRIDOS_COBROS, claveRecorrido } = await import('@/shared/lib/recorridosCobros');
