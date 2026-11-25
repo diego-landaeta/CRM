@@ -12,6 +12,7 @@ const get = vi.hoisted(() => vi.fn());
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ctx.valor }));
 vi.mock('@/shared/api/client', () => ({ default: { get, put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 // La tarjeta de links de pago (#680) mira los permisos de quien entra.
 const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));

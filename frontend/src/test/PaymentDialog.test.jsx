@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // Mocks ANTES de import del componente
@@ -21,6 +21,8 @@ const toastMock = vi.fn();
 vi.mock('@/shared/hooks/useToast', () => ({
   toast: (...args) => toastMock(...args),
 }));
+
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 
 import PaymentDialog from '@/modules/conversions/components/PaymentDialog';
 
@@ -51,16 +53,16 @@ describe('PaymentDialog', () => {
   it('muestra Total, Pagado y calcula Pendiente correctamente', () => {
     render(<PaymentDialog open onClose={vi.fn()} conversion={baseConversion} />);
     // 1000 total, 300 pagado, 700 pendiente
-    // Buscar el bloque que muestra "Pendiente:" — verificamos que aparezca el monto formateado
+    // Buscar el bloque que muestra "Pendiente:" â€” verificamos que aparezca el monto formateado
     expect(screen.getByText(/Pendiente:/i)).toBeInTheDocument();
-    // Intl puede usar nbsp + €; nos basta con que aparezca "700"
+    // Intl puede usar nbsp + â‚¬; nos basta con que aparezca "700"
     const allText = document.body.textContent || '';
     expect(allText).toMatch(/700/);
     expect(allText).toMatch(/1\.000|1000/);
     expect(allText).toMatch(/300/);
   });
 
-  it('muestra el producto contratado en el subtítulo', () => {
+  it('muestra el producto contratado en el subtÃ­tulo', () => {
     render(<PaymentDialog open onClose={vi.fn()} conversion={baseConversion} />);
     expect(screen.getByText('Master IA')).toBeInTheDocument();
   });
@@ -68,7 +70,7 @@ describe('PaymentDialog', () => {
   it('rechaza importe = 0 con toast destructive y NO llama API', async () => {
     const { container } = render(<PaymentDialog open onClose={vi.fn()} conversion={baseConversion} onPaid={vi.fn()} />);
     const form = container.querySelector('form');
-    // No completar importe (queda string vacío que parsea a 0)
+    // No completar importe (queda string vacÃ­o que parsea a 0)
     fireEvent.submit(form);
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith(
@@ -105,7 +107,7 @@ describe('PaymentDialog', () => {
     expect(addPaymentMock).not.toHaveBeenCalled();
   });
 
-  it('importe = pendiente exacto SÍ se acepta (caso borde)', async () => {
+  it('importe = pendiente exacto SÃ se acepta (caso borde)', async () => {
     const onClose = vi.fn();
     const onPaid = vi.fn();
     const { container } = render(<PaymentDialog open onClose={onClose} conversion={baseConversion} onPaid={onPaid} />);
@@ -119,7 +121,7 @@ describe('PaymentDialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('submit válido: llama addPayment con id, importe, fecha y notas', async () => {
+  it('submit vÃ¡lido: llama addPayment con id, importe, fecha y notas', async () => {
     const onPaid = vi.fn();
     const onClose = vi.fn();
     const { container } = render(<PaymentDialog open onClose={onClose} conversion={baseConversion} onPaid={onPaid} />);
@@ -130,7 +132,7 @@ describe('PaymentDialog', () => {
 
     fireEvent.change(importeInput, { target: { value: '250' } });
     fireEvent.change(fechaInput, { target: { value: '2026-01-15' } });
-    // El input de notas es el último input no-number/no-date
+    // El input de notas es el Ãºltimo input no-number/no-date
     const notas = container.querySelector('input[placeholder*="Primer"]');
     if (notas) fireEvent.change(notas, { target: { value: 'Cuota 2' } });
 
@@ -150,7 +152,7 @@ describe('PaymentDialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('notas vacías se envían como null', async () => {
+  it('notas vacÃ­as se envÃ­an como null', async () => {
     const { container } = render(<PaymentDialog open onClose={vi.fn()} conversion={baseConversion} onPaid={vi.fn()} />);
     fireEvent.change(container.querySelector('input[type="number"]'), { target: { value: '100' } });
     fireEvent.submit(container.querySelector('form'));
@@ -173,7 +175,7 @@ describe('PaymentDialog', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('botón Cancelar llama onClose sin llamar API', () => {
+  it('botÃ³n Cancelar llama onClose sin llamar API', () => {
     const onClose = vi.fn();
     render(<PaymentDialog open onClose={onClose} conversion={baseConversion} />);
     fireEvent.click(screen.getByText('Cancelar'));

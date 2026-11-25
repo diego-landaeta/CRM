@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ConfirmProvider } from './shared/components/ui/useConfirm';
 import ErrorBoundary from './shared/components/layout/ErrorBoundary';
 import App from './App';
 import { recargarUnaVez } from './shared/lib/piezaNueva';
@@ -28,7 +29,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ThemeProvider>
           <AuthProvider>
             <ProjectProvider>
-              <App />
+              <ConfirmProvider>
+                <App />
+              </ConfirmProvider>
             </ProjectProvider>
           </AuthProvider>
         </ThemeProvider>
