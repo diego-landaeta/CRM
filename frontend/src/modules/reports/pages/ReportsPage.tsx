@@ -28,6 +28,8 @@ import FeedbackEnReportes, { feedbackEnCsv } from '@/modules/feedback/components
 import { filaCsv, rangoEnNombre } from '@/shared/lib/csv';
 import ActividadPorComercial from '../components/ActividadPorComercial';
 import InformeMensual from '../components/InformeMensual';
+// El recorrido guiado de la pantalla (#941, tanda J).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 function exportReportCSV(data, project, range, panel, seguimiento, feedback = null) {
   const sections = [];
@@ -315,13 +317,16 @@ function PantallaDeReportes() {
   const isIaProject = activeProject?.type === 'ia';
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda J): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Reportes"
         subtitle={nombreAmbito}
         actions={
           tab === 'crm' ? (
             <div className="flex items-center gap-2 flex-wrap">
+              <VerRecorrido id="reportes" />
               {/* Se puede bajar al campus, pero hay que pedirlo: el que
                   manda es el conjunto. Solo sale cuando hay mas de uno. */}
               {socDelProyecto && !activeIssuerId && campusDeLaSociedad.length > 1 && (
@@ -348,6 +353,7 @@ function PantallaDeReportes() {
                   lunes a domingo, no los siete días anteriores.
                   Quitar el atajo puesto deja la fecha vacía; aquí no hay
                   informe sin periodo, así que se vuelve a «Este mes». */}
+              <div className="flex items-center gap-2 flex-wrap" data-recorrido="reportes-periodo">
               <RangoRapido
                 valor={range}
                 alElegir={(r) => setRange(r.from && r.to ? r : rangoPorDefecto())}
@@ -368,8 +374,9 @@ function PantallaDeReportes() {
                 aria-label="Fecha hasta"
                 className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
+              </div>
               {data && (
-                <>
+                <span className="flex items-center gap-2" data-recorrido="reportes-exportar">
                   <button
                     type="button"
                     onClick={() => exportReportCSV(data, nombreAmbito, range, panelResumen, panelSeguimiento, panelFeedback)}
@@ -394,7 +401,7 @@ function PantallaDeReportes() {
                   >
                     <FilePdf size={14} weight="bold" /> <span className="hidden sm:inline">PDF</span>
                   </button>
-                </>
+                </span>
               )}
             </div>
           ) : null
@@ -444,20 +451,25 @@ function PantallaDeReportes() {
       {/* Actividad por comercial (#203, parte B): arriba del todo, «es lo
           primero que se mira por la mañana». Con sus propios atajos (Ayer por
           defecto), aparte del periodo del resto del informe. */}
-      <ActividadPorComercial ambito={ambitoComoObjeto({ activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo })} />
+      {/* Las envolturas con `data-recorrido` (#941, tanda J) se esconden si su panel no pinta nada. */}
+      <div data-recorrido="reportes-actividad" className="empty:hidden">
+        <ActividadPorComercial ambito={ambitoComoObjeto({ activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo })} />
+      </div>
 
       {/* La tasa de cierre (#39). Justo debajo de la actividad: es la pregunta
           que se hace al abrir Reportes, y lleva su propio «¿de dónde sale?»:
           el número se puede comprobar sin salir de aquí. */}
-      <TasaDeCierre
-        activeProject={proyectoEfectivo}
-        activeIssuerId={issuerEfectivo}
-        from={range.from}
-        to={range.to}
-      />
+      <div data-recorrido="reportes-cierre" className="empty:hidden">
+        <TasaDeCierre
+          activeProject={proyectoEfectivo}
+          activeIssuerId={issuerEfectivo}
+          from={range.from}
+          to={range.to}
+        />
+      </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3" data-recorrido="reportes-cifras">
         <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
         {/* Aquí había una tarjeta «Tasa conversión» con `data.tasa_conversion`,
             que es OTRA cuenta: los leads en estado «convertido», un campo que
@@ -604,7 +616,9 @@ function PantallaDeReportes() {
       <FeedbackEnReportes from={range.from} to={range.to} issuerId={issuerEfectivo}
         project={proyectoEfectivo} onDatos={setPanelFeedback} />
 
-      <ReportsDownloadSection projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo} projectName={nombreAmbito} from={range.from} to={range.to} />
+      <div data-recorrido="reportes-descargas" className="empty:hidden">
+        <ReportsDownloadSection projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo} projectName={nombreAmbito} from={range.from} to={range.to} />
+      </div>
 
       {/* El informe del mes por equipo y comercial, y el ZIP de facturas para la gestoría (#772). */}
       <InformeMensual issuerId={issuerEfectivo} />
