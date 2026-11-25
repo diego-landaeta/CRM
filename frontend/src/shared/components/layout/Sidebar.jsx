@@ -282,6 +282,10 @@ export const SECCIONES_DE_ANTES = [
       // Meta Ads: administración por su rol; y en solo lectura a quien se le da
       // `meta_ads.view` (26/10/2026: el equipo de desarrollo), también si es solo colaborador.
       { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
+      // Google Analytics (CRM#55): visitas → prospectos → ventas, por canal y por página.
+      { label: 'Google Analytics', to: '/google-analytics', detail: 'Lo que pasa antes del lead', icon: ChartLineUp, roles: ['superadmin', 'admin'], permiso: 'google_analytics.view', oPermiso: 'google_analytics.view' },
+      // Tráfico orgánico (CRM#36): Search Console, búsquedas, páginas e indexación.
+      { label: 'Tráfico orgánico', to: '/trafico-organico', detail: 'Search Console', icon: MagnifyingGlass, roles: ['superadmin', 'admin'], permiso: 'search_console.view', oPermiso: 'search_console.view' },
       // Google Ads («Próximamente», #226) sale del menú hasta que tenga pantalla
       // (#534, parte 3; `menu-sin-proximamente-534`).
     ],

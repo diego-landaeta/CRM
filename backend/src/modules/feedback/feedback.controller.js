@@ -4,10 +4,12 @@ import { query } from '../../shared/config/db.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { personaDelInforme, alcanceComercial } from '../../shared/utils/roles.js';
 import * as service from './feedback.service.js';
-import { CLAVES, DISPARADORES, MOTIVOS } from './motivos.js';
+import { CLAVES, DISPARADORES } from './motivos.js';
 import { preguntasPara } from './preguntas.js';
 
-const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+// Vive en el servicio desde la #1154: el MCP también la necesita.
+const { fechaValida } = service;
+export { fechaValida };
 
 /**
  * El recorte del panel, según quién mira.
@@ -32,10 +34,14 @@ async function recorteDe(req) {
     { jefes: ['admin', 'superadmin', 'soporte'] });
   return {
     projectIds,
+    // Los campus de pruebas solo cuentan si se pide ESE campus (#593, punto 9).
+    // Al elegir empresa, o en el «Todos» de un admin o de una gestora (sus
+    // campus), salían sumados como si fueran de verdad.
+    conPruebas: !ambito.projectIds && !varios.length && Boolean(ambito.projectId),
     gestoraId: sinGestora && deQuien == null ? 'sin' : deQuien,
     deUsuario: rol === 'superadmin' || rol === 'soporte' ? null : req.user.userId,
-    desde: FECHA.test(req.query.desde || '') ? req.query.desde : null,
-    hasta: FECHA.test(req.query.hasta || '') ? req.query.hasta : null,
+    desde: fechaValida(req.query.desde),
+    hasta: fechaValida(req.query.hasta),
   };
 }
 
@@ -76,22 +82,9 @@ async function exigirQueSeaSuyo(req, leadId) {
 // GET /api/feedback/panel
 export async function panel(req, res, next) {
   try {
-    const { contestadas, ...datos } = await service.model.panel(await recorteDe(req));
-    const totales = datos.totales;
-    res.json({
-      success: true,
-      data: {
-        ...datos,
-        totales: {
-          ...totales,
-          tasa: totales.enviados ? Math.round((totales.respondidos * 1000) / totales.enviados) / 10 : 0,
-        },
-        motivos: MOTIVOS,
-        // Pregunta a pregunta: cuántos eligieron cada cosa y lo que escribieron.
-        preguntas: service.resumenDePreguntas(contestadas),
-        disparadores: DISPARADORES,
-      },
-    });
+    // Lo mismo que da el MCP (`informe` tipo «feedback»): una sola función
+    // para que las dos cifras no puedan separarse (#1154).
+    res.json({ success: true, data: await service.resumenDelPanel(await recorteDe(req)) });
   } catch (err) { next(err); }
 }
 

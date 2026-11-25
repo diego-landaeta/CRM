@@ -19,6 +19,8 @@ import tutoresModule from './modules/tutores/index.js';
 import consultasModule from './modules/consultas/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
+import googleAnalyticsModule from './modules/google-analytics/index.js';
+import searchConsoleModule from './modules/search-console/index.js';
 import accountingModule from './modules/accounting/index.js';
 import expensesModule from './modules/expenses/index.js';
 import integrationsModule from './modules/integrations/index.js';
@@ -106,6 +108,8 @@ import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js'
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startGoogleAnalyticsSyncScheduler } from './jobs/googleAnalyticsSyncScheduler.js';
+import { startSearchConsoleSyncScheduler } from './jobs/searchConsoleSyncScheduler.js';
 import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
@@ -133,6 +137,7 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
+import { comprobarBaseDeLaEncuesta } from './modules/feedback/feedback.service.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
 import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
 import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
@@ -329,6 +334,9 @@ const ALL_MODULES = [
   { name: 'consultas', mod: consultasModule },
   { name: 'notifications', mod: notificationsModule },
   { name: 'meta-ads', mod: metaAdsModule },
+  // Google Analytics 4 (CRM#55): lo que pasa antes del lead.
+  { name: 'google-analytics', mod: googleAnalyticsModule },
+  { name: 'search-console', mod: searchConsoleModule },
   { name: 'accounting', mod: accountingModule },
   // Egresos, su propio modulo e igual que en CRM-ISEIE (#227). Va DESPUES de
   // `accounting`: su alias /api/accounting/expenses cuelga de ese prefijo.
@@ -536,6 +544,10 @@ process.on('uncaughtException', (err) => {
 
 // Solo escuchar si no estamos en tests
 if (process.env.NODE_ENV !== 'test') {
+  // En producción, sin la dirección de la encuesta de feedback no se arranca:
+  // los correos saldrían con enlaces a localhost (#1154). Mejor que PM2 lo
+  // enseñe al desplegar que enterarse por las encuestas que nadie contesta.
+  comprobarBaseDeLaEncuesta();
   app.listen(PORT, () => {
     logger.info(`CRM API corriendo en puerto ${PORT}`);
     startEmailSequenceScheduler();
@@ -550,6 +562,10 @@ if (process.env.NODE_ENV !== 'test') {
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
+    // Sincronización de Google Analytics 4 (CRM#55). Apagada sin GA4_SYNC_ACTIVO=1.
+    startGoogleAnalyticsSyncScheduler();
+    // Sincronización de Search Console (CRM#36). Apagada sin GSC_SYNC_ACTIVO=1.
+    startSearchConsoleSyncScheduler();
     // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
     startMetaTokensScheduler();
     startTutorCommissionsScheduler();

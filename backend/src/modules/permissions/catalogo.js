@@ -238,6 +238,20 @@ export const SECCIONES = [
           a('edit', 'Conectar y sincronizar Meta Ads', 'Conectar cuentas, sincronizarlas y asociar campañas a productos.', ADMIN_SOPORTE),
         ],
       },
+      {
+        // CRM#55: lo que pasa antes del lead (visitas, canales, páginas de curso).
+        clave: 'google_analytics', nombre: 'Google Analytics', acciones: [
+          a('view', 'Ver Google Analytics', 'Visitas por canal y por página de curso, y cuántas acaban en prospecto y en venta.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Sincronizar Google Analytics', 'Traer ya los datos de GA4 de un campus.', ADMIN_SOPORTE),
+        ],
+      },
+      {
+        // CRM#36: lo que pasa en Google antes de la visita (búsquedas, posiciones, indexación).
+        clave: 'search_console', nombre: 'Search Console', acciones: [
+          a('view', 'Ver Tráfico orgánico', 'Clics, impresiones, posición, búsquedas y páginas de Google, y qué páginas de formación no están indexadas.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Sincronizar Search Console', 'Traer ya los datos de Search Console de un campus.', ADMIN_SOPORTE),
+        ],
+      },
     ],
   },
   {
@@ -429,6 +443,9 @@ export const SECCIONES = [
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
           // CRM#533: la salud de las conexiones de cada campus (y «Comprobar ahora»,
           // que prueba sin cambiar nada). Solo superadmin y admin, cada uno en lo suyo.
+          // CRM#1099: la cuenta de servicio de Google de cada campus (GA4 y Search
+          // Console). Verla va con `view`; cargarla, probarla y quitarla, solo admin.
+          a('google', 'Conectar Google Analytics y Search Console', 'Subir la cuenta de servicio de Google de un campus, elegir su propiedad de GA4 o de Search Console, probarla y quitarla.', ADMIN),
           a('salud', 'Ver la salud de las conexiones', 'Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora.', ADMIN),
         ],
       },

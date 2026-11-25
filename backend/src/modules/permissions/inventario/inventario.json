@@ -7173,6 +7173,106 @@
   "puertas": []
  },
  {
+  "id": "GET /api/google-analytics/estado",
+  "tipo": "ruta",
+  "modulo": "google-analytics",
+  "metodo": "GET",
+  "ruta": "/api/google-analytics/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "google_analytics.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/google-analytics/embudo",
+  "tipo": "ruta",
+  "modulo": "google-analytics",
+  "metodo": "GET",
+  "ruta": "/api/google-analytics/embudo",
+  "relativa": "GET /embudo",
+  "controlador": "embudo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "google_analytics.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/google-analytics/paginas",
+  "tipo": "ruta",
+  "modulo": "google-analytics",
+  "metodo": "GET",
+  "ruta": "/api/google-analytics/paginas",
+  "relativa": "GET /paginas",
+  "controlador": "paginas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "google_analytics.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/google-analytics/sincronizar",
+  "tipo": "ruta",
+  "modulo": "google-analytics",
+  "metodo": "POST",
+  "ruta": "/api/google-analytics/sincronizar",
+  "relativa": "POST /sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "google_analytics.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/ia-analisis/preguntar",
   "tipo": "ruta",
   "modulo": "ia-analisis",
@@ -7761,6 +7861,136 @@
     "tipo": "puede",
     "claves": [
      "integrations.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/integrations/google/gsc/sitios",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "POST",
+  "ruta": "/api/integrations/google/gsc/sitios",
+  "relativa": "POST /google/gsc/sitios",
+  "controlador": "sitios",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.google"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/integrations/google/:servicio",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/google/:servicio",
+  "relativa": "GET /google/:servicio",
+  "controlador": "ver",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/integrations/google/:servicio",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "PUT",
+  "ruta": "/api/integrations/google/:servicio",
+  "relativa": "PUT /google/:servicio",
+  "controlador": "guardar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.google"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/integrations/google/:servicio/probar",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "POST",
+  "ruta": "/api/integrations/google/:servicio/probar",
+  "relativa": "POST /google/:servicio/probar",
+  "controlador": "probar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.google"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/integrations/google/:servicio",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "DELETE",
+  "ruta": "/api/integrations/google/:servicio",
+  "relativa": "DELETE /google/:servicio",
+  "controlador": "quitar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.google"
     ]
    },
    {
@@ -16105,6 +16335,158 @@
     "claves": [
      "ventas.metas"
     ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/search-console/estado",
+  "tipo": "ruta",
+  "modulo": "search-console",
+  "metodo": "GET",
+  "ruta": "/api/search-console/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "search_console.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/search-console/resumen",
+  "tipo": "ruta",
+  "modulo": "search-console",
+  "metodo": "GET",
+  "ruta": "/api/search-console/resumen",
+  "relativa": "GET /resumen",
+  "controlador": "resumen",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "search_console.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/search-console/consultas",
+  "tipo": "ruta",
+  "modulo": "search-console",
+  "metodo": "GET",
+  "ruta": "/api/search-console/consultas",
+  "relativa": "GET /consultas",
+  "controlador": "consultas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "search_console.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/search-console/paginas",
+  "tipo": "ruta",
+  "modulo": "search-console",
+  "metodo": "GET",
+  "ruta": "/api/search-console/paginas",
+  "relativa": "GET /paginas",
+  "controlador": "paginas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "search_console.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/search-console/indexacion",
+  "tipo": "ruta",
+  "modulo": "search-console",
+  "metodo": "GET",
+  "ruta": "/api/search-console/indexacion",
+  "relativa": "GET /indexacion",
+  "controlador": "indexacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "search_console.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/search-console/sincronizar",
+  "tipo": "ruta",
+  "modulo": "search-console",
+  "metodo": "POST",
+  "ruta": "/api/search-console/sincronizar",
+  "relativa": "POST /sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "search_console.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []

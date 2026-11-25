@@ -170,6 +170,8 @@ const ALL_PROJECTS_OK = [
   /^\/prospectos\/duplicados$/,
   /^\/prospectos\/revision-duplicados$/,
   /^\/meta-ads$/,
+  /^\/google-analytics$/, // CRM#55: pide el campus dentro, como Meta Ads
+  /^\/trafico-organico$/, // CRM#36: pide el campus dentro, como Google Analytics
   /^\/chat-ia$/,
   /^\/conexion\/moodle(?:\/\d+)?$/,
   // CRM#632 (auditoría del 03/11): el admin con varios campus se quedaba en el
@@ -421,6 +423,8 @@ const CON_SOCIEDAD_OK = [
   /^\/prospectos\/duplicados$/,
   /^\/prospectos\/revision-duplicados$/,
   /^\/meta-ads$/,
+  /^\/google-analytics$/, // CRM#55: pide el campus dentro, como Meta Ads
+  /^\/trafico-organico$/, // CRM#36: pide el campus dentro, como Google Analytics
   /^\/chat-ia$/,
   /^\/conexion\/moodle(?:\/\d+)?$/,
   // CRM#632 (auditoría del 03/11): el admin con varios campus se quedaba en el

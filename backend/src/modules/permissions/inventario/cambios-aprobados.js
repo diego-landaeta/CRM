@@ -695,6 +695,38 @@ export const CAMBIOS_DE_MENU = [
     rutas: { 'Moodle › Conexión del campus': 'GET /api/integrations/' },
     aprobadoPor: 'Diego, 25/11',
   },
+  {
+    id: 'menu-google-analytics-55',
+    que: '«Publicidad › Google Analytics»: visitas de la web por día, por canal y por página de entrada, cruzadas con prospectos y ventas (CRM#55). La ve quien tiene `google_analytics.view`, clave nueva: admin, soporte y project manager de serie, cada uno en sus campus. Sincronizar a mano, `google_analytics.edit` (admin y soporte).',
+    motivo: 'CRM#55: el embudo empezaba cuando alguien deja su teléfono; con GA4 se ve lo de antes, y si un curso no vende porque no lo ven o porque no convence.',
+    perfiles: {
+      superadmin: ['+ Publicidad › Google Analytics'],
+      admin: ['+ Publicidad › Google Analytics'],
+      soporte: ['+ Publicidad › Google Analytics'],
+      project_manager: ['+ Publicidad › Google Analytics'],
+      'gestora+admin': ['+ Publicidad › Google Analytics'],
+    },
+    rutas: {
+      'Publicidad › Google Analytics': 'GET /api/google-analytics/estado',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#55)',
+  },
+  {
+    id: 'menu-trafico-organico-36',
+    que: '«Publicidad › Tráfico orgánico»: clics, impresiones, CTR y posición de Google comparados con el periodo anterior, las búsquedas, las páginas con muchas impresiones y CTR bajo y las páginas de formación sin indexar (CRM#36). La ve quien tiene `search_console.view`, clave nueva: admin, soporte y project manager de serie, cada uno en sus campus. Sincronizar a mano, `search_console.edit` (admin y soporte).',
+    motivo: 'CRM#36 (tarea 222 de Carlos): hacer el análisis SEO desde el CRM sin entrar en Search Console. Sustituye a «Campañas › Tráfico orgánico», que decía «Aún no conectado» y había salido del menú (#534).',
+    perfiles: {
+      superadmin: ['+ Publicidad › Tráfico orgánico'],
+      admin: ['+ Publicidad › Tráfico orgánico'],
+      soporte: ['+ Publicidad › Tráfico orgánico'],
+      project_manager: ['+ Publicidad › Tráfico orgánico'],
+      'gestora+admin': ['+ Publicidad › Tráfico orgánico'],
+    },
+    rutas: {
+      'Publicidad › Tráfico orgánico': 'GET /api/search-console/estado',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#36)',
+  },
 ];
 
 /**
