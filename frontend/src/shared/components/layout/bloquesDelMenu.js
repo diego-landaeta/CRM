@@ -115,7 +115,8 @@ export const ORDEN_DE_LOS_BLOQUES = [
  * conexión. Lo que no esté en la lista va detrás, en su orden.
  */
 export const ORDEN_DENTRO_DEL_BLOQUE = {
-  Moodle: ['Mi campus', 'Consultas', 'Cursos y alumnos', 'Cursos de Moodle', 'Cursos pendientes', 'Diplomas', 'Conexión del campus'],
+  // «Mis cursos» solo está en el menú de CRM-ISEIE (en el 360 es una pestaña de Mi campus).
+  Moodle: ['Mi campus', 'Mis cursos', 'Consultas', 'Cursos y alumnos', 'Cursos de Moodle', 'Cursos pendientes', 'Diplomas', 'Conexión del campus'],
 };
 
 const SEP = ' › ';
