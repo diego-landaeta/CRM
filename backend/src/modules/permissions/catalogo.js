@@ -237,6 +237,13 @@ export const SECCIONES = [
           a('conectar_portfolio', 'Conectar un portfolio de Meta', 'Conectar un Business Manager entero para que sus cuentas nuevas aparezcan solas.', ADMIN),
         ],
       },
+      {
+        // CRM#55: lo que pasa antes del lead (visitas, canales, páginas de curso).
+        clave: 'google_analytics', nombre: 'Google Analytics', acciones: [
+          a('view', 'Ver Google Analytics', 'Visitas por canal y por página de curso, y cuántas acaban en prospecto y en venta.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Sincronizar Google Analytics', 'Traer ya los datos de GA4 de un campus.', ADMIN_SOPORTE),
+        ],
+      },
     ],
   },
   {
