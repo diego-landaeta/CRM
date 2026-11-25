@@ -8,6 +8,8 @@ import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
 import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
+// El recorrido guiado de la pantalla (#941, tanda H).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   googleAnalyticsApi, type Embudo, type EstadoCampus, type PaginaGA,
 } from '../api/googleAnalytics.api';
@@ -183,7 +185,12 @@ export default function GoogleAnalyticsPage() {
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
   }
 
-  const selector = <ElegirCampus campus={campus} que="sus visitas" />;
+  // Con su anclaje del recorrido (#941, tanda H) solo cuando de verdad hay que elegir.
+  const selector = !campus.fijo && campus.opciones.length > 0 && (
+    <div data-recorrido="ga-campus">
+      <ElegirCampus campus={campus} que="sus visitas" />
+    </div>
+  );
 
   if (!projectId) {
     return <div className="space-y-3">{selector}<p className="text-sm text-muted-foreground">Elige un campus para ver sus visitas.</p></div>;
@@ -210,10 +217,12 @@ export default function GoogleAnalyticsPage() {
   const t = embudo?.total;
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda H): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       {selector}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div data-recorrido="ga-periodo" className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
             Propiedad {estado?.property_id || '—'} · Última sincronización: {cuando(estado?.last_synced_at || null)}
@@ -241,6 +250,7 @@ export default function GoogleAnalyticsPage() {
               {sincronizando ? 'Sincronizando…' : 'Sincronizar ahora'}
             </button>
           )}
+          <VerRecorrido id="google-analytics" listo={!cargando} compacto />
         </div>
       </div>
 
@@ -251,7 +261,7 @@ export default function GoogleAnalyticsPage() {
       ) : embudo && t ? (
         <>
           {/* El embudo en una línea (subfase 4) */}
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 items-stretch">
+          <div data-recorrido="ga-embudo" className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 items-stretch">
             <Cifra titulo="Sesiones" valor={num(t.sesiones)} detalle={t.sesiones == null ? 'GA4 no tiene datos de este periodo' : 'Visitas a la web, de GA4'} />
             <Paso valor={pct(t.lead_por_sesion)} texto="piden información" />
             <Cifra titulo="Prospectos" valor={num(t.leads)} detalle="Entraron en el CRM en el periodo" />
@@ -260,7 +270,7 @@ export default function GoogleAnalyticsPage() {
           </div>
 
           {/* Sesiones por día */}
-          <section className="rounded-lg border border-border bg-card p-4">
+          <section data-recorrido="ga-dias" className="rounded-lg border border-border bg-card p-4">
             <h2 className="text-sm font-semibold flex items-center gap-2 mb-1"><ChartLineUp size={16} /> Sesiones por día</h2>
             <p className="text-[11px] text-muted-foreground mb-2">Pasa el ratón por un día para ver sus prospectos y ventas. Un hueco es un día sin dato de GA4, no un cero.</p>
             <div className="h-56">
@@ -279,7 +289,7 @@ export default function GoogleAnalyticsPage() {
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             {/* Por canal */}
-            <section className="rounded-lg border border-border bg-card p-4 min-w-0">
+            <section data-recorrido="ga-canales" className="rounded-lg border border-border bg-card p-4 min-w-0">
               <h2 className="text-sm font-semibold mb-1">Por dónde llegan</h2>
               <p className="text-[11px] text-muted-foreground mb-3">Canal de la sesión según GA4.</p>
               {embudo.canales.length === 0 ? (
@@ -301,7 +311,7 @@ export default function GoogleAnalyticsPage() {
             </section>
 
             {/* Por página (subfase 3) */}
-            <section className="rounded-lg border border-border bg-card p-4 min-w-0">
+            <section data-recorrido="ga-paginas" className="rounded-lg border border-border bg-card p-4 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                 <div>
                   <h2 className="text-sm font-semibold">Por página de entrada</h2>
