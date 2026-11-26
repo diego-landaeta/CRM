@@ -108,6 +108,7 @@ import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js'
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startMetaPortfolioSyncScheduler } from './jobs/metaPortfolioSyncScheduler.js';
 import { startGoogleAnalyticsSyncScheduler } from './jobs/googleAnalyticsSyncScheduler.js';
 import { startSearchConsoleSyncScheduler } from './jobs/searchConsoleSyncScheduler.js';
 import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
@@ -562,6 +563,7 @@ if (process.env.NODE_ENV !== 'test') {
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
+    startMetaPortfolioSyncScheduler();
     // Sincronización de Google Analytics 4 (CRM#55). Apagada sin GA4_SYNC_ACTIVO=1.
     startGoogleAnalyticsSyncScheduler();
     // Sincronización de Search Console (CRM#36). Apagada sin GSC_SYNC_ACTIVO=1.

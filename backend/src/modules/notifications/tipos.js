@@ -299,6 +299,12 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Token de Meta o Instagram', agrupa: false,
     descripcion: 'La renovación de un token de Meta Ads o Instagram ha fallado, o el token caduca en menos de 7 días',
   },
+  // #212: el portfolio de Meta descubre una cuenta publicitaria nueva. Pide
+  // revisarla en la bandeja (asignarle campus o ignorarla).
+  meta_portfolio_cuenta_nueva: {
+    clase: ACCION, etiqueta: 'Cuenta nueva en el portfolio de Meta', agrupa: false,
+    descripcion: 'El portfolio de Meta ha encontrado una cuenta publicitaria nueva, sin campus asignado',
+  },
   // MCP (Diego, 22/10): tu Claude consulta con la URL sola, conectado como antes
   // de la #326, y el CRM no le da datos. Hay que conectarlo una vez. Como mucho
   // uno al día por URL (mcp.conexiones.js).
