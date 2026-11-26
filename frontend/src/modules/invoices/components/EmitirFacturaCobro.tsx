@@ -136,7 +136,7 @@ export default function EmitirFacturaCobro({ conversionId, paymentId = null, onE
       const e = err as { data?: { error?: string; code?: string } };
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
         // Hay cobros anteriores sin facturar: se pregunta antes de saltarse el orden.
-               if (await confirm({
+        if (await confirm({
           title: 'Emitir fuera de orden',
           message: (
             <>

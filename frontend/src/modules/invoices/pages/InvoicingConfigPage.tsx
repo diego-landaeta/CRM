@@ -121,7 +121,7 @@ export default function InvoicingConfigPage() {
   }
 
   async function removeIssuer(id: number) {
-        if (!(await confirm({ title: 'Eliminar empresa emisora', message: '¿Eliminar esta empresa emisora? Las facturas ya emitidas conservan sus datos.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    if (!(await confirm({ title: 'Eliminar empresa emisora', message: '¿Eliminar esta empresa emisora? Las facturas ya emitidas conservan sus datos.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await invoicesApi.deleteIssuer(id);
       toast({ title: 'Empresa eliminada' });
@@ -148,8 +148,8 @@ export default function InvoicingConfigPage() {
   }
 
   async function resetSequence() {
-      if (!(await confirm({ title: 'Actualizar secuencia', message: `Set ${resetAno}/${resetSerie} → próxima factura será ${resetAno}/${String(resetUltimo + 1).padStart(4, '0')}. ¿Continuar?` }))) return;
-
+    if (!pid) return;
+    if (!(await confirm({ title: 'Actualizar secuencia', message: `Set ${resetAno}/${resetSerie} → próxima factura será ${resetAno}/${String(resetUltimo + 1).padStart(4, '0')}. ¿Continuar?` }))) return;
     setResetting(true);
     try {
       const res = await invoicesApi.setSequence({ projectId: pid, ano: resetAno, serie: resetSerie, ultimoNumero: resetUltimo });

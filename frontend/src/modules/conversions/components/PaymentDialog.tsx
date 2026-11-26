@@ -104,7 +104,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
         // El servidor ha visto un cobro igual muy cerca en el tiempo. Preguntamos
         // en vez de crear el duplicado a ciegas.
         if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
-          const seguir = await confirm({
+        const seguir = await confirm({
           title: 'Posible cobro duplicado',
           message: (
             <>

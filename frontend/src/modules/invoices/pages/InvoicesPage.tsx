@@ -296,7 +296,7 @@ export default function InvoicesPage() {
   }
 
   async function markPaid(inv: Invoice) {
-      if (!(await confirm({ title: 'Marcar como pagada', message: `¿Marcar como pagada la factura ${inv.codigo}?` }))) return;
+    if (!(await confirm({ title: 'Marcar como pagada', message: `¿Marcar como pagada la factura ${inv.codigo}?` }))) return;
     try {
       const res = await invoicesApi.markPaid(inv.id);
       if (res.success) {

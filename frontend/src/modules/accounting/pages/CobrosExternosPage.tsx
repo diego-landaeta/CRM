@@ -233,7 +233,7 @@ function PestanaBanco({ qs, campus, puedeEditar }: { qs: (e?: Record<string, str
   const [extractos, setExtractos] = useState<ExtractoBanco[]>([]);
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
-    const confirm = useConfirm();
+  const confirm = useConfirm();
 
   const cargar = useCallback(async () => {
     setCargando(true);

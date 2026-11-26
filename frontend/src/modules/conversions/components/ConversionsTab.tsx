@@ -91,7 +91,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   }, [conversions]);
 
   async function handleDeleteRefund(refundId: number): Promise<void> {
-      if (!(await confirm({ title: 'Eliminar devolución', message: '¿Eliminar esta devolución? La operación es irreversible.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    if (!(await confirm({ title: 'Eliminar devolución', message: '¿Eliminar esta devolución? La operación es irreversible.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await conversionsApi.removeRefund(refundId);
       toast({ title: 'Devolución eliminada' });

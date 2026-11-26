@@ -334,7 +334,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   }
 
   async function handleDeleteInstallment(inst: Installment) {
-      if (!inst.id || !(await confirm({ title: 'Eliminar cuota', message: `¿Eliminar cuota #${inst.numero}? Esto no es reversible.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    if (!inst.id || !(await confirm({ title: 'Eliminar cuota', message: `¿Eliminar cuota #${inst.numero}? Esto no es reversible.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await conversionsApi.deleteInstallment(inst.id);
       toast({ title: 'Cuota eliminada' });

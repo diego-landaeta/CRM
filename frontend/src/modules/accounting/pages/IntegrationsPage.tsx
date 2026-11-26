@@ -1405,7 +1405,7 @@ function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar
   }
 
   async function apagar() {
-        if (!(await confirm({ title: 'Apagar el plugin del campus', message: 'El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?', tone: 'warning', confirmLabel: 'Apagar' }))) return;
+    if (!(await confirm({ title: 'Apagar el plugin del campus', message: 'El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?', tone: 'warning', confirmLabel: 'Apagar' }))) return;
     setTrabajando(true);
     try {
       const res = await client.delete<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);

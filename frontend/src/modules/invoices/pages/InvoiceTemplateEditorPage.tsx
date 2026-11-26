@@ -194,7 +194,7 @@ export default function InvoiceTemplateEditorPage() {
   }
 
   async function removeTemplate(id: number) {
-     if (!(await confirm({ title: 'Eliminar plantilla', message: '¿Eliminar esta plantilla?', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    if (!(await confirm({ title: 'Eliminar plantilla', message: '¿Eliminar esta plantilla?', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     await invoicesApi.deleteTemplate(id);
     if (current?.id === id) newTemplate();
     await load();

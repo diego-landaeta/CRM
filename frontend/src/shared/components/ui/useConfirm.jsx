@@ -1,4 +1,4 @@
-﻿import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import ConfirmDialog from './ConfirmDialog';
 
 const ConfirmContext = createContext(null);
