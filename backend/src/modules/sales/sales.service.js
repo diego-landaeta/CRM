@@ -338,7 +338,7 @@ const SIN_ASIGNAR = `(c.producto_contratado_id IS NULL
  *   (`facturado` aquí es lo VENDIDO, el importe de la venta: el nombre se
  *   queda por no romper a quien ya lo lee.)
  */
-export async function getTopProducts({ projectId, projectIds = null, limit = 10, days = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+export async function getTopProducts({ projectId, projectIds = null, limit = 10, days = null, from = null, to = null, responsableId = null, paisEntrada = null, compartidas = null } = {}) {
   const params = [];
   const where = [];
   const listaTop = comoLista(projectId, projectIds);
@@ -346,6 +346,9 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
   else where.push(SIN_PRUEBAS('c.project_id'));
   // País de entrada del prospecto de la venta (#221).
   if (paisEntrada) { params.push(paisEntrada); where.push(`${sqlPaisDeLaVenta('c')} = $${params.length}`); }
+  // Solo compartidas o solo enteras (#186). La parte de cada gestora no cambia.
+  const repartoTop = condicionDeCompartidas(compartidas, 'c');
+  if (repartoTop) where.push(repartoTop);
   // Por gestora, mirando el reparto —igual que las tarjetas—, y con SU parte
   // del importe: una venta atendida entre dos es media para cada una.
   let PESO = '1';
@@ -480,13 +483,16 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
  * @param {{ projectId?, projectIds?, from?, to?, responsableId? }} opts
  *   `responsableId`: solo la parte de esa gestora (una gestora ve lo suyo).
  */
-export async function getFacturado({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+export async function getFacturado({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null, compartidas = null } = {}) {
   const params = [];
   const w = [FACTURA_QUE_CUENTA];
   const lista = comoLista(projectId, projectIds);
   if (lista) { params.push(lista); w.push(`c.project_id = ANY($${params.length}::int[])`); }
   else w.push(SIN_PRUEBAS('c.project_id'));
   if (paisEntrada) { params.push(paisEntrada); w.push(`${sqlPaisDeLaVenta('c')} = $${params.length}`); }
+  // Solo compartidas o solo enteras (#186).
+  const repartoFac = condicionDeCompartidas(compartidas, 'c');
+  if (repartoFac) w.push(repartoFac);
   if (from) { params.push(from); w.push(`i.fecha_emision >= $${params.length}::date`); }
   if (to) { params.push(to); w.push(`i.fecha_emision <= $${params.length}::date`); }
   let soloGestora = '';
@@ -1032,13 +1038,16 @@ const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
      WHERE p0.conversion_id = cp.conversion_id
        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
 
-export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null, compartidas = null } = {}) {
+  // Solo compartidas o solo enteras (#186): las ventas y sus cobros.
+  const reparto = condicionDeCompartidas(compartidas, 'c');
   const pv = [];
   const wv = [];
   const listaV = comoLista(projectId, projectIds);
   if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
   else wv.push(SIN_PRUEBAS('c.project_id'));
   if (paisEntrada) { pv.push(paisEntrada); wv.push(`${sqlPaisDeLaVenta('c')} = $${pv.length}`); }
+  if (reparto) wv.push(reparto);
   if (responsableId) { pv.push(comoIds(responsableId)); wv.push(`${VENDEDORA_C} = ANY($${pv.length}::int[])`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
@@ -1059,6 +1068,7 @@ export async function getDesglose({ projectId = null, projectIds = null, from = 
   if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
   else wc.push(SIN_PRUEBAS('c.project_id'));
   if (paisEntrada) { pc.push(paisEntrada); wc.push(`${sqlPaisDeLaVenta('c')} = $${pc.length}`); }
+  if (reparto) wc.push(reparto);
   if (responsableId) { pc.push(comoIds(responsableId)); wc.push(`${VENDEDORA_C} = ANY($${pc.length}::int[])`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
@@ -1112,7 +1122,10 @@ function restarDias(fecha, dias) {
 }
 
 // Un tramo: ventas, dinero y leads agrupados por dia o por mes.
-async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes, paisEntrada = null }) {
+async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes, paisEntrada = null, compartidas = null }) {
+  // Solo compartidas o solo enteras (#186): las ventas y sus cobros. Los leads
+  // no son ventas, y siguen todos.
+  const reparto = condicionDeCompartidas(compartidas, 'c');
   const corte = porMes ? "to_char(date_trunc('month', %s), 'YYYY-MM')"
     : "to_char(%s, 'YYYY-MM-DD')";
 
@@ -1124,6 +1137,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
   else wv.push(SIN_PRUEBAS('c.project_id'));
   if (paisEntrada) { pv.push(paisEntrada); wv.push(`${sqlPaisDeLaVenta('c')} = $${pv.length}`); }
+  if (reparto) wv.push(reparto);
   if (responsableId) {
     pv.push(comoIds(responsableId));
     wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pv.length}::int[])`);
@@ -1146,6 +1160,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
   else wc.push(SIN_PRUEBAS('c.project_id'));
   if (paisEntrada) { pc.push(paisEntrada); wc.push(`${sqlPaisDeLaVenta('c')} = $${pc.length}`); }
+  if (reparto) wc.push(reparto);
   if (responsableId) {
     pc.push(comoIds(responsableId));
     wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pc.length}::int[])`);
@@ -1219,7 +1234,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   };
 }
 
-export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null, compartidas = null } = {}) {
   const hoy = new Date().toISOString().slice(0, 10);
   const desde = from || `${new Date().getFullYear()}-01-01`;
   const hasta = to || hoy;
@@ -1227,7 +1242,7 @@ export async function getSerieVentas({ projectId = null, projectIds = null, from
   // Hasta dos meses se ve por dias; a partir de ahi, por meses.
   const porMes = dias > 62;
 
-  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes, paisEntrada });
+  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes, paisEntrada, compartidas });
 
   // El periodo justo anterior, del mismo tamaño.
   const finAnterior = restarDias(desde, 1);
@@ -1235,10 +1250,10 @@ export async function getSerieVentas({ projectId = null, projectIds = null, from
   // Con la MISMA lista de campus que el periodo (#245): sin ella, con «Todos» o
   // una empresa, el anterior y el historial sumaban los campus de todas las
   // empresas, también los que no son de quien pide.
-  const previo = await tramo({ projectId, projectIds, from: iniAnterior, to: finAnterior, responsableId, porMes, paisEntrada });
+  const previo = await tramo({ projectId, projectIds, from: iniAnterior, to: finAnterior, responsableId, porMes, paisEntrada, compartidas });
 
   // Y el historial completo mes a mes, desde que hay datos.
-  const historial = await tramo({ projectId, projectIds, from: '2026-01-01', to: hoy, responsableId, porMes: true, paisEntrada });
+  const historial = await tramo({ projectId, projectIds, from: '2026-01-01', to: hoy, responsableId, porMes: true, paisEntrada, compartidas });
 
   const varia = (a, b) => (b ? Math.round(((a - b) / b) * 1000) / 10 : (a ? 100 : 0));
 
