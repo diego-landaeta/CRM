@@ -13,11 +13,7 @@
 
 import { PROYECTOS_IA } from '@/shared/lib/proyectosIA';
 
-// La versión que enseña el menú. Ya no se escribe a mano: salía «BETA 2.2.0»
-// con producción en la 2.5.24 (11/11). La pone Vite al compilar, de la etiqueta
-// de Git (`scripts/versionDeLaApp.js`); en las pruebas no hay compilación y
-// queda vacía.
-export const BETA_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
+// La versión que enseña el CRM vive en `version.ts` (sale de Novedades).
 
 export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').toLowerCase() === 'true';
 
@@ -33,6 +29,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/links-pago',             // Links de pago de Stripe (v2.8.0; Diego, 19/11: «actívalo»)
   '/meta-ads',               // Meta Ads (metricas + ROI manual)
   '/google-analytics',       // Google Analytics 4: visitas → prospectos → ventas (CRM#55)
+  '/trafico-organico',       // Search Console: búsquedas, páginas e indexación (CRM#36)
   '/informes',                // Análisis › Reportes (overview + descargables prospectos/ventas)
   '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
   '/captacion',              // Captación: Formularios, Webhooks, Make
