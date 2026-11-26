@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { useProject } from '@/shared/hooks/useProject';
 import { useVistaGeneral } from '@/shared/hooks/useVistaGeneral';
 import ArbolesDeLosCampus from '../components/ArbolesDeLosCampus';
+// El recorrido guiado de la pantalla (#941, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   getTree,
   createCategory,
@@ -94,7 +96,7 @@ function NodeRow({
             <span style={{ width: 16, display: 'inline-block' }} />
           )}
         </button>
-        <span className="font-medium truncate">{node.nombre}</span>
+        <span className="font-medium truncate min-w-0">{node.nombre}</span>
         {node.productos_count > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
             {node.productos_count}
@@ -105,7 +107,9 @@ function NodeRow({
         >
           {node.source}
         </span>
-        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Con ratón, al pasar por encima; en el móvil o una pantalla táctil, siempre: allí
+            no hay «encima» y no había forma de verlos (#941, tanda I). */}
+        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
           <button
             type="button"
             title="Crear subcategoría"
@@ -368,24 +372,30 @@ export default function CategoriesTreePage() {
 
   if (general) {
     return (
-      <div className="container mx-auto py-6 max-w-5xl">
+      <div className="container mx-auto py-6 max-w-5xl [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
         <PageHeader
           title="Árbol de categorías"
           subtitle="El de cada campus, solo para ver. Para crear, cambiar o sincronizar categorías, entra en el campus."
+          actions={<VerRecorrido id="arbol-categorias" />}
         />
-        <ArbolesDeLosCampus ambito={ambito} />
+        <div data-recorrido="arbol-campus">
+          <ArbolesDeLosCampus ambito={ambito} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 max-w-5xl">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="container mx-auto py-6 max-w-5xl [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Árbol de categorías"
         subtitle="Jerarquía N niveles · pasa el ratón sobre un nodo para ver acciones"
+        actions={<VerRecorrido id="arbol-categorias" listo={!loading} />}
       />
       <div className="flex items-start justify-end gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-2">
+        <div data-recorrido="arbol-acciones" className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleStartSync}
             disabled={syncStarting || sync?.status === 'running'}
@@ -437,7 +447,7 @@ export default function CategoriesTreePage() {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 border rounded-lg bg-muted/30">
+      <div data-recorrido="arbol-filtros" className="flex flex-wrap items-center gap-3 mb-4 p-3 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
           <MagnifyingGlass size={16} className="text-muted-foreground" />
           <input
@@ -489,7 +499,7 @@ export default function CategoriesTreePage() {
           <div className="text-xs text-muted-foreground mb-3">
             <strong>{stats.total}</strong> categorías · <strong>{stats.productos}</strong> productos asignados
           </div>
-          <div className="border rounded-lg p-2 bg-card">
+          <div data-recorrido="arbol-lista" className="border rounded-lg p-2 bg-card">
             {tree
               .filter((n) => nodeMatchesRecursive(n, search, hideEmpty, sourceFilter))
               .map((node) => (

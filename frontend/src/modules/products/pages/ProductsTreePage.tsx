@@ -1,4 +1,6 @@
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (#941, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { useEffect, useState, useMemo } from 'react';
 import { useProject } from '@/shared/hooks/useProject';
 import { useVistaGeneral } from '@/shared/hooks/useVistaGeneral';
@@ -157,12 +159,17 @@ export default function ProductsTreePage() {
   const totalProducts = products.length;
 
   return (
-    <div className="container mx-auto py-6">
-      <PageHeader title="Productos por categoría" />
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="container mx-auto py-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
+      <PageHeader
+        title="Productos por categoría"
+        actions={<VerRecorrido id="productos-por-categoria" listo={!loadingTree && !loadingProducts} />}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
         {/* Sidebar árbol */}
-        <aside className="border rounded-lg bg-card">
+        <aside data-recorrido="porcat-arbol" className="border rounded-lg bg-card min-w-0">
           <div className="flex items-center gap-2 p-3 border-b">
             <Tree size={16} className="text-primary" />
             <span className="font-medium text-sm">Categorías</span>
@@ -236,9 +243,11 @@ export default function ProductsTreePage() {
         </aside>
 
         {/* Listado */}
-        <main className="border rounded-lg bg-card overflow-hidden">
-          <div className="p-3 border-b flex items-center gap-3">
-            <div className="flex-1">
+        <main className="border rounded-lg bg-card overflow-hidden min-w-0">
+          {/* En el móvil el buscador baja a su propia fila: al lado del título se
+              salía de la pantalla (#941, tanda I). */}
+          <div className="p-3 border-b flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-0">
               <div className="font-medium text-sm">
                 {selected ? selected.nombre
                   : campusSel ? (arboles.find((c) => c.id === campusSel)?.nombre || 'Todos los productos')
@@ -250,14 +259,14 @@ export default function ProductsTreePage() {
                   ` · ${filteredProducts.length} coinciden con "${productSearch}"`}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div data-recorrido="porcat-buscar" className="flex items-center gap-2 w-full sm:w-auto">
               <MagnifyingGlass size={14} className="text-muted-foreground" />
               <input
                 type="text"
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
                 placeholder="Buscar producto/SKU…"
-                className="text-sm px-2 py-1 bg-background border rounded focus:outline-none focus:border-primary"
+                className="min-w-0 flex-1 sm:flex-none text-sm px-2 py-1 bg-background border rounded focus:outline-none focus:border-primary"
               />
             </div>
           </div>
@@ -273,6 +282,9 @@ export default function ProductsTreePage() {
           )}
 
           {!loadingProducts && filteredProducts.length > 0 && (
+            /* Con «Todos» arriba lleva también la columna del campus: en el
+               móvil se desliza en vez de salirse (#941, tanda I). */
+            <div data-recorrido="porcat-lista" className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/30 border-b">
                 <tr>
@@ -301,6 +313,7 @@ export default function ProductsTreePage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </main>
       </div>

@@ -22,6 +22,8 @@ import {
 } from '@/modules/product-categories/api/categories.api';
 
 import ArbolDeCategorias from '@/modules/product-categories/components/ArbolDeCategorias';
+// El recorrido guiado de la pantalla (#941, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -199,7 +201,9 @@ export default function ProductsPage() {
   const hasFilters = !!selectedCat || !!campusFiltro || !!productSearch || statusFilter !== 'active';
 
   return (
-    <div className="space-y-4">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <ProductFormDialog open={formOpen} onClose={() => setFormOpen(false)} product={editingProduct} onSubmit={handleSubmit} />
 
       <Suspense fallback={null}>
@@ -220,9 +224,11 @@ export default function ProductsPage() {
           ? `Catálogo de tus campus · ${filteredProducts.length} de ${products.length}. Para crear o sincronizar, elige un campus arriba.`
           : `Catálogo — ${activeProject.nombre} · ${filteredProducts.length} de ${products.length}${selectedCat ? ` en "${selectedCat.nombre}"` : ''}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="productos" listo={!loading} />
             {can('woocommerce.sync') && !general && (
             <button
+              data-recorrido="productos-sincronizar"
               onClick={handleSyncWc}
               disabled={syncStarting || syncStatus?.status === 'running'}
               className="flex items-center gap-2 h-9 px-3 rounded-md border bg-card text-sm hover:bg-muted disabled:opacity-50"
@@ -244,6 +250,7 @@ export default function ProductsPage() {
             </button>
             {can('products.create') && !general && (
             <button
+              data-recorrido="productos-nuevo"
               onClick={openCreate}
               // En el móvil es solo el «+»: así el lector de pantalla dice qué hace.
               aria-label="Nuevo producto"
@@ -283,7 +290,7 @@ export default function ProductsPage() {
       <div className={`grid gap-4 ${sidebarOpen ? 'grid-cols-1 lg:grid-cols-[260px_1fr]' : 'grid-cols-1'}`}>
         {/* Sidebar filtros */}
         {sidebarOpen && (
-          <aside className="border rounded-lg bg-card h-fit lg:sticky lg:top-4">
+          <aside data-recorrido="productos-filtros" className="border rounded-lg bg-card h-fit lg:sticky lg:top-4">
             <div className="flex items-center gap-2 p-3 border-b">
               <Tree size={14} className="text-primary" />
               <span className="font-medium text-sm flex-1">{general ? 'Campus' : 'Categorías'}</span>
@@ -375,7 +382,7 @@ export default function ProductsPage() {
 
         {/* Listado de productos */}
         <main>
-          <div className="mb-3 flex items-center gap-2">
+          <div data-recorrido="productos-buscar" className="mb-3 flex items-center gap-2">
             <div className="flex-1 relative">
               <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -414,7 +421,7 @@ export default function ProductsPage() {
               ) : null}
             />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div data-recorrido="productos-lista" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredProducts.map((product: any) => (
                 <div key={product.id} className={`bg-card p-5 rounded-lg border border-border transition-all ${!product.active ? 'opacity-50' : ''}`}>
                   <div className="flex items-start justify-between mb-3">
@@ -461,7 +468,7 @@ export default function ProductsPage() {
                   </div>
 
                   {(can('products.edit') || can('products.delete')) && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t">
+                  <div data-recorrido="productos-acciones" className="flex gap-2 mt-3 pt-3 border-t">
                     {can('products.edit') && (
                     <button onClick={() => openEdit(product)} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-md border bg-card text-[13px] font-medium hover:bg-muted">
                       <PencilSimple size={14} /> Editar
