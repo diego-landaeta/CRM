@@ -5,6 +5,8 @@ import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './integrations.controller.js';
 import * as salud from './salud.controller.js';
+import * as categoriasMoodle from './moodle-categorias.controller.js';
+import * as google from './google.controller.js';
 
 const router = Router();
 
@@ -36,6 +38,19 @@ router.get('/estado',          puede('integrations.view'), ctrl.estado);
 // quien pide, como `/estado`. Solo superadmin y admin (`integrations.salud`).
 router.get('/salud',            puede('integrations.salud'), salud.salud);
 router.post('/salud/comprobar', puede('integrations.salud'), salud.comprobar);
+// En qué categoría del Moodle va el curso de cada tipo de formación (CRM#1113, fase 2).
+// Leer lee el Moodle del campus; guardar solo escribe en `config_public`. Antes de `/:provider`.
+router.get('/moodle/categorias', puede('integrations.view'), projectAccess, categoriasMoodle.ver);
+router.put('/moodle/categorias', puede('integrations.edit'), projectAccess, categoriasMoodle.guardar);
+// Google Analytics 4 y Search Console del campus (CRM#1099): la cuenta de servicio
+// y la propiedad, guardadas en `api_credentials` como las lee el módulo de cada uno.
+// Ver, quien ve Integraciones; guardar, probar y quitar, solo admin y superadmin
+// (`integrations.google`). `:servicio` es `ga4` o `gsc`.
+router.post('/google/gsc/sitios',      puede('integrations.google'), projectAccess, google.sitios);
+router.get('/google/:servicio',        puede('integrations.view'), projectAccess, google.ver);
+router.put('/google/:servicio',        puede('integrations.google'), projectAccess, google.guardar);
+router.post('/google/:servicio/probar', puede('integrations.google'), projectAccess, google.probar);
+router.delete('/google/:servicio',     puede('integrations.google'), projectAccess, google.quitar);
 router.get('/:provider',       puede('integrations.view'), projectAccess, ctrl.getOne);
 router.put('/',                puede('integrations.edit'), projectAccess, ctrl.upsert);
 router.post('/:provider/test', puede('integrations.edit'), projectAccess, ctrl.test);

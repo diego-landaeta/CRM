@@ -245,6 +245,13 @@ export const SECCIONES = [
           a('edit', 'Sincronizar Google Analytics', 'Traer ya los datos de GA4 de un campus.', ADMIN_SOPORTE),
         ],
       },
+      {
+        // CRM#36: lo que pasa en Google antes de la visita (búsquedas, posiciones, indexación).
+        clave: 'search_console', nombre: 'Search Console', acciones: [
+          a('view', 'Ver Tráfico orgánico', 'Clics, impresiones, posición, búsquedas y páginas de Google, y qué páginas de formación no están indexadas.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Sincronizar Search Console', 'Traer ya los datos de Search Console de un campus.', ADMIN_SOPORTE),
+        ],
+      },
     ],
   },
   {
@@ -258,6 +265,9 @@ export const SECCIONES = [
           a('delete', 'Borrar productos', 'Quitar un producto.', ADMIN_SOPORTE),
           a('categorias', 'Árbol de categorías', 'Crear, mover y quitar categorías.', ADMIN_SOPORTE),
           a('export', 'Exportar el catálogo', 'Descargar el catálogo.', TODOS),
+          // CRM#1113: en Productos › Formaciones, los alumnos de cada formación (activos, terminados y
+          // cómo van de pagos). Son ventas y cobros: con el alcance de Ventas (la gestora, lo suyo).
+          a('alumnos', 'Ver los alumnos de cada formación', 'Cuántos alumnos activos tiene cada formación, hasta cuándo y cómo van de pagos (una gestora, los suyos).', TODOS, { requiere: ['conversions.view'] }),
         ],
       },
       {
@@ -282,6 +292,10 @@ export const SECCIONES = [
       {
         clave: 'tutores', nombre: 'Tutores', acciones: [
           a('mis_cursos', 'Sus cursos y comisiones', 'El tutor ve sus colaboraciones, sus cursos y sus comisiones.', ['tutor', 'tutor_redactor'], { propia: true }),
+          // «Mi campus» de administración (Diego, 25/11): todo el Moodle de sus campus, con el
+          // token del campus, aunque no tenga cuenta enlazada. Solo lee; corregir y responder
+          // siguen siendo de la profesora del curso.
+          a('campus_administracion', 'Mi campus de administración', 'Ver en «Mi campus» todos los cursos del Moodle de sus campus: consultas por responder, entregas por corregir y alumnos con su % hecho. Solo lectura; se abre en Moodle.', ADMIN),
           a('gestionar', 'Gestionar colaboraciones', 'Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus.', ADMIN),
           a('avisar', 'Avisar de comisiones', 'Ver el aviso de comisiones y mandarlo al tutor.', TODOS),
           a('liquidar', 'Liquidar comisiones', 'Pagar o revertir las comisiones de un tutor (mueve dinero).', ADMIN, { requiere: ['tutores.gestionar'] }),
@@ -318,6 +332,10 @@ export const SECCIONES = [
           a('cobros', 'Cobros y cuotas', 'Apuntar cobros, generar y pagar cuotas.', TODOS),
           a('reparto', 'Repartir una venta', 'Repartir una venta entre varias gestoras.', ADMIN),
           a('devoluciones', 'Devoluciones', 'Apuntar y quitar devoluciones.', ADMIN_SOPORTE),
+          // Diego, 25/11/2026 (sobre CRM#1113): la baja o el desistimiento del alumno en la venta.
+          // Como editar o cobrar la venta, la gestora la da en LAS SUYAS (ventaPorId) y la líder
+          // de equipo en las de su equipo: es quien habla con el alumno. No toca dinero.
+          a('baja_alumno', 'Dar de baja al alumno', 'Apuntar en la venta la baja o el desistimiento del alumno (fecha, motivo y nota) y deshacerla. Deja de contar como activo en Formaciones › Alumnos; no anula facturas ni toca cobros ni Moodle. Una gestora, en sus ventas.', [...ADMIN, 'gestor']),
           a('sin_gestora', 'Venta sin gestora', 'Registrar una venta que no es de nadie: no cuenta en el informe de ninguna gestora.', ADMIN),
         ],
       },
@@ -334,6 +352,11 @@ export const SECCIONES = [
           a('gestionar', 'Anular y abonar', 'Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar facturas, proformas y borradores. Diego, 19/11/2026: también las gestoras, cualquier factura de su campus.', [...ADMIN, 'gestor']),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
           a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
+          // Diego, 25/11: «Enviar factura automáticamente: Sí / No» y «Enviar a este
+          // correo» solo los ven las administradoras; una gestora no elige nada y la
+          // factura sigue el modo del CRM (en ISEIE, «Por enviar» para administración).
+          a('envio_auto', 'Elegir el envío de la factura', '«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» al registrar una venta o crear un link, y cambiarlo en la venta.', ADMIN),
+          a('automatica', 'Ver la facturación automática', 'Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos.', [...ADMIN, 'gestor']),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', [...ADMIN, 'gestor']),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', [...ADMIN_SOPORTE, 'gestor']),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),
@@ -420,6 +443,9 @@ export const SECCIONES = [
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
           // CRM#533: la salud de las conexiones de cada campus (y «Comprobar ahora»,
           // que prueba sin cambiar nada). Solo superadmin y admin, cada uno en lo suyo.
+          // CRM#1099: la cuenta de servicio de Google de cada campus (GA4 y Search
+          // Console). Verla va con `view`; cargarla, probarla y quitarla, solo admin.
+          a('google', 'Conectar Google Analytics y Search Console', 'Subir la cuenta de servicio de Google de un campus, elegir su propiedad de GA4 o de Search Console, probarla y quitarla.', ADMIN),
           a('salud', 'Ver la salud de las conexiones', 'Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora.', ADMIN),
         ],
       },
@@ -443,6 +469,8 @@ export const SECCIONES = [
         clave: 'feedback', nombre: 'Feedback', acciones: [
           a('view', 'Ver feedback', 'El panel y las respuestas de los clientes.', TODOS),
           a('enviar', 'Enviar la encuesta', 'Mandar, o no, la encuesta revisada a un cliente.', TODOS),
+          // #1157: con el mismo alcance que el panel (una gestora, lo suyo; un admin, sus campus).
+          a('exportar', 'Exportar las respuestas', 'Bajar en CSV las respuestas filtradas: fecha, campus, gestora, motivo, puntuación y comentario, sin datos de contacto.', TODOS, { requiere: ['feedback.view'] }),
         ],
       },
       {
@@ -483,6 +511,20 @@ export const SECCIONES = [
           a('edit', 'Editar solicitudes de admisión', 'Cambiar datos y subir documentos.', COMERCIAL),
           a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una solicitud de admisión.', ADMIN_SOPORTE),
           a('delete', 'Borrar solicitudes de admisión', 'Quitar una solicitud de admisión.', ADMIN_SOPORTE),
+        ],
+      },
+      {
+        // Apostilla de La Haya (CRM#1130, Diego 25/11/2026): «lo ven todos los que
+        // entran al CRM» (no tutores, colaboradores ni redactoras: no van en TODOS) y
+        // la gestionan admin y la gestora de esa venta. La líder de equipo trae lo de
+        // gestora (las suyas y las de su equipo). Soporte solo la ve: da soporte
+        // técnico, no lleva el trámite. QUÉ apostillas gestiona cada una es alcance
+        // (apostillas.service.js), no casilla.
+        clave: 'apostillas', nombre: 'Apostillas de La Haya', acciones: [
+          a('view', 'Ver apostillas', 'Las apostillas de sus campus, sus cifras y su paso, y el bloque en la ficha del cliente y de la venta.', TODOS),
+          a('edit', 'Gestionar apostillas', 'Cambiar el paso, quién la lleva, el envío y las notas, y subir y abrir sus documentos (una gestora, solo las de sus clientes y ventas).', ['admin', 'gestor']),
+          a('asociar', 'Crear y enlazar apostillas', 'Crear una apostilla a mano y enlazar las «Sin asociar» con su cliente y su venta.', ADMIN),
+          a('config', 'Configurar el aviso de atascadas', 'A los cuántos días en el mismo paso avisa la campana, en sus campus.', ADMIN),
         ],
       },
       {
@@ -540,6 +582,9 @@ export const SECCIONES = [
           // CRM#957: qué curso de Moodle es cada producto del catálogo, para la matrícula
           // automática (#767). Otra pantalla (Académico › Cursos de Moodle): no pide `moodle.view`.
           a('cursos_producto', 'Unir productos con cursos de Moodle', 'Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus.', ADMIN_SOPORTE, { independiente: true }),
+          // CRM#1113, fase 2: desde Productos › Formaciones, crear en el Moodle del campus el curso
+          // de una formación, o actualizarlo, con una sección por módulo. Escribe en Moodle.
+          a('crear_cursos', 'Crear cursos en Moodle', 'Crear o actualizar en el Moodle de sus campus el curso de una formación, con una sección por módulo.', ADMIN_SOPORTE, { independiente: true }),
         ],
       },
       {

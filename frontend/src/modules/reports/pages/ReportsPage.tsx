@@ -30,6 +30,8 @@ import ActividadPorComercial from '../components/ActividadPorComercial';
 import InformeMensual from '../components/InformeMensual';
 // El recorrido guiado de la pantalla (#941, tanda J).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+// Apostillas de La Haya (CRM#1130): cuántas, cuánto dinero, por estado, campus y mes.
+import CifrasApostillas from '@/modules/apostillas/components/CifrasApostillas';
 
 function exportReportCSV(data, project, range, panel, seguimiento, feedback = null) {
   const sections = [];
@@ -217,6 +219,7 @@ export default function ReportsPage() {
 
 function PantallaDeReportes() {
   const { activeProject, activeIssuerId, activeIssuer, projects } = useProjectContext();
+  const { can } = usePermission();
 
   // ARRANCA EN LA SOCIEDAD, no en el campus (#125 · 5).
   //
@@ -611,6 +614,12 @@ function PantallaDeReportes() {
 
       {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
       <DondePonerElDinero from={range.from} to={range.to} />
+
+      {/* Apostillas de La Haya (CRM#1130): las del rango y el ámbito. Sin ninguna, no se pinta. */}
+      {can('apostillas.view') && (
+        <CifrasApostillas conTitulo from={range.from} to={range.to}
+          ambito={ambitoComoObjeto({ activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo }) as Record<string, number>} />
+      )}
 
       {/* Por qué no compran: las cifras de «Análisis → Feedback», con este rango y ámbito. */}
       <FeedbackEnReportes from={range.from} to={range.to} issuerId={issuerEfectivo}
