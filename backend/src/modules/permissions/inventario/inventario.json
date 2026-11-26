@@ -12204,6 +12204,10 @@
     "claves": [
      "meta_ads.conectar_portfolio"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
    }
   ],
   "puertas": []
@@ -12226,6 +12230,10 @@
     "claves": [
      "meta_ads.conectar_portfolio"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
    }
   ],
   "puertas": []
@@ -12248,6 +12256,10 @@
     "claves": [
      "meta_ads.conectar_portfolio"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
    }
   ],
   "puertas": []
@@ -12270,6 +12282,10 @@
     "claves": [
      "meta_ads.conectar_portfolio"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
    }
   ],
   "puertas": []
@@ -12292,6 +12308,10 @@
     "claves": [
      "meta_ads.conectar_portfolio"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
    }
   ],
   "puertas": []
@@ -12340,6 +12360,10 @@
     "claves": [
      "meta_ads.conectar_portfolio"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
    }
   ],
   "puertas": []

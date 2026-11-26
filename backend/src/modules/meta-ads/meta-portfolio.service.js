@@ -75,49 +75,48 @@ export async function syncPortfolio(portfolioId) {
   await query(`UPDATE meta_business_portfolios SET last_sync_status = 'in_progress', updated_at = NOW() WHERE id = $1`, [portfolioId]);
 
   const accessToken = unpackToken(portfolio.access_token_enc);
-  let cuentas;
   try {
-    cuentas = await metaClient.listOwnedAdAccounts({ businessId: portfolio.business_id, accessToken });
+    const cuentas = await metaClient.listOwnedAdAccounts({ businessId: portfolio.business_id, accessToken });
+
+    let nuevas = 0;
+    for (const cuenta of cuentas) {
+      const adAccountId = `act_${cuenta.account_id}`;
+      const conectada = await query(`SELECT id FROM meta_ad_accounts WHERE ad_account_id = $1`, [adAccountId]);
+      const metaAdAccountId = conectada.rows[0]?.id || null;
+      const campus = metaAdAccountId ? null : await sugerirCampus(cuenta.name);
+
+      const { rows: upsert } = await query(
+        `INSERT INTO meta_portfolio_discovered_accounts
+           (portfolio_id, ad_account_id, nombre, estado, campus_sugerido_id, meta_ad_account_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (portfolio_id, ad_account_id) DO UPDATE SET
+           nombre = EXCLUDED.nombre,
+           meta_ad_account_id = COALESCE(meta_portfolio_discovered_accounts.meta_ad_account_id, EXCLUDED.meta_ad_account_id),
+           updated_at = NOW()
+         RETURNING id, (xmax = 0) AS es_nueva`,
+        [portfolioId, adAccountId, cuenta.name || null, metaAdAccountId ? 'asignada' : 'nueva', campus, metaAdAccountId]
+      );
+      if (upsert[0]?.es_nueva && !metaAdAccountId) nuevas++;
+    }
+
+    await query(`UPDATE meta_business_portfolios SET last_sync_status = 'ok', last_sync_error = NULL, last_synced_at = NOW(), updated_at = NOW() WHERE id = $1`, [portfolioId]);
+
+    if (nuevas > 0) {
+      await notifyAdmins({
+        type: 'meta_portfolio_cuenta_nueva',
+        title: nuevas === 1 ? 'Una cuenta nueva en el portfolio de Meta' : `${nuevas} cuentas nuevas en el portfolio de Meta`,
+        message: `En «${portfolio.nombre || portfolio.business_id}». Revisa la bandeja en Meta Ads › Portfolios.`,
+        link_path: '/meta-ads?tab=portfolio',
+      });
+    }
+
+    return { cuentasVistas: cuentas.length, nuevas };
   } catch (err) {
     await query(`UPDATE meta_business_portfolios SET last_sync_status = 'error', last_sync_error = $2, updated_at = NOW() WHERE id = $1`, [portfolioId, err.message]);
     throw err;
   }
-
-  let nuevas = 0;
-  for (const cuenta of cuentas) {
-    const adAccountId = `act_${cuenta.account_id}`;
-    const conectada = await query(`SELECT id FROM meta_ad_accounts WHERE ad_account_id = $1`, [adAccountId]);
-    const metaAdAccountId = conectada.rows[0]?.id || null;
-    const campus = metaAdAccountId ? null : await sugerirCampus(cuenta.name);
-
-    const { rows: upsert } = await query(
-      `INSERT INTO meta_portfolio_discovered_accounts
-         (portfolio_id, ad_account_id, nombre, estado, campus_sugerido_id, meta_ad_account_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (portfolio_id, ad_account_id) DO UPDATE SET
-         nombre = EXCLUDED.nombre,
-         meta_ad_account_id = COALESCE(meta_portfolio_discovered_accounts.meta_ad_account_id, EXCLUDED.meta_ad_account_id),
-         updated_at = NOW()
-       RETURNING id, (xmax = 0) AS es_nueva`,
-      [portfolioId, adAccountId, cuenta.name || null, metaAdAccountId ? 'asignada' : 'nueva', campus, metaAdAccountId]
-    );
-    if (upsert[0]?.es_nueva && !metaAdAccountId) nuevas++;
-  }
-
-  await query(`UPDATE meta_business_portfolios SET last_sync_status = 'ok', last_sync_error = NULL, last_synced_at = NOW(), updated_at = NOW() WHERE id = $1`, [portfolioId]);
-
-  if (nuevas > 0) {
-    await notifyAdmins({
-      type: 'meta_portfolio_cuenta_nueva',
-      title: nuevas === 1 ? 'Una cuenta nueva en el portfolio de Meta' : `${nuevas} cuentas nuevas en el portfolio de Meta`,
-      message: `En «${portfolio.nombre || portfolio.business_id}». Revisa la bandeja en Meta Ads › Portfolios.`,
-      link_path: '/meta-ads?tab=portfolio', 
-
-    });
-  }
-
-  return { cuentasVistas: cuentas.length, nuevas };
 }
+
 
 /** Las cuentas descubiertas de un portfolio, con el nombre del campus sugerido. */
 export async function listDiscoveredAccounts(portfolioId) {

@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import request from 'supertest';
+import jwt from 'jsonwebtoken';
+import app from '../src/app.js';
 
 /**
  * Conectar un portfolio de Meta entero (#212): en vez de dar de alta cada
@@ -218,5 +221,97 @@ describe('desconectar (#212)', () => {
     expect(rows).toHaveLength(0);
     const cuentas = await q(`SELECT id FROM meta_ad_accounts WHERE project_id = $1`, [P]);
     expect(cuentas.length).toBeGreaterThan(0);
+  });
+});
+
+
+describe('acceso por HTTP: quien puede tocar el portfolio (#212, revision Diego)', () => {
+  const idsHttp = { users: [], projects: [] };
+  let P1, P2, AD1, AD2, GESTOR, SOPORTE, SA, PORTFOLIO_HTTP, DISCOVERED_ID;
+  const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
+
+  beforeAll(async () => {
+    const [p1] = await q(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
+      [`${MARCA} HTTP P1`, `${MARCA.toLowerCase()}-http-p1`, `${MARCA}-http-p1-key`]);
+    P1 = p1.id; idsHttp.projects.push(P1);
+    const [p2] = await q(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
+      [`${MARCA} HTTP P2`, `${MARCA.toLowerCase()}-http-p2`, `${MARCA}-http-p2-key`]);
+    P2 = p2.id; idsHttp.projects.push(P2);
+
+    const crear = async (nombre, email, role) => {
+      const [u] = await q(`INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id, role`,
+        [nombre, email, role]);
+      idsHttp.users.push(u.id);
+      return u;
+    };
+    AD1 = await crear(`${MARCA} AD1`, `ad1@${MARCA.toLowerCase()}.test`, 'admin');
+    AD2 = await crear(`${MARCA} AD2`, `ad2@${MARCA.toLowerCase()}.test`, 'admin');
+    GESTOR = await crear(`${MARCA} GESTOR`, `gestor@${MARCA.toLowerCase()}.test`, 'gestor');
+    SOPORTE = await crear(`${MARCA} SOPORTE`, `soporte@${MARCA.toLowerCase()}.test`, 'soporte');
+    SA = await crear(`${MARCA} SA`, `sa@${MARCA.toLowerCase()}.test`, 'superadmin');
+
+    await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [AD1.id, P1]);
+    await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [AD2.id, P2]);
+
+    const tokenCifrado = (() => { const { encrypted, iv, authTag } = encrypt('token-http-test'); return `${iv}:${authTag}:${encrypted}`; })();
+    const [portfolio] = await q(
+      `INSERT INTO meta_business_portfolios (business_id, nombre, access_token_enc, created_by_user_id)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [`${BIZ}-http`, 'Portfolio HTTP test', tokenCifrado, SA.id]);
+    PORTFOLIO_HTTP = portfolio.id;
+
+    const [discovered] = await q(
+      `INSERT INTO meta_portfolio_discovered_accounts (portfolio_id, ad_account_id, nombre, estado, campus_sugerido_id)
+       VALUES ($1, $2, $3, 'nueva', $4) RETURNING id`,
+      [PORTFOLIO_HTTP, `act_${N}http`, 'Cuenta HTTP test', P1]);
+    DISCOVERED_ID = discovered.id;
+  }, 60000);
+
+  afterAll(async () => {
+    await q(`DELETE FROM meta_portfolio_discovered_accounts WHERE portfolio_id = $1`, [PORTFOLIO_HTTP]);
+    await q(`DELETE FROM meta_business_portfolios WHERE id = $1`, [PORTFOLIO_HTTP]);
+    await q(`DELETE FROM meta_ad_accounts WHERE project_id = ANY($1::int[])`, [idsHttp.projects]);
+    await q(`DELETE FROM user_projects WHERE user_id = ANY($1::int[])`, [idsHttp.users]);
+    await q(`DELETE FROM users WHERE id = ANY($1::int[])`, [idsHttp.users]);
+    await q(`DELETE FROM projects WHERE id = ANY($1::int[])`, [idsHttp.projects]);
+  }, 60000);
+
+  it('soporte no puede conectar un portfolio (no tiene el permiso, a proposito)', async () => {
+    const res = await request(app).post('/api/meta-ads/portfolios').set(como(SOPORTE))
+      .send({ business_id: '999999', access_token: 'x'.repeat(25) });
+    expect(res.status).toBe(403);
+  });
+
+  it('gestor no puede conectar un portfolio', async () => {
+    const res = await request(app).post('/api/meta-ads/portfolios').set(como(GESTOR))
+      .send({ business_id: '999999', access_token: 'x'.repeat(25) });
+    expect(res.status).toBe(403);
+  });
+
+  it('un admin de campus (no ve todo el CRM) no puede listar portfolios: es del negocio entero', async () => {
+    const res = await request(app).get('/api/meta-ads/portfolios').set(como(AD1));
+    expect(res.status).toBe(403);
+  });
+
+  it('superadmin si puede listar, y el token nunca sale en la respuesta', async () => {
+    const res = await request(app).get('/api/meta-ads/portfolios').set(como(SA));
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/token-http-test|access_token_enc/i);
+  });
+
+  it('un admin de otro campus no puede asignar la cuenta descubierta a un campus que no es suyo', async () => {
+    const res = await request(app)
+      .post(`/api/meta-ads/portfolios/discovered/${DISCOVERED_ID}/assign`)
+      .set(como(AD2))
+      .send({ project_id: P1 });
+    expect(res.status).toBe(403);
+  });
+
+  it('project_id invalido ("5abc") no cuela como 5: 400, no 200', async () => {
+    const res = await request(app)
+      .post(`/api/meta-ads/portfolios/discovered/${DISCOVERED_ID}/assign`)
+      .set(como(AD1))
+      .send({ project_id: '5abc' });
+    expect(res.status).toBe(400);
   });
 });
