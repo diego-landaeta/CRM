@@ -3,7 +3,9 @@ import { upsertCredentialSchema, listCredentialsSchema } from './credentials.val
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { decrypt } from '../../shared/utils/crypto.js';
-import { refreshGoogleAdsAccessToken } from '../../shared/services/googleAds.service.js';
+import { probarCredencial as probarCredencialGoogleAds } from '../google-ads/google-ads.client.js';
+import { campusConLaCuenta, mensajeCuentaRepetida } from '../google-ads/google-ads.service.js';
+import { leerCredencialGoogleAds } from '../../shared/services/googleAds.service.js';
 import { anotar, historial, ACCIONES } from './credentials.registro.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { claveDeIA, ORIGENES, DONDE_SE_CONFIGURA, probarClaveDeIA } from './clave-ia.js';
@@ -149,7 +151,7 @@ export async function test(req, res, next) {
     // Carga la fila completa para conocer el `service`. Necesario para decidir
     // si hacemos validacion real (google_ads) o stub.
     const { rows } = await query(
-      `SELECT ac.service, ac.encrypted_value, ac.iv, ac.auth_tag, p.gsc_property
+      `SELECT ac.service, ac.project_id, ac.encrypted_value, ac.iv, ac.auth_tag, p.gsc_property
          FROM api_credentials ac LEFT JOIN projects p ON p.id = ac.project_id
         WHERE ac.id = $1`,
       [id]
@@ -158,27 +160,23 @@ export async function test(req, res, next) {
     if (!row) throw new AppError('Credencial no encontrada', 404, 'NOT_FOUND');
 
     if (row.service === 'google_ads') {
-      // F2-014: validacion real contra el endpoint OAuth2 de Google.
-      let refreshToken;
+      // F2-014: validacion real contra el endpoint OAuth2 de Google. CRM#54: y si
+      // la credencial lleva `customer_id`, lee la cuenta con la API de Google Ads.
+      let valor;
       try {
-        refreshToken = decrypt(row.encrypted_value, row.iv, row.auth_tag);
+        valor = decrypt(row.encrypted_value, row.iv, row.auth_tag);
       } catch (err) {
         await model.recordTestResult(id, 'failed');
         return res.json({ success: true, data: { result: 'failed', message: `Decrypt fallo: ${err.message}` } });
       }
-      const result = await refreshGoogleAdsAccessToken({
-        clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-        refreshToken,
-      });
-      const stored = result.ok ? 'ok' : 'expired';
-      await model.recordTestResult(id, stored);
-      return res.json({
-        success: true,
-        data: result.ok
-          ? { result: 'ok', message: `Token refrescado, expira en ${result.expiresIn}s.` }
-          : { result: stored, code: result.code, message: result.message },
-      });
+      // Una cuenta va en un solo campus: si no, se pisan el gasto y las campañas.
+      const { customerId } = leerCredencialGoogleAds(valor);
+      const otro = await campusConLaCuenta(customerId, row.project_id);
+      const r = otro
+        ? { result: 'failed', code: 'GOOGLE_ADS_CUENTA_REPETIDA', message: mensajeCuentaRepetida(customerId, otro) }
+        : await probarCredencialGoogleAds(valor);
+      await model.recordTestResult(id, r.result);
+      return res.json({ success: true, data: r });
     }
 
     if (row.service === 'claude') {
