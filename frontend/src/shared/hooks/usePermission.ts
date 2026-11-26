@@ -1,6 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import type { UserRole } from '@/shared/types';
-import { rolesDe, tieneRol as tieneRolDe } from '@/shared/lib/roles';
+import { rolesDe, tieneRol as tieneRolDe, veListaDeGestoras } from '@/shared/lib/roles';
 
 export type PermissionKey = string;
 export type PermissionMap = Record<PermissionKey, boolean>;
@@ -28,6 +28,8 @@ export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
   { key: 'superadmin', label: 'Superadmin', desc: 'Acceso total. Solo este rol gestiona usuarios.', color: 'rose' },
   { key: 'admin',      label: 'Admin',      desc: 'Acceso operativo completo, no gestiona usuarios.', color: 'violet' },
   { key: 'gestor',     label: 'Gestor',     desc: 'Solo proyectos asignados, solo sus leads.', color: 'sky' },
+  // CRM#1105: una gestora que además lleva un equipo comercial.
+  { key: 'lider_equipo', label: 'Líder de equipo', desc: 'Lo suyo y lo de las gestoras de su equipo. Sin administración.', color: 'sky' },
   // El tutor no entra al CRM normal: solo ve sus formaciones y lo suyo.
   { key: 'tutor',      label: 'Tutor',      desc: 'Colaborador externo. Solo sus formaciones y sus comisiones.', color: 'violet' },
   { key: 'soporte',    label: 'Soporte',    desc: 'Acceso de solo lectura para soporte técnico.', color: 'emerald' },
@@ -49,6 +51,12 @@ export interface UsePermissionResult {
    * `lleva_equipo` de /auth/me (lo mismo en CRM-ISEIE).
    */
   llevaEquipo: boolean;
+  /**
+   * Si se le enseñan las listas de gestoras (filtro «Gestora», reasignar, la
+   * cola del equipo). Por permiso y alcance, no por rol (Diego, 25/11/2026: a la
+   * líder de equipo le salían vacías). Ver `veListaDeGestoras`.
+   */
+  veGestoras: boolean;
 }
 
 /**
@@ -77,6 +85,7 @@ export function crearCan(user: Parameters<typeof rolesDe>[0] | null | undefined,
 export default function usePermission(): UsePermissionResult {
   const { user, permissions } = useAuth();
   const can = crearCan(user, permissions);
+  const llevaEquipo = (user as { lleva_equipo?: boolean } | null | undefined)?.lleva_equipo === true;
 
   return {
     can,
@@ -84,6 +93,7 @@ export default function usePermission(): UsePermissionResult {
     roles: rolesDe(user),
     tieneRol: (...roles: UserRole[]) => tieneRolDe(user, ...roles),
     isAdmin: tieneRolDe(user, 'admin', 'superadmin'),
-    llevaEquipo: (user as { lleva_equipo?: boolean } | null | undefined)?.lleva_equipo === true,
+    llevaEquipo,
+    veGestoras: veListaDeGestoras(user, can, llevaEquipo),
   };
 }
