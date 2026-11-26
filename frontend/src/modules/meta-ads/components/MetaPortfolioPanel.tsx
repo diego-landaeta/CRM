@@ -4,6 +4,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { metaPortfolioApi, MetaPortfolio, MetaPortfolioDiscoveredAccount } from '../api/metaPortfolio.api';
 import { toast } from '@/shared/hooks/useToast';
 import Select from '@/shared/components/ui/Select';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
+
 
 const ESTADO_TONE: Record<string, string> = {
   nueva: 'bg-warning-soft text-warning-soft-foreground',
@@ -31,6 +33,7 @@ export default function MetaPortfolioPanel() {
   const [token, setToken] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   function load() {
     setLoading(true);
@@ -64,8 +67,8 @@ export default function MetaPortfolioPanel() {
     }
   }
 
-  async function handleDisconnect(p: MetaPortfolio) {
-    if (!confirm(`Desconectar el portfolio "${p.nombre || p.business_id}"? Las cuentas ya asignadas a un campus no se tocan.`)) return;
+   async function handleDisconnect(p: MetaPortfolio) {
+    if (!(await confirm({ title: 'Desconectar portfolio', message: `¿Desconectar el portfolio "${p.nombre || p.business_id}"? Las cuentas ya asignadas a un campus no se tocan.`, tone: 'destructive', confirmLabel: 'Desconectar' }))) return;
     try {
       await metaPortfolioApi.disconnect(p.id);
       toast({ title: 'Portfolio desconectado' });
@@ -220,6 +223,7 @@ function DiscoveredAccountRow({ row, projects, onChanged }: {
 }) {
   const [projectId, setProjectId] = useState<number | ''>(row.campus_sugerido_id ?? '');
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
   const accionable = row.estado === 'nueva' || row.estado === 'sin_acceso';
 
   async function handleAssign() {
@@ -240,7 +244,7 @@ function DiscoveredAccountRow({ row, projects, onChanged }: {
   }
 
   async function handleIgnore() {
-    if (!confirm(`Ignorar "${row.nombre || row.ad_account_id}"? No volverá a salir en la bandeja.`)) return;
+    if (!(await confirm({ title: 'Ignorar cuenta', message: `¿Ignorar "${row.nombre || row.ad_account_id}"? No volverá a salir en la bandeja.`, tone: 'destructive', confirmLabel: 'Ignorar' }))) return;
     setBusy(true);
     try {
       await metaPortfolioApi.ignore(row.id);

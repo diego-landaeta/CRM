@@ -1,5 +1,6 @@
 import * as service from './meta-portfolio.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { assignSchema, connectSchema } from './meta-portfolio.validation.js';
 
 /**
  * POST /portfolios — conecta un Business Manager entero (#212).
@@ -7,9 +8,9 @@ import { AppError } from '../../shared/utils/AppError.js';
  */
 export async function connect(req, res, next) {
   try {
-    const { business_id, nombre, access_token } = req.body || {};
-    if (!business_id) throw new AppError('business_id requerido', 400, 'MISSING_BUSINESS_ID');
-    if (!access_token) throw new AppError('access_token requerido', 400, 'MISSING_TOKEN');
+    const parsed = connectSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const { business_id, nombre, access_token } = parsed.data;
     const result = await service.connectPortfolio({ businessId: business_id, nombre, accessToken: access_token, userId: req.user.userId });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -58,8 +59,9 @@ export async function assign(req, res, next) {
   try {
     const discoveredId = parseInt(req.params.discoveredId);
     if (!discoveredId) throw new AppError('discoveredId requerido', 400, 'MISSING_DISCOVERED');
-    const projectId = parseInt(req.body?.project_id);
-    if (!projectId) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+    const parsed = assignSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const { project_id: projectId } = parsed.data;
     const result = await service.assignDiscoveredAccount(discoveredId, { projectId, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

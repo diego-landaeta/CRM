@@ -8,6 +8,7 @@ import ErrorBoundary from './shared/components/layout/ErrorBoundary';
 import App from './App';
 import { recargarUnaVez } from './shared/lib/piezaNueva';
 import './index.css';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 // Auto-reload cuando una pieza del frontal falla por estar desactualizada tras un
 // deploy (la pestaña abierta con el JS viejo pide piezas que ya no están). La regla
@@ -28,7 +29,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ThemeProvider>
           <AuthProvider>
             <ProjectProvider>
-              <App />
+              <ConfirmProvider>
+                <App />
+              </ConfirmProvider>
             </ProjectProvider>
           </AuthProvider>
         </ThemeProvider>

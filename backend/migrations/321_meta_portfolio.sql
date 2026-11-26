@@ -31,3 +31,19 @@ CREATE TABLE IF NOT EXISTS meta_portfolio_discovered_accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_mpda_portfolio ON meta_portfolio_discovered_accounts(portfolio_id);
 CREATE INDEX IF NOT EXISTS idx_mpda_estado ON meta_portfolio_discovered_accounts(estado);
+
+DO $$
+DECLARE r text; t text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['crm_user', 'crm_iseie_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      FOREACH t IN ARRAY ARRAY['meta_business_portfolios', 'meta_portfolio_discovered_accounts'] LOOP
+        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO %I', t, r);
+      END LOOP;
+      FOREACH t IN ARRAY ARRAY['meta_business_portfolios_id_seq', 'meta_portfolio_discovered_accounts_id_seq'] LOOP
+        EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE %I TO %I', t, r);
+      END LOOP;
+    END IF;
+  END LOOP;
+END $$;
+
