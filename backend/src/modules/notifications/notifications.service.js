@@ -56,13 +56,19 @@ export async function notifyUsers({ targetUserIds, type, title, message = null, 
 // campana y la lista no enseñan los retirados (`list`). Sin migración: `metadata`
 // es JSONB desde la 067.
 
-/** Los avisos de ese tipo dirigidos a esa persona que siguen sin retirar. */
+/** Los avisos de ese tipo dirigidos a esa persona que siguen sin retirar (con el índice GIN de la 080). */
 export async function avisosAbiertos(userId, type) {
   const { rows } = await query(
     `SELECT id, metadata, created_at FROM admin_notifications
-      WHERE type = $2 AND $1 = ANY(target_user_ids) AND NOT (metadata ? 'resuelta_at')
+      WHERE type = $2 AND target_user_ids IS NOT NULL AND target_user_ids @> ARRAY[$1::int]
+        AND NOT (metadata ? 'resuelta_at')
       ORDER BY id`, [userId, type]);
   return rows.map((r) => ({ id: Number(r.id), metadata: r.metadata || {}, createdAt: r.created_at }));
+}
+
+/** Añade campos a la `metadata` de un aviso (sin tocar lo demás). */
+export async function anotarAviso(id, campos) {
+  await query('UPDATE admin_notifications SET metadata = metadata || $2::jsonb WHERE id = $1', [id, JSON.stringify(campos)]);
 }
 
 /** Retira esos avisos: leídos para todos sus destinatarios y con el motivo. Devuelve cuántos. */
