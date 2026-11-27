@@ -159,7 +159,8 @@ describe('lo que enseña', () => {
     expect(Object.keys(deOtra.pendiente).sort()).toEqual(Object.keys(libre.pendiente).sort());
     expect(deOtra.pendiente).toMatchObject({ estado: 'pendiente', de: ANA.email, a: OTRA_DE_C.email, intentos: 0 });
     expect(JSON.stringify(deOtra)).not.toMatch(/no_mandado|otro usuario|otra persona/i);
-    expect(JSON.stringify(deOtra)).not.toContain(String(OTRA_DE_C.id));
+    // Ni rastro de la otra persona: solo lo que se enseña de cualquier petición.
+    expect(Object.keys(deOtra.pendiente).sort()).toEqual(['a', 'cuando', 'de', 'estado', 'expira_at', 'id', 'intentos', 'pedido_at']);
   });
 
   it('el historial: confirmados y anulados, de qué correo a cuál y cuándo, el último primero', async () => {

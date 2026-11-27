@@ -73,7 +73,7 @@ export default function CambioDeCorreo({ userId }: { userId: number }) {
             <Estado estado="pendiente" />
             <span className="min-w-0 break-words text-sm font-medium">{pendiente.a}</span>
           </div>
-          <dl className="mt-2 grid gap-x-4 gap-y-1 text-secundario sm:grid-cols-3">
+          <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-x-4 gap-y-1 text-secundario">
             <div><dt className="text-muted-foreground">Lo pidió</dt><dd>{formatDateTime(pendiente.pedido_at)}</dd></div>
             <div><dt className="text-muted-foreground">Vale hasta</dt><dd>{formatDateTime(pendiente.expira_at)}</dd></div>
             <div><dt className="text-muted-foreground">Intentos</dt><dd>{pendiente.intentos} de {maximo}</dd></div>
@@ -125,12 +125,16 @@ export default function CambioDeCorreo({ userId }: { userId: number }) {
           <h4 className="text-secundario font-medium text-muted-foreground">Anteriores</h4>
           <ul className="mt-1 divide-y divide-border">
             {historial.map((h) => (
-              <li key={h.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:gap-3">
-                <span className="sm:w-24 sm:flex-shrink-0"><Estado estado={h.estado} /></span>
-                <span className="min-w-0 flex-1 break-words text-secundario">
+              // Apilado a cualquier ancho: la ficha es estrecha también en escritorio,
+              // y dos correos en fila se partían por la mitad.
+              <li key={h.id} className="py-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <Estado estado={h.estado} />
+                  <span className="text-secundario text-muted-foreground">{formatDateTime(h.cuando)}</span>
+                </div>
+                <p className="mt-1 min-w-0 break-words text-secundario">
                   {h.de ? <>{h.de} <span aria-hidden="true">→</span><span className="sr-only"> a </span> </> : null}{h.a}
-                </span>
-                <span className="text-secundario text-muted-foreground sm:flex-shrink-0">{formatDateTime(h.cuando)}</span>
+                </p>
               </li>
             ))}
           </ul>
