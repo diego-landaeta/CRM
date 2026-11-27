@@ -129,18 +129,29 @@ describe('quién lo ve', () => {
     expect((await ver(SOPORTE, OTRA_DE_C)).status).toBe(200);
   });
 
-  it('la cuenta de un superadmin: soporte no la ve ni la anula (404); el propio superadmin, sí', async () => {
-    // El de la base de pruebas (db:preparar -- --datos): crear uno aquí lo
-    // contarían otras pruebas que corren a la vez.
-    const jefe = await one(`SELECT id, role FROM users WHERE role = 'superadmin' AND active = true ORDER BY id LIMIT 1`);
-    expect(jefe).toBeTruthy();
-    const visto = await ver(SOPORTE, jefe);
-    expect(visto.status).toBe(404);
-    expect(visto.body.code).toBe('USER_NOT_FOUND');
-    const anulado = await anular(SOPORTE, jefe);
-    expect(anulado.status).toBe(404);
-    expect(anulado.body.code).toBe('USER_NOT_FOUND');
-    expect((await ver(jefe, jefe)).status).toBe(200);
+  it('la cuenta de un superadmin: ni soporte ni un admin con la excepción la ven ni la anulan (404)', async () => {
+    // Inactivas a propósito: otras pruebas cuentan los superadmin activos
+    // mientras corren a la vez (certifexDiplomas), y estas no deben sumar.
+    // Por eso tampoco se prueba aquí que un superadmin la vea: con la cuenta
+    // inactiva no pasa de la guardia de permisos. Esa rama es la de siempre.
+    const jefe = async (n, role, extra) => {
+      const u = await one(`INSERT INTO users (nombre, email, password_hash, role, roles_extra, active)
+                           VALUES ($1, $2, 'x', $3, $4::user_role[], false) RETURNING id, role, email`,
+      [`${MARCA} ${n}`, `${n}@${MARCA}.test`, role, extra]);
+      ids.users.push(u.id); return u;
+    };
+    const JEFA = await jefe('jefa', 'superadmin', []);
+    // Superadmin como rol añadido: cuenta igual.
+    const JEFE_EXTRA = await jefe('jefeextra', 'gestor', ['superadmin']);
+    await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [JEFE_EXTRA.id, A]);
+    for (const [quien, persona] of [[SOPORTE, JEFA], [SOPORTE, JEFE_EXTRA], [ADMIN_CON, JEFE_EXTRA]]) {
+      const visto = await ver(quien, persona);
+      expect(visto.status).toBe(404);
+      expect(visto.body.code).toBe('USER_NOT_FOUND');
+      const anulado = await anular(quien, persona);
+      expect(anulado.status).toBe(404);
+      expect(anulado.body.code).toBe('USER_NOT_FOUND');
+    }
   });
 });
 

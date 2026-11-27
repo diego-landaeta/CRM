@@ -6,7 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceDeLider } from '../../shared/utils/roles.js';
+import { alcanceDeLider, tieneRol } from '../../shared/utils/roles.js';
 
 /**
  * A quién ve en Usuarios quien pregunta (Diego, 04/11: «el project manager ve
@@ -470,9 +470,10 @@ async function exigirPersonaSuyaParaCorreo(req, id) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
   if (Number(id) === Number(req.user?.userId)) return;
-  // La cuenta de un superadmin solo la mira otro superadmin: ni soporte, que ve
-  // el CRM entero, ni un admin con la excepción. Para los demás, no existe.
-  if (user.role === 'superadmin' && req.user?.role !== 'superadmin') {
+  // La cuenta de un superadmin (también como rol añadido) solo la mira otro
+  // superadmin: ni soporte, que ve el CRM entero, ni un admin con la
+  // excepción. Para los demás, no existe.
+  if (tieneRol(user, 'superadmin') && !tieneRol(req.user, 'superadmin')) {
     throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
   }
   const campus = await campusParaRecortar(req);
