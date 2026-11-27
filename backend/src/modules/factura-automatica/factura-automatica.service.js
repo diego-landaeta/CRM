@@ -60,7 +60,7 @@ export function tokenBienFirmado(token) {
   return esperada.length === llega.length && crypto.timingSafeEqual(esperada, llega);
 }
 
-const caducidad = (desde = new Date()) => new Date(desde.getTime() + cfg.diasDePlazo() * 24 * 3600 * 1000);
+const caducidad = async (desde = new Date()) => new Date(desde.getTime() + (await cfg.diasDePlazoConDb()) * 24 * 3600 * 1000);
 
 // ── Una venta cada vez ───────────────────────────────────────────────────────
 // El formulario, el vigilante y una cuota pueden querer facturar la misma venta
@@ -89,10 +89,10 @@ function deUnoEnUno(conversionId, fn) {
  *   · En revisión → en la cola, para una persona.
  */
 export async function alCobrar({ conversionId, paymentId }) {
-  if (!cfg.activa() || !conversionId) return false;
+  if (!conversionId) return false;
   try {
     const campus = await model.campusDeLaVenta(conversionId);
-    if (!campus || !cfg.activaEn(campus)) return false;
+    if (!campus || !(await cfg.activaEnConDb(campus))) return false;
 
     const fila = await model.deLaVenta(conversionId);
     if (!fila) {
@@ -118,7 +118,7 @@ export async function pedirDatos(conversionId, paymentId) {
   const v = await model.venta(conversionId);
   if (!v) return null;
   const { token, hash } = nuevoToken();
-  const caducaAt = caducidad();
+  const caducaAt = await caducidad();
   const fila = await model.crear({
     conversionId, projectId: v.project_id, leadId: v.lead_id, paymentId, tokenHash: hash, caducaAt,
   });
@@ -127,7 +127,7 @@ export async function pedirDatos(conversionId, paymentId) {
   // escribe. Con la ficha completa (la cargó la gestora o vino de la admisión),
   // la factura sale ya y queda para administración; si no, a revisión y aviso a
   // la gestora para que complete los datos en la venta.
-  if (cfg.revisionAdmin()) return conLosDatosDeLaFicha(fila, v);
+  if (await cfg.revisionAdminConDb()) return conLosDatosDeLaFicha(fila, v);
   await mandarPeticion(fila, v, token);
   return fila;
 }
@@ -161,7 +161,7 @@ export async function datosDeLaGestora(conversionId, datos) {
   await model.guardarFichaFiscal(v.lead_id, d);
   const fuera = problemas(d);
   const fila = await model.deLaVenta(conversionId);
-  if (!fuera.length && fila && ['pendiente', 'revision'].includes(fila.estado) && cfg.activaEn(await model.campusDeLaVenta(conversionId))) {
+  if (!fuera.length && fila && ['pendiente', 'revision'].includes(fila.estado) && (await cfg.activaEnConDb(await model.campusDeLaVenta(conversionId)))) {
     const lista = await model.guardarDatos(fila.id, d, { origen: 'ficha', estado: 'ficha', desde: ['pendiente', 'revision'] });
     if (lista) await emitirPendientes(lista.id);
     await nota(v.lead_id, '🧾 La gestora completó los datos fiscales en la venta.');
@@ -214,7 +214,7 @@ async function filaDelEnlace(token) {
   const fila = await model.porTokenHash(huella(token));
   if (!fila) throw ENLACE_NO_VALE();
   // El interruptor manda también aquí: apagado, los enlaces que ya salieron no hacen nada.
-  if (!cfg.activaEn({ id: fila.project_id, slug: fila.slug })) throw ENLACE_NO_VALE();
+  if (!(await cfg.activaEnConDb({ id: fila.project_id, slug: fila.slug }))) throw ENLACE_NO_VALE();
   return fila;
 }
 
@@ -287,7 +287,6 @@ export async function cerrarPlazo(filaId) {
 
 /** La vuelta del vigilante: plazos cumplidos y cobros que quedaron esperando. */
 export async function vuelta({ limite = 50 } = {}) {
-  if (!cfg.activa()) return { vencidas: 0, reintentos: 0 };
   let vencidas = 0;
   let reintentos = 0;
   for (const f of await model.vencidas(limite)) {
@@ -322,7 +321,7 @@ async function emitirDeLaFila(filaId) {
   const f = await model.porId(filaId);
   const emitidas = [];
   if (!f || !['respondido', 'ficha'].includes(f.estado)) return { emitidas };
-  if (!cfg.activaEn(await model.campusDeLaVenta(f.conversion_id))) return { emitidas };
+  if (!(await cfg.activaEnConDb(await model.campusDeLaVenta(f.conversion_id)))) return { emitidas };
 
   const v = await model.venta(f.conversion_id);
   if (!v) return { emitidas };
@@ -383,7 +382,7 @@ async function emitirDeLaFila(filaId) {
  */
 async function mandarFactura(inv, v, f) {
   // «Por enviar» (ISEIE, 25/11): no sale al alumno; la verifica y la manda administración.
-  if (cfg.revisionAdmin()) {
+  if (await cfg.revisionAdminConDb()) {
     try { await anotarEnLaFactura(inv.id, NOTA_POR_ENVIAR); } catch (err) {
       logger.warn({ err: err.message, invoiceId: inv.id }, 'factura automática: no se pudo dejar «Por enviar»');
     }
@@ -395,7 +394,7 @@ async function mandarFactura(inv, v, f) {
     }
     return;
   }
-  if (!cfg.enviarPdf()) return;
+  if (!(await cfg.enviarPdfConDb())) return;
   const email = String(v.factura_envio_email || '').trim() || f.email || v.email;
   if (!email) return;
   try {
@@ -433,7 +432,7 @@ export async function estadoDeLaVenta(conversionId) {
 /** Un enlace nuevo: el anterior deja de valer y el plazo vuelve a empezar. */
 export async function reenviar(conversionId) {
   const campus = await model.campusDeLaVenta(conversionId);
-  if (!campus || !cfg.activaEn(campus)) {
+  if (!campus || !(await cfg.activaEnConDb(campus))) {
     throw new AppError('La factura automática no está encendida en este campus.', 409, 'APAGADA');
   }
   const f = await model.deLaVenta(conversionId);
@@ -442,7 +441,7 @@ export async function reenviar(conversionId) {
     throw new AppError('Esta venta ya tiene sus datos fiscales.', 409, 'YA_RESPONDIDO');
   }
   const { token, hash } = nuevoToken();
-  const fila = await model.renovarEnlace(f.id, { tokenHash: hash, caducaAt: caducidad() });
+  const fila = await model.renovarEnlace(f.id, { tokenHash: hash, caducaAt: await caducidad() });
   if (!fila) throw new AppError('No se pudo renovar el enlace.', 409, 'NO_RENOVADO');
   const v = await model.venta(conversionId);
   const r = await mandarPeticion(fila, v, token, { reenvio: true });
@@ -521,7 +520,6 @@ export function comoVaEnLaCola(d, { posibleDuplicada = false, pausada = false } 
 
 /** Para la cola: qué pasa con los datos fiscales de cada venta. */
 export async function estadosParaCola(conversionIds) {
-  if (!cfg.activa()) return new Map();
   try { return await model.estadosDe(conversionIds); } catch { return new Map(); }
 }
 

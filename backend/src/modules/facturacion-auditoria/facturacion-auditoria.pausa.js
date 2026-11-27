@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
-import { leerConfig } from './facturacion-auditoria.config.js';
+import { leerConfigConDb } from './facturacion-auditoria.config.js';
 
 /*
   LA PAUSA DE LA FACTURACIÓN (#765).
@@ -37,7 +37,8 @@ export function emitiendoLaColaDeLaPausa(fn) {
 }
 
 /** La pausa abierta, o null. Con el interruptor apagado, siempre null. */
-export async function pausaAbierta({ cfg = leerConfig() } = {}) {
+export async function pausaAbierta({ cfg } = {}) {
+  cfg = cfg ?? await leerConfigConDb();
   if (!cfg.activa) return null;
   try {
     const { rows } = await query(
@@ -71,7 +72,8 @@ export const MENSAJE_PAUSADA = 'La facturación está pausada: la auditoría ha 
  * Para la emisión si la facturación está pausada (423 FACTURACION_PAUSADA).
  * `paymentId`: el cobro que se va a facturar, si lo hay.
  */
-export async function exigirFacturacionActiva({ paymentId = null, cfg = leerConfig() } = {}) {
+export async function exigirFacturacionActiva({ paymentId = null, cfg } = {}) {
+  cfg = cfg ?? await leerConfigConDb();
   if (!cfg.activa) return;
   if (colaDeLaPausa.getStore()) return;
   const pausa = await pausaAbierta({ cfg });

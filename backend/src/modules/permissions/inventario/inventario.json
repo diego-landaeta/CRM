@@ -5862,6 +5862,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/facturacion-ajustes/",
+  "tipo": "ruta",
+  "modulo": "facturacion-ajustes",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-ajustes/",
+  "relativa": "GET /",
+  "controlador": "ver",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.automatica_configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/facturacion-ajustes/",
+  "tipo": "ruta",
+  "modulo": "facturacion-ajustes",
+  "metodo": "PUT",
+  "ruta": "/api/facturacion-ajustes/",
+  "relativa": "PUT /",
+  "controlador": "guardarGlobal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.automatica_configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/facturacion-ajustes/campus/:projectId",
+  "tipo": "ruta",
+  "modulo": "facturacion-ajustes",
+  "metodo": "PATCH",
+  "ruta": "/api/facturacion-ajustes/campus/:projectId",
+  "relativa": "PATCH /campus/:projectId",
+  "controlador": "guardarCampus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.automatica_configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturacion-ajustes/registro",
+  "tipo": "ruta",
+  "modulo": "facturacion-ajustes",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-ajustes/registro",
+  "relativa": "GET /registro",
+  "controlador": "verRegistro",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.automatica_configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturacion-auditoria/estado",
   "tipo": "ruta",
   "modulo": "facturacion-auditoria",

@@ -42,6 +42,7 @@ import matriculasModule from './modules/matriculas/index.js';
 import feedbackModule from './modules/feedback/index.js';
 // Factura automática con formulario de datos fiscales (#764): apagada de serie.
 import facturaAutomaticaModule from './modules/factura-automatica/index.js';
+import facturacionAjustesModule from './modules/facturacion-ajustes/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import emailSequencesModule from './modules/email-sequences/index.js';
 import formsModule from './modules/forms/index.js';
@@ -361,6 +362,7 @@ const ALL_MODULES = [
   { name: 'apostillas', mod: apostillasModule },
   { name: 'feedback', mod: feedbackModule },
   { name: 'factura-automatica', mod: facturaAutomaticaModule },
+  { name: 'facturacion-ajustes', mod: facturacionAjustesModule },
   { name: 'novedades', mod: novedadesModule },
   { name: 'email-sequences', mod: emailSequencesModule },
   { name: 'forms', mod: formsModule },

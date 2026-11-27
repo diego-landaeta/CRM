@@ -1,3 +1,4 @@
+import { query } from '../../shared/config/db.js';
 /*
   Factura automática con formulario de datos fiscales (#764) · el interruptor.
 
@@ -56,3 +57,47 @@ export const intentosMaximos = () => entero(process.env.FACTURA_AUTOMATICA_INTEN
 export const revisionAdmin = () => si(process.env.FACTURA_ENVIO_REVISION_ADMIN);
 
 export const enviarPdf = () => String(process.env.FACTURA_AUTOMATICA_ENVIAR_PDF ?? '1').trim() !== '0';
+
+
+// ── Con ajuste desde la pantalla (#1202): la base de datos manda si hay
+// fila/columna guardada; si no, se usa exactamente la lógica de arriba (el
+// .env o el valor de serie). Se lee fresco en cada llamada, igual que el resto.
+
+async function filaCampus(projectId) {
+  const { rows } = await query(
+    `SELECT activo FROM factura_automatica_campus WHERE project_id = $1`,
+    [projectId]
+  );
+  return rows[0] || null;
+}
+
+async function ajustesGlobales() {
+  const { rows } = await query(
+    `SELECT dias, enviar_pdf, revision_admin FROM ajustes_facturacion WHERE id = 1`
+  );
+  return rows[0] || {};
+}
+
+/** Como activaEn(), pero mira primero el interruptor por campus guardado desde la pantalla. */
+export async function activaEnConDb(proyecto) {
+  const id = typeof proyecto === 'object' ? proyecto?.id : proyecto;
+  const fila = id ? await filaCampus(id) : null;
+  if (fila) return fila.activo;
+  return activaEn(proyecto);
+}
+
+export async function diasDePlazoConDb() {
+  const { dias } = await ajustesGlobales();
+  return dias ?? diasDePlazo();
+}
+
+export async function enviarPdfConDb() {
+  const { enviar_pdf: enviarPdfGuardado } = await ajustesGlobales();
+  return enviarPdfGuardado ?? enviarPdf();
+}
+
+export async function revisionAdminConDb() {
+  const { revision_admin: revisionAdminGuardado } = await ajustesGlobales();
+  return revisionAdminGuardado ?? revisionAdmin();
+}
+

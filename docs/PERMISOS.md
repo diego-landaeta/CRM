@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-1006 rutas en 76 módulos, y 31 acciones con condición dentro de una ruta.
+1010 rutas en 77 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -443,6 +443,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | panel | `GET /api/factura-automatica/panel` | (no existía) | (ruta nueva) | `facturas.automatica` |
 | formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |
 | responder | `POST /api/fd/:token` | (no existía) | (ruta nueva) | — |
+
+## facturacion-ajustes
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| ver | `GET /api/facturacion-ajustes/` | (no existía) | (ruta nueva) | `facturas.automatica_configurar` |
+| guardarGlobal | `PUT /api/facturacion-ajustes/` | (no existía) | (ruta nueva) | `facturas.automatica_configurar` |
+| guardarCampus | `PATCH /api/facturacion-ajustes/campus/:projectId` | (no existía) | (ruta nueva) | `facturas.automatica_configurar` |
+| verRegistro | `GET /api/facturacion-ajustes/registro` | (no existía) | (ruta nueva) | `facturas.automatica_configurar` |
 
 ## facturacion-auditoria
 
@@ -1694,6 +1703,7 @@ lo que pide para tener sentido (editar pide ver).
 | Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
 | Elegir el envío de la factura | `facturas.envio_auto` | «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» al registrar una venta o crear un link, y cambiarlo en la venta. | Admin | `facturas.view` |
 | Ver la facturación automática | `facturas.automatica` | Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos. | Admin, Gestora, Líder de equipo | `facturas.view` |
+| Configurar la facturación automática | `facturas.automatica_configurar` | Encender/apagar por campus, días de plazo, envío del PDF, revisión de administración y la auditoría (antes solo por el .env, #1202). | Admin | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Editar facturas | `facturas.edit` | Cambiar cualquier dato de una factura. | Admin, Soporte, Gestora, Líder de equipo | `facturas.view` |
 | Configurar la facturación | `facturas.configurar` | Empresas emisoras, regímenes, plantillas, series y ajustes. | Admin, Soporte | `facturas.view` |

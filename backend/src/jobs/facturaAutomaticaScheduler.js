@@ -1,6 +1,5 @@
 import { logger } from '../shared/utils/logger.js';
 import { vuelta } from '../modules/factura-automatica/factura-automatica.service.js';
-import { activa } from '../modules/factura-automatica/factura-automatica.config.js';
 import { vigilar } from './latido.js';
 
 /**
@@ -27,10 +26,10 @@ async function tick() {
 }
 
 export function startFacturaAutomaticaScheduler() {
-  if (!activa()) {
-    logger.info('Factura automática apagada (FACTURA_AUTOMATICA_ACTIVA)');
-    return;
-  }
+  // #1202: antes no arrancaba si estaba apagada al iniciar, y encenderla
+  // despues desde la pantalla no servia de nada hasta reiniciar. vuelta() ya
+  // vuelve a mirar el interruptor en cada vuelta y no hace nada si esta
+  // apagado, asi que siempre se arranca y el propio tick decide cada vez.
   vigilar('factura_automatica', 'Factura automática (plazo de 7 días)', tick, TICK_MS);
-  logger.info({ tickMs: TICK_MS }, 'Factura automática iniciada');
+  logger.info({ tickMs: TICK_MS }, 'Factura automática: vigilante arrancado (el interruptor se mira en cada vuelta)');
 }

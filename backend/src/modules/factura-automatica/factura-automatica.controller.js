@@ -1,6 +1,9 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as service from './factura-automatica.service.js';
-import { activa, diasDePlazo, enviarPdf, revisionAdmin } from './factura-automatica.config.js';
+import {
+  activa, activaEn, diasDePlazo, revisionAdmin,
+  activaEnConDb, diasDePlazoConDb, enviarPdfConDb, revisionAdminConDb,
+} from './factura-automatica.config.js';
 import { datosFiscalesSchema, envioFacturaSchema, panelSchema } from './factura-automatica.validation.js';
 import * as envio from './factura-automatica.envio.js';
 import * as model from './factura-automatica.model.js';
@@ -114,6 +117,18 @@ export async function panel(req, res, next) {
     const projectIds = await listaDelAmbito(req);
     const personas = await alcanceComercial(req.user);
     const data = await panelDe({ projectIds, personas, limite: q.limite || 200 });
-    res.json({ success: true, data: { ...data, activa: activa(), dias: diasDePlazo(), enviar_pdf: enviarPdf(), revision: revisionAdmin() } });
+    const activaAqui = projectIds?.length === 1
+      ? await activaEnConDb({ id: projectIds[0] })
+      : activaEn();
+    res.json({
+      success: true,
+      data: {
+        ...data,
+        activa: activaAqui,
+        dias: await diasDePlazoConDb(),
+        enviar_pdf: await enviarPdfConDb(),
+        revision: await revisionAdminConDb(),
+      },
+    });
   } catch (err) { next(err); }
 }

@@ -357,6 +357,7 @@ export const SECCIONES = [
           // factura sigue el modo del CRM (en ISEIE, «Por enviar» para administración).
           a('envio_auto', 'Elegir el envío de la factura', '«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» al registrar una venta o crear un link, y cambiarlo en la venta.', ADMIN),
           a('automatica', 'Ver la facturación automática', 'Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos.', [...ADMIN, 'gestor']),
+          a('automatica_configurar', 'Configurar la facturación automática', 'Encender/apagar por campus, días de plazo, envío del PDF, revisión de administración y la auditoría (antes solo por el .env, #1202).', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', [...ADMIN, 'gestor']),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', [...ADMIN_SOPORTE, 'gestor']),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),

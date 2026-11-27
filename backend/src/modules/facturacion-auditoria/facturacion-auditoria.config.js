@@ -1,3 +1,4 @@
+import { query } from '../../shared/config/db.js';
 /**
  * La auditoría de facturación cada 2 horas (#765, Automatizaciones 2/9).
  *
@@ -59,3 +60,36 @@ export function leerConfig(env = process.env) {
 }
 
 export const auditoriaActiva = (env = process.env) => leerConfig(env).activa;
+
+
+// ── Con ajuste desde la pantalla (#1202): igual que en factura-automatica,
+// la base de datos manda si hay columna guardada; si no, lo de arriba (el
+// .env o el valor de serie). Fresco en cada llamada.
+
+async function filaGlobal() {
+  const { rows } = await query(
+    `SELECT auditoria_activa, auditoria_pausar, auditoria_correos, auditoria_desde
+       FROM ajustes_facturacion WHERE id = 1`
+  );
+  return rows[0] || null;
+}
+
+export async function leerConfigConDb(env = process.env) {
+  const base = leerConfig(env);
+  const fila = await filaGlobal();
+  if (!fila) return base;
+  return {
+    activa: fila.auditoria_activa ?? base.activa,
+    pausar: fila.auditoria_pausar ?? base.pausar,
+    desde: fila.auditoria_desde
+      ? new Date(fila.auditoria_desde).toISOString().slice(0, 10)
+      : base.desde,
+    correos: fila.auditoria_correos
+      ? String(fila.auditoria_correos).split(',').map((s) => s.trim())
+        .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+      : base.correos,
+  };
+}
+
+export const auditoriaActivaConDb = async (env = process.env) => (await leerConfigConDb(env)).activa;
+

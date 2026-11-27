@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, PaperPlaneTilt, CheckCircle, Clock, WarningCircle, Receipt, ShieldCheck, ArrowClockwise,
+  ArrowLeft, PaperPlaneTilt, CheckCircle, Clock, WarningCircle, Receipt, ShieldCheck, ArrowClockwise, GearSix,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -281,6 +281,7 @@ export default function FacturacionAutomaticaPage() {
       </section>
 
       {can('facturas.auditoria') && <AuditoriaFacturacion />}
+      {can('facturas.automatica_configurar') && <AjustesFacturacionAutomatica />}
     </div>
   );
 }
@@ -446,6 +447,231 @@ function AuditoriaFacturacion() {
             </div>
           )}
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Ajustes (#1202): encender por campus y todos los ajustes desde la pantalla,
+// sin tocar el .env. Antes exigía SSH + editar el .env + reiniciar la API.
+
+type Origen = 'pantalla' | 'servidor' | 'serie';
+type Con<T> = { valor: T; origen: Origen };
+type AjustesGlobales = {
+  dias: Con<number>;
+  enviarPdf: Con<boolean>;
+  revisionAdmin: Con<boolean>;
+  auditoriaEstado: Con<'apagada' | 'aviso' | 'pausa'>;
+  auditoriaCorreos: Con<string[]>;
+  auditoriaDesde: Con<string | null>;
+  actualizado: { en: string; por: number | null } | null;
+};
+type CampusAjuste = { project_id: number; campus: string; activo: boolean; origen: Origen };
+type AjustesData = { global: AjustesGlobales; campus: CampusAjuste[] };
+type RegistroFila = {
+  id: number; action: string; created_at: string; usuario: string | null;
+  details: { campos?: string[]; project_id?: number | null };
+};
+
+const ORIGEN_TEXTO: Record<Origen, string> = { pantalla: 'desde la pantalla', servidor: 'del servidor (.env)', serie: 'de serie' };
+
+function Origencito({ o }: { o: Origen }) {
+  return <span className="text-[10px] text-muted-foreground">({ORIGEN_TEXTO[o]})</span>;
+}
+
+function AjustesFacturacionAutomatica() {
+  const [datos, setDatos] = useState<AjustesData | null>(null);
+  const [registro, setRegistro] = useState<RegistroFila[] | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [guardandoCampus, setGuardandoCampus] = useState<Record<number, boolean>>({});
+
+  const [fijarDias, setFijarDias] = useState(false);
+  const [dias, setDias] = useState(7);
+  const [fijarPdf, setFijarPdf] = useState(false);
+  const [enviarPdf, setEnviarPdf] = useState(true);
+  const [fijarRevision, setFijarRevision] = useState(false);
+  const [revisionAdmin, setRevisionAdmin] = useState(false);
+  const [fijarAuditoria, setFijarAuditoria] = useState(false);
+  const [auditoriaEstado, setAuditoriaEstado] = useState<'apagada' | 'aviso' | 'pausa'>('apagada');
+  const [correos, setCorreos] = useState('');
+  const [fijarDesde, setFijarDesde] = useState(false);
+  const [auditoriaDesde, setAuditoriaDesde] = useState('');
+
+  const cargar = useCallback(() => {
+    setCargando(true);
+    client.get<AjustesData>('/facturacion-ajustes')
+      .then((r) => {
+        if (!r?.success || !r.data) return;
+        const g = r.data.global;
+        setDatos(r.data);
+        setFijarDias(g.dias.origen === 'pantalla'); setDias(g.dias.valor);
+        setFijarPdf(g.enviarPdf.origen === 'pantalla'); setEnviarPdf(g.enviarPdf.valor);
+        setFijarRevision(g.revisionAdmin.origen === 'pantalla'); setRevisionAdmin(g.revisionAdmin.valor);
+        setFijarAuditoria(g.auditoriaEstado.origen === 'pantalla'); setAuditoriaEstado(g.auditoriaEstado.valor);
+        setCorreos((g.auditoriaCorreos.valor || []).join(', '));
+        setFijarDesde(g.auditoriaDesde.origen === 'pantalla'); setAuditoriaDesde(g.auditoriaDesde.valor || '');
+      })
+      .catch((err) => toast({ title: 'No se pudieron cargar los ajustes', description: (err as Error)?.message, variant: 'destructive' }))
+      .finally(() => setCargando(false));
+    client.get<RegistroFila[]>('/facturacion-ajustes/registro?limite=20')
+      .then((r) => { if (r?.success) setRegistro(r.data || []); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function guardar() {
+    setGuardando(true);
+    try {
+      const body = {
+        dias: fijarDias ? dias : null,
+        enviarPdf: fijarPdf ? enviarPdf : null,
+        revisionAdmin: fijarRevision ? revisionAdmin : null,
+        auditoriaEstado: fijarAuditoria ? auditoriaEstado : null,
+        auditoriaCorreos: correos.split(',').map((s) => s.trim()).filter(Boolean),
+        auditoriaDesde: fijarDesde ? (auditoriaDesde || null) : null,
+      };
+      const r = await client.put('/facturacion-ajustes', body);
+      if (!r?.success) throw new Error(r?.error || 'No se pudo guardar');
+      toast({ title: 'Ajustes guardados' });
+      cargar();
+    } catch (err) {
+      toast({ title: 'No se pudo guardar', description: (err as Error)?.message, variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }
+
+  async function toggleCampus(projectId: number, next: boolean) {
+    setDatos((d) => (d ? { ...d, campus: d.campus.map((c) => (c.project_id === projectId ? { ...c, activo: next } : c)) } : d));
+    setGuardandoCampus((p) => ({ ...p, [projectId]: true }));
+    try {
+      const r = await client.patch(`/facturacion-ajustes/campus/${projectId}`, { activo: next });
+      if (!r?.success) throw new Error(r?.error || 'No se pudo guardar');
+    } catch (err) {
+      setDatos((d) => (d ? { ...d, campus: d.campus.map((c) => (c.project_id === projectId ? { ...c, activo: !next } : c)) } : d));
+      toast({ title: 'No se pudo guardar', description: (err as Error)?.message, variant: 'destructive' });
+    } finally {
+      setGuardandoCampus((p) => ({ ...p, [projectId]: false }));
+    }
+  }
+
+  if (cargando && !datos) return null;
+  if (!datos) return null;
+
+  return (
+    <section className="bg-card border border-border rounded-lg overflow-hidden" data-recorrido="fa-ajustes">
+      <h2 className="px-4 py-2.5 border-b border-border font-semibold text-sm flex items-center gap-2">
+        <GearSix size={15} weight="bold" /> Ajustes
+        <span className="text-[11px] font-normal text-muted-foreground">· antes solo se cambiaban por SSH + .env + reiniciar la API</span>
+      </h2>
+      <div className="p-4 space-y-5 text-sm">
+        <div>
+          <h3 className="font-semibold mb-2">Por campus</h3>
+          <div className="overflow-x-auto">
+            <table className="tabla-cifras w-full text-[13px]">
+              <thead className="text-[11px] text-muted-foreground border-b border-border">
+                <tr><th className="px-3 py-2 text-left">Campus</th><th className="px-3 py-2 text-left">Factura automáticamente</th></tr>
+              </thead>
+              <tbody>
+                {datos.campus.map((c) => (
+                  <tr key={c.project_id} className="border-b border-border/50 last:border-0">
+                    <td className="px-3 py-2">{c.campus}</td>
+                    <td className="px-3 py-2">
+                      <label className="inline-flex items-center gap-2">
+                        <input type="checkbox" checked={c.activo} disabled={!!guardandoCampus[c.project_id]}
+                          onChange={(e) => toggleCampus(c.project_id, e.target.checked)} />
+                        <Origencito o={c.origen} />
+                      </label>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-4 space-y-3">
+          <h3 className="font-semibold">Ajustes globales</h3>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5">
+              <input type="checkbox" checked={fijarDias} onChange={(e) => setFijarDias(e.target.checked)} /> Días de plazo
+            </label>
+            <input type="number" min={1} max={30} value={dias} disabled={!fijarDias}
+              onChange={(e) => setDias(Number(e.target.value))}
+              className="h-8 w-20 px-2 rounded-md border border-border bg-background text-sm disabled:opacity-50" />
+            <Origencito o={datos.global.dias.origen} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5">
+              <input type="checkbox" checked={fijarPdf} onChange={(e) => setFijarPdf(e.target.checked)} /> Enviar el PDF al alumno
+            </label>
+            <select value={enviarPdf ? '1' : '0'} disabled={!fijarPdf} onChange={(e) => setEnviarPdf(e.target.value === '1')}
+              className="h-8 px-2 rounded-md border border-border bg-background text-sm disabled:opacity-50">
+              <option value="1">Sí</option><option value="0">No</option>
+            </select>
+            <Origencito o={datos.global.enviarPdf.origen} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5">
+              <input type="checkbox" checked={fijarRevision} onChange={(e) => setFijarRevision(e.target.checked)} /> Revisión de administración
+            </label>
+            <select value={revisionAdmin ? '1' : '0'} disabled={!fijarRevision} onChange={(e) => setRevisionAdmin(e.target.value === '1')}
+              className="h-8 px-2 rounded-md border border-border bg-background text-sm disabled:opacity-50">
+              <option value="0">No (al alumno)</option><option value="1">Sí (queda «Por enviar»)</option>
+            </select>
+            <Origencito o={datos.global.revisionAdmin.origen} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5">
+              <input type="checkbox" checked={fijarAuditoria} onChange={(e) => setFijarAuditoria(e.target.checked)} /> Auditoría
+            </label>
+            <select value={auditoriaEstado} disabled={!fijarAuditoria}
+              onChange={(e) => setAuditoriaEstado(e.target.value as 'apagada' | 'aviso' | 'pausa')}
+              className="h-8 px-2 rounded-md border border-border bg-background text-sm disabled:opacity-50">
+              <option value="apagada">Apagada</option>
+              <option value="aviso">Solo avisa (no pausa)</option>
+              <option value="pausa">Pausa la facturación</option>
+            </select>
+            <Origencito o={datos.global.auditoriaEstado.origen} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5">
+              <input type="checkbox" checked={fijarDesde} onChange={(e) => setFijarDesde(e.target.checked)} /> Auditar desde
+            </label>
+            <input type="date" value={auditoriaDesde} disabled={!fijarDesde} onChange={(e) => setAuditoriaDesde(e.target.value)}
+              className="h-8 px-2 rounded-md border border-border bg-background text-sm disabled:opacity-50" />
+            <Origencito o={datos.global.auditoriaDesde.origen} />
+          </div>
+
+          <label className="block space-y-1">
+            <span className="text-[12px] font-medium">Correos de más para la auditoría (además de administración)</span>
+            <input type="text" value={correos} onChange={(e) => setCorreos(e.target.value)} placeholder="correo@dominio.com, otro@dominio.com"
+              className="h-9 w-full px-2 rounded-md border border-border bg-background text-sm" />
+          </label>
+
+          <button type="button" onClick={guardar} disabled={guardando}
+            className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+            {guardando ? 'Guardando…' : 'Guardar ajustes'}
+          </button>
+        </div>
+
+        {registro && registro.length > 0 && (
+          <div className="border-t border-border pt-3">
+            <h3 className="font-semibold mb-1 text-[12px]">Registro de cambios</h3>
+            <ul className="space-y-0.5 text-[12px] text-muted-foreground max-h-48 overflow-y-auto">
+              {registro.map((r) => (
+                <li key={r.id}>
+                  {cuando(r.created_at)} · {r.usuario || 'alguien'} ·{' '}
+                  {r.action === 'ajuste_facturacion.campus' ? `campus #${r.details.project_id}` : (r.details.campos || []).join(', ')}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </section>
   );

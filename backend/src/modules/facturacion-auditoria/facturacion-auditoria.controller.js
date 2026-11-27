@@ -1,7 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as service from './facturacion-auditoria.service.js';
 import * as model from './facturacion-auditoria.model.js';
-import { leerConfig } from './facturacion-auditoria.config.js';
+import { leerConfigConDb } from './facturacion-auditoria.config.js';
 import { sinDatosSchema, historialSchema, simularSchema } from './facturacion-auditoria.validation.js';
 import { fechaValida } from './facturacion-auditoria.config.js';
 
@@ -30,7 +30,7 @@ export async function reanudar(req, res, next) {
 export async function auditar(req, res, next) {
   try {
     sinDatosSchema.parse(req.body || {});
-    if (!leerConfig().activa) throw APAGADA();
+    if (!(await leerConfigConDb()).activa) throw APAGADA();
     const r = await service.auditar({ origen: 'manual', userId: req.user.userId });
     res.json({ success: true, data: { auditoria: r.auditoria, limpia: r.limpia, resumen: r.resumen, pausada: !!r.pausa } });
   } catch (err) { next(err); }
@@ -55,7 +55,7 @@ export async function simular(req, res, next) {
 export async function historial(req, res, next) {
   try {
     const q = historialSchema.parse(req.query || {});
-    if (!leerConfig().activa) return res.json({ success: true, data: { vueltas: [], pausas: [] } });
+    if (!(await leerConfigConDb()).activa) return res.json({ success: true, data: { vueltas: [], pausas: [] } });
     res.json({ success: true, data: await model.historial({ limite: q.limite || 20 }) });
   } catch (err) { next(err); }
 }

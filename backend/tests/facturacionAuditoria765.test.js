@@ -30,6 +30,8 @@ vi.mock('../src/shared/services/marca.service.js', () => ({
   remitenteDe: (m) => ({ projectId: m?.id ?? null, fromName: m?.nombre }),
 }));
 
+vi.mock('../src/jobs/latido.js', () => ({ vigilar: vi.fn(() => 'intervalo') }));
+
 const { leerConfig } = await import('../src/modules/facturacion-auditoria/facturacion-auditoria.config.js');
 const pausa = await import('../src/modules/facturacion-auditoria/facturacion-auditoria.pausa.js');
 const servicio = await import('../src/modules/facturacion-auditoria/facturacion-auditoria.service.js');
@@ -60,7 +62,7 @@ describe('con el interruptor APAGADO no cambia nada', () => {
   it('la emisión no pregunta por la pausa', async () => {
     await expect(pausa.exigirFacturacionActiva({ paymentId: 5 })).resolves.toBeUndefined();
     expect(await pausa.pausaAbierta()).toBeNull();
-    expect(consultas).toHaveLength(0);
+    expect(tocaLaAuditoria()).toHaveLength(0);
   });
 
   it('ni auditoría, ni cola, ni estado, ni tarea programada', async () => {
@@ -68,7 +70,10 @@ describe('con el interruptor APAGADO no cambia nada', () => {
     expect(await servicio.encolarSiPausada({ paymentId: 5, conversionId: 1 })).toBe(false);
     expect(await servicio.estado()).toEqual({ activa: false });
     expect(await runFacturacionAuditoria()).toEqual({ omitido: 'apagada' });
-    expect(startFacturacionAuditoriaScheduler()).toBeNull();
+     // #1202: antes no arrancaba si estaba apagada al iniciar; ahora siempre
+    // arranca vigilar(...), y es runFacturacionAuditoria() quien decide en
+    // cada vuelta si hace algo.
+    expect(startFacturacionAuditoriaScheduler()).toBe('intervalo');
     await expect(servicio.reanudar({ userId: 1 })).rejects.toMatchObject({ code: 'AUDITORIA_APAGADA' });
     expect(tocaLaAuditoria()).toHaveLength(0);
     expect(sendEmail).not.toHaveBeenCalled();

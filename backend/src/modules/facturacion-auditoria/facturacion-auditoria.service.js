@@ -5,7 +5,7 @@ import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as invoicesModel from '../invoices/invoices.model.js';
 import * as invoicesService from '../invoices/invoices.service.js';
 import * as model from './facturacion-auditoria.model.js';
-import { leerConfig } from './facturacion-auditoria.config.js';
+import { leerConfigConDb } from './facturacion-auditoria.config.js';
 import { pausaAbierta, emitiendoLaColaDeLaPausa } from './facturacion-auditoria.pausa.js';
 import { avisarDeLaPausa } from './facturacion-auditoria.correo.js';
 
@@ -132,7 +132,8 @@ async function auditarDesde(cfg) {
  * Pasa la auditoría y la apunta. Si sale con errores y no hay pausa abierta, la
  * abre y avisa (salvo `pausarSiFalla: false`, la de «Marcar como solucionado»).
  */
-export async function auditar({ origen = 'programada', userId = null, pausarSiFalla = true, cfg = leerConfig(), ahora = new Date() } = {}) {
+export async function auditar({ origen = 'programada', userId = null, pausarSiFalla = true, cfg, ahora = new Date() } = {}) {
+  cfg = cfg ?? await leerConfigConDb();
   if (!cfg.activa) return { omitido: 'apagada' };
   const empezo = ahora;
   const hoy = hoyEnMadrid(ahora);
@@ -159,7 +160,7 @@ export async function auditar({ origen = 'programada', userId = null, pausarSiFa
 
   let pausaNueva = null;
   if (!limpia && !pausa && pausarSiFalla && cfg.pausar !== false) {
-    pausaNueva = await pausar({ auditoria, incidencias, resumen });
+    pausaNueva = await pausar({ auditoria, incidencias, resumen, cfg });
   } else if (!limpia && cfg.pausar === false && origen === 'programada') {
     await avisarSinPausar({ auditoria, resumen });
   }
@@ -198,7 +199,8 @@ async function avisarSinPausar({ auditoria, resumen }) {
  * se quiere probar; sin ella, la que usaría la auditoría (la del .env, la
  * guardada o, si nunca ha dado una vuelta, hoy).
  */
-export async function simular({ desde = null, cfg = leerConfig(), ahora = new Date() } = {}) {
+export async function simular({ desde = null, cfg, ahora = new Date() } = {}) {
+  cfg = cfg ?? await leerConfigConDb();
   const hoy = hoyEnMadrid(ahora);
   const corte = desde || cfg.desde || await model.auditarDesdeLeido() || hoy;
   const hasta = restarDias(hoy, cfg.dias);
@@ -221,11 +223,11 @@ export function motivoDe(resumen) {
     .join(' · ');
 }
 
-async function pausar({ auditoria, incidencias, resumen }) {
+async function pausar({ auditoria, incidencias, resumen, cfg }) {
   const motivo = motivoDe(resumen);
   const pausa = await model.abrirPausa({ auditoriaId: auditoria.id, motivo, incidencias });
   // Otra vuelta la abrió a la vez: ya avisó ella.
-  if (!pausa) return pausaAbierta();
+  if (!pausa) return pausaAbierta({ cfg });
   logger.warn({ pausaId: pausa.id, auditoriaId: auditoria.id, motivo }, 'facturación PAUSADA por la auditoría');
 
   // Los avisos no pueden deshacer la pausa: si fallan, se apunta y se sigue.
@@ -237,7 +239,7 @@ async function pausar({ auditoria, incidencias, resumen }) {
     metadata: { pausa_id: pausa.id, auditoria_id: auditoria.id, ...resumen },
   });
   try {
-    await avisarDeLaPausa({ pausa, incidencias, resumen });
+    await avisarDeLaPausa({ pausa, incidencias, resumen, cfg });
   } catch (err) {
     logger.error({ err: err.message, pausaId: pausa.id }, 'auditoría de facturación: no se pudo mandar el correo de la pausa');
   }
@@ -246,7 +248,8 @@ async function pausar({ auditoria, incidencias, resumen }) {
 
 // ── El estado, para el aviso del CRM ────────────────────────────────────────
 
-export async function estado({ cfg = leerConfig() } = {}) {
+export async function estado({ cfg } = {}) {
+  cfg = cfg ?? await leerConfigConDb();
   // Apagada no consulta nada (lo que saldría al encenderla, en `simular`).
   if (!cfg.activa) return { activa: false };
   const [pausa, ultima, cola, desde] = await Promise.all([
@@ -271,7 +274,8 @@ export async function estado({ cfg = leerConfig() } = {}) {
  * pausada, el cobro se apunta en la cola de la pausa y devuelve true: quien
  * llama NO emite. Sin pausa (o con el interruptor apagado), false.
  */
-export async function encolarSiPausada({ paymentId, conversionId, userId = null, cfg = leerConfig() }) {
+export async function encolarSiPausada({ paymentId, conversionId, userId = null, cfg }) {
+  cfg = cfg ?? await leerConfigConDb();
   if (!cfg.activa || !paymentId) return false;
   const pausa = await pausaAbierta({ cfg });
   if (!pausa) return false;
@@ -320,7 +324,8 @@ export async function emitirColaDeLaPausa({ userId = null } = {}) {
  * «Marcar como solucionado»: vuelve a auditar y SOLO reanuda si sale limpia.
  * Al reanudar, emite la cola de la pausa en orden de cobro y cierra la pausa.
  */
-export async function reanudar({ userId, cfg = leerConfig() } = {}) {
+export async function reanudar({ userId, cfg } = {}) {
+  cfg = cfg ?? await leerConfigConDb();
   if (!cfg.activa) throw new AppError('La auditoría de facturación está apagada.', 409, 'AUDITORIA_APAGADA');
   if (reanudando) throw new AppError('Ya se está reanudando la facturación. Espera unos segundos.', 409, 'REANUDANDO');
   reanudando = true;
