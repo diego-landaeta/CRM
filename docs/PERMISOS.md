@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-1012 rutas en 76 módulos, y 31 acciones con condición dentro de una ruta.
+1013 rutas en 76 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -507,7 +507,6 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | panel | `GET /api/feedback/panel` | sesión | superadmin, admin, gestor, soporte, project_manager | `feedback.view` |
 | lista | `GET /api/feedback/lista` | sesión | superadmin, admin, gestor, soporte, project_manager | `feedback.view` |
-| exportar | `GET /api/feedback/exportar` | (no existía) | (ruta nueva) | `feedback.exportar` |
 | deUnLead | `GET /api/feedback/lead/:leadId` | sesión | superadmin, admin, gestor, soporte, project_manager | `feedback.view` |
 | enviarLoRevisado | `POST /api/feedback/lead/:leadId/enviar` | sesión | superadmin, admin, gestor, soporte, project_manager | `feedback.enviar` |
 | noEnviar | `POST /api/feedback/lead/:leadId/no-enviar` | sesión | superadmin, admin, gestor, soporte, project_manager | `feedback.enviar` |
@@ -702,6 +701,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | removeLeadProduct | `DELETE /api/leads/:id/products/:lpId` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | getById | `GET /api/leads/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | avanceEnMoodle | `GET /api/leads/:id/campus` | (no existía) | (ruta nueva) | `leads.view` |
+| diplomaDelAlumno | `GET /api/leads/:id/diploma` | (no existía) | (ruta nueva) | `leads.view` |
 | mergeLeads | `POST /api/leads/:id/merge` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | revisar | `POST /api/leads/:id/revisar` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | createManual | `POST /api/leads/` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.create` |
@@ -1126,6 +1126,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | consultas | `GET /api/search-console/consultas` | (no existía) | (ruta nueva) | `search_console.view` |
 | paginas | `GET /api/search-console/paginas` | (no existía) | (ruta nueva) | `search_console.view` |
 | indexacion | `GET /api/search-console/indexacion` | (no existía) | (ruta nueva) | `search_console.view` |
+| semana | `GET /api/search-console/semana` | (no existía) | (ruta nueva) | `search_console.view` |
 | sincronizar | `POST /api/search-console/sincronizar` | (no existía) | (ruta nueva) | `search_console.edit` |
 
 ## soporte
@@ -1809,7 +1810,6 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver feedback | `feedback.view` | El panel y las respuestas de los clientes. | Admin, Gestora, Soporte, Project manager, Líder de equipo |  |
 | Enviar la encuesta | `feedback.enviar` | Mandar, o no, la encuesta revisada a un cliente. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `feedback.view` |
-| Exportar las respuestas | `feedback.exportar` | Bajar en CSV las respuestas filtradas: fecha, campus, gestora, motivo, puntuación y comentario, sin datos de contacto. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `feedback.view` |
 
 ### Análisis IA
 
