@@ -455,3 +455,44 @@ export async function desbloquearBrevo(req, res, next) {
     res.json({ success: true, data: await desbloquear({ userId: id, porQuien: req.user?.userId }) });
   } catch (err) { next(err); }
 }
+
+// ===== CAMBIO DE CORREO EN LA FICHA (#1199) =====
+
+/**
+ * La persona tiene que ser de alguno de los campus de quien mira (o ser él
+ * mismo). Superadmin y soporte, cualquiera. A diferencia de la ficha, aquí no
+ * se abre a quien tenga «Editar usuarios»: el permiso es de soporte y un admin
+ * que lo reciba como excepción actúa en lo suyo (`exigirCampusSuyo`). Fuera de
+ * sus campus, o si no existe, 404: no se confirma que haya alguien con ese id.
+ */
+async function exigirPersonaSuyaParaCorreo(req, id) {
+  const user = await userModel.findById(id);
+  if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  if (Number(id) === Number(req.user?.userId)) return;
+  const campus = await campusParaRecortar(req);
+  if (!campus) return;
+  const suyos = await campusDeLaPersona(id);
+  if (!suyos.some((c) => campus.includes(c))) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+}
+
+/** GET /api/users/:id/cambios-de-correo — el pendiente y el historial (permiso users.cambios_correo). */
+export async function cambiosDeCorreo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaSuyaParaCorreo(req, id);
+    const { cambiosDeLaPersona } = await import('./cambio-de-correo.js');
+    res.json({ success: true, data: await cambiosDeLaPersona(id) });
+  } catch (err) { next(err); }
+}
+
+/** POST /api/users/:id/cambios-de-correo/anular — deja sin efecto el pendiente. */
+export async function anularCambioDeCorreo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaSuyaParaCorreo(req, id);
+    const { anularPendiente } = await import('./cambio-de-correo.js');
+    res.json({ success: true, data: await anularPendiente({ userId: id, porUserId: req.user?.userId, ip: req.ip }) });
+  } catch (err) { next(err); }
+}
