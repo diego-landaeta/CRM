@@ -464,11 +464,17 @@ export async function desbloquearBrevo(req, res, next) {
  * se abre a quien tenga «Editar usuarios»: el permiso es de soporte y un admin
  * que lo reciba como excepción actúa en lo suyo (`exigirCampusSuyo`). Fuera de
  * sus campus, o si no existe, 404: no se confirma que haya alguien con ese id.
+ * La de un superadmin, solo otro superadmin (o él mismo).
  */
 async function exigirPersonaSuyaParaCorreo(req, id) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
   if (Number(id) === Number(req.user?.userId)) return;
+  // La cuenta de un superadmin solo la mira otro superadmin: ni soporte, que ve
+  // el CRM entero, ni un admin con la excepción. Para los demás, no existe.
+  if (user.role === 'superadmin' && req.user?.role !== 'superadmin') {
+    throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  }
   const campus = await campusParaRecortar(req);
   if (!campus) return;
   const suyos = await campusDeLaPersona(id);

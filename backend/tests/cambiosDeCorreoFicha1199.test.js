@@ -128,6 +128,20 @@ describe('quién lo ve', () => {
   it('soporte ve a cualquiera, de cualquier campus', async () => {
     expect((await ver(SOPORTE, OTRA_DE_C)).status).toBe(200);
   });
+
+  it('la cuenta de un superadmin: soporte no la ve ni la anula (404); el propio superadmin, sí', async () => {
+    // El de la base de pruebas (db:preparar -- --datos): crear uno aquí lo
+    // contarían otras pruebas que corren a la vez.
+    const jefe = await one(`SELECT id, role FROM users WHERE role = 'superadmin' AND active = true ORDER BY id LIMIT 1`);
+    expect(jefe).toBeTruthy();
+    const visto = await ver(SOPORTE, jefe);
+    expect(visto.status).toBe(404);
+    expect(visto.body.code).toBe('USER_NOT_FOUND');
+    const anulado = await anular(SOPORTE, jefe);
+    expect(anulado.status).toBe(404);
+    expect(anulado.body.code).toBe('USER_NOT_FOUND');
+    expect((await ver(jefe, jefe)).status).toBe(200);
+  });
 });
 
 describe('lo que enseña', () => {
@@ -207,6 +221,16 @@ describe('«Anular»', () => {
     const r = await one(`SELECT user_id, details FROM user_activity_log
                           WHERE action = 'usuario.anular_cambio_correo' AND user_id = $1 ORDER BY id DESC LIMIT 1`, [ADMIN_CON.id]);
     expect(r.details).toMatchObject({ usuario_id: ANA.id, a: `ana.reg@${MARCA}.test` });
+  });
+
+  it('una que ya caducó no se anula: 404 SIN_PENDIENTE y sigue como «caducado»', async () => {
+    await pedir({ userId: ANA.id, emailNuevo: `ana.caducada@${MARCA}.test` });
+    await q(`UPDATE cambios_de_correo SET expira_at = NOW() - INTERVAL '1 minute' WHERE user_id = $1`, [ANA.id]);
+    const res = await anular(SOPORTE, ANA);
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('SIN_PENDIENTE');
+    expect((await one('SELECT anulado_at FROM cambios_de_correo WHERE user_id = $1', [ANA.id])).anulado_at).toBeNull();
+    expect((await ver(SOPORTE, ANA)).body.data.historial[0].estado).toBe('caducado');
   });
 
   it('sin nada pendiente, 404 y no anota nada', async () => {
