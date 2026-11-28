@@ -3,9 +3,9 @@ import { condicionDeCompartidas } from './compartidas.js';
 import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
 import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
-import { AppError } from '../../shared/utils/AppError.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
+import { negarSiTieneFactura } from './cobro-facturado.js';
 // Una gestora o varias (las de un equipo comercial, 09/11/2026).
 import { comoIds } from '../../shared/utils/roles.js';
 
@@ -1028,7 +1028,7 @@ export async function getPaymentOwnership(paymentId) {
  * Ahora hace lo mismo que `unpay`, que si lo hacia bien, y ademas NO deja
  * borrar un cobro que ya tiene factura emitida: eso no se deshace borrando, se
  * deshace anulándola (CRM#793). Anulada y a cero, el cobro ya se puede borrar
- * (CRM#1230).
+ * (CRM#1230). La regla es la de «Deshacer el pago»: cobro-facturado.js.
  */
 export async function deletePayment(paymentId) {
   const client = await getClient();
@@ -1044,38 +1044,9 @@ export async function deletePayment(paymentId) {
       return null;
     }
 
-    // Una factura emitida no se borra por detras.
-    //
-    // SALVO QUE YA ESTE ANULADA Y A CERO (CRM#1230 / ISEIE#858). «Anular»
-    // (CRM#793) no la pasa a 'cancelada': le pone `anulada_at` y emite un abono
-    // por lo que quedara. Si ademas sus abonos vivos la dejan a cero, ese cobro
-    // ya no tiene factura que lo respalde y se puede borrar. La factura y su
-    // abono no se tocan (son documentos emitidos); solo se suelta su enlace al
-    // cobro, que lo hace la clave ajena (ON DELETE SET NULL).
-    //
-    // Anulada sin llegar a cero, o con un abono total pero sin «Anular», sigue
-    // siendo la factura del cobro: 409, como hasta ahora.
-    const { rows: fact } = await client.query(
-      `SELECT i.codigo, i.tipo, i.anulada_at IS NOT NULL AS anulada,
-              ROUND(i.total + COALESCE((SELECT SUM(r.total) FROM invoices r
-                                         WHERE r.rectifica_id = i.id AND r.tipo = 'rectificativa'
-                                           AND r.estado <> 'cancelada'), 0), 2)::float8 AS saldo
-         FROM invoices i
-        WHERE i.payment_id = $1 AND i.tipo <> 'proforma' AND i.estado <> 'cancelada'
-        FOR UPDATE OF i`,
-      [paymentId]
-    );
-    const anuladaACero = (f) => f.anulada && f.tipo !== 'rectificativa' && Math.abs(f.saldo) < 0.005;
-    const vigente = fact.find((f) => !anuladaACero(f));
-    if (vigente) {
-      await client.query('ROLLBACK');
-      throw new AppError(
-        vigente.anulada
-          ? `La factura ${vigente.codigo} de ese cobro está anulada, pero sus abonos no la dejan a cero (quedan ${vigente.saldo.toFixed(2)}). Emite el abono que falta antes de borrar el cobro.`
-          : `Ese cobro tiene la factura ${vigente.codigo}. Anúlala antes de borrarlo.`,
-        409, 'PAYMENT_HAS_INVOICE'
-      );
-    }
+    // Una factura emitida no se borra por detras, salvo anulada y a cero (lo
+    // mismo en «Deshacer el pago» de una cuota, CRM#1228 + CRM#1230).
+    await negarSiTieneFactura(client, paymentId);
 
     // La cuota vuelve a pendiente. Sin esto seguiria diciendo que se cobro.
     await client.query(
