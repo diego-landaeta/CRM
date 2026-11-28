@@ -22,6 +22,8 @@ vi.mock('@/shared/hooks/useToast', () => ({
   toast: (...args) => toastMock(...args),
 }));
 
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
+
 import PaymentDialog from '@/modules/conversions/components/PaymentDialog';
 
 const baseConversion = {

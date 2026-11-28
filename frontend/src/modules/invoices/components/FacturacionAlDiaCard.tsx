@@ -14,6 +14,7 @@ import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
 import { posibleDuplicada, preguntarSiEmitirDuplicada, textoDuplicada, type OtraFactura } from '../lib/posibleDuplicada';
 import { textoDatosFiscales, necesitaPersona, type DatosFiscalesEnCola } from '../lib/datosFiscalesCola';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 import EnvioFacturaDialog from '@/modules/factura-automatica/components/EnvioFacturaDialog';
 
 type ColaItem = {
@@ -105,6 +106,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);
   const [aprobando, setAprobando] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   const cargar = useCallback(async () => {
     if (!projectId) return;
@@ -183,7 +185,17 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
       const e = err as { data?: { error?: string; code?: string } };
       // Hay cobros anteriores sin facturar: se pregunta antes de saltarse el orden.
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
-        if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
+        if (await confirm({
+          title: 'Emitir fuera de orden',
+          message: (
+            <>
+              <p>{e.data.error}</p>
+              <p className="mt-2">¿Emitirla igualmente, fuera de orden?</p>
+            </>
+          ),
+          tone: 'warning',
+          confirmLabel: 'Emitir',
+        })) {
           setGenerando(null);
           // El número y la confirmación que ya se dieron siguen valiendo: antes
           // se leía el número del cuadro, que para entonces ya estaba cerrado.

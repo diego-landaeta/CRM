@@ -24,6 +24,7 @@ vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch: vi
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => sesion }));
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ctx.value }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 // Lo que no se mira aquí y hace sus propias llamadas.
 vi.mock('@/modules/invoices/components/FacturacionAlDiaCard', () => ({ default: () => null }));
 vi.mock('@/modules/invoices/components/AvisoHuecosFacturas', () => ({ default: () => null }));

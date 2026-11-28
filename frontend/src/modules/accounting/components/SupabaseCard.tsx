@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Database, ArrowsClockwise, FloppyDisk, PlugsConnected } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 /**
  * Supabase, para los proyectos IA (#44).
@@ -54,6 +55,7 @@ export default function SupabaseCard({ projectId }: { projectId: number }) {
   const [probando, setProbando] = useState(false);
   const [previo, setPrevio] = useState<Previo | null>(null);
   const [trayendo, setTrayendo] = useState(false);
+  const confirm = useConfirm();
 
   const cargar = useCallback(async () => {
     try {
@@ -132,12 +134,16 @@ export default function SupabaseCard({ projectId }: { projectId: number }) {
   }
 
   async function traer() {
-    const aviso = `Se crearán en el CRM los clientes y las ventas de las suscripciones de la app.
-
-Cada una se marca con su id, así que volver a pulsar no duplica nada.
-
-¿Seguir?`;
-    if (!confirm(aviso)) return;
+    if (!(await confirm({
+      title: 'Traer de Supabase',
+      message: (
+        <>
+          <p>Se crearán en el CRM los clientes y las ventas de las suscripciones de la app.</p>
+          <p className="mt-2">Cada una se marca con su id, así que volver a pulsar no duplica nada.</p>
+        </>
+      ),
+      confirmLabel: 'Traer',
+    }))) return;
     setTrayendo(true);
     try {
       const r = await client.post<{
