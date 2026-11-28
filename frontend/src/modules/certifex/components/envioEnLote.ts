@@ -64,9 +64,16 @@ const ROTULO: Record<MotivoSinEnviar, [string, string]> = {
  * ciegas y lo mande dos veces (QA de la #1201). Un 4xx sí es claro: se enseña tal cual.
  */
 export const TANDA_SIN_CONFIRMAR = 'Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar.';
+/**
+ * Sin red, el navegador rechaza con «TypeError: Failed to fetch» (Chrome), «NetworkError…»
+ * (Firefox) o «Load failed» (Safari), en inglés: se dice en castellano (QA en navegador).
+ */
+export const SIN_CONEXION = 'No hay conexión con el servidor: refresca la lista antes de volver a enviar.';
+const ES_DE_RED = /failed to fetch|networkerror|load failed|network request failed/i;
 export function errorDeTanda(e: unknown): string {
   const status = (e as { status?: number })?.status;
   if (typeof status === 'number' && status >= 400 && status < 500) return (e as Error).message || 'No se pudo enviar';
+  if (typeof status !== 'number' && (e instanceof TypeError || ES_DE_RED.test(String((e as Error)?.message ?? '')))) return SIN_CONEXION;
   return TANDA_SIN_CONFIRMAR;
 }
 

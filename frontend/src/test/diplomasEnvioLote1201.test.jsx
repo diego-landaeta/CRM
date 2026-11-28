@@ -152,6 +152,10 @@ describe('#1201 · «Enviar al alumno (n)» en Emitidos', () => {
     expect(diplomasApi.avisosLote).toHaveBeenCalledTimes(1);
     expect(datos.toasts.at(-1).description).toMatch(/5 no se han intentado/);
     expect(await screen.findByText(/el correo está apagado en el servidor de Certifex/)).toBeTruthy();
+    // QA en navegador: la alerta cuenta DIPLOMAS (5 sin intentar), no líneas («1 no se ha…»).
+    const aviso = await screen.findByRole('alert');
+    expect(within(aviso).getByText('5 no se han podido completar')).toBeTruthy();
+    expect(within(aviso).getByText('5 más:')).toBeTruthy();
   });
 
   it('elegir uno a uno también cuenta: uno enviable y uno ya enviado', async () => {
@@ -172,10 +176,11 @@ describe('#1201 · «Enviar al alumno (n)» en Emitidos', () => {
     expect(screen.getByRole('button', { name: /^Enviar al alumno \(1\)$/ })).toBeTruthy();
   });
 
-  it('QA: una tanda sin respuesta clara dice «puede que algunos se hayan enviado» y la lista se recarga sola; un 4xx sale tal cual', async () => {
+  it('QA: sin red, «No hay conexión con el servidor» (no «Failed to fetch»); la lista se recarga sola; un 4xx sale tal cual', async () => {
     datos.diplomas = Array.from({ length: 12 }, (_, i) => diploma(i + 1));
     diplomasApi.avisosLote.mockImplementation(async (exps) => {
-      if (exps.includes(exp(1))) throw new Error('Failed to fetch'); // sin respuesta: sin status
+      // Sin red: el navegador rechaza con «TypeError: Failed to fetch», en inglés.
+      if (exps.includes(exp(1))) throw new TypeError('Failed to fetch');
       throw Object.assign(new Error('Ese diploma se está enviando ahora'), { status: 409 });
     });
     await abrirEmitidos();
@@ -184,7 +189,8 @@ describe('#1201 · «Enviar al alumno (n)» en Emitidos', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Enviar al alumno \(12\)$/ }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Enviar' }));
     const aviso = await screen.findByRole('alert');
-    expect(within(aviso).getAllByText('Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar.')).toHaveLength(10);
+    expect(within(aviso).getAllByText('No hay conexión con el servidor: refresca la lista antes de volver a enviar.')).toHaveLength(10);
+    expect(within(aviso).queryByText(/Failed to fetch/)).toBeNull();
     expect(within(aviso).getAllByText('Ese diploma se está enviando ahora')).toHaveLength(2);
     await waitFor(() => expect(diplomasApi.diplomas.mock.calls.length).toBeGreaterThan(antes));
   });

@@ -136,7 +136,10 @@ const notaTexto = (nota: number | null, umbral: number | null) => (nota == null
   ? '—'
   : `${nota.toLocaleString('es', { maximumFractionDigits: 2 })}${umbral != null ? ` · aprobado desde ${umbral.toLocaleString('es', { maximumFractionDigits: 2 })}` : ''}`);
 
-type Fallo = { quien: string; error: string };
+/** `n`: cuántos diplomas cuenta la línea («15 más: sin intentar»); sin él, uno. */
+type Fallo = { quien: string; error: string; n?: number };
+/** Los diplomas de una lista de fallos, no sus líneas (QA de la #1201). */
+const cuantos = (fs: Fallo[]) => fs.reduce((t, f) => t + (f.n ?? 1), 0);
 
 /**
  * #1135 (QA del 26/11): a quien se le pidieron los datos y aún no contestó (o corrigió y su
@@ -1105,7 +1108,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       ...res.filter((r) => r.resultado !== 'enviado' && r.resultado !== 'correo_apagado')
         .map((r) => ({ quien: nombreDe(r.nexpediente), error: r.error ?? (r.resultado ? `Aviso aprobado, pero ${ROTULO_AVISO[r.resultado]}` : 'Error') })),
       ...fuera,
-      ...(sinIntentar ? [{ quien: `${sinIntentar} más`, error: 'Sin intentar: el correo de Certifex está apagado.' }] : []),
+      ...(sinIntentar ? [{ quien: `${sinIntentar} más`, error: 'Sin intentar: el correo de Certifex está apagado.', n: sinIntentar }] : []),
     ];
     setCorreoApagado(apagado);
     setFallos(malos);
@@ -1113,7 +1116,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       ? { title: 'Aprobado, pero el correo está apagado', description: `No ha salido ningún correo: el servidor de Certifex tiene el envío apagado.${sinIntentar ? ` ${sinIntentar} no se han intentado.` : ''}`, variant: 'destructive' }
       : {
         title: `${enviados} ${enviados === 1 ? 'diploma enviado' : 'diplomas enviados'} al alumno`,
-        description: malos.length ? `${malos.length} sin enviar: el motivo, en pantalla.` : undefined,
+        description: malos.length ? `${cuantos(malos)} sin enviar: el motivo, en pantalla.` : undefined,
         variant: enviados ? undefined : 'destructive',
       });
   }, 'No se pudo enviar');
@@ -1414,7 +1417,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="font-medium text-destructive-soft-foreground">
-              {fallos.length} {fallos.length === 1 ? 'no se ha podido completar' : 'no se han podido completar'}
+              {cuantos(fallos)} {cuantos(fallos) === 1 ? 'no se ha podido completar' : 'no se han podido completar'}
             </span>
             <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFallos([]); setHechos([]); }}>Cerrar</button>
           </div>
