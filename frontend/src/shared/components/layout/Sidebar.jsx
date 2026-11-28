@@ -286,8 +286,8 @@ export const SECCIONES_DE_ANTES = [
       { label: 'Google Analytics', to: '/google-analytics', detail: 'Lo que pasa antes del lead', icon: ChartLineUp, roles: ['superadmin', 'admin'], permiso: 'google_analytics.view', oPermiso: 'google_analytics.view' },
       // Tráfico orgánico (CRM#36): Search Console, búsquedas, páginas e indexación.
       { label: 'Tráfico orgánico', to: '/trafico-organico', detail: 'Search Console', icon: MagnifyingGlass, roles: ['superadmin', 'admin'], permiso: 'search_console.view', oPermiso: 'search_console.view' },
-      // Google Ads («Próximamente», #226) sale del menú hasta que tenga pantalla
-      // (#534, parte 3; `menu-sin-proximamente-534`).
+      // Google Ads (CRM#54): campañas, grupos y anuncios con su gasto y su coste por venta.
+      { label: 'Google Ads', to: '/google-ads', detail: 'Gasto y coste por venta', icon: ChartBar, roles: ['superadmin', 'admin'], permiso: 'google_ads.view', oPermiso: 'google_ads.view' },
     ],
   },
   {
