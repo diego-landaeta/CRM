@@ -113,7 +113,7 @@ describe('el rastro de un cobro borrado, en el Registro, por campus', () => {
     const f = await apunte(ADMIN_AJENO);
     expect(f).toBeTruthy();
     expect(f.project_id).toBe(AJENO);
-    expect(f.resumen).toBe('Borró un cobro de 120.00 € del 2026-11-03');
+    expect(f.resumen).toBe('Borró un cobro de 120,00 € del 03/11/2026');
   });
 
   it('el CSV del admin de otro campus, igual: no sale el apunte de quien borró', async () => {

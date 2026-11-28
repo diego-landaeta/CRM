@@ -140,11 +140,13 @@ describe('#1228 + #1230 · «Deshacer el pago» con factura', () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
-  it('si la comisión de la gestora ya estaba pagada, lo avisa', async () => {
-    const aviso = 'La comisión de la gestora de esta venta ya está pagada (20.00 €): no se ha rebajado. Regularízala a mano si hace falta.';
+  it('si la comisión de la gestora ya estaba pagada, lo avisa como advertencia, no como éxito', async () => {
+    const aviso = 'La comisión de la gestora de esta venta ya está pagada (20,00 €, el 20/11/2026): no se ha rebajado. Regularízala a mano si hace falta.';
     api.unpayInstallment.mockResolvedValue({ success: true, data: { aviso } });
     const { boton } = await abrir([cuota()]);
     fireEvent.click(boton);
-    await waitFor(() => expect(api.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Comisión ya pagada', description: aviso })));
+    await waitFor(() => expect(api.toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Comisión ya pagada', description: aviso, variant: 'warning',
+    })));
   });
 });

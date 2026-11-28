@@ -277,7 +277,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
       const res = await conversionsApi.unpayInstallment(inst.id);
       toast({ title: 'Pago deshecho', description: `Cuota #${inst.numero} vuelve a pendiente` });
       // La comisión de la gestora ya pagada no se rebaja: se avisa (CRM#1230).
-      if (res?.data?.aviso) toast({ title: 'Comisión ya pagada', description: res.data.aviso });
+      if (res?.data?.aviso) toast({ title: 'Comisión ya pagada', description: res.data.aviso, variant: 'warning', duration: 10000 });
       onSaved?.();
       await load();
     } catch (err: any) {

@@ -277,7 +277,8 @@ describe('una sola regla para borrar un cobro', () => {
     const r = await conversionService.removePayment(p2.id, { userId: GESTORA.id });
     expect(await existe(p2.id)).toBe(false);
     expect(await comision(v.id)).toEqual({ importe: 20, estado: 'pagado' });
-    expect(r.aviso).toMatch(/ya está pagada \(20\.00 €, el 2026-11-20\): no se ha rebajado/);
+    // En español: «20,00 €» y «20/11/2026», no «20.00» ni «2026-11-20».
+    expect(r.aviso).toMatch(/ya está pagada \(20,00 €, el 20\/11\/2026\): no se ha rebajado/);
 
     const log = await one(`SELECT details FROM user_activity_log WHERE action = 'cobro_borrado' AND (details->>'payment_id')::int = $1`, [p2.id]);
     expect(log.details.comision_gestora_pagada).toMatchObject({ importe: 20 });

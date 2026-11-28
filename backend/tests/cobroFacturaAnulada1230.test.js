@@ -234,7 +234,10 @@ describe('#1230 · el cobro de una factura anulada', () => {
     const f = await facturaDe(v, p);
     // Marcada como anulada a mano, sin abono: no está a cero.
     await q(`UPDATE invoices SET anulada_at = NOW(), motivo_anulacion = 'a mano' WHERE id = $1`, [f]);
-    await expect(conversionModel.deletePayment(p.id)).rejects.toMatchObject({ statusCode: 409 });
+    const err = await conversionModel.deletePayment(p.id).then(() => null, (e) => e);
+    expect(err).toMatchObject({ statusCode: 409 });
+    // Lo que queda, en español y con su moneda: «90,00 €», no «90.00».
+    expect(err.message).toContain('quedan 90,00 €');
     expect(await cobrado(v.id)).toBe(90);
   });
 

@@ -1,4 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
+import { fechaEs } from '../../shared/utils/fechaEs.js';
+// Los importes como en el resto de textos del CRM: «50,00 €».
+import { conMoneda } from '../facturas-colaborador/moneda.js';
 
 /**
  * Cuándo se puede borrar un cobro. UNA sola regla para «Eliminar pago»
@@ -68,7 +71,7 @@ export function motivoParaNoBorrar(facturas, { comisionTutorPagada = false } = {
     }
     if (f.anulada) {
       return `La factura ${f.codigo || ''} de ese cobro está anulada, pero sus abonos no la dejan a cero `
-        + `(quedan ${Number(f.saldo).toFixed(2)}). Emite el abono que falta antes de borrar el cobro.`;
+        + `(quedan ${conMoneda(f.saldo)}). Emite el abono que falta antes de borrar el cobro.`;
     }
     return `Ese cobro tiene la factura ${f.codigo || ''}. Anúlala antes de borrar el cobro.`;
   }
@@ -126,8 +129,8 @@ export async function comisionGestoraPagada(client, conversionId) {
 
 export function avisoComisionPagada(c) {
   if (!c) return null;
-  return `La comisión de la gestora de esta venta ya está pagada (${Number(c.importe).toFixed(2)} €`
-    + `${c.fecha_pago ? `, el ${c.fecha_pago}` : ''}): no se ha rebajado. Regularízala a mano si hace falta.`;
+  return `La comisión de la gestora de esta venta ya está pagada (${conMoneda(c.importe)}`
+    + `${c.fecha_pago ? `, el ${fechaEs(c.fecha_pago)}` : ''}): no se ha rebajado. Regularízala a mano si hace falta.`;
 }
 
 /**
