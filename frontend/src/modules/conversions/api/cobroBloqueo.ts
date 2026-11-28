@@ -37,6 +37,12 @@ export function avisoNuevo(vistos: Map<string, number>, clave: string, ahora = D
 export const COBRO_NO_SE_BORRA = ['PAYMENT_HAS_INVOICE', 'PAYMENT_HAS_PAID_COMMISSION'];
 
 /**
+ * Los códigos con que el servidor dice que la VENTA no se borra (CRM#1234): tiene
+ * facturas sin anular o comisiones ya pagadas. El texto dice cuáles.
+ */
+export const VENTA_NO_SE_BORRA = ['SALE_HAS_INVOICE', 'SALE_HAS_PAID_COMMISSION'];
+
+/**
  * El motivo para no borrar, o null. Si la respuesta no trae el campo (un
  * servidor sin actualizar), se cae al criterio de antes: con factura y sin
  * estar anulada a cero, no.

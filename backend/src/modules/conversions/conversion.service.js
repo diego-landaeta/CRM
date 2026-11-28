@@ -5,7 +5,7 @@ import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
 import * as installmentsModel from './installments.model.js';
-import { avisoComisionPagada } from './cobro-facturado.js';
+import { avisoComisionPagada, negarSiLaVentaNoSeBorra } from './cobro-facturado.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -491,6 +491,11 @@ export async function unpayInstallment(instId, { userId = null, ip = null } = {}
 export async function remove(id, { reason, motivo, userId } = {}) {
   const existing = await conversionModel.findById(id);
   if (!existing) throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
+
+  // Con facturas sin anular o comisiones ya pagadas no se borra (CRM#1234): se
+  // mira antes de apuntar la nota, cancelar en Stripe o tocar Moodle. El
+  // modelo lo vuelve a mirar con la venta bloqueada, dentro del borrado.
+  await negarSiLaVentaNoSeBorra({ query }, id);
 
   // Antes de borrar, dejamos rastro en lead_interactions para auditoría.
   if (existing.lead_id && reason) {

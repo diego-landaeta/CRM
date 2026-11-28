@@ -14,7 +14,7 @@ import EmitirBorradorDialog from '@/modules/invoices/components/EmitirBorradorDi
 import { invoicesApi, type Invoice } from '@/modules/invoices/api/invoices.api';
 import SendInvoiceDialog from '@/modules/invoices/components/SendInvoiceDialog';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
-import { motivoParaNoBorrar, avisoNuevo, COBRO_NO_SE_BORRA } from '../api/cobroBloqueo';
+import { motivoParaNoBorrar, avisoNuevo, COBRO_NO_SE_BORRA, VENTA_NO_SE_BORRA } from '../api/cobroBloqueo';
 
 // Un cobro con factura vigente no se borra (CRM#1228 + CRM#1230): la regla y el
 // texto son los del servidor, los mismos que en «Deshacer el pago».
@@ -141,6 +141,13 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
       toast({ title: 'Conversión eliminada', description: 'Queda registro en el historial del lead' });
       await load();
     } catch (err: any) {
+      if (VENTA_NO_SE_BORRA.includes(err?.data?.code)) {
+        // Con facturas sin anular o comisiones pagadas no se borra (CRM#1234): el
+        // servidor dice cuáles; se enseña tal cual y se recarga por si cambió.
+        toast({ title: 'No se puede eliminar esta compra', description: err.data.error, variant: 'destructive' });
+        await load();
+        return;
+      }
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
     } finally { setPendingConversion(null); }
   }
@@ -467,7 +474,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
           <div role="dialog" className="relative bg-card rounded-lg border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <h4 className="font-semibold text-base mb-1">Eliminar compra</h4>
             <p className="text-xs text-muted-foreground mb-4">
-              Se eliminarán todos sus pagos. Esta acción no se puede deshacer, pero quedará un registro en el historial del lead con el motivo.
+              Se eliminarán todos sus pagos. Esta acción no se puede deshacer, pero quedará un registro en el historial del lead con el motivo. Si tiene facturas sin anular o comisiones ya pagadas, no se podrá eliminar.
             </p>
             <div className="space-y-3">
               <div>

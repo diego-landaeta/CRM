@@ -5,7 +5,7 @@ import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
-import { antesDeBorrarCobro, COLUMNAS_DEL_BLOQUEO, conBloqueoDelCobro } from './cobro-facturado.js';
+import { antesDeBorrarCobro, COLUMNAS_DEL_BLOQUEO, conBloqueoDelCobro, negarSiLaVentaNoSeBorra } from './cobro-facturado.js';
 // Una gestora o varias (las de un equipo comercial, 09/11/2026).
 import { comoIds } from '../../shared/utils/roles.js';
 
@@ -1086,7 +1086,21 @@ export async function deleteConversion(id) {
     const { alBorrarLaVenta } = await import('../matricula-moodle/matricula-moodle.service.js');
     await alBorrarLaVenta(id);
   }
-  await query(`DELETE FROM conversions WHERE id = $1`, [id]);
+  // Los cobros se van por cascada y las facturas se quedarían sin cobro ni
+  // venta (SET NULL): la regla va aquí, con la venta y sus cobros bloqueados
+  // para que no entre a la vez una factura o un cobro (CRM#1234).
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await negarSiLaVentaNoSeBorra(client, id, { bloquear: true });
+    await client.query(`DELETE FROM conversions WHERE id = $1`, [id]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Valores distintos de producto para el desplegable de filtros. Va aparte de
