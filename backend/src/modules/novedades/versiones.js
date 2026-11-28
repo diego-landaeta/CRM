@@ -229,6 +229,211 @@ const LISTA = [
         ]
       },
       {
+        "titulo": "Ventas, prospectos y facturas",
+        "items": [
+          {
+            "titulo": "Ventas compartidas, también en Ventas",
+            "texto": "El filtro «Reparto» (solo las compartidas o sin compartir) está también en Ventas, y lo siguen todas las tarjetas: el resumen, los cursos más vendidos, la evolución y los países. Una venta compartida le sigue contando la mitad a cada gestora.",
+            "roles": [
+              "gestor",
+              "lider_equipo",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Los filtros se quedan al volver",
+            "texto": "En Finanzas › Ventas, Ventas y Análisis de ventas, los filtros se guardan en la dirección de la página: al recargar, al volver de la ficha de una venta o al pasar el enlace a otra persona, se abre con los mismos filtros.",
+            "roles": [
+              "gestor",
+              "lider_equipo",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "De dónde viene cada prospecto",
+            "texto": "Al entrar por un formulario, por el botón de WhatsApp o por Make, el prospecto guarda de dónde viene (las UTM, la página de la que llega y el clic de Google, Meta o TikTok) y sale ya con su canal. En Reportes los canales son siempre los mismos, y en la ficha, «Origen y UTMs» enseña también el clic de TikTok.",
+            "roles": [
+              "gestor",
+              "lider_equipo",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/informes",
+            "boton": "Ir a Reportes"
+          },
+          {
+            "titulo": "Eliminar una factura emitida por error",
+            "texto": "Si una factura se emitió por error, no se ha enviado, no tiene cobro y es la última de su serie, administración la puede eliminar con su motivo, y queda en el Registro. Si no cumple todo eso, se anula con su abono, como siempre.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/facturas",
+            "boton": "Ir a Facturas"
+          }
+        ]
+      },
+      {
+        "titulo": "Moodle y tutores",
+        "items": [
+          {
+            "titulo": "Supervisión de tutores",
+            "texto": "Con el permiso «Supervisar tutores», en Mi campus sale la pestaña «Supervisión de tutores»: la carga de cada tutor de tus campus, su Mi campus (consultas por responder, entregas por corregir y lo que tiene por desarrollar), lo que redactan en Moodle y sus tareas. Solo se mira: no se puede tocar nada.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/mis-cursos/campus",
+            "boton": "Ir a Mi campus"
+          },
+          {
+            "titulo": "«Avisar al tutor», con la marca del campus",
+            "texto": "En Comisiones de tutores, «Avisar al tutor» manda el correo con la plantilla y la marca del campus, deja anotado quién lo mandó y cuándo, y avisa si ya se le mandó ese mes. Si los correos a tutores están parados, se ve la vista previa y no sale nada.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tutores/comisiones",
+            "boton": "Ir a Comisiones"
+          },
+          {
+            "titulo": "Mi campus cuenta como Moodle",
+            "texto": "Las entregas por corregir y los alumnos de cada tutora salen como los enseña Moodle: según los grupos del curso y de cada tarea, y sin contar como alumnas a las personas del equipo.",
+            "roles": [
+              "tutor",
+              "tutor_redactor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/mis-cursos/campus",
+            "boton": "Ir a Mi campus"
+          },
+          {
+            "titulo": "Los avisos se retiran solos",
+            "texto": "El aviso de entregas de 48 h, el de la carga, los de consultas «cerca del plazo» y «fuera de plazo», y el de un Moodle a medio actualizar desaparecen de la campana en cuanto ya están atendidos.",
+            "roles": [
+              "tutor",
+              "admin",
+              "superadmin"
+            ]
+          }
+        ]
+      },
+      {
+        "titulo": "Diplomas",
+        "items": [
+          {
+            "titulo": "El diploma, en la ficha del alumno",
+            "texto": "En la ficha del cliente, la tarjeta «Diploma» dice si se le pidieron los datos y hasta cuándo, si los ha contestado y si el diploma ya está emitido y enviado. En Diplomas › Pendientes, a quien aún no ha contestado se le ve «Esperando al alumno».",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/clientes/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          },
+          {
+            "titulo": "Enviar varios diplomas a la vez",
+            "texto": "En Diplomas › Emitidos se marcan varios y «Enviar al alumno» los manda de una vez. Los que ya se enviaron, los revertidos y los que no tienen correo se quedan fuera, y se dice por qué.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/clientes/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          }
+        ]
+      },
+      {
+        "titulo": "Usuarios y correo",
+        "items": [
+          {
+            "titulo": "El cambio de correo, en la ficha del usuario",
+            "texto": "En la ficha del usuario se ve si tiene un cambio de correo pendiente (a qué dirección, hasta cuándo vale y cuántos intentos lleva) y los anteriores, y se puede anular. El código no se ve nunca.",
+            "roles": [
+              "soporte",
+              "superadmin"
+            ],
+            "ruta": "/configuracion",
+            "boton": "Ir a Configuración"
+          },
+          {
+            "titulo": "Varios buzones de correo",
+            "texto": "En Correos › Buzones se conectan, se prueban y se quitan los buzones que lee la Bandeja (facturación, soporte, admisiones…), sin tocar el servidor. La contraseña se guarda cifrada y no se vuelve a ver. En la Bandeja se elige de qué buzón leer.",
+            "roles": [
+              "admin",
+              "superadmin",
+              "soporte"
+            ],
+            "ruta": "/correos",
+            "boton": "Ir a Correos",
+            "recorrido": "correos"
+          }
+        ]
+      },
+      {
+        "titulo": "Marketing y Claude",
+        "items": [
+          {
+            "titulo": "Meta Ads dice qué pasa",
+            "texto": "Si los datos no se pueden cargar, lo dice y ofrece «Reintentar», en vez de enseñar «Sin campañas». Y se distingue «no hay cuenta conectada» de «todavía no hay datos».",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/meta-ads",
+            "boton": "Ir a Meta Ads"
+          },
+          {
+            "titulo": "El aviso de Meta, a quien puede arreglarlo",
+            "texto": "El aviso de que la conexión con Meta falla o está a punto de caducar ya solo llega a quien puede volver a conectar la cuenta de ese campus.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ]
+          },
+          {
+            "titulo": "Aviso los lunes si una web cae en Google",
+            "texto": "Cada lunes, si los clics o las impresiones de Google de una web caen mucho contra la semana anterior, llega un aviso a la campana. En Tráfico orgánico se ve arriba la semana contra la anterior, y las búsquedas y las páginas se bajan en CSV.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/trafico-organico",
+            "boton": "Ir a Tráfico orgánico"
+          },
+          {
+            "titulo": "Feedback, en CSV",
+            "texto": "En el panel de Feedback, las respuestas filtradas por campus y periodo se bajan en CSV: fecha, campus, gestora, motivo, puntuación y comentario, sin datos de contacto.",
+            "roles": [
+              "gestor",
+              "lider_equipo",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/informes/feedback",
+            "boton": "Ir a Feedback"
+          },
+          {
+            "titulo": "Claude lee Search Console y Google Analytics",
+            "texto": "Desde el conector del CRM, Claude consulta lo que guarda Search Console (lo más buscado, la evolución por semanas y la comparación con el periodo anterior) y Google Analytics 4 de cada campus.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion/mcp",
+            "boton": "Ir a Conexión → MCP"
+          }
+        ]
+      },
+      {
         "titulo": "Links de pago",
         "items": [
           {
@@ -280,6 +485,18 @@ const LISTA = [
             "ruta": "/tareas",
             "boton": "Ir a Tareas",
             "recorrido": "tablero"
+          },
+          {
+            "titulo": "Más pantallas con «Ver recorrido»",
+            "texto": "Tienen su recorrido Seguimiento de fin de mes, Conexión, Banco y Actividad de WhatsApp, Correos, Tutores, el proceso comercial, Convocatorias, Duplicados, Solicitud de admisión y las pantallas de Consultas (alumnos, carga, tutores, métricas y respuestas).",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/prospectos/seguimiento",
+            "boton": "Ir a Seguimiento",
+            "recorrido": "seguimiento-fin-de-mes"
           }
         ]
       }
@@ -294,7 +511,11 @@ const LISTA = [
       "En Diplomas, «Aprobar y emitir», «Rechazar» y «Editar» se ven siempre, aunque la tabla no quepa.",
       "La tabla de Actividad (Monitask) cabe en el móvil.",
       "El CRM ya no satura los campus: las consultas a Moodle salen poco a poco, para que el campus no se caiga con «Database connection failed».",
-      "En el Registro, un admin de campus ya no puede saber si un correo es de otra persona al pedir un cambio de correo."
+      "En el Registro, un admin de campus ya no puede saber si un correo es de otra persona al pedir un cambio de correo.",
+      "En Reportes, «Campus y país de entrada» cuenta a cada gestora su mitad de una venta compartida, no la venta entera.",
+      "La líder de equipo ve «Eliminar» en los prospectos de su equipo que no tienen venta.",
+      "Formaciones: el orden de los módulos se guarda 1, 2, 3… y ya no cambia al volver a guardar.",
+      "Tareas, Usuarios y el Manual usan los colores del diseño, también en modo oscuro."
     ]
   },
   {
