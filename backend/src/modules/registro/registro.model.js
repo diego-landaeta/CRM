@@ -1,5 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
+import { fechaEs } from '../../shared/utils/fechaEs.js';
+import { conMoneda } from '../facturas-colaborador/moneda.js';
 
 /**
  * El registro del sistema, con vista «general» y «todos» (#111).
@@ -297,6 +299,9 @@ function enCristiano(action, details) {
     // es como se apuntaba antes.
     password_changed: 'Cambió su contraseña',
     change_password: 'Cambió su contraseña',
+    // Al borrar un cobro («Eliminar pago» o «Deshacer el pago», CRM#1230).
+    cobro_borrado: `Borró un cobro de ${d.importe != null ? conMoneda(d.importe) : '—'} del ${fechaEs(d.fecha)}`
+      + `${Array.isArray(d.facturas) && d.facturas.length ? ` (factura anulada ${d.facturas.join(', ')})` : ''}`,
   };
   return M[action] || action;
 }

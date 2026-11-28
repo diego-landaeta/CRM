@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { conversionsApi, type Conversion, type Payment, type Refund, type Installment } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
@@ -14,6 +14,11 @@ import EmitirBorradorDialog from '@/modules/invoices/components/EmitirBorradorDi
 import { invoicesApi, type Invoice } from '@/modules/invoices/api/invoices.api';
 import SendInvoiceDialog from '@/modules/invoices/components/SendInvoiceDialog';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
+import { motivoParaNoBorrar, avisoNuevo, COBRO_NO_SE_BORRA } from '../api/cobroBloqueo';
+
+// Un cobro con factura vigente no se borra (CRM#1228 + CRM#1230): la regla y el
+// texto son los del servidor, los mismos que en «Deshacer el pago».
+const NO_SE_ELIMINA = 'No se puede eliminar este pago';
 
 interface ConversionsTabTarget {
   id: number;
@@ -44,6 +49,11 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
   const [sendInvoiceDialog, setSendInvoiceDialog] = useState<Invoice | null>(null);
   const [installmentsReload, setInstallmentsReload] = useState(0);
+  // Sube con cada `load()`: el historial de pagos y las cuotas de cada venta
+  // se cargan aparte y tienen que volver a pedirse cuando la pestaña recarga
+  // (tras borrar un pago, o tras un 409, CRM#1230). Sin esto el historial seguía
+  // enseñando el cobro borrado y la cuota seguía «Pagada».
+  const [recarga, setRecarga] = useState(0);
 
   // Tras registrar un pago: si la conversion tiene factura emitida y aún no
   // enviada, ofrecer enviarla por email (con confirmación, no automático).
@@ -77,6 +87,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
     } finally {
       setLoading(false);
       setCargadasDe(deQuien);
+      setRecarga((k) => k + 1);
     }
   }
 
@@ -104,10 +115,18 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   async function doDeletePayment(): Promise<void> {
     if (pendingPayment === null) return;
     try {
-      await conversionsApi.removePayment(pendingPayment);
+      const res = await conversionsApi.removePayment(pendingPayment);
       toast({ title: 'Pago eliminado' });
+      // La comisión de la gestora ya pagada no se rebaja: se avisa (CRM#1230).
+      if (res?.data?.aviso) toast({ title: 'Comisión ya pagada', description: res.data.aviso, variant: 'warning', duration: 10000 });
       await load();
     } catch (err: any) {
+      if (COBRO_NO_SE_BORRA.includes(err?.data?.code)) {
+        // El mismo título y el mismo texto que «Deshacer el pago» (CRM#1228 + #1230).
+        toast({ title: NO_SE_ELIMINA, description: err.data.error, variant: 'destructive' });
+        await load();
+        return;
+      }
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
     } finally { setPendingPayment(null); }
   }
@@ -356,7 +375,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                   <CuotasInline
                     conversionId={c.id}
                     canManage={canManage}
-                    refreshKey={installmentsReload}
+                    refreshKey={installmentsReload + recarga}
                     onManage={() => setInstallmentsDialogConv(c)}
                   />
                 )}
@@ -370,6 +389,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                       onDelete={handleDeletePayment}
                       canManage={canManage}
                       markInitial={c.metodo_pago === 'fraccionado'}
+                      refreshKey={recarga}
                     />
                   </details>
                 )}
@@ -518,17 +538,21 @@ interface PaymentsListProps {
   onDelete: (id: number) => void;
   canManage?: boolean;
   markInitial?: boolean;
+  /** Cambia cuando la pestaña recarga: el historial se vuelve a pedir. */
+  refreshKey?: number;
 }
 
-function PaymentsList({ conversionId, onDelete, canManage, markInitial }: PaymentsListProps) {
+function PaymentsList({ conversionId, onDelete, canManage, markInitial, refreshKey = 0 }: PaymentsListProps) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
+  // Un doble clic en la papelera no apila el mismo aviso.
+  const avisosVistos = useRef(new Map<string, number>());
 
   const reload = () => {
     conversionsApi.getById(conversionId).then(res => {
       if (res.success && res.data) setPayments(res.data.payments || []);
     });
   };
-  useEffect(reload, [conversionId]);
+  useEffect(reload, [conversionId, refreshKey]);
 
   if (!payments) return <div className="mt-2 text-muted-foreground">Cargando…</div>;
 
@@ -560,7 +584,18 @@ function PaymentsList({ conversionId, onDelete, canManage, markInitial }: Paymen
             {/* Factura de ESTE pago */}
             <PaymentInvoiceCell src={p} onChanged={reload} />
             {canManage && (
-              <button onClick={() => onDelete(p.id)} className="text-muted-foreground hover:text-destructive p-0.5" title="Eliminar pago">
+              <button
+                onClick={() => {
+                  // Lo dice antes de preguntar «¿Eliminar pago?», con el texto del servidor.
+                  const motivo = motivoParaNoBorrar(p);
+                  if (!motivo) onDelete(p.id);
+                  else if (avisoNuevo(avisosVistos.current, `${p.id}:${motivo}`)) {
+                    toast({ title: NO_SE_ELIMINA, description: motivo, variant: 'destructive' });
+                  }
+                }}
+                className="text-muted-foreground hover:text-destructive p-0.5"
+                title={motivoParaNoBorrar(p) || 'Eliminar pago'}
+                aria-label="Eliminar pago">
                 <Trash size={12} weight="bold" />
               </button>
             )}
@@ -577,6 +612,8 @@ interface FacturaSrc {
   factura_codigo?: string | null;
   factura_estado?: string | null;
   factura_tipo?: string | null;
+  /** Anulada (CRM#793): se dice, como en el plan de cuotas. */
+  factura_anulada?: boolean;
   cliente_nif?: string | null;
   cliente_direccion?: string | null;
   cliente_ciudad?: string | null;
@@ -623,7 +660,7 @@ function PaymentInvoiceCell({ src, onChanged }: { src: FacturaSrc; onChanged: ()
                : 'border-border bg-card hover:bg-muted'}`}
       >
         {warn ? <Warning size={11} weight="bold" /> : <Receipt size={11} weight="bold" />}
-        {isDraft ? 'BORRADOR' : `Nº ${src.factura_codigo || ''}`}{incompleta ? ' · faltan datos' : ''}
+        {isDraft ? 'BORRADOR' : `Nº ${src.factura_codigo || ''}`}{src.factura_anulada ? ' · anulada' : ''}{incompleta ? ' · faltan datos' : ''}
       </button>
       {emitOpen && inv && (
         <EmitirBorradorDialog

@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 import { useToast } from '@/shared/hooks/useToast';
-import { X, CheckCircle, WarningCircle } from '@phosphor-icons/react';
+import { X, CheckCircle, WarningCircle, Warning } from '@phosphor-icons/react';
+
+// Tres maneras de avisar: lo que salió bien, lo que salió mal y lo que hay que
+// mirar ('warning'). La de advertencia ya se pedía («Llevar a Moodle») pero se
+// pintaba como un éxito, con el check verde (CRM#1230).
+const AVISO = 'warning';
 
 export default function Toaster() {
   const { toasts, addListener, dismiss } = useToast();
@@ -19,13 +24,17 @@ export default function Toaster() {
           className={`pointer-events-auto flex items-start gap-3 p-4 rounded-lg border animate-in slide-in-from-bottom-4 fade-in-0 ${
             t.variant === 'destructive'
               ? 'bg-destructive-soft border-destructive/30 text-destructive-soft-foreground'
-              : 'bg-card border-border text-foreground'
+              : t.variant === AVISO
+                ? 'bg-warning-soft border-warning/30 text-warning-soft-foreground'
+                : 'bg-card border-border text-foreground'
           }`}
         >
           <div className="flex-shrink-0 mt-0.5">
             {t.variant === 'destructive'
               ? <WarningCircle size={18} weight="regular" className="text-destructive" />
-              : <CheckCircle size={18} weight="regular" className="text-success" />
+              : t.variant === AVISO
+                ? <Warning size={18} weight="regular" className="text-warning" />
+                : <CheckCircle size={18} weight="regular" className="text-success" />
             }
           </div>
           <div className="flex-1 min-w-0">
