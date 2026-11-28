@@ -4,6 +4,8 @@ import { nombreDeLasLineas } from './nombre-de-las-lineas.js';
 import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
+import * as installmentsModel from './installments.model.js';
+import { avisoComisionPagada, negarSiLaVentaNoSeBorra } from './cobro-facturado.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -441,8 +443,10 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
       + 'No se puede apuntar otra vez a mano.',
       409, 'DUPLICATE_AUTOMATIC_PAYMENT');
   }
-  // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
-  commissionModel.recalculateCommission(conversionId).catch(err =>
+  // Recalcular comision en cada pago (importe_base = importe_pagado actualizado).
+  // La de la gestora ya PAGADA no se reescribe (CRM#1230): lo pagado es lo que
+  // salió; lo de este cobro se regulariza a mano, igual que al borrar.
+  commissionModel.recalculateCommission(conversionId, { conservarPagada: true }).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
   );
   // Auto-factura al registrar el abono: una factura por ESTE pago (su monto).
@@ -455,15 +459,43 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
   return result;
 }
 
-export async function removePayment(paymentId) {
-  const deleted = await conversionModel.deletePayment(paymentId);
+export async function removePayment(paymentId, { userId = null, ip = null } = {}) {
+  const deleted = await conversionModel.deletePayment(paymentId, { userId, ip });
   if (!deleted) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
-  return { message: 'Pago eliminado' };
+  await recalcularComisionTrasBorrar(deleted.conversion_id);
+  return { message: 'Pago eliminado', aviso: avisoComisionPagada(deleted.comision_pagada) };
+}
+
+// La comision sale de lo cobrado: al quitar un cobro se recalcula, igual que
+// al apuntarlo (CRM#1230: el cobro repetido inflaba tambien la comision). Pero
+// la ya PAGADA no se rebaja: ese dinero ya salio; se avisa y se regulariza a
+// mano. Lo mismo para «Eliminar pago» y «Deshacer el pago».
+async function recalcularComisionTrasBorrar(conversionId) {
+  try {
+    await commissionModel.recalculateCommission(conversionId, { conservarPagada: true });
+  } catch (err) {
+    logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)');
+  }
+}
+
+// «Deshacer el pago» de una cuota: borra su cobro con la misma regla que
+// «Eliminar pago» y recalcula la comision igual (CRM#1228 + CRM#1230).
+export async function unpayInstallment(instId, { userId = null, ip = null } = {}) {
+  const cuota = await installmentsModel.unpay(instId, { userId, ip });
+  if (!cuota) return null;
+  const { comision_pagada: comisionPagada, ...resto } = cuota;
+  await recalcularComisionTrasBorrar(resto.conversion_id);
+  return { ...resto, aviso: avisoComisionPagada(comisionPagada) };
 }
 
 export async function remove(id, { reason, motivo, userId } = {}) {
   const existing = await conversionModel.findById(id);
   if (!existing) throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
+
+  // Con facturas sin anular o comisiones ya pagadas no se borra (CRM#1234): se
+  // mira antes de apuntar la nota, cancelar en Stripe o tocar Moodle. El
+  // modelo lo vuelve a mirar con la venta bloqueada, dentro del borrado.
+  await negarSiLaVentaNoSeBorra({ query }, id);
 
   // Antes de borrar, dejamos rastro en lead_interactions para auditoría.
   if (existing.lead_id && reason) {

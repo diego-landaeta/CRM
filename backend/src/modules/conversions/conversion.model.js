@@ -3,9 +3,9 @@ import { condicionDeCompartidas } from './compartidas.js';
 import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
 import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
-import { AppError } from '../../shared/utils/AppError.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
+import { antesDeBorrarCobro, COLUMNAS_DEL_BLOQUEO, conBloqueoDelCobro, negarSiLaVentaNoSeBorra } from './cobro-facturado.js';
 // Una gestora o varias (las de un equipo comercial, 09/11/2026).
 import { comoIds } from '../../shared/utils/roles.js';
 
@@ -300,14 +300,17 @@ export async function findById(id) {
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais, i.items AS factura_items,
             -- La factura salió sola sin mandarse: «la envía la gestora» (#764, 24/11).
-            i.envio_nota AS factura_envio_nota, i.sent_to_email AS factura_enviada_a
+            i.envio_nota AS factura_envio_nota, i.sent_to_email AS factura_enviada_a,
+            i.anulada_at IS NOT NULL AS factura_anulada,
+            -- Si se puede borrar y por qué no: la misma regla que el borrado (CRM#1228 + #1230).
+            ${COLUMNAS_DEL_BLOQUEO('cp.id')}
        FROM conversion_payments cp
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1
       ORDER BY cp.fecha DESC, cp.id DESC`,
     [id]
   );
-  conversion.payments = payments;
+  conversion.payments = payments.map(conBloqueoDelCobro);
 
   // Cuotas (plan de pago fraccionado) con la factura de la cuota ya cobrada.
   const { rows: installments } = await query(
@@ -320,14 +323,15 @@ export async function findById(id) {
             )) AS pagado_por_stripe,
             i.id AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
-            i.cliente_cp, i.cliente_pais
+            i.cliente_cp, i.cliente_pais, i.anulada_at IS NOT NULL AS factura_anulada,
+            ${COLUMNAS_DEL_BLOQUEO('ci.payment_id')}
        FROM conversion_installments ci
        LEFT JOIN invoices i ON i.payment_id = ci.payment_id AND i.estado <> 'cancelada'
       WHERE ci.conversion_id = $1
       ORDER BY ci.numero ASC`,
     [id]
   );
-  conversion.installments = installments;
+  conversion.installments = installments.map(conBloqueoDelCobro);
   return conversion;
 }
 
@@ -1027,9 +1031,10 @@ export async function getPaymentOwnership(paymentId) {
  *
  * Ahora hace lo mismo que `unpay`, que si lo hacia bien, y ademas NO deja
  * borrar un cobro que ya tiene factura emitida: eso no se deshace borrando, se
- * deshace con una rectificativa.
+ * deshace anulándola (CRM#793). Anulada y a cero, el cobro ya se puede borrar
+ * (CRM#1230). La regla es la de «Deshacer el pago»: cobro-facturado.js.
  */
-export async function deletePayment(paymentId) {
+export async function deletePayment(paymentId, { userId = null, ip = null } = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -1043,20 +1048,13 @@ export async function deletePayment(paymentId) {
       return null;
     }
 
-    // Una factura emitida no se borra por detras.
-    const { rows: fact } = await client.query(
-      `SELECT codigo FROM invoices
-        WHERE payment_id = $1 AND tipo <> 'proforma' AND estado <> 'cancelada'
-        LIMIT 1`,
-      [paymentId]
-    );
-    if (fact[0]) {
-      await client.query('ROLLBACK');
-      throw new AppError(
-        `Ese cobro tiene la factura ${fact[0].codigo}. Anulala o emite una rectificativa antes de borrarlo.`,
-        409, 'PAYMENT_HAS_INVOICE'
-      );
-    }
+    // Una factura emitida no se borra por detras. La regla (y su texto) es la
+    // misma que en «Deshacer el pago» de una cuota: `cobro-facturado.js`
+    // (CRM#1228 + CRM#1230). Ahí se bloquea el cobro, se mira la comisión de
+    // la gestora y se deja el rastro.
+    const { comisionPagada } = await antesDeBorrarCobro(client, {
+      paymentId, conversionId: rows[0].conversion_id, accion: 'eliminar_pago', userId, ip,
+    });
 
     // La cuota vuelve a pendiente. Sin esto seguiria diciendo que se cobro.
     await client.query(
@@ -1072,7 +1070,7 @@ export async function deletePayment(paymentId) {
     await recalcularCobrado(client, rows[0].conversion_id);
 
     await client.query('COMMIT');
-    return rows[0];
+    return { ...rows[0], comision_pagada: comisionPagada };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -1088,7 +1086,21 @@ export async function deleteConversion(id) {
     const { alBorrarLaVenta } = await import('../matricula-moodle/matricula-moodle.service.js');
     await alBorrarLaVenta(id);
   }
-  await query(`DELETE FROM conversions WHERE id = $1`, [id]);
+  // Los cobros se van por cascada y las facturas se quedarían sin cobro ni
+  // venta (SET NULL): la regla va aquí, con la venta y sus cobros bloqueados
+  // para que no entre a la vez una factura o un cobro (CRM#1234).
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await negarSiLaVentaNoSeBorra(client, id, { bloquear: true });
+    await client.query(`DELETE FROM conversions WHERE id = $1`, [id]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Valores distintos de producto para el desplegable de filtros. Va aparte de
