@@ -292,7 +292,9 @@ const LISTA = [
       "Los avisos de Moodle de una cuenta o una matrícula suspendida ya no hablan en masculino de todas.",
       "En el móvil, el botón del rayo ya no tapa lo último de la ficha del cliente.",
       "En Diplomas, «Aprobar y emitir», «Rechazar» y «Editar» se ven siempre, aunque la tabla no quepa.",
-      "La tabla de Actividad (Monitask) cabe en el móvil."
+      "La tabla de Actividad (Monitask) cabe en el móvil.",
+      "El CRM ya no satura los campus: las consultas a Moodle salen poco a poco, para que el campus no se caiga con «Database connection failed».",
+      "En el Registro, un admin de campus ya no puede saber si un correo es de otra persona al pedir un cambio de correo."
     ]
   },
   {
