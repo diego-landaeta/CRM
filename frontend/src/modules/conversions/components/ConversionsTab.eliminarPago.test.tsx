@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 /*
   CRM#1228 + CRM#1230 (gemelas CRM-ISEIE#856 + #858) · «Eliminar pago» dice lo
@@ -51,6 +51,7 @@ const { default: ConversionsTab } = await import('./ConversionsTab');
 // Las papeleras salen en el orden de los pagos: 501 (vigente) y 502 (anulada).
 const papeleras = () => screen.findAllByRole('button', { name: 'Eliminar pago', hidden: true }, { timeout: 5000 });
 
+afterEach(() => { cleanup(); });
 beforeEach(() => {
   vi.clearAllMocks();
   api.byLead.mockResolvedValue({ success: true, data: [venta] });
