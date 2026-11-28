@@ -21,6 +21,9 @@ vi.mock('../src/shared/services/brevo.service.js', async (original) => ({ ...(aw
 const { default: pool } = await import('../src/shared/config/db.js');
 const { vuelta, quienPuedeReconectar, TIPO_AVISO, _internals } = await import('../src/jobs/metaTokensScheduler.js');
 const { packToken } = await import('../src/modules/meta-ads/meta-ads.service.js');
+const { appEnUso, valoresDeAjustes } = await import('../src/modules/meta-ads/meta-app.config.js');
+// Lo que `vuelta()` le pasa a cada cuenta (#1209): los ajustes y la app en uso.
+const cfgDeLaVuelta = async (extra = {}) => ({ ...(await valoresDeAjustes()), app: await appEnUso(), ...extra });
 
 const MARCA = `TOK1192${Date.now().toString(36)}`;
 const DIA = 86400 * 1000;
@@ -211,12 +214,36 @@ describe('a quién llega el aviso de un token de Meta (#1192)', () => {
     const r = await _internals.revisarCuenta({
       tipo: 'meta_ads', id: cuenta.id, project_id: cuenta.project_id, nombre: 'Cuenta de prueba',
       tokenCifrado: cuenta.access_token_enc, expiresAtGuardada: null, proyecto: null,
-    }, new Date(), []);
+    }, new Date(), [], await cfgDeLaVuelta());
     expect(r).toMatchObject({ ok: false, avisos: [] });
     expect(await avisosDe(cuentas[VACIO])).toHaveLength(0);
     expect(correos.sendEmail).not.toHaveBeenCalled();
     const e = await _internals.leerEstado('meta_ads', cuentas[VACIO]);
     expect(e.aviso_fallo_at).toBeNull();
     expect(e.aviso_caduca_para).toBeNull();
+  });
+
+  it('«Renovar ahora» sin app guardada (CRM#1222): no avisa ni da por avisado; la vuelta diaria sí avisa', async () => {
+    graph.debug = debugQueCaduca(3);
+    graph.cambio = falla;
+    const [cuenta] = await q(
+      `SELECT a.id, a.project_id, a.access_token_enc FROM meta_ad_accounts a WHERE a.id = $1`, [cuentas[VACIO]]);
+    const laCuenta = {
+      tipo: 'meta_ads', id: cuenta.id, project_id: cuenta.project_id, nombre: 'Cuenta de prueba',
+      tokenCifrado: cuenta.access_token_enc, expiresAtGuardada: null, proyecto: null,
+    };
+    const alguien = [{ id: u.admin, email: correoDe('admin') }];
+    const sinApp = { app: { appId: null, appSecret: null } };
+
+    const aMano = await _internals.revisarCuenta(laCuenta, new Date(), alguien, await cfgDeLaVuelta({ ...sinApp, a_mano: true }));
+    expect(aMano).toMatchObject({ ok: false, avisos: [] });
+    expect(correos.sendEmail).not.toHaveBeenCalled();
+    const e = await _internals.leerEstado('meta_ads', cuentas[VACIO]);
+    expect(e.ultimo_error).toMatch(/^missing_app_config/);
+    expect(e.aviso_fallo_at).toBeNull();
+
+    // La automática, con el mismo fallo, sí avisa a quien puede reconectarla.
+    const diaria = await _internals.revisarCuenta(laCuenta, new Date(), alguien, await cfgDeLaVuelta(sinApp));
+    expect(diaria.avisos).toContain('fallo');
   });
 });
