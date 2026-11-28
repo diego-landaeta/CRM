@@ -11,6 +11,8 @@ import * as porPagar from '../accounts-payable/payable.model.js';
 import * as stripe from '../stripe-payments/stripe-payments.model.js';
 import * as comisiones from '../commissions/commission.model.js';
 import * as duplicados from '../leads/dup-queue.service.js';
+import * as searchConsole from '../search-console/search-console.service.js';
+import * as googleAnalytics from '../google-analytics/google-analytics.service.js';
 import * as model from './mcp.model.js';
 import { acotarProyectos, responsableImpuesto, alcanceDelAmbito, fueraDelAlcance } from './mcp.acceso.js';
 import { enteroEnv } from './mcp.config.js';
@@ -252,6 +254,18 @@ function soloAdministracion(ambito, herramienta) {
   }
 }
 
+/**
+ * Para lo que tiene su propio permiso en el catálogo (#423), como la pantalla:
+ * se lee en cada consulta, así que quitarlo cierra la puerta en la siguiente.
+ * Se llama DESPUÉS de acotar, como `soloAdministracion`.
+ */
+async function conPermiso(ambito, clave, herramienta, nombrePermiso) {
+  const { explicarPermisos } = await import('../permissions/permissions.service.js');
+  if ((await explicarPermisos(ambito.userId))?.mapa?.[clave] !== true) {
+    throw new AppError(`«${herramienta}» necesita el permiso ${nombrePermiso}, y no lo tienes. Pídeselo a un super admin.`, 403, 'MCP_SIN_PERMISO');
+  }
+}
+
 /** Un periodo al revés no da «0 de todo»: se le dice a Claude que lo corrija. */
 function periodoEnOrden({ desde, hasta }) {
   if (desde && hasta && desde > hasta) {
@@ -326,6 +340,8 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   moodle_alumnos: 'Moodle de los campus',
   moodle_recursos_externos: 'Moodle de los campus',
   moodle_estructura: 'Moodle de los campus',
+  informe_seo: 'Tráfico orgánico',
+  informe_ga4: 'Google Analytics',
   informe: 'Informes',
 });
 
@@ -932,6 +948,121 @@ export const HERRAMIENTAS = [
       periodoEnOrden(a);
       periodoEnOrden({ desde: a.creados_desde, hasta: a.creados_hasta });
       return conTope(model.anunciosDeMeta({ projectIds, conjuntoId: a.conjunto_id, ...filtrosMeta(a) }), TOPE_INFORME_MS, 'meta_anuncios');
+    },
+  },
+  // Search Console (#36) para Claude: lee lo que ya guardó la sincronización
+  // (tablas gsc_*); no llama a Google en cada pregunta. Pide el mismo permiso
+  // que la pantalla «Tráfico orgánico» (`search_console.view`) y solo de sus campus.
+  {
+    nombre: 'informe_seo',
+    titulo: 'Informe SEO (Search Console)',
+    descripcion: 'El tráfico orgánico de Google de tus campus, como la pantalla «Tráfico orgánico»: por campus y periodo, clics, impresiones, CTR (en %) y posición media; '
+      + 'su evolución por semana (por mes si el periodo pasa de 90 días; solo los tramos con datos, el primero y el último pueden estar a medias); '
+      + 'las búsquedas y las páginas con MÁS CLICS («top»); y, salvo con comparar_con_periodo_anterior: false, '
+      + 'el periodo anterior de la misma longitud, lo que cambia («cambio»; la posición BAJA cuando mejora) y las búsquedas y páginas que más SUBEN y más BAJAN en clics. '
+      + 'Sin fechas, las últimas cuatro semanas hasta el último día que tiene guardado cada campus (Google va dos o tres días por detrás: no cuentes los días que faltan como caída). '
+      + 'Son los datos que trae la sincronización diaria, no los de este minuto. Si un campus no tiene Search Console conectado o aún no tiene datos, sale con un «aviso», '
+      + 'no con cero clics. Necesita el permiso «Ver Tráfico orgánico».',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      limite: z.number().int().min(1).max(50).default(10).describe('Cuántas búsquedas y páginas en cada lista (el top, las que suben y las que bajan)'),
+      comparar_con_periodo_anterior: z.boolean().default(true)
+        .describe('true (de serie): compara con el periodo anterior de la misma longitud. false: ni se calcula ni se devuelve (sin «anterior», «cambio», «suben» ni «bajan»)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      await conPermiso(ambito, 'search_console.view', 'informe_seo', '«Ver Tráfico orgánico»');
+      periodoEnOrden(a);
+      const nombres = new Map((ambito.proyectos || []).map((p) => [Number(p.id), p.nombre]));
+      const campus = [];
+      for (const projectId of projectIds) {
+        const entrada = { campus_id: projectId, campus: nombres.get(projectId) || String(projectId) };
+        const estado = await searchConsole.estadoDelCampus(projectId);
+        if (!estado.ultimo_dia) {
+          campus.push({
+            ...entrada,
+            aviso: estado.conectado ? 'Search Console conectado, pero aún sin datos sincronizados' : 'sin Search Console conectado',
+          });
+          continue;
+        }
+        const { desde, hasta } = searchConsole.periodoDelInforme({ desde: a.desde, hasta: a.hasta, ultimoDia: estado.ultimo_dia });
+        if (desde > hasta) {
+          campus.push({ ...entrada, aviso: `el último día guardado es ${estado.ultimo_dia}, anterior a «desde» (${desde})`, ultimo_dia: estado.ultimo_dia });
+          continue;
+        }
+        const informe = await conTope(searchConsole.informeSeo(projectId, desde, hasta, {
+          limite: a.limite,
+          comparar: a.comparar_con_periodo_anterior !== false,
+          tope: estado.ultimo_dia,
+        }), TOPE_INFORME_MS, 'informe_seo');
+        campus.push({
+          ...entrada,
+          ultimo_dia: estado.ultimo_dia,
+          ultima_sincronizacion: estado.ultima_sincronizacion,
+          ...(estado.estado_sincronizacion === 'error' ? { aviso: 'la última sincronización falló: los datos pueden estar atrasados' } : {}),
+          ...informe,
+        });
+      }
+      return { desde: a.desde || null, hasta: a.hasta || null, campus };
+    },
+  },
+  // Google Analytics 4 (#55) para Claude (#1247): lee lo que ya guardó la
+  // sincronización (tablas ga4_*) con las MISMAS funciones que la pantalla
+  // «Google Analytics» (`embudo` y `paginas`). Pide su permiso
+  // (`google_analytics.view`) y solo de sus campus, como «informe_seo».
+  {
+    nombre: 'informe_ga4',
+    titulo: 'Informe de Google Analytics 4',
+    descripcion: 'Las visitas a la web de tus campus según Google Analytics 4, como la pantalla «Google Analytics»: por campus y periodo, '
+      + 'sesiones, usuarios, conversiones (eventos clave de GA4), y cuántas acaban en prospecto y en venta (lead_por_sesion y venta_por_lead, en %); '
+      + 'el reparto por canal de GA4; las páginas de entrada (las de formación) con MÁS SESIONES, con sus prospectos y ventas; y, salvo con comparar_con_periodo_anterior: false, '
+      + 'el periodo anterior de la misma longitud y lo que cambia («cambio»). '
+      + 'Sin fechas, las últimas cuatro semanas hasta el último día que tiene guardado cada campus. '
+      + 'Los usuarios son la suma por día y canal, como en la pantalla: no son personas únicas. '
+      + 'Son los datos que trae la sincronización, no los de este minuto. Si un campus no tiene GA4 conectado o aún no tiene datos, sale con un «aviso», '
+      + 'no con cero sesiones. Necesita el permiso «Ver Google Analytics».',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      limite: z.number().int().min(1).max(50).default(10).describe('Cuántas páginas en el top'),
+      comparar_con_periodo_anterior: z.boolean().default(true)
+        .describe('true (de serie): compara con el periodo anterior de la misma longitud. false: ni se calcula ni se devuelve (sin «anterior» ni «cambio»)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      await conPermiso(ambito, 'google_analytics.view', 'informe_ga4', '«Ver Google Analytics»');
+      periodoEnOrden(a);
+      const nombres = new Map((ambito.proyectos || []).map((p) => [Number(p.id), p.nombre]));
+      const campus = [];
+      for (const projectId of projectIds) {
+        const entrada = { campus_id: projectId, campus: nombres.get(projectId) || String(projectId) };
+        const estado = await googleAnalytics.estadoDelCampus(projectId);
+        if (!estado.ultimo_dia) {
+          campus.push({
+            ...entrada,
+            aviso: estado.conectado ? 'Google Analytics 4 conectado, pero aún sin datos sincronizados' : 'sin Google Analytics 4 conectado',
+          });
+          continue;
+        }
+        const { desde, hasta } = searchConsole.periodoDelInforme({ desde: a.desde, hasta: a.hasta, ultimoDia: estado.ultimo_dia });
+        if (desde > hasta) {
+          campus.push({ ...entrada, aviso: `el último día guardado es ${estado.ultimo_dia}, anterior a «desde» (${desde})`, ultimo_dia: estado.ultimo_dia });
+          continue;
+        }
+        const informe = await conTope(googleAnalytics.informeGa4(projectId, desde, hasta, {
+          limite: a.limite,
+          comparar: a.comparar_con_periodo_anterior !== false,
+        }), TOPE_INFORME_MS, 'informe_ga4');
+        campus.push({
+          ...entrada,
+          ultimo_dia: estado.ultimo_dia,
+          ultima_sincronizacion: estado.ultima_sincronizacion,
+          ...(estado.estado_sincronizacion === 'error' ? { aviso: 'la última sincronización falló: los datos pueden estar atrasados' } : {}),
+          ...informe,
+        });
+      }
+      return { desde: a.desde || null, hasta: a.hasta || null, campus };
     },
   },
   {

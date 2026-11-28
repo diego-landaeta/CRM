@@ -36,6 +36,7 @@ import { logger } from '../../shared/utils/logger.js';
 import {
   cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno, esRolDeTutora,
   conversacionesSinResponder,
+  esRolExtraDeTutora, modosDeGrupoDelCurso, modoDeLaTarea, SIN_GRUPOS, GRUPOS_VISIBLES,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 import { peticionCerrada } from '../../shared/services/moodle.limitador.js';
@@ -59,22 +60,67 @@ export const paralelo = () => {
  */
 const CURSOS_POR_TANDA = 10;
 
-/** Quien tiene un rol del equipo no es alumno; el resto sí (vive en moodle.client.js). */
+/** Quien tiene algún rol que no es del equipo es alumno (vive en moodle.client.js). */
 export { esAlumno };
 
+/** Roles que de serie tienen «ver todos los grupos» (`moodle/site:accessallgroups`). */
+const VEN_TODOS_LOS_GRUPOS = new Set(['editingteacher', 'manager']);
+
 /**
- * Los alumnos que le tocan a la profesora `yo` en ese curso. Una profesora SIN permiso de
- * edición que está en algún grupo ve solo a los de sus grupos (lo que Moodle le enseña con
- * grupos separados: de serie no tiene «ver todos los grupos»). Con permiso de edición, o
- * sin grupo, todos. Al poner la nota, el plugin lo vuelve a mirar con los permisos exactos.
+ * ¿Ese rol ve todos los grupos? Los de serie, salvo que el campus lo haya puesto en
+ * `MOODLE_ROLES_TUTORA` (ISEIE: `manager`): ese rol cuenta como tutora, no como quien ve
+ * a todos; si está en algún grupo, se recorta como a una profesora sin edición (nunca
+ * enseñar de más; al poner la nota, el plugin mira los permisos exactos).
  */
-export function alumnosDe(gente, yo) {
+export const veTodosLosGrupos = (rol) => VEN_TODOS_LOS_GRUPOS.has(rol) && !esRolExtraDeTutora(rol);
+
+/**
+ * ¿Le pueden recortar los grupos? Solo a una profesora SIN permiso de edición (de serie no
+ * tiene «ver todos los grupos») que está en algún grupo. Sin grupo, Moodle le deja el grupo
+ * activo en 0 y le enseña a todos.
+ */
+export const recortadaPorGrupos = (yo) => !yo.roles.some(veTodosLosGrupos) && (yo.grupos || []).length > 0;
+
+/**
+ * Los alumnos que le tocan a la profesora `yo`, como se los enseña Moodle (#1062): quien
+ * puede entregar (`esAlumno`, la aproximación a `mod/assign:submit`) y, si los grupos la
+ * recortan (`recortadaPorGrupos`) y el modo es de GRUPOS SEPARADOS, solo los de sus grupos.
+ * Sin grupos o con grupos visibles, Moodle le enseña a todos y el plugin le deja calificarlos.
+ * `modo`: el de Moodle (SIN_GRUPOS, GRUPOS_SEPARADOS, GRUPOS_VISIBLES); null = no se sabe, y
+ * entonces se recorta como con grupos separados (nunca enseñar de más). Al poner la nota, el
+ * plugin lo vuelve a mirar con los permisos exactos.
+ */
+export function alumnosDe(gente, yo, { modo = null } = {}) {
   const alumnos = gente.filter((g) => g.id !== yo.id && esAlumno(g));
-  const veTodos = yo.roles.some((r) => r === 'editingteacher' || r === 'manager');
-  const misGrupos = new Set(yo.grupos || []);
-  if (veTodos || misGrupos.size === 0) return alumnos;
+  if (!recortadaPorGrupos(yo) || modo === SIN_GRUPOS || modo === GRUPOS_VISIBLES) return alumnos;
+  const misGrupos = new Set(yo.grupos);
   return alumnos.filter((a) => (a.grupos || []).some((x) => misGrupos.has(x)));
 }
+
+/**
+ * Lo que ve la profesora `yo` en un curso: los alumnos del curso (con el modo de grupo del
+ * curso, el de su lista de participantes y del informe de calificación) y los de cada tarea
+ * (`deLaTarea(cmid)`, con el modo de la tarea: el de «Necesita calificación»). Solo pregunta
+ * a Moodle los modos si los grupos la pueden recortar; si no, son todos.
+ */
+export async function vistaDeLaProfesora(conexion, cursoId, gente, yo, opciones) {
+  if (!recortadaPorGrupos(yo)) {
+    const todos = alumnosDe(gente, yo);
+    return { alumnos: todos, deLaTarea: () => todos };
+  }
+  const modos = await modosDeGrupoDelCurso(conexion, cursoId, opciones);
+  const alumnos = alumnosDe(gente, yo, { modo: modos.curso });
+  const porModo = new Map([[modos.curso, alumnos]]);
+  return {
+    alumnos,
+    deLaTarea: (cmid) => {
+      const m = modoDeLaTarea(modos, cmid);
+      if (!porModo.has(m)) porModo.set(m, alumnosDe(gente, yo, { modo: m }));
+      return porModo.get(m);
+    },
+  };
+}
+
 /** La copia de dos minutos, por tutora y campus: `${tutorId}:${projectId}` → { at, datos }. */
 const cache = new Map();
 
@@ -246,9 +292,10 @@ async function unCampus(tutorId, c, { conProgreso = true, conMensajes = true, ..
       const gente = await matriculadosDe(conexion, curso.id, opciones);
       const yo = gente.find((g) => g.id === c.moodleId);
       if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) return null;
-      return { ...curso, alumnos: alumnosDe(gente, yo), error: null };
+      const { alumnos, deLaTarea } = await vistaDeLaProfesora(conexion, curso.id, gente, yo, opciones);
+      return { ...curso, alumnos, deLaTarea, error: null };
     } catch (err) {
-      return { ...curso, alumnos: [], error: mensaje(err, 'No se han podido leer sus alumnos.') };
+      return { ...curso, alumnos: [], deLaTarea: () => [], error: mensaje(err, 'No se han podido leer sus alumnos.') };
     }
   });
   const imparte = conGente.filter(Boolean);
@@ -275,9 +322,11 @@ async function unCampus(tutorId, c, { conProgreso = true, conMensajes = true, ..
     const susMensajes = mensajes.filter((m) => alumnos.has(m.alumnoId) && !mensajesUsados.has(m.conversacionId));
     susMensajes.forEach((m) => mensajesUsados.add(m.conversacionId));
     const susTareas = (tareas.get(curso.id) || []).map((t) => {
-      const sin = (entregas.get(t.id) || []).filter((e) => alumnos.has(e.alumnoId))
+      // Los de la tarea, con su modo de grupo: puede no ser el del curso (#1062).
+      const deLaTarea = new Map(curso.deLaTarea(t.cmid).map((a) => [a.id, a]));
+      const sin = (entregas.get(t.id) || []).filter((e) => deLaTarea.has(e.alumnoId))
         .map((e) => ({
-          ...e, alumno: alumnos.get(e.alumnoId)?.nombre || null,
+          ...e, alumno: deLaTarea.get(e.alumnoId)?.nombre || null,
           // Esa entrega, abierta en el calificador de Moodle.
           corregirUrl: `${url}/mod/assign/view.php?id=${t.cmid}&action=grader&userid=${e.alumnoId}`,
         }));
@@ -342,7 +391,7 @@ export async function tareasPorTandas(conexion, cursoIds, opciones) {
     const tanda = cursoIds.slice(i, i + CURSOS_POR_TANDA);
     try {
       const t = await tareasDeCursos(conexion, tanda, opciones);
-      const e = await entregasSinCorregir(conexion, [...t.values()].flat().map((x) => x.id), opciones);
+      const e = await entregasSinCorregir(conexion, [...t.values()].flat(), opciones);
       for (const [k, v] of t) tareas.set(k, v);
       for (const id of t.sinPermiso || []) sinPermiso.add(id);
       for (const [k, v] of e) entregas.set(k, v);
@@ -434,8 +483,13 @@ export function campusElegidos(suyos, pedidos) {
  * Todo «Mi campus» de una tutora. Con `refrescar`, sin la copia de dos minutos. Con
  * `campus` (ids de proyecto), solo esos campus suyos: lo demás ni se lee de Moodle.
  */
-export async function miCampus(tutorId, { refrescar = false, campus: pedidos = null, ...opciones } = {}) {
-  const suyos = await campusDeLaTutora(tutorId);
+export async function miCampus(tutorId, { refrescar = false, campus: pedidos = null, soloEn = null, ...opciones } = {}) {
+  // `soloEn` (supervisión de tutores, 26/11/2026): los campus de QUIEN MIRA. No es un
+  // filtro que se pueda saltar como `campus`: lo que no está ahí no existe para él, ni
+  // en el selector ni en lo que tiene por desarrollar. null = sin recorte.
+  const limite = Array.isArray(soloEn) ? new Set(soloEn.map(Number)) : null;
+  const dentro = (projectId) => !limite || (projectId != null && limite.has(Number(projectId)));
+  const suyos = (await campusDeLaTutora(tutorId)).filter((c) => dentro(c.projectId));
   const { elegidos, filtro } = campusElegidos(suyos, pedidos);
   const campus = [];
   let leidoAt = null;
@@ -455,9 +509,11 @@ export async function miCampus(tutorId, { refrescar = false, campus: pedidos = n
     if (leidoAt === null || entrada.at < leidoAt) leidoAt = entrada.at;
   }
   const pendientes = (await pendientesDeDesarrollar(tutorId))
-    .filter((p) => !filtro || p.projectId == null || filtro.has(p.projectId));
+    .filter((p) => !filtro || p.projectId == null || filtro.has(p.projectId))
+    .filter((p) => !limite || p.projectId == null || dentro(p.projectId));
   const sinConectar = (await campusSinConectar(tutorId))
-    .filter((s) => !filtro || filtro.has(s.projectId));
+    .filter((s) => !filtro || filtro.has(s.projectId))
+    .filter((s) => dentro(s.projectId));
   return sinLasYaAtendidas(tutorId, {
     leidoAt: new Date(leidoAt ?? Date.now()).toISOString(),
     campus,

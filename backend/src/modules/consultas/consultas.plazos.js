@@ -23,6 +23,9 @@
       tocar «Mi carga de trabajo». Correo y campana, y no se repite hasta que
       pase otra semana.
 
+  Y se retiran solos (#1197, consultas.avisosDePlazo.js): al responder o cerrar la
+  consulta, y en cada vuelta los que ya no aplican.
+
   «Una vez por espera»: si el alumno vuelve a escribir, la espera empieza de
   nuevo (`espera_desde`) y se vuelve a avisar.
 
@@ -40,7 +43,8 @@ import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import { AVISO_CONSULTA_FUERA_DE_PLAZO } from './consultas.avisosCorreo.js';
 import { PLAZO_HORAS } from './consultas.model.js';
-import { DIAS_CARGA } from './consultas.carga.js';
+import { DIAS_CARGA, retirarAvisosDeCarga, cargaAlDia } from './consultas.carga.js';
+import { retirarAvisosQueSobran } from './consultas.avisosDePlazo.js';
 
 /** Qué parte del plazo tiene que pasar para recordárselo al tutor: la del ámbar del semáforo. */
 export const PARTE_DEL_PLAZO = 0.75;
@@ -225,6 +229,8 @@ export async function revisarPlazos({
 } = {}) {
   const r = { recordatorios: 0, fueraDePlazo: 0, errores: 0 };
   const umbral = umbralesDeAviso(env);
+  // Primero, lo que ya no pide nada (#1197): respondidas, cerradas, otra espera, reasignadas.
+  r.retirados = await retirarAvisosQueSobran({ ahora, projectIds, umbral });
   for (const c of await cercaDelPlazo(ahora, projectIds, umbral.recordatorio)) {
     try { await recordarAlTutor(c, enviar); r.recordatorios += 1; } catch (err) {
       r.errores += 1;
@@ -302,7 +308,9 @@ export async function recordarCargas({ ahora = new Date(), enviar = sendEmail, t
     const texto = t.ultima
       ? `Hace más de ${DIAS_CARGA} días que no la actualizas.`
       : 'Aún no la has indicado.';
-    await notifyUsers({
+    // Justo antes de avisar, otra vez en la base: puede haberla guardado mientras tanto.
+    if (await cargaAlDia(Number(t.id), ahora)) continue;
+    const nuevo = await notifyUsers({
       targetUserIds: [Number(t.id)],
       type: 'carga_desactualizada',
       title: 'Actualiza tu carga de trabajo',
@@ -310,6 +318,16 @@ export async function recordarCargas({ ahora = new Date(), enviar = sendEmail, t
       link_path: '/consultas/carga',
       metadata: { tutor_id: Number(t.id) },
     });
+    // Primero el nuevo y luego retirar: si el nuevo no se crea, el anterior se queda.
+    if (nuevo) {
+      if (await cargaAlDia(Number(t.id), ahora)) {
+        // La ha guardado mientras se creaba el aviso: sobran todos, también este.
+        await retirarAvisosDeCarga(Number(t.id), 'actualizada', ahora);
+        continue;
+      }
+      // El de la semana pasada, si no lo atendió, lo sustituye este: uno solo en la campana.
+      await retirarAvisosDeCarga(Number(t.id), 'sustituido', ahora, { menos: Number(nuevo.id) });
+    }
     if (NO_ESCRIBIR_A_TUTORES) {
       r.frenados += 1;
       logger.info({ tutorId: t.id }, 'consultas: recordatorio de carga sin enviar por correo (freno de correos a tutores)');

@@ -11,11 +11,22 @@ import { z } from 'zod';
 
 export const TIPOS_FORMACION = ['curso', 'diplomado', 'master'];
 
+/**
+ * El `orden` de un módulo según su posición en la lista (0, 1, 2…): 1, 2, 3…, como las
+ * secciones de Moodle, donde la 0 es «General» y el módulo N va en la sección N. Todos
+ * los que escriben `product_modules.orden` lo sacan de aquí: la ficha de la formación
+ * los guardaba 0…n-1 y el temario de la web 1…n, y cada «Guardar» los movía (CRM#1215).
+ */
+export const PRIMER_ORDEN = 1;
+export const ordenDeLaPosicion = (i) => i + PRIMER_ORDEN;
+
 // Mismos topes que valida Certifex al imprimir el diploma (certifex.programa.js):
 // pasarse aquí sería guardar algo que luego no se puede emitir.
 export const MAX_HORAS = 5000;
 export const MAX_MODULOS = 100;
 export const MAX_HORAS_MODULO = 2000;
+// El mismo tope que el plugin del CRM en Moodle (1.12.0, CRM#1124): diez años.
+export const MAX_DIAS_DESBLOQUEO = 3650;
 
 const vacioEsNulo = (v) => (v === '' || (typeof v === 'number' && Number.isNaN(v)) ? null : v);
 const fecha = z.preprocess(vacioEsNulo,
@@ -27,6 +38,13 @@ const moduloSchema = z.object({
   descripcion: z.preprocess(vacioEsNulo, z.string().max(20000, 'El temario de un módulo no puede pasar de 20.000 caracteres').nullable().optional()),
   horas: z.preprocess(vacioEsNulo, z.coerce.number().int('Las horas de un módulo van sin decimales')
     .min(0, 'Las horas no pueden ser negativas').max(MAX_HORAS_MODULO, `Un módulo no puede pasar de ${MAX_HORAS_MODULO} horas`).nullable().optional()),
+  // «Se desbloquea a los … días» (CRM#1124): vacío o 0 = desde el principio. Sin la clave, se
+  // queda lo guardado (la pantalla solo la manda con la fase 2 de Moodle encendida). Un texto que
+  // no es número («abc») se dice en castellano, no con el «Expected number, received nan» de Zod.
+  dias_desbloqueo: z.preprocess((v) => { const x = vacioEsNulo(v); return x === 0 || x === '0' ? null : x; },
+    z.coerce.number({ invalid_type_error: 'Los días para desbloquear un módulo tienen que ser un número' }).int('Los días para desbloquear un módulo van sin decimales')
+      .min(1, 'Los días para desbloquear no pueden ser negativos')
+      .max(MAX_DIAS_DESBLOQUEO, `Un módulo no puede desbloquearse a más de ${MAX_DIAS_DESBLOQUEO} días`).nullable().optional()),
 });
 
 const campos = {

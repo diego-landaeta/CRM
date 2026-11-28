@@ -23,12 +23,14 @@ import client from '@/shared/api/client';
 import {
   diplomasApi, emisionesApi,
   type CambiosSolicitud, type CampusCertifex, type CatalogoDelCampus, type ConexionCertifex, type CursoCertifex, type Diploma, type FiltroAviso,
-  type PestanaDiplomas, type ProgramaDelCrm, type ProgramaOficial, type ResultadoAprobarEmitir, type ResumenDiplomas, type Solicitud, type Terminado,
+  type PestanaDiplomas, type ProgramaDelCrm, type ProgramaOficial, type RespuestaAvisosLote, type ResultadoAprobarEmitir, type ResumenDiplomas, type Solicitud, type Terminado,
 } from '../api/certifex.api';
 import {
   Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
 import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
+import { contarFuera, errorDeTanda, motivoSinEnviar, TANDA_ENVIO_LOTE, textoFuera, textoMotivos, TOPE_ENVIO_LOTE } from '../components/envioEnLote';
+import { dia, EtiquetaDiploma, leerConfirmacion } from '@/modules/diploma-confirmacion/components/EstadoDelDiploma';
 
 /**
  * Certifex · Diplomas (#272): lo que los alumnos piden desde Moodle y los diplomas ya
@@ -134,14 +136,36 @@ const notaTexto = (nota: number | null, umbral: number | null) => (nota == null
   ? '—'
   : `${nota.toLocaleString('es', { maximumFractionDigits: 2 })}${umbral != null ? ` · aprobado desde ${umbral.toLocaleString('es', { maximumFractionDigits: 2 })}` : ''}`);
 
-type Fallo = { quien: string; error: string };
+/** `n`: cuántos diplomas cuenta la línea («15 más: sin intentar»); sin él, uno. */
+type Fallo = { quien: string; error: string; n?: number };
+/** Los diplomas de una lista de fallos, no sus líneas (QA de la #1201). */
+const cuantos = (fs: Fallo[]) => fs.reduce((t, f) => t + (f.n ?? 1), 0);
+
+/**
+ * #1135 (QA del 26/11): a quien se le pidieron los datos y aún no contestó (o corrigió y su
+ * corrección no se ha pasado a Certifex) no se le ofrece «Aprobar y emitir», ni de uno en uno
+ * ni en lote. La casilla se puede marcar (para rechazar en lote), pero el lote lo deja fuera y lo
+ * dice. El servidor lo bloquea igual (`bloqueosDeConfirmacion`); esto lo dice antes.
+ */
+type FueraPorConfirmacion = { alumno: number; sinPasar: number };
+const esperaAlAlumno = (c: Solicitud) => {
+  const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
+  return !!datos && !datos.puedeEmitir;
+};
+const textoFueraPorConfirmacion = ({ alumno, sinPasar }: FueraPorConfirmacion) => [
+  alumno > 0 && `${alumno} ${alumno === 1 ? 'espera' : 'esperan'} al alumno: no se ${alumno === 1 ? 'emite' : 'emiten'}`,
+  sinPasar > 0 && `${sinPasar} con datos corregidos sin pasar a Certifex: no se ${sinPasar === 1 ? 'emite' : 'emiten'}`,
+].filter(Boolean).join(' · ');
+
 type Dialogo =
   | null
   // `sinDni`: las que se quedaron fuera por no tener DNI (se dice en la confirmación).
-  | { tipo: 'aprobarEmitir'; ids: number[]; sinDni?: number }
+  // `esperando`: las que se quedaron fuera por esperar al alumno (#1135, `esperaAlAlumno`).
+  | { tipo: 'aprobarEmitir'; ids: number[]; sinDni?: number; esperando?: FueraPorConfirmacion }
   | { tipo: 'emitir'; ids: number[]; sinDni?: number }
   | { tipo: 'rechazar'; ids: number[] }
-  | { tipo: 'avisos'; exps: string[]; reenvio: boolean; fuera?: boolean }
+  // `lote` (#1201): «Enviar al alumno (n)» de Emitidos; `omitidos`, lo que se quedó fuera y por qué.
+  | { tipo: 'avisos'; exps: string[]; reenvio: boolean; fuera?: boolean; lote?: boolean; omitidos?: string }
   | { tipo: 'avisoRechazo'; ids: number[] }
   | { tipo: 'revocar'; d: Diploma }
   // #624: un diploma de «Emitidos, falta enviarlos» (la fila trae la matrícula y el diploma).
@@ -538,11 +562,15 @@ function TablaDesplazable({ children, className }: { children: React.ReactNode; 
   );
 }
 
-/** La cabecera de la columna de acciones, fija a la derecha y opaca (lo que se desliza pasa por debajo). */
-const ACCIONES_TH = 'sticky right-0 z-[1] border-l border-border bg-card bg-gradient-to-r from-muted/40 to-muted/40';
+/**
+ * La cabecera de la columna de acciones, fija a la derecha y opaca (lo que se desliza pasa por debajo).
+ * Solo desde 640 px (#1201): en el móvil, las acciones de Emitidos miden más que la pantalla y,
+ * fijas, tapaban la fila entera, casilla incluida (no se podía elegir nada para enviar en lote).
+ */
+const ACCIONES_TH = 'sm:sticky sm:right-0 sm:z-[1] sm:border-l border-border bg-card bg-gradient-to-r from-muted/40 to-muted/40';
 /** Su celda: opaca, con el color de la fila (elegida o al pasar por encima; el `tr` lleva `group`). */
 function accionesTd(elegida = false) {
-  return cn('sticky right-0 z-[1] border-l border-border bg-card',
+  return cn('sm:sticky sm:right-0 sm:z-[1] sm:border-l border-border bg-card',
     elegida ? 'bg-gradient-to-r from-primary/5 to-primary/5' : 'group-hover:bg-gradient-to-r group-hover:from-muted/40 group-hover:to-muted/40');
 }
 
@@ -929,9 +957,16 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     return n;
   });
   // El DNI es obligatorio para emitir (Diego, 20/10): lo que no lo tiene no entra en un lote.
+  // Lo que espera al alumno (#1135) tampoco: se puede elegir para rechazar, pero no se emite.
   const elegidasPendientes = pestana === 'pendientes' ? solicitudes.filter((c) => elegidas.has(String(c.matriculaId))) : [];
-  const elegidasConDni = elegidasPendientes.filter(tieneDni).map((c) => c.matriculaId);
-  const elegidasSinDni = elegidasPendientes.length - elegidasConDni.length;
+  const elegidasEsperando = elegidasPendientes.filter(esperaAlAlumno);
+  const fueraPorConfirmacion: FueraPorConfirmacion = {
+    alumno: elegidasEsperando.filter((c) => c.confirmacion?.estado === 'pendiente').length,
+    sinPasar: elegidasEsperando.filter((c) => c.confirmacion?.estado !== 'pendiente').length,
+  };
+  const elegidasEmitibles = elegidasPendientes.filter((c) => !esperaAlAlumno(c));
+  const elegidasConDni = elegidasEmitibles.filter(tieneDni).map((c) => c.matriculaId);
+  const elegidasSinDni = elegidasEmitibles.length - elegidasConDni.length;
   const sinEmitirConDni = despues.sinEmitir.filter(tieneDni);
   const sinEmitirSinDni = despues.sinEmitir.length - sinEmitirConDni.length;
   const conFechas = pestana !== 'terminados';
@@ -1037,6 +1072,53 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     toast(activo
       ? { title: `${enviados} ${enviados === 1 ? 'diploma enviado' : 'diplomas enviados'} al alumno` }
       : { title: 'Aprobado, pero el correo está apagado', description: 'No ha salido ningún correo: el servidor de Certifex tiene el envío apagado.', variant: 'destructive' });
+  }, 'No se pudo enviar');
+
+  /**
+   * #1201: «Enviar al alumno (n)» desde Emitidos. Por tandas de 10 al envío en lote del servidor,
+   * que deja fuera (y dice por qué) lo que ya no toca. Si una tanda falla entera (Certifex no
+   * responde), se apunta en las suyas y el lote sigue con la siguiente. Con el correo de Certifex
+   * apagado se para ahí: aprobar más sin que salga ningún correo no sirve.
+   */
+  const enviarEnLote = (exps: string[]) => ejecutar(async () => {
+    setLote({ hechas: 0, total: exps.length });
+    const res: RespuestaAvisosLote['resultados'] = [];
+    const fuera: Fallo[] = [];
+    let apagado = false;
+    let hechas = 0;
+    while (hechas < exps.length && !apagado) {
+      const tanda = exps.slice(hechas, hechas + TANDA_ENVIO_LOTE);
+      try {
+        const r = (await diplomasApi.avisosLote(tanda)).data;
+        res.push(...r.resultados);
+        fuera.push(...r.omitidos.map((o) => ({ quien: nombreDe(o.nexpediente), error: o.error })));
+        if (r.correoActivo === false) apagado = true;
+      } catch (e) {
+        // Sin respuesta clara, «puede que algunos se hayan enviado» (`errorDeTanda`). Al acabar,
+        // `ejecutar` recarga la lista sola: se ve lo que de verdad salió.
+        const error = errorDeTanda(e);
+        fuera.push(...tanda.map((n) => ({ quien: nombreDe(n), error })));
+      }
+      hechas += tanda.length;
+      setLote({ hechas, total: exps.length });
+    }
+    const sinIntentar = exps.length - hechas;
+    const enviados = res.filter((r) => r.resultado === 'enviado').length;
+    const malos: Fallo[] = [
+      ...res.filter((r) => r.resultado !== 'enviado' && r.resultado !== 'correo_apagado')
+        .map((r) => ({ quien: nombreDe(r.nexpediente), error: r.error ?? (r.resultado ? `Aviso aprobado, pero ${ROTULO_AVISO[r.resultado]}` : 'Error') })),
+      ...fuera,
+      ...(sinIntentar ? [{ quien: `${sinIntentar} más`, error: 'Sin intentar: el correo de Certifex está apagado.', n: sinIntentar }] : []),
+    ];
+    setCorreoApagado(apagado);
+    setFallos(malos);
+    toast(apagado
+      ? { title: 'Aprobado, pero el correo está apagado', description: `No ha salido ningún correo: el servidor de Certifex tiene el envío apagado.${sinIntentar ? ` ${sinIntentar} no se han intentado.` : ''}`, variant: 'destructive' }
+      : {
+        title: `${enviados} ${enviados === 1 ? 'diploma enviado' : 'diplomas enviados'} al alumno`,
+        description: malos.length ? `${cuantos(malos)} sin enviar: el motivo, en pantalla.` : undefined,
+        variant: enviados ? undefined : 'destructive',
+      });
   }, 'No se pudo enviar');
 
   const avisarRechazo = (ids: number[]) => ejecutar(async () => {
@@ -1263,11 +1345,14 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
 
   // En Revertidos (#624) las fechas son las de la reversión (es por lo que filtra el servidor).
   const fechaRotulo = pestana === 'revertidos' ? 'Revertido' : pestana === 'enviados' || pestana === 'revocados' ? 'Emitido' : 'Solicitado';
-  // En bloque solo lo emitido por el CRM: lo de fuera se reenvía de uno en uno, a propósito.
-  const enviables = [...elegidas].filter((k) => diplomas.some((d) => d.nexpediente === k && (delCrm(d) || d.aviso)));
-  const conAviso = enviables.filter((k) => diplomas.find((d) => d.nexpediente === k)?.aviso).length;
-  const reenvioEnBloque = conAviso > 0;
-  const rotuloEnBloque = conAviso === 0 ? 'Enviar al alumno' : conAviso === enviables.length ? 'Reenviar' : 'Enviar o reenviar';
+  // #1201: en lote, como «Aprobar y emitir (n)»: lo que no se puede enviar (ya enviado, sin correo
+  // en la ficha, emitido fuera del CRM, revocado, revertido) se queda fuera y se dice por qué. Lo
+  // de fuera, y volver a mandar lo ya enviado, va de uno en uno («Reenviar» en su fila).
+  const elegidosEmitidos = pestana === 'enviados' ? diplomas.filter((d) => elegidas.has(d.nexpediente)) : [];
+  const enviables = elegidosEmitidos.filter((d) => !motivoSinEnviar(d)).map((d) => d.nexpediente);
+  const fueraDelEnvio = contarFuera(elegidosEmitidos);
+  const textoFueraDelEnvio = textoFuera(fueraDelEnvio);
+  const enviablesDeMas = enviables.length > TOPE_ENVIO_LOTE;
 
   return (
     <div className="space-y-5 pb-24">
@@ -1332,7 +1417,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="font-medium text-destructive-soft-foreground">
-              {fallos.length} {fallos.length === 1 ? 'no se ha podido completar' : 'no se han podido completar'}
+              {cuantos(fallos)} {cuantos(fallos) === 1 ? 'no se ha podido completar' : 'no se han podido completar'}
             </span>
             <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFallos([]); setHechos([]); }}>Cerrar</button>
           </div>
@@ -1597,6 +1682,10 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                   <tbody className="divide-y divide-border">
                     {solicitudes.map((c) => {
                       const k = String(c.matriculaId);
+                      // #1135: a quien ya se le pidieron los datos no se le ofrece «Aprobar y emitir»
+                      // como a los demás: se dice que se espera al alumno (y hasta cuándo).
+                      const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
+                      const esperando = !!datos && !datos.puedeEmitir;
                       return (
                         <tr key={k} className={cn('group align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                           {!soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
@@ -1605,6 +1694,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                             <CorreoDelAlumno c={c} />
                             <div className="flex flex-wrap items-center gap-1.5">
                               {FIRMA_EN_DIPLOMA && administra && <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />}
+                              {datos && <EtiquetaDiploma lectura={datos} className="mt-1" />}
                               {soloLectura
                                 ? (tieneDni(c)
                                   ? <div className="mt-1"><Etiqueta tono="neutral">DNI {c.titular.dni}</Etiqueta></div>
@@ -1626,12 +1716,27 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           {!soloLectura && (
                             <td className={cn('px-2 py-3 pr-4', accionesTd(elegidas.has(k)))}>
                               <div className="flex flex-col items-stretch gap-1.5">
-                                <Button size="sm" disabled={trabajando || !tieneDni(c)} title={tieneDni(c) ? undefined : TITULO_SIN_DNI}
-                                  aria-describedby={tieneDni(c) ? undefined : `diplomas-sin-dni-${k}`}
-                                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: [c.matriculaId] })}>
-                                  <SealCheck size={14} className="mr-1.5" /> Aprobar y emitir
-                                </Button>
-                                {!tieneDni(c) && (
+                                {esperando ? (
+                                  <div role="status" data-confirmacion={c.confirmacion?.estado}
+                                    className="flex max-w-[190px] items-start gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                                    <HourglassMedium size={14} className="mt-px shrink-0 text-info" aria-hidden="true" />
+                                    <span>
+                                      <span className="block font-semibold text-foreground">
+                                        {c.confirmacion?.estado === 'pendiente' ? 'Esperando al alumno' : 'Sin pasar a Certifex'}
+                                      </span>
+                                      {c.confirmacion?.estado === 'pendiente'
+                                        ? `Datos pedidos. Hasta el ${dia(c.confirmacion.caducaEn)}.`
+                                        : 'Corrigió sus datos: pásalos antes de emitir.'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" disabled={trabajando || !tieneDni(c)} title={tieneDni(c) ? undefined : TITULO_SIN_DNI}
+                                    aria-describedby={tieneDni(c) ? undefined : `diplomas-sin-dni-${k}`}
+                                    onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: [c.matriculaId] })}>
+                                    <SealCheck size={14} className="mr-1.5" /> Aprobar y emitir
+                                  </Button>
+                                )}
+                                {!esperando && !tieneDni(c) && (
                                   <span id={`diplomas-sin-dni-${k}`} className="text-center text-[11px] font-medium text-destructive" title={TITULO_SIN_DNI}>{PON_EL_DNI}</span>
                                 )}
                                 {/* Rechazar sigue siendo de administración (22/10/2026). */}
@@ -1845,13 +1950,20 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 {/* Sin DNI no se emite: las que no lo tienen se quedan fuera, y se dice. */}
                 {elegidasSinDni > 0 && (
                   <span className="self-center text-xs font-medium text-destructive" role="status">
-                    {elegidasConDni.length === 0
+                    {elegidasConDni.length === 0 && elegidasEsperando.length === 0
                       ? 'Ninguna tiene DNI: ponlo para poder emitir'
                       : `${elegidasSinDni} sin DNI ${elegidasSinDni === 1 ? 'se queda' : 'se quedan'} fuera (es obligatorio)`}
                   </span>
                 )}
-                <Button size="sm" disabled={trabajando || elegidasConDni.length === 0} title={elegidasConDni.length === 0 ? TITULO_SIN_DNI : undefined}
-                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: elegidasConDni, sinDni: elegidasSinDni })}>
+                {/* #1135: lo que espera al alumno tampoco se emite en lote, y se dice. */}
+                {elegidasEsperando.length > 0 && (
+                  <span className="self-center text-xs font-medium text-muted-foreground" role="status" data-fuera="esperando">
+                    {textoFueraPorConfirmacion(fueraPorConfirmacion)}
+                  </span>
+                )}
+                <Button size="sm" disabled={trabajando || elegidasConDni.length === 0}
+                  title={elegidasConDni.length > 0 ? undefined : elegidasSinDni > 0 ? TITULO_SIN_DNI : 'Esperan al alumno: se podrán emitir cuando conteste o venza el plazo.'}
+                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: elegidasConDni, sinDni: elegidasSinDni, esperando: fueraPorConfirmacion })}>
                   <SealCheck size={14} className="mr-1.5" />
                   {trabajando && lote ? `Emitiendo ${lote.hechas} de ${lote.total}…` : `Aprobar y emitir (${elegidasConDni.length})`}
                 </Button>
@@ -1863,11 +1975,27 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
               </Button>
             )}
             {pestana === 'enviados' && (
-              <Button size="sm" disabled={trabajando || enviables.length === 0} onClick={() => abrir({ tipo: 'avisos', exps: enviables, reenvio: reenvioEnBloque })}
-                title={enviables.length < elegidas.size ? 'Lo emitido fuera del CRM no entra en un envío en bloque: reenvíalo de uno en uno.' : undefined}>
-                <PaperPlaneTilt size={14} className="mr-1.5" />
-                {trabajando && lote ? `Enviando ${lote.hechas} de ${lote.total}…` : `${rotuloEnBloque} (${enviables.length})`}
-              </Button>
+              <>
+                {/* #1201: lo que no se puede enviar se queda fuera del lote, y se dice cuántos y por qué. */}
+                {textoFueraDelEnvio && (
+                  <span className="self-center text-xs font-medium text-muted-foreground" role="status" data-fuera="envio">
+                    {textoFueraDelEnvio}
+                  </span>
+                )}
+                {enviablesDeMas && (
+                  <span className="self-center text-xs font-medium text-destructive" role="status">
+                    Máximo {TOPE_ENVIO_LOTE} por vez
+                  </span>
+                )}
+                <Button size="sm" disabled={trabajando || enviables.length === 0 || enviablesDeMas}
+                  title={enviables.length === 0
+                    ? 'Ninguno de los elegidos se puede enviar en lote: el motivo, al lado. Para reenviar uno, «Reenviar» en su fila.'
+                    : enviablesDeMas ? `Máximo ${TOPE_ENVIO_LOTE} por vez: quita algunos de la selección.` : undefined}
+                  onClick={() => abrir({ tipo: 'avisos', exps: enviables, reenvio: false, lote: true, omitidos: textoMotivos(fueraDelEnvio) })}>
+                  <PaperPlaneTilt size={14} className="mr-1.5" />
+                  {trabajando && lote ? `Enviando ${lote.hechas} de ${lote.total}…` : `Enviar al alumno (${enviables.length})`}
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -1904,6 +2032,17 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
             {(dialogo?.tipo === 'aprobarEmitir' || dialogo?.tipo === 'emitir') && !!dialogo.sinDni && (
               <strong className="mt-2 block text-destructive">
                 {dialogo.sinDni} sin DNI no {dialogo.sinDni === 1 ? 'entra' : 'entran'}: el DNI es obligatorio en el diploma. Pónselo y emítelo después.
+              </strong>
+            )}
+            {/* #1135: lo que espera al alumno se queda fuera del lote, y se dice aquí también. */}
+            {dialogo?.tipo === 'aprobarEmitir' && !!dialogo.esperando?.alumno && (
+              <strong className="mt-2 block text-foreground" data-fuera="esperando">
+                {textoFueraPorConfirmacion({ alumno: dialogo.esperando.alumno, sinPasar: 0 })}. Se podrá emitir cuando conteste o venza el plazo.
+              </strong>
+            )}
+            {dialogo?.tipo === 'aprobarEmitir' && !!dialogo.esperando?.sinPasar && (
+              <strong className="mt-2 block text-foreground" data-fuera="sin-pasar">
+                {textoFueraPorConfirmacion({ alumno: 0, sinPasar: dialogo.esperando.sinPasar })}. Pasa sus datos antes de emitir.
               </strong>
             )}
             {/* #624, prevención: lo que saldría «Con lo de Moodle», dicho antes y con «Editar» a mano. */}
@@ -1990,7 +2129,15 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
           : ''}
         message={dialogo?.tipo === 'avisos' && dialogo.fuera
           ? <>Este diploma se emitió <strong>fuera del CRM</strong> y nadie lo tiene pendiente de enviar. Si lo reenvías, sale un correo al alumno con su diploma en PDF y el enlace de verificación. Queda registrado a tu nombre.</>
-          : <>Sale un correo a cada alumno con su diploma en PDF y el enlace de verificación. Hazlo después de comprobar el PDF. Queda registrado a tu nombre.</>}
+          : (
+            <>
+              Sale un correo a cada alumno con su diploma en PDF y el enlace de verificación. Hazlo después de comprobar el PDF. Queda registrado a tu nombre.
+              {/* #1201: lo que se quedó fuera del lote, también aquí. */}
+              {dialogo?.tipo === 'avisos' && dialogo.omitidos && (
+                <span className="mt-2 block" data-fuera="envio-dialogo">Se quedan fuera, y no se les manda nada: {dialogo.omitidos}.</span>
+              )}
+            </>
+          )}
         confirmLabel={dialogo?.tipo === 'avisos' && dialogo.reenvio ? 'Reenviar' : 'Enviar'}
         tone={dialogo?.tipo === 'avisos' && dialogo.fuera ? 'warning' : 'info'}
         loading={trabajando}
@@ -1998,7 +2145,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         onConfirm={() => {
           const d = dialogo;
           setDialogo(null);
-          if (d?.tipo === 'avisos') void enviarAvisos(d.exps);
+          if (d?.tipo === 'avisos') void (d.lote ? enviarEnLote(d.exps) : enviarAvisos(d.exps));
         }}
       />
       <ConfirmDialog

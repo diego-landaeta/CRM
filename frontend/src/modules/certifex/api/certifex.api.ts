@@ -1,4 +1,5 @@
 import client, { API_BASE_URL, getAccessToken } from '@/shared/api/client';
+import type { ConfirmacionDeDatos } from '@/modules/diploma-confirmacion/components/EstadoDelDiploma';
 
 /** Una consulta que llega desde la web de Certifex (migración 186). */
 export type EstadoConsulta = 'nueva' | 'en_curso' | 'resuelta' | 'spam';
@@ -351,6 +352,11 @@ export interface FirmaDelAlumno {
 
 /** Una solicitud de diploma: un candidato de Certifex que lo pidió desde Moodle. */
 export interface Solicitud extends Candidato {
+  /**
+   * Solo en Pendientes (#1135): la confirmación de datos del diploma, si ya se le pidió al
+   * alumno (en qué está). null = no se le ha pedido o la confirmación está apagada.
+   */
+  confirmacion?: ConfirmacionDeDatos | null;
   /** Solo sin diploma: el programa que se mandará al emitir. */
   programaCrm?: ProgramaDelCrm | null;
   /** Solo sin diploma: lo revisado a mano antes de aprobar. */
@@ -404,6 +410,11 @@ export interface Diploma {
   aviso: { resultado: ResultadoAviso; en: string; por: string; porNombre?: string | null } | null;
   /** El correo del alumno, al que Certifex manda el diploma (05/11/2026). Null si no se sabe. */
   titularEmail?: string | null;
+  /**
+   * #1201: Certifex tiene su matrícula y el alumno NO tiene correo (false también si no se sabe).
+   * No entra en «Enviar al alumno» en lote.
+   */
+  sinCorreo?: boolean;
   /**
    * #624: entregado para Certifex (aviso aprobado, haya salido o no, o correo enviado desde su
    * panel). Lo entregado no se revierte. Un Certifex anterior no lo manda.
@@ -494,6 +505,16 @@ export interface ResultadoAprobarEmitir {
   sinPrograma?: string;
 }
 export interface RespuestaAvisos { correoActivo: boolean; resultados: { nexpediente: string | null; ok: boolean; resultado?: ResultadoAviso; error?: string }[] }
+/** #1201: por qué un diploma no entra en un envío en lote (lo decide el servidor). */
+export type MotivoSinEnviar = 'ya_enviado' | 'entregado' | 'sin_correo' | 'fuera_del_crm' | 'revocado' | 'anulado' | 'en_curso' | 'no_encontrado';
+/**
+ * #1201: el lote de Emitidos. Lo que no toca vuelve en `omitidos`, con su motivo, y no llega a
+ * Certifex. Si no salió ninguno, `correoActivo` es null (no se preguntó).
+ */
+export interface RespuestaAvisosLote extends Omit<RespuestaAvisos, 'correoActivo'> {
+  correoActivo: boolean | null;
+  omitidos: { nexpediente: string; motivo: MotivoSinEnviar; error: string }[];
+}
 export interface RespuestaAvisosRechazo { correoActivo: boolean; resultados: { matriculaId: number | null; ok: boolean; resultado?: string; error?: string }[] }
 
 const qs = (f: object) => {
@@ -525,6 +546,8 @@ export const diplomasApi = {
   rechazar: (matriculaIds: number[], motivo: string) =>
     client.post('/certifex/diplomas/rechazar', { matriculaIds, motivo }) as R<{ resultados: ResultadoDecision[] }>,
   avisos: (nexpedientes: string[]) => client.post('/certifex/diplomas/avisos', { nexpedientes }) as R<RespuestaAvisos>,
+  /** #1201: «Enviar al alumno (n)» desde Emitidos, hasta 10 por llamada. */
+  avisosLote: (nexpedientes: string[]) => client.post('/certifex/diplomas/avisos/lote', { nexpedientes }) as R<RespuestaAvisosLote>,
   avisosRechazo: (matriculaIds: number[]) =>
     client.post('/certifex/diplomas/avisos-rechazo', { matriculaIds }) as R<RespuestaAvisosRechazo>,
   /** ¿El Certifex conectado ya revierte (su 0045)? Si no, `motivo` dice por qué (#624). */

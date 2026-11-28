@@ -269,7 +269,7 @@ const total = (r) => ({
   posicion: posicion(r?.posicion_suma, Number(r?.impresiones || 0)),
 });
 
-async function totales(projectId, desde, hasta) {
+export async function totales(projectId, desde, hasta) {
   const { rows } = await query(
     `SELECT SUM(clics)::int AS clics, SUM(impresiones)::int AS impresiones, SUM(posicion_suma) AS posicion_suma,
             COUNT(*)::int AS dias
@@ -412,4 +412,239 @@ export async function indexacion(projectId) {
     else cuenta.no_indexadas += 1;
   }
   return { ...cuenta, paginas: rows };
+}
+
+// ─── Para Claude (MCP «informe_seo») ────────────────────────────────────────
+
+/** Días del periodo por defecto: cuatro semanas, como la pantalla. */
+export const DIAS_INFORME = 28;
+
+/** Cómo está Search Console en un campus: credencial, último día guardado y última vuelta. */
+export async function estadoDelCampus(projectId) {
+  const [{ rows: [cred] }, { rows: [u] }, { rows: [s] }] = await Promise.all([
+    query(
+      `SELECT 1 AS hay FROM api_credentials
+        WHERE service = $1 AND project_id = $2 AND active = true
+          AND COALESCE(metadata->>'entorno', 'produccion') = 'produccion'
+        LIMIT 1`,
+      [SERVICIO, projectId]
+    ),
+    query(`SELECT to_char(MAX(fecha), 'YYYY-MM-DD') AS ultimo FROM gsc_diario WHERE project_id = $1`, [projectId]),
+    query(`SELECT last_synced_at, last_status FROM gsc_sincronizacion WHERE project_id = $1`, [projectId]),
+  ]);
+  return {
+    conectado: Boolean(cred?.hay),
+    ultimo_dia: u?.ultimo || null,
+    ultima_sincronizacion: s?.last_synced_at ? new Date(s.last_synced_at).toISOString() : null,
+    estado_sincronizacion: s?.last_status || null,
+  };
+}
+
+/**
+ * El periodo del informe. Sin fechas, las últimas cuatro semanas HASTA EL
+ * ÚLTIMO DÍA GUARDADO: Google va dos o tres días por detrás, y contar hasta
+ * hoy haría que todo pareciera bajar.
+ */
+export function periodoDelInforme({ desde = null, hasta = null, ultimoDia = null, ahora = new Date() } = {}) {
+  const fin = hasta || ultimoDia || haceDias(1, ahora);
+  const inicio = desde || dia(new Date(Date.parse(`${fin}T00:00:00Z`) - (DIAS_INFORME - 1) * 86400000));
+  return { desde: inicio, hasta: fin };
+}
+
+const pct = (ahora, antes) => (antes > 0 ? Number(((ahora - antes) / antes * 100).toFixed(1)) : null);
+
+/** Lo que cambia de un periodo al otro. La posición baja cuando MEJORA. */
+export function cambioEntre(actual, anterior) {
+  return {
+    clics: actual.clics - anterior.clics,
+    clics_pct: pct(actual.clics, anterior.clics),
+    impresiones: actual.impresiones - anterior.impresiones,
+    impresiones_pct: pct(actual.impresiones, anterior.impresiones),
+    ctr_puntos: actual.ctr != null && anterior.ctr != null ? Number((actual.ctr - anterior.ctr).toFixed(2)) : null,
+    posicion: actual.posicion != null && anterior.posicion != null ? Number((actual.posicion - anterior.posicion).toFixed(1)) : null,
+  };
+}
+
+const TABLA_MOVIMIENTOS = {
+  consultas: { tabla: 'gsc_consultas_diarias', clave: 'consulta' },
+  paginas: { tabla: 'gsc_paginas_diarias', clave: `host || ruta` },
+};
+
+/**
+ * Las búsquedas o las páginas que más SUBEN y más BAJAN en clics frente al
+ * periodo anterior de la misma longitud. Entran también las que desaparecen
+ * (bajan a 0) y las que aparecen (vienen de 0).
+ */
+export async function movimientos(projectId, desde, hasta, { tipo = 'consultas', limite = 10 } = {}) {
+  const t = TABLA_MOVIMIENTOS[tipo];
+  if (!t) throw new AppError(`Tipo de movimiento desconocido: ${tipo}`, 400, 'GSC_TIPO');
+  const ant = periodoAnterior(desde, hasta);
+  const { rows } = await query(
+    `WITH a AS (
+       SELECT ${t.clave} AS clave, SUM(clics)::int AS clics, SUM(impresiones)::int AS impresiones, SUM(posicion_suma) AS posicion_suma
+         FROM ${t.tabla} WHERE project_id = $1 AND fecha BETWEEN $2 AND $3 GROUP BY 1
+     ),
+     b AS (
+       SELECT ${t.clave} AS clave, SUM(clics)::int AS clics, SUM(impresiones)::int AS impresiones, SUM(posicion_suma) AS posicion_suma
+         FROM ${t.tabla} WHERE project_id = $1 AND fecha BETWEEN $4 AND $5 GROUP BY 1
+     ),
+     m AS (
+       SELECT COALESCE(a.clave, b.clave) AS clave,
+              COALESCE(a.clics, 0) AS clics, COALESCE(a.impresiones, 0) AS impresiones, a.posicion_suma,
+              COALESCE(b.clics, 0) AS clics_antes, COALESCE(b.impresiones, 0) AS impresiones_antes, b.posicion_suma AS posicion_suma_antes,
+              COALESCE(a.clics, 0) - COALESCE(b.clics, 0) AS diferencia
+         FROM a FULL JOIN b ON b.clave = a.clave
+     )
+     (SELECT 'sube' AS sentido, m.* FROM m WHERE diferencia > 0 ORDER BY diferencia DESC, impresiones DESC, clave LIMIT $6)
+     UNION ALL
+     (SELECT 'baja' AS sentido, m.* FROM m WHERE diferencia < 0 ORDER BY diferencia ASC, impresiones_antes DESC, clave LIMIT $6)`,
+    [projectId, desde, hasta, ant.desde, ant.hasta, Math.min(Math.max(Number(limite) || 10, 1), 50)]
+  );
+  const fila = (r) => {
+    const actual = total(r);
+    const antes = total({ clics: r.clics_antes, impresiones: r.impresiones_antes, posicion_suma: r.posicion_suma_antes });
+    return {
+      [tipo === 'paginas' ? 'pagina' : 'consulta']: r.clave,
+      clics: actual.clics,
+      clics_antes: antes.clics,
+      diferencia_clics: Number(r.diferencia),
+      impresiones: actual.impresiones,
+      impresiones_antes: antes.impresiones,
+      ctr: actual.ctr,
+      posicion: actual.posicion,
+      posicion_antes: antes.posicion,
+    };
+  };
+  return {
+    suben: rows.filter((r) => r.sentido === 'sube').map(fila),
+    bajan: rows.filter((r) => r.sentido === 'baja').map(fila),
+  };
+}
+
+/**
+ * Las búsquedas o las páginas con MÁS CLICS del periodo, en el mismo orden que
+ * la pantalla «Tráfico orgánico» (clics, luego impresiones). Con `anterior`
+ * (un periodo), cada fila trae lo que tenía entonces y lo que cambia; sin él,
+ * ni se mira el periodo anterior.
+ */
+export async function top(projectId, desde, hasta, { tipo = 'consultas', limite = 10, anterior = null } = {}) {
+  const t = TABLA_MOVIMIENTOS[tipo];
+  if (!t) throw new AppError(`Tipo de top desconocido: ${tipo}`, 400, 'GSC_TIPO');
+  const tope = Math.min(Math.max(Number(limite) || 10, 1), 50);
+  const { rows } = await query(
+    `WITH a AS (
+       SELECT ${t.clave} AS clave, SUM(clics)::int AS clics, SUM(impresiones)::int AS impresiones, SUM(posicion_suma) AS posicion_suma
+         FROM ${t.tabla} WHERE project_id = $1 AND fecha BETWEEN $2 AND $3 GROUP BY 1
+        ORDER BY 2 DESC, 3 DESC, 1
+        LIMIT $4
+     )
+     ${anterior
+    ? `, b AS (
+       SELECT ${t.clave} AS clave, SUM(clics)::int AS clics, SUM(impresiones)::int AS impresiones, SUM(posicion_suma) AS posicion_suma
+         FROM ${t.tabla} WHERE project_id = $1 AND fecha BETWEEN $5 AND $6 AND (${t.clave}) IN (SELECT clave FROM a) GROUP BY 1
+     )
+     SELECT a.*, b.clics AS clics_antes, b.impresiones AS impresiones_antes, b.posicion_suma AS posicion_suma_antes
+       FROM a LEFT JOIN b ON b.clave = a.clave`
+    : 'SELECT a.* FROM a'}
+      ORDER BY a.clics DESC, a.impresiones DESC, a.clave`,
+    anterior ? [projectId, desde, hasta, tope, anterior.desde, anterior.hasta] : [projectId, desde, hasta, tope]
+  );
+  return rows.map((r) => {
+    const actual = total(r);
+    const fila = { [tipo === 'paginas' ? 'pagina' : 'consulta']: r.clave, ...actual };
+    if (!anterior) return fila;
+    const antes = total({ clics: r.clics_antes, impresiones: r.impresiones_antes, posicion_suma: r.posicion_suma_antes });
+    return {
+      ...fila,
+      clics_antes: antes.clics,
+      impresiones_antes: antes.impresiones,
+      ctr_antes: antes.ctr,
+      posicion_antes: antes.posicion,
+      cambio: cambioEntre(actual, antes),
+    };
+  });
+}
+
+/** Hasta cuántos días la evolución va por semanas; a partir de ahí, por meses. */
+export const DIAS_EVOLUCION_SEMANAL = 90;
+
+const finDeTramo = (inicio, por) => {
+  const d = new Date(`${inicio}T00:00:00Z`);
+  return por === 'mes'
+    ? dia(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)))
+    : dia(new Date(d.getTime() + 6 * 86400000));
+};
+
+/**
+ * Clics e impresiones por semana (de lunes a domingo; por mes si el periodo
+ * pasa de 90 días), del sitio entero (`gsc_diario`, lo mismo que el total).
+ * Solo salen los tramos con datos, y nada pasa de `tope` (el último día
+ * guardado): la primera y la última fila pueden ser tramos incompletos, y lo
+ * dicen sus fechas y `dias_con_datos`.
+ */
+export async function evolucion(projectId, desde, hasta, { tope = null } = {}) {
+  const fin = tope && tope < hasta ? tope : hasta;
+  const largo = Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86400000) + 1;
+  const por = largo > DIAS_EVOLUCION_SEMANAL ? 'mes' : 'semana';
+  const { rows } = await query(
+    `SELECT to_char(date_trunc($4, fecha::timestamp), 'YYYY-MM-DD') AS inicio,
+            SUM(clics)::int AS clics, SUM(impresiones)::int AS impresiones, SUM(posicion_suma) AS posicion_suma,
+            COUNT(*)::int AS dias
+       FROM gsc_diario WHERE project_id = $1 AND fecha BETWEEN $2 AND $3
+      GROUP BY 1 ORDER BY 1`,
+    [projectId, desde, fin, por === 'mes' ? 'month' : 'week']
+  );
+  return {
+    por,
+    filas: rows.map((r) => {
+      const finTramo = finDeTramo(r.inicio, por);
+      return {
+        desde: r.inicio < desde ? desde : r.inicio,
+        hasta: finTramo > fin ? fin : finTramo,
+        dias_con_datos: r.dias,
+        ...total(r),
+      };
+    }),
+  };
+}
+
+/**
+ * El informe SEO de un campus: totales del periodo, su evolución, las
+ * búsquedas y páginas con más clics y, si se compara (de serie), el periodo
+ * anterior, lo que cambia y lo que más sube y baja. Con `comparar: false` el
+ * periodo anterior ni se consulta. Solo lee lo que ya guardó la
+ * sincronización: no llama a Google.
+ */
+export async function informeSeo(projectId, desde, hasta, { limite = 10, comparar = true, tope = null } = {}) {
+  const ant = comparar ? periodoAnterior(desde, hasta) : null;
+  const sinDias = ({ dias: _dias, ...resto }) => resto;
+  const [actual, evol, topConsultas, topPaginas, extra] = await Promise.all([
+    totales(projectId, desde, hasta),
+    evolucion(projectId, desde, hasta, { tope }),
+    top(projectId, desde, hasta, { tipo: 'consultas', limite, anterior: ant }),
+    top(projectId, desde, hasta, { tipo: 'paginas', limite, anterior: ant }),
+    comparar
+      ? Promise.all([
+        totales(projectId, ant.desde, ant.hasta),
+        movimientos(projectId, desde, hasta, { tipo: 'consultas', limite }),
+        movimientos(projectId, desde, hasta, { tipo: 'paginas', limite }),
+      ])
+      : null,
+  ]);
+  const informe = {
+    periodo: { desde, hasta, dias_con_datos: actual.dias },
+    total: sinDias(actual),
+    evolucion: evol,
+    consultas: { top: topConsultas },
+    paginas: { top: topPaginas },
+  };
+  if (!extra) return informe;
+  const [anterior, consultasMov, paginasMov] = extra;
+  return {
+    ...informe,
+    anterior: { ...ant, dias_con_datos: anterior.dias, ...sinDias(anterior) },
+    cambio: cambioEntre(actual, anterior),
+    consultas: { top: topConsultas, ...consultasMov },
+    paginas: { top: topPaginas, ...paginasMov },
+  };
 }

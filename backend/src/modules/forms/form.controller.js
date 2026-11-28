@@ -12,6 +12,44 @@ import { query } from '../../shared/config/db.js';
 import { countryToPrefix, phoneToCountryName } from '../../shared/utils/countryPrefix.js';
 import { logger } from '../../shared/utils/logger.js';
 import { planificarPasosDeLead } from '../proceso/proceso.model.js';
+import { limpiarFbp, deducirCanal, clicsDelOrigen, utmsDeLaDireccion, recortarUtm } from '../leads/canal.js';
+
+/**
+ * El origen de un alta por formulario o widget (#48): las UTM que vengan como
+ * campo o, si no, las pegadas a la dirección; el referrer de la visita; los
+ * identificadores de clic; y el canal que sale de todo eso. Antes estas dos
+ * altas no deducían el canal y guardaban «webhook»/«form» como utm_source, así
+ * que todo lo que entraba por formulario quedaba sin categoría.
+ */
+export function origenDelFormulario(campos = {}, landingUrl = null) {
+  const deLaUrl = utmsDeLaDireccion(landingUrl);
+  const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  // Recortadas a su columna: las del campo tampoco pasan por Zod aquí (#48).
+  const utm = (k) => recortarUtm(k, texto(campos[k])) || deLaUrl[k];
+  // Un referrer que es la propia página del formulario no dice nada (Elementor
+  // manda la página como «referrer»): deducirCanal ya lo ignora.
+  const referrer = texto(campos.referrer) || texto(campos.referer) || null;
+  const clics = clicsDelOrigen({ landing_url: landingUrl, gclid: campos.gclid, fbclid: campos.fbclid, ttclid: campos.ttclid });
+  const canal = deducirCanal({
+    utm_source: utm('utm_source'),
+    utm_medium: utm('utm_medium'),
+    referrer,
+    landing_url: landingUrl,
+    gclid: campos.gclid,
+    fbclid: campos.fbclid,
+    ttclid: campos.ttclid,
+  });
+  return {
+    utm_source: utm('utm_source'),
+    utm_medium: utm('utm_medium'),
+    utm_campaign: utm('utm_campaign'),
+    utm_content: utm('utm_content'),
+    utm_term: utm('utm_term'),
+    referrer: referrer ? referrer.slice(0, 2000) : null,
+    canal,
+    ...clics,
+  };
+}
 
 // LA AGENDA DEL PROCESO COMERCIAL (#89 · #90), como en los otros dos caminos de
 // entrada (lead.service: el webhook de Make y el alta a mano). Aqui faltaba, y
@@ -507,6 +545,11 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
 
     // Con la asignación encendida y alguien trabajando, el lead es para ella; si no, el turno (29/10).
     const porActividad = await decidirFormulario(f.project_id);
+    // De dónde vino, para la IP/navegador/fbclid del prospecto (#474): la IP y
+    // el navegador son del servidor, nunca del formulario externo (que podría
+    // mentir). El fbclid viene pegado a la URL de entrada, si la hay.
+    const landingUrlFinal = final.landing_url || body.landing_url || req.headers?.referer || null;
+    const origen = origenDelFormulario({ ...body, ...final }, landingUrlFinal);
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
       forcedResponsableId: porActividad?.elegida?.id || null,
@@ -517,11 +560,23 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       notas: final.notas || null,
       duplicadoDe: dup.duplicadoDe,
       reincidente: dup.reincidente,
-      landingUrl: final.landing_url || body.landing_url || req.headers?.referer || null,
+      landingUrl: landingUrlFinal,
       utms: {
-        utm_source: final.utm_source || source,
-        utm_medium: final.utm_medium || (source === 'mailhook' ? 'email' : 'api'),
-        utm_campaign: final.utm_campaign || f.embed_id,
+        utm_source: origen.utm_source || source,
+        utm_medium: origen.utm_medium || (source === 'mailhook' ? 'email' : 'api'),
+        utm_campaign: origen.utm_campaign || f.embed_id,
+        // Lo de verdad, no el relleno de arriba («webhook», «api»): el canal se
+        // deduce de las UTM reales, el referrer, la dirección y los clics (#48).
+        utm_content: origen.utm_content,
+        utm_term: origen.utm_term,
+        referrer: origen.referrer,
+        canal_detectado: origen.canal,
+        gclid: origen.gclid,
+        ttclid: origen.ttclid,
+        fbc: origen.fbc,
+        fbp: limpiarFbp(final.fbp || body.fbp || body._fbp),
+        client_ip: req.ip || null,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 500) || null,
       },
       customFields,
     });
@@ -590,6 +645,13 @@ export async function publicSubmit(req, res, next) {
       return res.json({ success: true, data: { lead_id: ya.id, redirect_url: f.config?.redirect_url || null } });
     }
     const porActividad = await decidirFormulario(f.project_id);
+    // El widget es un iframe de otro dominio: no puede leer la cookie _fbp del
+    // sitio que lo incrusta, así que fbp queda sin dato aquí (#474, decisión
+    // 24/11). El fbclid sí se puede sacar, porque el widget manda
+    // `landing_url` con el `document.referrer` del padre.
+    // El canal sale de esa misma dirección (sus UTM y clics) y, si la web lo pasa
+    // en el `src` del iframe (`?referrer=`), del referrer de la visita (#48).
+    const origen = origenDelFormulario(body, body.landing_url);
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
       forcedResponsableId: porActividad?.elegida?.id || null,
@@ -602,9 +664,19 @@ export async function publicSubmit(req, res, next) {
       reincidente: dup.reincidente,
       landingUrl: body.landing_url || null,
       utms: {
-        utm_source: body.utm_source || 'form',
-        utm_medium: body.utm_medium || 'embed',
-        utm_campaign: body.utm_campaign || f.embed_id,
+        utm_source: origen.utm_source || 'form',
+        utm_medium: origen.utm_medium || 'embed',
+        utm_campaign: origen.utm_campaign || f.embed_id,
+        utm_content: origen.utm_content,
+        utm_term: origen.utm_term,
+        referrer: origen.referrer,
+        canal_detectado: origen.canal,
+        gclid: origen.gclid,
+        ttclid: origen.ttclid,
+        fbc: origen.fbc,
+        fbp: null,
+        client_ip: req.ip || null,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 500) || null,
       },
       customFields: body.custom_fields || {},
     });

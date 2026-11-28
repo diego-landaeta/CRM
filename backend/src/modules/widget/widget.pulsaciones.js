@@ -2,6 +2,7 @@ import { query } from '../../shared/config/db.js';
 import { ALTA_POR_WHATSAPP } from '../../shared/utils/origenDelLead.js';
 import { SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { paisDeEntrada } from '../leads/pais.js';
+import { utmsDeLaDireccion, extraerGclid, extraerTtclid } from '../leads/canal.js';
 
 /*
   LAS PULSACIONES DEL BOTÓN DE WHATSAPP DE LAS WEBS (Diego, 29/10).
@@ -38,7 +39,7 @@ export function limpiarPagina(u) {
     url.hash = '';
     // Los parámetros de seguimiento se quedan (dicen de qué anuncio vino); el resto, fuera.
     for (const k of [...url.searchParams.keys()]) {
-      if (!/^(utm_|gclid$|fbclid$)/i.test(k)) url.searchParams.delete(k);
+      if (!/^(utm_|gclid$|fbclid$|ttclid$)/i.test(k)) url.searchParams.delete(k);
     }
     return url.toString().slice(0, 500);
   } catch {
@@ -102,8 +103,37 @@ export async function cruzarConPulsacion({ leadId, projectId, userId }) {
     if (pais) {
       await query('UPDATE leads SET pais_origen = $2 WHERE id = $1 AND pais_origen IS NULL', [leadId, pais]);
     }
+    await guardarOrigenDeLaPagina(leadId, p.pagina);
   }
   return p;
+}
+
+/**
+ * Las UTM, el gclid y el ttclid (#1246) que traía la página del botón, en el origen del lead (#48),
+ * sin pisar nada escrito. El canal NO se toca: es «whatsapp», lo eligió la
+ * gestora al darlo de alta, y la regla de recálculo lo respeta.
+ */
+export async function guardarOrigenDeLaPagina(leadId, pagina) {
+  // Ya recortadas a su columna: una UTM larga hacía fallar el UPDATE y se
+  // perdía todo el origen de la página (#48).
+  const u = utmsDeLaDireccion(pagina);
+  const gclid = extraerGclid(pagina);
+  const ttclid = extraerTtclid(pagina);
+  if (!gclid && !ttclid && !Object.values(u).some(Boolean)) return false;
+  const { rowCount } = await query(
+    `UPDATE lead_utms SET
+        utm_source   = COALESCE(NULLIF(utm_source, ''), $2),
+        utm_medium   = COALESCE(NULLIF(utm_medium, ''), $3),
+        utm_campaign = COALESCE(NULLIF(utm_campaign, ''), $4),
+        utm_content  = COALESCE(NULLIF(utm_content, ''), $5),
+        utm_term     = COALESCE(NULLIF(utm_term, ''), $6),
+        gclid        = COALESCE(NULLIF(gclid, ''), $7),
+        landing_url  = COALESCE(NULLIF(landing_url, ''), $8),
+        ttclid       = COALESCE(NULLIF(ttclid, ''), $9)
+      WHERE lead_id = $1`,
+    [leadId, u.utm_source, u.utm_medium, u.utm_campaign, u.utm_content, u.utm_term, gclid, pagina, ttclid]
+  );
+  return rowCount > 0;
 }
 
 /**

@@ -28,6 +28,8 @@
 */
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+// Plugin 1.14.0 (#768, paso 1): el alumno terminó un curso con todo corregido.
+import { recibirCursoCompletado } from '../diploma-confirmacion/diploma-confirmacion.moodle.js';
 import { textoDeMoodle } from '../../shared/services/moodle.client.js';
 import * as model from './consultas.model.js';
 import { entraMensajeDelAlumno, tutoresDelCampus, siYaEstaRepetido, campusConConsultas } from './consultas.service.js';
@@ -53,6 +55,10 @@ export async function recibirAviso(projectId, cuerpo, cabecera, { ahoraMs = Date
   if (aviso?.evento === 'plugin_estado') {
     await apuntarAviso(projectId);
     return anotarActualizacion(projectId, leerEstado(aviso));
+  }
+  if (aviso?.evento === 'curso_completado') {
+    await apuntarAviso(projectId);
+    return recibirCursoCompletado(projectId, aviso);
   }
   await apuntarAviso(projectId);
   return procesarAviso(projectId, aviso);
