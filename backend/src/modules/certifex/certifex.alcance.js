@@ -87,6 +87,17 @@ export function exigirMatriculas(alcance, ids, centroDe) {
  */
 export async function exigirExpedientes(alcance, nexpedientes) {
   if (!alcance) return null;
+  const filaDe = await buscarExpedientes(nexpedientes);
+  comprobarExpedientes(alcance, nexpedientes, filaDe);
+  return filaDe;
+}
+
+/**
+ * Los diplomas de Certifex con esos números (Map numero → fila; el que no aparece, no está).
+ * Pocos: uno a uno por su número; muchos: recorriendo el listado hasta tenerlos todos.
+ * Lo usa también «Enviar al alumno» en lote (#1201), que necesita las filas aunque sea super admin.
+ */
+export async function buscarExpedientes(nexpedientes) {
   const buscados = new Set(nexpedientes.map((n) => String(n).toUpperCase()));
   const filaDe = new Map();
   if (buscados.size <= 5) {
@@ -102,11 +113,17 @@ export async function exigirExpedientes(alcance, nexpedientes) {
     });
     for (const d of r.filas) filaDe.set(d.nexpediente, d);
   }
-  for (const nexp of buscados) {
+  return filaDe;
+}
+
+/** 404 si alguno de esos diplomas (ya buscados) no es de esta persona. Sin alcance (super admin), nada. */
+export function comprobarExpedientes(alcance, nexpedientes, filaDe) {
+  if (!alcance) return;
+  for (const n of nexpedientes) {
+    const nexp = String(n).toUpperCase();
     const centro = filaDe.get(nexp)?.centro;
     if (!centro || !alcance.has(String(centro).toUpperCase())) throw new AppError(`${NO_ENCONTRADO} (${nexp})`, 404, 'NOT_FOUND');
   }
-  return filaDe;
 }
 
 export { NO_ENCONTRADA };
