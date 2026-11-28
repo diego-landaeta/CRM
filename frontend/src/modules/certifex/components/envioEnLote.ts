@@ -12,10 +12,12 @@ import type { Diploma, MotivoSinEnviar } from '../api/certifex.api';
  */
 
 /** Por qué no entra en el lote; null = entra. */
-export function motivoSinEnviar(d: Pick<Diploma, 'revocada' | 'anulada' | 'aviso' | 'emitidoEnCrm' | 'sinCorreo'>): MotivoSinEnviar | null {
+export function motivoSinEnviar(d: Pick<Diploma, 'revocada' | 'anulada' | 'aviso' | 'emitidoEnCrm' | 'sinCorreo' | 'entregado'>): MotivoSinEnviar | null {
   if (d.revocada) return 'revocado';
   if (d.anulada) return 'anulado';
   if (d.aviso?.resultado === 'enviado') return 'ya_enviado';
+  // Entregado sin aviso del CRM: lo mandó Certifex por su cuenta (su panel o su cola).
+  if (d.entregado === true && !d.aviso) return 'entregado';
   // Un Certifex/CRM anterior no manda la marca: se da por hecho que es del CRM (como `delCrm`).
   if (d.emitidoEnCrm === false) return 'fuera_del_crm';
   if (d.sinCorreo) return 'sin_correo';
@@ -44,9 +46,10 @@ export function contarFuera(ds: Parameters<typeof motivoSinEnviar>[0][]): Cuenta
 }
 
 /** En el orden en que se dicen. */
-const ORDEN: MotivoSinEnviar[] = ['ya_enviado', 'sin_correo', 'fuera_del_crm', 'revocado', 'anulado', 'en_curso', 'no_encontrado'];
+const ORDEN: MotivoSinEnviar[] = ['ya_enviado', 'entregado', 'sin_correo', 'fuera_del_crm', 'revocado', 'anulado', 'en_curso', 'no_encontrado'];
 const ROTULO: Record<MotivoSinEnviar, [string, string]> = {
   ya_enviado: ['ya enviado', 'ya enviados'],
+  entregado: ['ya entregado por Certifex', 'ya entregados por Certifex'],
   sin_correo: ['sin correo en la ficha', 'sin correo en la ficha'],
   fuera_del_crm: ['emitido fuera del CRM', 'emitidos fuera del CRM'],
   revocado: ['revocado', 'revocados'],
@@ -54,6 +57,18 @@ const ROTULO: Record<MotivoSinEnviar, [string, string]> = {
   en_curso: ['enviándose ya', 'enviándose ya'],
   no_encontrado: ['que Certifex no tiene', 'que Certifex no tiene'],
 };
+
+/**
+ * Una tanda que falla sin respuesta clara (Certifex no contestó a tiempo, nginx cortó, la red):
+ * puede que alguno sí haya salido. Se dice así, no «no responde», para que nadie lo reintente a
+ * ciegas y lo mande dos veces (QA de la #1201). Un 4xx sí es claro: se enseña tal cual.
+ */
+export const TANDA_SIN_CONFIRMAR = 'Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar.';
+export function errorDeTanda(e: unknown): string {
+  const status = (e as { status?: number })?.status;
+  if (typeof status === 'number' && status >= 400 && status < 500) return (e as Error).message || 'No se pudo enviar';
+  return TANDA_SIN_CONFIRMAR;
+}
 
 /** «2 ya enviados · 1 sin correo en la ficha»; vacío si no queda ninguno fuera. */
 export function textoMotivos(c: Cuenta): string {

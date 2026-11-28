@@ -4,7 +4,7 @@ import { getDecryptedValue } from '../credentials/credentials.model.js';
 import { certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, buscarExpedientes, comprobarExpedientes, exigirCentro } from './certifex.alcance.js';
 import { emitidoPorElCrm } from './certifex.marcas.js';
-import { avisosLoteSchema, mensajeDeValidacion } from './certifex.validation.js';
+import { avisosLoteSchema, mensajeDeValidacion, TANDA_AVISOS_LOTE } from './certifex.validation.js';
 import { anotarEnvios } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
 import { query } from '../../shared/config/db.js';
 
@@ -233,6 +233,9 @@ export function motivoSinEnviar(d) {
   if (d.revocada) return 'revocado';
   if (d.anulada) return 'anulado';
   if (d.aviso?.resultado === 'enviado') return 'ya_enviado';
+  // Entregado sin aviso del CRM: lo mandó Certifex por su cuenta (su panel o su cola). Tampoco
+  // se vuelve a mandar en lote (QA de la #1201).
+  if (d.entregado === true && !d.aviso) return 'entregado';
   if (!emitidoPorElCrm(d)) return 'fuera_del_crm';
   if (d.sinCorreo) return 'sin_correo';
   return null;
@@ -243,6 +246,7 @@ const TEXTO_SIN_ENVIAR = {
   revocado: 'Está revocado: no se envía.',
   anulado: 'Está revertido (su número está anulado): no se envía.',
   ya_enviado: 'Ya se le envió. Para mandarlo otra vez, «Reenviar» desde su fila.',
+  entregado: 'Certifex ya se lo entregó (desde su panel). Para mandarlo otra vez, «Reenviar» desde su fila.',
   fuera_del_crm: 'Se emitió fuera del CRM. Si hace falta, «Reenviar» desde su fila.',
   sin_correo: 'El alumno no tiene correo en Certifex: no hay a quién mandarlo.',
   en_curso: 'Se está enviando ahora mismo desde otra pestaña o de otra persona.',
@@ -252,9 +256,37 @@ const TEXTO_SIN_ENVIAR = {
  * Los diplomas que se están enviando ahora. Un solo proceso (PM2 `instances: 1`), así que
  * basta con memoria. Se cogen ANTES de mirar en Certifex si ya se enviaron y se sueltan al
  * acabar: dos lotes a la vez con el mismo diploma no lo mandan dos veces (el segundo lo deja
- * fuera, «en_curso»), y uno que llegue después ya lo ve enviado.
+ * fuera, «en_curso»), y uno que llegue después ya lo ve enviado. El envío de uno («Enviar» o
+ * «Reenviar» en la fila) toma el mismo candado: fila y lote a la vez, un solo correo.
+ *
+ * Solo vale dentro de ESTE proceso: entre /testeo y producción, o entre este CRM y la gemela de
+ * ISEIE, el control tiene que estar en Certifex (issue aparte).
  */
 const enviandoAhora = new Set();
+
+/**
+ * Coge los que nadie está enviando (sin `await` por medio: no hay carrera). Devuelve los que
+ * ha cogido (`mios`, a soltar con `soltarEnvio`) y los que ya tenía otro (`ocupados`).
+ */
+export function tomarEnvio(nexpedientes) {
+  const mios = [];
+  const ocupados = new Set();
+  for (const n of nexpedientes) {
+    if (enviandoAhora.has(n)) ocupados.add(n);
+    else { enviandoAhora.add(n); mios.push(n); }
+  }
+  return { mios, ocupados };
+}
+
+export function soltarEnvio(mios) {
+  for (const n of mios) enviandoAhora.delete(n);
+}
+
+/**
+ * Certifex no contestó (o no a tiempo: 120 s): puede que haya mandado alguno. No es «no salió
+ * nada»: se dice así para que nadie lo reintente a ciegas y lo mande dos veces.
+ */
+export const SIN_CONFIRMAR = 'Certifex no ha contestado a tiempo. Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar.';
 
 /**
  * POST /api/certifex/diplomas/avisos/lote — «Enviar al alumno (n)» en Emitidos (#1201).
@@ -266,19 +298,18 @@ const enviandoAhora = new Set();
  * error sale tal cual: el panel lo apunta en esos y sigue con la tanda siguiente.
  */
 export async function avisosLote(req, res, next) {
-  const mios = [];
+  let mios = [];
   try {
     const r = avisosLoteSchema.safeParse(req.body);
     if (!r.success) throw new AppError(mensajeDeValidacion(r.error), 400, 'VALIDATION_ERROR');
     const pedidos = [...new Set(r.data.nexpedientes)];
-    // Primero, coger los que nadie está enviando (sin `await` por medio: no hay carrera).
-    const ocupados = new Set();
-    for (const n of pedidos) {
-      if (enviandoAhora.has(n)) ocupados.add(n);
-      else { enviandoAhora.add(n); mios.push(n); }
-    }
+    // Primero, coger los que nadie está enviando, antes de mirar nada en Certifex.
+    const toma = tomarEnvio(pedidos);
+    mios = toma.mios;
+    const { ocupados } = toma;
     const alcance = await alcanceDe(req.user);
-    const filaDe = await buscarExpedientes(pedidos);
+    // Uno a uno por su número (son 10 como mucho): sin recorrer todo Certifex (QA de la #1201).
+    const filaDe = await buscarExpedientes(pedidos, { unoAUnoHasta: TANDA_AVISOS_LOTE });
     comprobarExpedientes(alcance, pedidos, filaDe);
 
     const omitidos = [];
@@ -298,11 +329,17 @@ export async function avisosLote(req, res, next) {
     }
     if (omitidos.length) logger.info({ userId: req.user.userId, omitidos: omitidos.map((o) => `${o.nexpediente}:${o.motivo}`) }, 'Certifex: envío en lote, fuera');
     if (!aEnviar.length) return res.json({ success: true, data: { correoActivo: null, resultados: [], omitidos } });
-    const data = await aprobarAvisos(req.user, aEnviar);
+    let data;
+    try {
+      data = await aprobarAvisos(req.user, aEnviar);
+    } catch (err) {
+      if (err?.code !== 'CERTIFEX_NO_RESPONDE') throw err;
+      throw new AppError(SIN_CONFIRMAR, 504, 'ENVIO_SIN_CONFIRMAR');
+    }
     res.json({ success: true, data: { ...data, resultados: data?.resultados ?? [], omitidos } });
   } catch (err) {
     next(err);
   } finally {
-    for (const n of mios) enviandoAhora.delete(n);
+    soltarEnvio(mios);
   }
 }

@@ -29,7 +29,7 @@ import {
   Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
 import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
-import { contarFuera, motivoSinEnviar, TANDA_ENVIO_LOTE, textoFuera, textoMotivos, TOPE_ENVIO_LOTE } from '../components/envioEnLote';
+import { contarFuera, errorDeTanda, motivoSinEnviar, TANDA_ENVIO_LOTE, textoFuera, textoMotivos, TOPE_ENVIO_LOTE } from '../components/envioEnLote';
 import { dia, EtiquetaDiploma, leerConfirmacion } from '@/modules/diploma-confirmacion/components/EstadoDelDiploma';
 
 /**
@@ -1091,7 +1091,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         fuera.push(...r.omitidos.map((o) => ({ quien: nombreDe(o.nexpediente), error: o.error })));
         if (r.correoActivo === false) apagado = true;
       } catch (e) {
-        const error = (e as Error).message || 'No se pudo enviar';
+        // Sin respuesta clara, «puede que algunos se hayan enviado» (`errorDeTanda`). Al acabar,
+        // `ejecutar` recarga la lista sola: se ve lo que de verdad salió.
+        const error = errorDeTanda(e);
         fuera.push(...tanda.map((n) => ({ quien: nombreDe(n), error })));
       }
       hechas += tanda.length;

@@ -95,12 +95,13 @@ export async function exigirExpedientes(alcance, nexpedientes) {
 /**
  * Los diplomas de Certifex con esos números (Map numero → fila; el que no aparece, no está).
  * Pocos: uno a uno por su número; muchos: recorriendo el listado hasta tenerlos todos.
- * Lo usa también «Enviar al alumno» en lote (#1201), que necesita las filas aunque sea super admin.
+ * Lo usa también «Enviar al alumno» en lote (#1201), que necesita las filas aunque sea super admin
+ * y busca uno a uno hasta 10 (`unoAUnoHasta`): 10 consultas cortas pesan menos que recorrer todo.
  */
-export async function buscarExpedientes(nexpedientes) {
+export async function buscarExpedientes(nexpedientes, { unoAUnoHasta = 5 } = {}) {
   const buscados = new Set(nexpedientes.map((n) => String(n).toUpperCase()));
   const filaDe = new Map();
-  if (buscados.size <= 5) {
+  if (buscados.size <= unoAUnoHasta) {
     for (const nexp of buscados) {
       const d = await certifex('GET', `/diplomas?${new URLSearchParams({ estado: 'todos', q: nexp, pagina: '1', tam: '5' })}`);
       const f = (Array.isArray(d?.filas) ? d.filas : []).find((x) => x.nexpediente === nexp);

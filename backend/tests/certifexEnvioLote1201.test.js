@@ -81,6 +81,7 @@ const DIPLOMAS = [
   diploma(9, { aviso: { resultado: 'correo_apagado', en: '2026-11-21T10:00:00.000Z', por: DEL_CRM } }), // no salió: se puede
   diploma(10, { centro: 'ISEIE' }),
   ...[11, 12, 13, 14, 15, 16, 17].map((n) => diploma(n)),
+  diploma(18, { entregado: true }), // entregado por Certifex sin aviso del CRM (su panel o su cola)
 ];
 // Las matrículas aprobadas (de ahí sale el correo del titular).
 const CANDIDATOS = DIPLOMAS.map((d) => ({
@@ -93,6 +94,7 @@ let falloDe = new Set(); // los que Certifex no puede enviar
 let esperaAvisos = null; // para retener /avisos (dos lotes a la vez)
 let correoActivo = true; // el correo del servidor de Certifex
 let certifexCaido = false; // /avisos contesta 503
+let certifexSinContestar = false; // /avisos no contesta (se corta por tiempo)
 const fetchReal = globalThis.fetch;
 beforeAll(() => {
   globalThis.fetch = vi.fn(async (url, opts = {}) => {
@@ -114,6 +116,7 @@ beforeAll(() => {
       esperaAvisos = null;
       if (espera) await espera;
       if (certifexCaido) return responder({ error: 'Certifex caído' }, 503);
+      if (certifexSinContestar) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
       return responder({
         correoActivo,
         resultados: p.cuerpo.nexpedientes.map((n) => (falloDe.has(n)
@@ -131,6 +134,7 @@ beforeEach(() => {
   esperaAvisos = null;
   correoActivo = true;
   certifexCaido = false;
+  certifexSinContestar = false;
   anotados.lista = [];
   brevo.enviados = [];
   registrar({ userId: 1, role: 'superadmin' });
@@ -262,5 +266,65 @@ describe('#1201 · quién puede y sobre qué campus', () => {
     const r = await lote([exp(1)], SIN_EMITIR);
     expect(r.status).toBe(403);
     expect(avisosEnviados()).toHaveLength(0);
+  });
+});
+
+describe('#1201 · cambios tras el QA', () => {
+  const fila = (nexpedientes, t = SUPER) => request.post('/api/certifex/diplomas/avisos').set('Authorization', `Bearer ${t}`).send({ nexpedientes });
+  const vecesQueSale = (n) => avisosEnviados().flatMap((x) => x.cuerpo.nexpedientes).filter((e) => e === n).length;
+
+  it('fila y lote a la vez con el mismo diploma: un solo envío (la fila contesta 409)', async () => {
+    let soltar;
+    esperaAvisos = new Promise((r) => { soltar = r; });
+    const primero = lote([exp(1), exp(2)]).then((x) => x);
+    await vi.waitFor(() => expect(avisosEnviados()).toHaveLength(1));
+    const r = await fila([exp(2)]);
+    soltar();
+    expect((await primero).status).toBe(200);
+    expect(r.status, JSON.stringify(r.body)).toBe(409);
+    expect(r.body.code).toBe('ENVIO_EN_CURSO');
+    expect(r.body.error).toMatch(/se está enviando ahora/);
+    expect(vecesQueSale(exp(2))).toBe(1);
+  });
+
+  it('y al revés: la fila enviando, el lote lo deja fuera («en_curso»)', async () => {
+    let soltar;
+    esperaAvisos = new Promise((r) => { soltar = r; });
+    const primero = fila([exp(3)]).then((x) => x);
+    await vi.waitFor(() => expect(avisosEnviados()).toHaveLength(1));
+    const r = await lote([exp(3), exp(11)]);
+    soltar();
+    expect((await primero).status).toBe(200);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.omitidos).toMatchObject([{ nexpediente: exp(3), motivo: 'en_curso' }]);
+    expect(vecesQueSale(exp(3))).toBe(1);
+  });
+
+  it('acabado el envío de la fila, el candado se suelta', async () => {
+    expect((await fila([exp(12)])).status).toBe(200);
+    expect((await fila([exp(12)])).status).toBe(200);
+  });
+
+  it('entregado por Certifex sin aviso del CRM: no entra en el lote', async () => {
+    const r = await lote([exp(1), exp(18)]);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(avisosEnviados()[0].cuerpo.nexpedientes).toEqual([exp(1)]);
+    expect(r.body.data.omitidos).toMatchObject([{ nexpediente: exp(18), motivo: 'entregado' }]);
+  });
+
+  it('super admin con más de 5: busca cada diploma por su número, sin recorrer todo Certifex', async () => {
+    const r = await lote([1, 2, 3, 11, 12, 13, 14, 15].map((n) => exp(n)));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const listados = pedidas.filter((x) => x.ruta === '/diplomas');
+    expect(listados).toHaveLength(8);
+    for (const x of listados) expect(x.query.q).toBeTruthy();
+  });
+
+  it('si Certifex no contesta a tiempo: 504 «puede que algunos se hayan enviado», no «no responde»', async () => {
+    certifexSinContestar = true;
+    const r = await lote([exp(1), exp(2)]);
+    expect(r.status).toBe(504);
+    expect(r.body.code).toBe('ENVIO_SIN_CONFIRMAR');
+    expect(r.body.error).toMatch(/Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar/);
   });
 });

@@ -48,7 +48,7 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     resumen: async () => ({ data: { pendientes: 0, rechazadas: 0, vigentes: datos.diplomas.length, revocados: 0, terminados: 0, porAvisar: 0, sinEmitir: 0, porEnviar: 0 } }),
     solicitudes: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     porAvisar: async () => ({ data: { porAvisar: [], sinEmitir: [] } }),
-    diplomas: async () => ({ data: { filas: datos.diplomas, total: datos.diplomas.length, pagina: 1, tam: 50 } }),
+    diplomas: vi.fn(async () => ({ data: { filas: datos.diplomas, total: datos.diplomas.length, pagina: 1, tam: 50 } })),
     terminados: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     formaciones: async () => ({ data: { proyecto: null, motivo: null, formaciones: [] } }),
     avisos: vi.fn(async () => { throw new Error('en lote no se usa el envío de uno'); }),
@@ -63,6 +63,7 @@ afterEach(cleanup);
 beforeEach(() => {
   datos.toasts = [];
   diplomasApi.avisos.mockClear();
+  diplomasApi.diplomas.mockClear();
   diplomasApi.avisosLote.mockReset();
   diplomasApi.avisosLote.mockImplementation(async (exps) => ({
     data: { correoActivo: true, resultados: exps.map((n) => ({ nexpediente: n, ok: true, resultado: 'enviado' })), omitidos: [] },
@@ -113,7 +114,8 @@ describe('#1201 · «Enviar al alumno (n)» en Emitidos', () => {
   it('en tandas de 10; una tanda que falla entera se apunta y el lote sigue; lo que el servidor deja fuera, con su motivo', async () => {
     datos.diplomas = Array.from({ length: 25 }, (_, i) => diploma(i + 1));
     diplomasApi.avisosLote.mockImplementation(async (exps) => {
-      if (exps.includes(exp(11))) throw new Error('Certifex no responde. Prueba de nuevo en un momento.');
+      // La tanda se corta por tiempo (504): puede que alguno haya salido.
+      if (exps.includes(exp(11))) throw Object.assign(new Error('Error 504'), { status: 504 });
       const [primero, ...resto] = exps;
       return {
         data: {
@@ -132,7 +134,7 @@ describe('#1201 · «Enviar al alumno (n)» en Emitidos', () => {
     const aviso = await screen.findByRole('alert');
     // 10 de la tanda caída + 2 «enviándose ya» (la primera de cada tanda que sí contestó).
     expect(within(aviso).getByText('12 no se han podido completar')).toBeTruthy();
-    expect(within(aviso).getAllByText('Certifex no responde. Prueba de nuevo en un momento.')).toHaveLength(10);
+    expect(within(aviso).getAllByText('Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar.')).toHaveLength(10);
     expect(within(aviso).getAllByText(/Se está enviando ahora mismo/)).toHaveLength(2);
     expect(datos.toasts.at(-1)).toMatchObject({ title: '13 diplomas enviados al alumno', description: '12 sin enviar: el motivo, en pantalla.' });
   });
@@ -160,5 +162,30 @@ describe('#1201 · «Enviar al alumno (n)» en Emitidos', () => {
     elegir(2);
     expect(document.querySelector('[data-fuera="envio"]')?.textContent).toBe('1 se queda fuera: 1 ya enviado');
     expect(screen.getByRole('button', { name: /^Enviar al alumno \(1\)$/ })).toBeTruthy();
+  });
+
+  it('QA: entregado por Certifex sin aviso del CRM también se queda fuera', async () => {
+    datos.diplomas = [diploma(1), diploma(2, { entregado: true })];
+    await abrirEmitidos();
+    elegirTodo();
+    expect(document.querySelector('[data-fuera="envio"]')?.textContent).toBe('1 se queda fuera: 1 ya entregado por Certifex');
+    expect(screen.getByRole('button', { name: /^Enviar al alumno \(1\)$/ })).toBeTruthy();
+  });
+
+  it('QA: una tanda sin respuesta clara dice «puede que algunos se hayan enviado» y la lista se recarga sola; un 4xx sale tal cual', async () => {
+    datos.diplomas = Array.from({ length: 12 }, (_, i) => diploma(i + 1));
+    diplomasApi.avisosLote.mockImplementation(async (exps) => {
+      if (exps.includes(exp(1))) throw new Error('Failed to fetch'); // sin respuesta: sin status
+      throw Object.assign(new Error('Ese diploma se está enviando ahora'), { status: 409 });
+    });
+    await abrirEmitidos();
+    const antes = diplomasApi.diplomas.mock.calls.length;
+    elegirTodo();
+    fireEvent.click(screen.getByRole('button', { name: /^Enviar al alumno \(12\)$/ }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Enviar' }));
+    const aviso = await screen.findByRole('alert');
+    expect(within(aviso).getAllByText('Puede que algunos se hayan enviado: refresca la lista antes de volver a enviar.')).toHaveLength(10);
+    expect(within(aviso).getAllByText('Ese diploma se está enviando ahora')).toHaveLength(2);
+    await waitFor(() => expect(diplomasApi.diplomas.mock.calls.length).toBeGreaterThan(antes));
   });
 });

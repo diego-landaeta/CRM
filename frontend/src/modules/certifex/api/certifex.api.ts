@@ -506,7 +506,7 @@ export interface ResultadoAprobarEmitir {
 }
 export interface RespuestaAvisos { correoActivo: boolean; resultados: { nexpediente: string | null; ok: boolean; resultado?: ResultadoAviso; error?: string }[] }
 /** #1201: por qué un diploma no entra en un envío en lote (lo decide el servidor). */
-export type MotivoSinEnviar = 'ya_enviado' | 'sin_correo' | 'fuera_del_crm' | 'revocado' | 'anulado' | 'en_curso' | 'no_encontrado';
+export type MotivoSinEnviar = 'ya_enviado' | 'entregado' | 'sin_correo' | 'fuera_del_crm' | 'revocado' | 'anulado' | 'en_curso' | 'no_encontrado';
 /**
  * #1201: el lote de Emitidos. Lo que no toca vuelve en `omitidos`, con su motivo, y no llega a
  * Certifex. Si no salió ninguno, `correoActivo` es null (no se preguntó).
