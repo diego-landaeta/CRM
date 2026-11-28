@@ -3,9 +3,9 @@ import { condicionDeCompartidas } from './compartidas.js';
 import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
 import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
-import { AppError } from '../../shared/utils/AppError.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
+import { negarSiTieneFactura } from './cobro-facturado.js';
 // Una gestora o varias (las de un equipo comercial, 09/11/2026).
 import { comoIds } from '../../shared/utils/roles.js';
 
@@ -1043,20 +1043,9 @@ export async function deletePayment(paymentId) {
       return null;
     }
 
-    // Una factura emitida no se borra por detras.
-    const { rows: fact } = await client.query(
-      `SELECT codigo FROM invoices
-        WHERE payment_id = $1 AND tipo <> 'proforma' AND estado <> 'cancelada'
-        LIMIT 1`,
-      [paymentId]
-    );
-    if (fact[0]) {
-      await client.query('ROLLBACK');
-      throw new AppError(
-        `Ese cobro tiene la factura ${fact[0].codigo}. Anulala o emite una rectificativa antes de borrarlo.`,
-        409, 'PAYMENT_HAS_INVOICE'
-      );
-    }
+    // Una factura emitida no se borra por detras (lo mismo en «Deshacer el
+    // pago» de una cuota, CRM#1228).
+    await negarSiTieneFactura(client, paymentId);
 
     // La cuota vuelve a pendiente. Sin esto seguiria diciendo que se cobro.
     await client.query(
