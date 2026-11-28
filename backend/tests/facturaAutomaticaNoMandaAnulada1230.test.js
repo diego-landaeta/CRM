@@ -130,6 +130,8 @@ describe('#1230 · la factura automática no manda una anulada', () => {
     const s = (await conversionModel.addPayment(v.id, { importe: 250, fecha: hoy, metodo: 'tarjeta_stripe' }, { allowDuplicate: true })).payment;
     await fa.alCobrar({ conversionId: v.id, paymentId: s.id });
 
+    // Lo primero: el PDF de la anulada no sale.
+    expect(pdfs()).not.toContain(nombrePdf(f.codigo));
     const [nueva] = await q('SELECT * FROM invoices WHERE payment_id = $1 AND estado <> \'cancelada\'', [s.id]);
     expect(nueva).toBeTruthy();
     expect(nueva.id).not.toBe(f.id);
